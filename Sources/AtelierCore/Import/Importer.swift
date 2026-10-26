@@ -1,0 +1,265 @@
+import Foundation
+import GRDB
+
+public enum ImportMode: Sendable, Hashable {
+    /// Files stay where they are, on a local drive or the NAS.
+    case reference
+    /// Files are copied to `destinationRoot/YYYY/YYYY-MM-DD Event/` and hash-verified.
+    case copy(destinationRoot: URL, eventName: String)
+}
+
+public struct ImportOptions: Sendable {
+    public var mode: ImportMode
+    /// Applied to every imported photo (metadata preset, keywords part).
+    public var keywords: [String]
+    public var buildPreviews: Bool
+
+    public init(mode: ImportMode = .reference, keywords: [String] = [], buildPreviews: Bool = true) {
+        self.mode = mode
+        self.keywords = keywords
+        self.buildPreviews = buildPreviews
+    }
+}
+
+public struct ImportFailure: Sendable, Hashable {
+    public var url: URL
+    public var reason: String
+}
+
+public struct ImportProgress: Sendable {
+    public var total = 0
+    public var processed = 0
+    public var imported = 0
+    /// Already in the catalog (same folder and filename).
+    public var skipped = 0
+    public var previewsBuilt = 0
+    public var failures: [ImportFailure] = []
+    public var importedAssetIDs: [Int64] = []
+}
+
+/// Imports files into the catalog. Originals are only ever read, never modified.
+public final class Importer: Sendable {
+    let catalog: Catalog
+    let previews: PreviewCache?
+
+    public init(catalog: Catalog, previews: PreviewCache?) {
+        self.catalog = catalog
+        self.previews = previews
+    }
+
+    /// Expands folders recursively into supported image files, sorted by path.
+    public static func collectFiles(from sources: [URL]) -> [URL] {
+        var files: [URL] = []
+        for source in sources {
+            var isDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: source.path, isDirectory: &isDirectory) else { continue }
+            if !isDirectory.boolValue {
+                if MetadataReader.isSupported(source) { files.append(source) }
+                continue
+            }
+            let enumerator = FileManager.default.enumerator(
+                at: source, includingPropertiesForKeys: [.isRegularFileKey],
+                options: [.skipsHiddenFiles, .skipsPackageDescendants])
+            while let url = enumerator?.nextObject() as? URL {
+                let isFile = (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) ?? false
+                if isFile && MetadataReader.isSupported(url) { files.append(url) }
+            }
+        }
+        return files.sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
+    }
+
+    public func run(sources: [URL], options: ImportOptions,
+                    progress: @escaping @Sendable (ImportProgress) -> Void = { _ in }) async -> ImportProgress {
+        let files = Self.collectFiles(from: sources)
+        var state = ImportProgress()
+        state.total = files.count
+        progress(state)
+
+        for file in files {
+            if Task.isCancelled { break }
+            do {
+                if let assetID = try importFile(file, options: options) {
+                    state.imported += 1
+                    state.importedAssetIDs.append(assetID)
+                } else {
+                    state.skipped += 1
+                }
+            } catch {
+                state.failures.append(ImportFailure(url: file, reason: error.localizedDescription))
+            }
+            state.processed += 1
+            progress(state)
+        }
+
+        if options.buildPreviews, let previews {
+            let base = state
+            state.previewsBuilt = await buildPreviews(for: state.importedAssetIDs, cache: previews) { built in
+                var snapshot = base
+                snapshot.previewsBuilt = built
+                progress(snapshot)
+            }
+            progress(state)
+        }
+        return state
+    }
+
+    /// Returns the new asset id, or nil when the file was already cataloged.
+    func importFile(_ source: URL, options: ImportOptions) throws -> Int64? {
+        // Re-importing a referenced folder should not re-hash files that are already cataloged.
+        if options.mode == .reference, try isCataloged(source) { return nil }
+
+        let metadata = MetadataReader.read(source)
+        let sourceValues = try source.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
+        let hash = try FileHasher.sha256(of: source)
+        var fileURL = source
+
+        if case let .copy(root, eventName) = options.mode {
+            let date = metadata.captureTime ?? sourceValues.contentModificationDate ?? Date()
+            let directory = Self.destinationDirectory(root: root, date: date, eventName: eventName)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            fileURL = try Self.copyVerified(source, hash: hash, into: directory)
+        }
+
+        let volume = try VolumeIdentity.volume(containing: fileURL)
+        let relativeFolder = VolumeIdentity.relativePath(of: fileURL.deletingLastPathComponent(),
+                                                         inVolumeAt: volume.rootURL)
+        let filename = fileURL.lastPathComponent
+
+        return try catalog.writer.write { db -> Int64? in
+            var volumeRecord = try Volume.filter(Column("identityKey") == volume.identityKey).fetchOne(db)
+                ?? Volume(id: nil, identityKey: volume.identityKey, name: volume.name, kind: volume.kind,
+                          mountPath: nil, lastSeen: nil, isOnline: true)
+            volumeRecord.name = volume.name
+            volumeRecord.kind = volume.kind
+            volumeRecord.mountPath = volume.rootURL.path
+            volumeRecord.lastSeen = Date()
+            volumeRecord.isOnline = true
+            try volumeRecord.save(db)
+
+            var folder = try Folder
+                .filter(Column("volumeId") == volumeRecord.id! && Column("relativePath") == relativeFolder)
+                .fetchOne(db)
+                ?? Folder(id: nil, volumeId: volumeRecord.id!, relativePath: relativeFolder)
+            if folder.id == nil { try folder.insert(db) }
+
+            let exists = try Asset
+                .filter(Column("folderId") == folder.id! && Column("filename") == filename)
+                .fetchCount(db) > 0
+            if exists { return nil }
+
+            var asset = Asset(
+                id: nil, folderId: folder.id!, filename: filename,
+                fileSize: Int64(sourceValues.fileSize ?? 0),
+                modifiedAt: sourceValues.contentModificationDate, contentHash: hash,
+                perceptualHash: nil, captureTime: metadata.captureTime,
+                cameraMake: metadata.cameraMake, cameraModel: metadata.cameraModel, lens: metadata.lens,
+                width: metadata.width, height: metadata.height, orientation: metadata.orientation,
+                uti: metadata.uti, importedAt: Date())
+            try asset.insert(db)
+            let assetID = asset.id!
+
+            try AssetMetadata(
+                assetId: assetID,
+                rating: metadata.xmp.rating ?? 0,
+                flag: metadata.xmp.flag ?? .none,
+                colorLabel: metadata.xmp.colorLabel,
+                title: metadata.xmp.title,
+                caption: metadata.xmp.caption,
+                latitude: metadata.latitude,
+                longitude: metadata.longitude
+            ).insert(db)
+
+            try Catalog.addKeywords(db, names: metadata.xmp.keywords + options.keywords, to: [assetID])
+            return assetID
+        }
+    }
+
+    func isCataloged(_ url: URL) throws -> Bool {
+        let volume = try VolumeIdentity.volume(containing: url)
+        let relativeFolder = VolumeIdentity.relativePath(of: url.deletingLastPathComponent(),
+                                                         inVolumeAt: volume.rootURL)
+        return try catalog.writer.read { db in
+            (try Int.fetchOne(db, sql: """
+                SELECT COUNT(*) FROM asset
+                JOIN folder ON folder.id = asset.folderId
+                JOIN volume ON volume.id = folder.volumeId
+                WHERE volume.identityKey = ? AND folder.relativePath = ? AND asset.filename = ?
+                """, arguments: [volume.identityKey, relativeFolder, url.lastPathComponent]) ?? 0) > 0
+        }
+    }
+
+    /// Builds previews with a few parallel workers. Returns how many succeeded.
+    public func buildPreviews(for assetIDs: [Int64], cache: PreviewCache,
+                              progress: @escaping @Sendable (Int) -> Void = { _ in }) async -> Int {
+        let catalog = self.catalog
+        let jobs: [(Int64, URL)] = assetIDs.compactMap { id in
+            (try? catalog.fileURL(for: id)).map { (id, $0) }
+        }
+        let workers = max(2, ProcessInfo.processInfo.activeProcessorCount / 2)
+        return await withTaskGroup(of: Bool.self) { group in
+            var built = 0
+            var pending = jobs.makeIterator()
+            for _ in 0..<workers {
+                guard case let (id, url)? = pending.next() else { break }
+                group.addTask { (try? cache.generate(for: id, from: url)) != nil }
+            }
+            for await ok in group {
+                if ok {
+                    built += 1
+                    progress(built)
+                }
+                if case let (id, url)? = pending.next() {
+                    group.addTask { (try? cache.generate(for: id, from: url)) != nil }
+                }
+            }
+            return built
+        }
+    }
+
+    // MARK: Copy mode
+
+    static func destinationDirectory(root: URL, date: Date, eventName: String) -> URL {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy"
+        let year = formatter.string(from: date)
+        formatter.dateFormat = "yyyy-MM-dd"
+        let day = formatter.string(from: date)
+        let event = eventName.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "/", with: "-")
+        let folderName = event.isEmpty ? day : "\(day) \(event)"
+        return root.appendingPathComponent(year, isDirectory: true)
+            .appendingPathComponent(folderName, isDirectory: true)
+    }
+
+    /// Copies `source` into `directory` and verifies the copy by hash. If an identical file is
+    /// already there, it is reused; a different file with the same name gets a numeric suffix.
+    static func copyVerified(_ source: URL, hash: String, into directory: URL) throws -> URL {
+        let fm = FileManager.default
+        let base = source.deletingPathExtension().lastPathComponent
+        let ext = source.pathExtension
+        var candidate = directory.appendingPathComponent(source.lastPathComponent)
+        var counter = 1
+        while fm.fileExists(atPath: candidate.path) {
+            if (try? FileHasher.sha256(of: candidate)) == hash { return candidate }
+            let name = ext.isEmpty ? "\(base)-\(counter)" : "\(base)-\(counter).\(ext)"
+            candidate = directory.appendingPathComponent(name)
+            counter += 1
+        }
+        try fm.copyItem(at: source, to: candidate)
+        guard try FileHasher.sha256(of: candidate) == hash else {
+            try? fm.removeItem(at: candidate)
+            throw CocoaError(.fileWriteUnknown, userInfo: [
+                NSFilePathErrorKey: candidate.path,
+                NSLocalizedDescriptionKey: "Copy of \(source.lastPathComponent) failed hash verification.",
+            ])
+        }
+        // Bring an existing XMP sidecar along so ratings and keywords from other apps survive.
+        let sidecar = XMPSidecar.sidecarURL(for: source)
+        let sidecarDestination = XMPSidecar.sidecarURL(for: candidate)
+        if fm.fileExists(atPath: sidecar.path) && !fm.fileExists(atPath: sidecarDestination.path) {
+            try? fm.copyItem(at: sidecar, to: sidecarDestination)
+        }
+        return candidate
+    }
+}
