@@ -31,6 +31,7 @@ extension LibraryModel {
 
         if mode != .loupe { menu.addItem(ClosureMenuItem("Open in Loupe") { self.openLoupe() }) }
         if mode != .develop { menu.addItem(ClosureMenuItem("Edit in Develop") { self.openDevelop() }) }
+        menu.addItem(submenu("Edit In", editInMenu()))
 
         if includeZoom {
             menu.addItem(.separator())
@@ -107,6 +108,22 @@ extension LibraryModel {
         menu.addItem(.separator())
         menu.addItem(ClosureMenuItem("Write XMP Metadata") { self.writeXMP(selectionOnly: true) })
         menu.addItem(ClosureMenuItem("Export\(count)…") { self.beginExport() })
+        return menu
+    }
+
+    /// The installed editors, then Other Application… and the Edit In settings.
+    func editInMenu() -> NSMenu {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        for editor in externalEditors {
+            let item = ClosureMenuItem("Edit in \(editor.name)") { self.editIn(editor) }
+            let icon = editor.icon
+            icon.size = NSSize(width: 16, height: 16)
+            item.image = icon
+            menu.addItem(item)
+        }
+        if !externalEditors.isEmpty { menu.addItem(.separator()) }
+        menu.addItem(ClosureMenuItem("Other Application…") { self.editInOtherApp() })
         return menu
     }
 

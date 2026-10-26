@@ -122,6 +122,13 @@ final class DevelopController: ObservableObject {
 
     // MARK: Opening
 
+    /// Opens the current photo again, after its file changed on disk.
+    func reopen() {
+        let id = assetID
+        open(nil)
+        open(id)
+    }
+
     func open(_ assetID: Int64?) {
         guard assetID != self.assetID else { return }
         flushSave()

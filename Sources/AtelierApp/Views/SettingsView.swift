@@ -1,6 +1,7 @@
 import AppKit
 import AtelierCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Atelier > Settings… (⌘,). Values live in user defaults under the same keys the dialogs use,
 /// so a default set here is what the Import and Export dialogs start with.
@@ -17,6 +18,8 @@ struct SettingsView: View {
                 .tabItem { Label("Develop", systemImage: "slider.horizontal.3") }
             ExportSettingsTab()
                 .tabItem { Label("Export", systemImage: "square.and.arrow.up") }
+            EditInSettings()
+                .tabItem { Label("Edit In", systemImage: "paintbrush") }
             MetadataSettings()
                 .tabItem { Label("Metadata", systemImage: "tag") }
             KeyboardSettings()
@@ -298,6 +301,94 @@ private struct ExportSettingsTab: View {
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+// MARK: - Edit In
+
+/// The apps offered under Photo > Edit In, and the file each one is sent.
+struct EditInSettings: View {
+    @State private var editors = ExternalEditorStore.load()
+
+    var body: some View {
+        Form {
+            Section {
+                if editors.isEmpty {
+                    Text("No photo editors found. Add one with the + button.")
+                        .foregroundStyle(.secondary)
+                }
+                ForEach($editors) { $editor in
+                    EditorRow(editor: $editor) {
+                        editors.removeAll { $0.id == editor.id }
+                    }
+                }
+                HStack {
+                    Button("Add App…", systemImage: "plus") { addApp() }
+                    Spacer()
+                    Button("Find Installed Editors") {
+                        for found in ExternalEditorStore.detected() where !editors.contains(where: { $0.id == found.id }) {
+                            editors.append(found)
+                        }
+                    }
+                }
+            } header: {
+                Text("Edit In")
+            } footer: {
+                Text("Photo > Edit In saves a copy next to the original (or in Pictures/Atelier/Edits when that folder is read-only), stacks it with the original, and opens it in the app. Saves in the app update Atelier.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .onChange(of: editors) { _, newValue in ExternalEditorStore.save(newValue) }
+    }
+
+    private func addApp() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose an App to Edit In"
+        panel.prompt = "Add"
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+        panel.allowedContentTypes = [.application]
+        guard panel.runModal() == .OK, let url = panel.url,
+              !editors.contains(where: { $0.appPath == url.path }) else { return }
+        editors.append(ExternalEditor(appURL: url))
+    }
+}
+
+private struct EditorRow: View {
+    @Binding var editor: ExternalEditor
+    let remove: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(nsImage: editor.icon)
+                    .resizable()
+                    .frame(width: 24, height: 24)
+                TextField("Name", text: $editor.name)
+                    .textFieldStyle(.plain)
+                    .font(.headline)
+                if !editor.isInstalled {
+                    Text("Not installed").font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button(role: .destructive, action: remove) { Image(systemName: "minus.circle") }
+                    .buttonStyle(.borderless)
+                    .help("Remove from Edit In")
+            }
+            HStack(spacing: 12) {
+                Picker("File", selection: $editor.format) {
+                    ForEach(ExternalEditor.FileFormat.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
+                .fixedSize()
+                Picker("Color", selection: $editor.colorSpace) {
+                    ForEach(ExportColorSpace.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
+                .fixedSize()
+            }
+            Toggle("Include develop adjustments", isOn: $editor.applyDevelop)
+        }
+        .padding(.vertical, 4)
     }
 }
 

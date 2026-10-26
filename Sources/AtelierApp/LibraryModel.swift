@@ -53,6 +53,7 @@ final class LibraryModel: ObservableObject {
     let previews: PreviewCache
     let previewScheduler: PreviewScheduler
     let develop: DevelopController
+    let editWatcher = EditWatcher()
 
     @Published var rows: [AssetRow] = []
     @Published var sidebar = SidebarData()
@@ -129,6 +130,12 @@ final class LibraryModel: ObservableObject {
             ThumbnailLoader.shared.invalidate(id)
             self?.previewsChanged()
         }
+        editWatcher.onChange = { [weak self] id in self?.editedFileChanged(id) }
+        // Folder events can be missed on network shares; coming back from the editor checks too.
+        NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil,
+                                               queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.editWatcher.check() }
+        }
     }
 
     // MARK: Observation
@@ -190,6 +197,11 @@ final class LibraryModel: ObservableObject {
 
     func reloadDetail() {
         detail = focusedID.flatMap { try? catalog.detail(for: $0) }
+        // An edit saved while Atelier was not watching (after a relaunch) is picked up when shown.
+        if let detail, let id = detail.asset.id, rows.first(where: { $0.id == id })?.stackKind == .externalEdit,
+           let url = detail.fileURL {
+            editWatcher.watch(id, at: url, known: detail.asset.modifiedAt)
+        }
     }
 
     // MARK: Selection

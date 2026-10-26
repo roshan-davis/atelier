@@ -63,6 +63,21 @@ struct AtelierApp: App {
                 Button("Refresh Volumes") { model.refreshVolumes() }
                     .keyboardShortcut("r", modifiers: [.command])
             }
+            CommandMenu("Photo") {
+                Menu("Edit In") {
+                    ForEach(Array(model.externalEditors.enumerated()), id: \.element.id) { index, editor in
+                        if index == 0 {
+                            Button("Edit in \(editor.name)") { model.editIn(editor) }
+                                .keyboardShortcut("e", modifiers: [.command, .option])
+                        } else {
+                            Button("Edit in \(editor.name)") { model.editIn(editor) }
+                        }
+                    }
+                    Divider()
+                    Button("Other Application…") { model.editInOtherApp() }
+                }
+                .disabled(model.focusedID == nil)
+            }
             CommandGroup(replacing: .help) {
                 Button("Keyboard Shortcuts") { model.showingShortcuts = true }
                     .keyboardShortcut("/", modifiers: [.command])

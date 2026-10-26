@@ -39,13 +39,14 @@ public enum ExportFormat: String, CaseIterable, Codable, Sendable {
 }
 
 public enum ExportColorSpace: String, CaseIterable, Codable, Sendable {
-    case sRGB, displayP3, adobeRGB
+    case sRGB, displayP3, adobeRGB, proPhoto
 
     public var label: String {
         switch self {
         case .sRGB: return "sRGB (web and social)"
         case .displayP3: return "Display P3"
         case .adobeRGB: return "Adobe RGB (1998)"
+        case .proPhoto: return "ProPhoto RGB"
         }
     }
 
@@ -54,8 +55,12 @@ public enum ExportColorSpace: String, CaseIterable, Codable, Sendable {
         case .sRGB: return CGColorSpace(name: CGColorSpace.sRGB)!
         case .displayP3: return CGColorSpace(name: CGColorSpace.displayP3)!
         case .adobeRGB: return CGColorSpace(name: CGColorSpace.adobeRGB1998)!
+        case .proPhoto: return CGColorSpace(name: CGColorSpace.rommrgb)!
         }
     }
+
+    /// The choices offered when exporting; ProPhoto is for Edit In.
+    public static let exportChoices: [ExportColorSpace] = [.sRGB, .displayP3, .adobeRGB]
 }
 
 public enum ExportMetadata: String, CaseIterable, Codable, Sendable {
@@ -150,13 +155,15 @@ public final class Exporter: Sendable {
         return result
     }
 
-    /// Exports one photo and returns the written file.
-    public func export(_ assetID: Int64, settings: ExportSettings) throws -> URL {
+    /// Exports one photo and returns the written file. `baseName` replaces the original's
+    /// name; with `develop` false the photo is rendered without its develop settings.
+    public func export(_ assetID: Int64, settings: ExportSettings, baseName: String? = nil,
+                       develop applyDevelop: Bool = true) throws -> URL {
         guard let detail = try catalog.detail(for: assetID) else { throw ExportError("The photo is no longer in the catalog.") }
         guard let source = detail.fileURL, FileManager.default.fileExists(atPath: source.path) else {
             throw ExportError("The original is offline. Connect its drive and export again.")
         }
-        let develop = try catalog.developSettings(for: assetID)
+        let develop = applyDevelop ? try catalog.developSettings(for: assetID) : .neutral
         // A crop keeps only part of the photo, so decode larger to still reach the long edge.
         var decodeEdge = settings.longEdge
         if let longEdge = settings.longEdge, let crop = develop.crop,
@@ -197,7 +204,7 @@ public final class Exporter: Sendable {
             throw ExportError("Rendering failed.")
         }
 
-        let base = (detail.asset.filename as NSString).deletingPathExtension
+        let base = baseName ?? (detail.asset.filename as NSString).deletingPathExtension
         let target = Self.uniqueURL(in: settings.destination, base: base, extension: settings.format.fileExtension)
         guard let destination = CGImageDestinationCreateWithURL(target as CFURL, settings.format.type.identifier as CFString,
                                                                 1, nil) else {
@@ -265,8 +272,8 @@ public final class Exporter: Sendable {
     }
 }
 
-struct ExportError: LocalizedError {
+public struct ExportError: LocalizedError {
     let message: String
-    init(_ message: String) { self.message = message }
-    var errorDescription: String? { message }
+    public init(_ message: String) { self.message = message }
+    public var errorDescription: String? { message }
 }

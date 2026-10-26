@@ -22,6 +22,23 @@ public struct PhotoVersion: Codable, Identifiable, Hashable, Sendable, Fetchable
     /// Rendered file for external edits and AI results; nil for parameter-only versions.
     public var filePath: String?
     public var createdAt: Date
+    /// The cataloged photo holding an external edit or AI result, stacked on `assetId`.
+    public var derivedAssetId: Int64?
+    /// How an AI result was made (model, recipe, seed, prompt), as JSON.
+    public var provenance: String?
+
+    public init(id: Int64? = nil, assetId: Int64, kind: VersionKind, parentVersionId: Int64? = nil, name: String? = nil,
+                filePath: String? = nil, createdAt: Date = Date(), derivedAssetId: Int64? = nil, provenance: String? = nil) {
+        self.id = id
+        self.assetId = assetId
+        self.kind = kind
+        self.parentVersionId = parentVersionId
+        self.name = name
+        self.filePath = filePath
+        self.createdAt = createdAt
+        self.derivedAssetId = derivedAssetId
+        self.provenance = provenance
+    }
 
     public mutating func didInsert(_ inserted: InsertionSuccess) {
         id = inserted.rowID

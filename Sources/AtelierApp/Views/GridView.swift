@@ -250,7 +250,15 @@ final class ThumbnailItem: NSCollectionViewItem {
         case .rejected: flag = "✕ "
         case .none: flag = ""
         }
-        return flag + stars
+        // Stacks: the original shows how many versions sit on it, each version what it is.
+        var stack = ""
+        switch row.stackKind {
+        case .externalEdit?: stack = "  ◪ Edit"
+        case .ai?: stack = "  ✦ AI"
+        default:
+            if let count = row.stackCount, count > 0 { stack = "  ▤ \(count + 1)" }
+        }
+        return flag + stars + stack
     }
 
     static func color(for label: ColorLabel) -> NSColor {
