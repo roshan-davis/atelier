@@ -65,9 +65,23 @@ Every feature follows these rules. A feature is not done until it meets them.
    - **Import into:** a new import entry (named after the first folder by default) or an existing one.
    - **Files:** leave files where they are, or copy them into the library folder (dated folders, hash-verified).
    - **Keywords:** optional, applied to every photo.
+   - **Culling:** optional "Cull before importing" (see Culling).
 3. The Import button reads "Import N Photos" and is disabled until at least one photo is found.
 4. After Import, the dialog closes, the import entry is selected, photos appear as they are cataloged, and the status bar shows progress with Cancel.
 5. When done, the status bar summarizes imported, already-in-catalog and unreadable files, with "Show Problems" listing any failures.
+
+### Culling (decided Oct 26, 2026)
+
+Culling picks the keepers from groups of similar shots (bursts, the same scene taken a few times). It runs before an import or on any import entry later, in the same Cull view.
+
+- **Before importing:** the Import dialog has "Cull before importing". With it on, the button reads "Continue to Culling…" and the Cull view opens on the chosen photos. Only kept photos go into the import entry, with the options chosen in the dialog. The shots not kept are still cataloged (flagged Rejected, outside the entry, under All Photographs and their folder) so they can be re-reviewed; in copy mode they are copied too.
+- **On an import entry:** right-click the entry in the sidebar > Cull…, or Library > Cull Import…. When done, kept photos are flagged Picked and the others Rejected (nothing is removed; the Rejected filter hides them and culling again changes it).
+- **Grouping:** photos are ordered by capture time; a photo joins the group before it when it was taken close in time and looks alike (Vision image feature prints). A Grouping slider goes from Tight to Loose and regroups instantly. Single shots are listed last and kept.
+- **Suggested keeper:** in each group Atelier suggests the best photo: the sharpest, and where there are faces, the best face capture quality (eyes open, in focus). It is marked Suggested and starts as the keeper; any photo can be kept or dropped, and a group can keep several.
+- **Layout:** groups as rows of thumbnails on the left (kept photos with a check, the rest dimmed), the focused photo large on the right with its sharpness and face quality, counts and the Grouping slider on top, Cancel and Import N Photos (or Done) at the bottom.
+- **Keys:** arrows move between photos and groups, P keeps, X drops, Space toggles, Return finishes, Esc cancels.
+- **Groups are remembered.** Every photo culled with others shows "◫ n" (the group's size) in the grid. Photo > Show Cull Group (⇧⌘G), or right-click > Show Cull Group (n Shots), opens the Cull view on that one group: the keeper next to every shot it beat, rejected ones included, with the same large preview to re-review and change the keeper. A shot kept on re-review is flagged Picked and joins the group's import entry.
+- Analysis runs in the background with progress; for photos already cataloged it reads the files where they are.
 
 ## Scope by release
 

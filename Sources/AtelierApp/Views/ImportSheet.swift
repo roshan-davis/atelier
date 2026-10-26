@@ -22,6 +22,7 @@ struct ImportSheet: View {
     @State private var keywords = ""
     /// The develop preset applied to new photos, remembered between imports.
     @AppStorage("import.developPreset") private var presetID = ""
+    @AppStorage("import.cull") private var cullFirst = false
     @State private var dropTargeted = false
 
     private var photoCount: Int? {
@@ -121,6 +122,15 @@ struct ImportSheet: View {
                     }
                     TextField("Keywords", text: $keywords, prompt: Text("Added to every photo, comma separated"))
                 }
+
+                Section {
+                    Toggle("Cull before importing", isOn: $cullFirst)
+                } footer: {
+                    Text("Groups similar shots and suggests the best of each, so you pick the keepers first. Only keepers go into the import entry; the rest are cataloged as Rejected and can be reviewed later with Photo > Show Cull Group.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             .formStyle(.grouped)
 
@@ -131,8 +141,14 @@ struct ImportSheet: View {
                 Button(importButtonTitle) {
                     var options = self.options
                     options.developPreset = model.develop.presets.first { $0.id.uuidString == presetID }
-                    model.runImport(sources: sources, options: options)
+                    let sources = self.sources
                     dismiss()
+                    if cullFirst {
+                        // After the dialog closes, so the Cull view isn't stacked on it.
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { model.beginImportCull(sources: sources, options: options) }
+                    } else {
+                        model.runImport(sources: sources, options: options)
+                    }
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(!canImport)
@@ -182,6 +198,7 @@ struct ImportSheet: View {
     }
 
     private var importButtonTitle: String {
+        if cullFirst { return "Continue to Culling…" }
         guard let photoCount, photoCount > 0 else { return "Import" }
         return "Import \(photoCount) Photo\(photoCount == 1 ? "" : "s")"
     }

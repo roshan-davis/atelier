@@ -208,6 +208,8 @@ public struct AssetRow: Codable, Hashable, Identifiable, Sendable, FetchableReco
     public var stackKind: VersionKind?
     /// How many edits and AI results are stacked on this photo.
     public var stackCount: Int?
+    /// How many photos were culled together with this one; nil when it was never in a cull group.
+    public var cullGroupSize: Int?
 }
 
 /// Everything the inspector and loupe need for one photo.

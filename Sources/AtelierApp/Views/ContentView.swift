@@ -97,6 +97,10 @@ struct ContentView: View {
         .sheet(isPresented: $model.showingShortcuts) {
             ShortcutsSheet()
         }
+        .sheet(item: $model.cullSession) { session in
+            CullView(cull: session)
+                .environment(\.theme, theme)
+        }
         .background(WindowAccessor { model.mainWindow = $0 })
         .environment(\.theme, theme)
         .onAppear { theme.apply() }

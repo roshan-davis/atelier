@@ -31,6 +31,9 @@ extension LibraryModel {
 
         if mode != .loupe { menu.addItem(ClosureMenuItem("Open in Loupe") { self.openLoupe() }) }
         if mode != .develop { menu.addItem(ClosureMenuItem("Edit in Develop") { self.openDevelop() }) }
+        if ids.count == 1, let size = rows.first(where: { $0.id == ids[0] })?.cullGroupSize, size > 1 {
+            menu.addItem(ClosureMenuItem("Show Cull Group (\(size) Shots)") { self.showCullGroup() })
+        }
         menu.addItem(submenu("Edit In", editInMenu()))
         let ai = NSMenu()
         for recipe in AIRecipe.allCases {

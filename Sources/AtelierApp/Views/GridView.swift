@@ -258,6 +258,8 @@ final class ThumbnailItem: NSCollectionViewItem {
         default:
             if let count = row.stackCount, count > 0 { stack = "  ▤ \(count + 1)" }
         }
+        // Culled with other shots: how many were in the group.
+        if let size = row.cullGroupSize, size > 1 { stack += "  ◫ \(size)" }
         return flag + stars + stack
     }
 

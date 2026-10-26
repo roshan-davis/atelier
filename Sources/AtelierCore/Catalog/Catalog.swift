@@ -141,6 +141,7 @@ public final class Catalog: Sendable {
         }
         registerDevelopMigration(&migrator)
         registerStackMigration(&migrator)
+        registerCullMigration(&migrator)
         return migrator
     }
 }

@@ -75,6 +75,7 @@ enum LayoutSnapshots {
         try? await Task.sleep(for: .seconds(2))
         await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1000, height: 584),
                       to: folder.appendingPathComponent("theme-neutralGray-grid.png"))
+        await snapshotCulling(model: model, into: folder)
         await capture(AnyView(AppearanceSettings().frame(width: 560)), size: CGSize(width: 560, height: 330),
                       to: folder.appendingPathComponent("settings-appearance.png"))
         await capture(AnyView(EditInSettings().frame(width: 640)), size: CGSize(width: 640, height: 360),
@@ -85,6 +86,87 @@ enum LayoutSnapshots {
         Theme.system.apply()
         fflush(stdout)
         exit(0)
+    }
+
+    /// Culling before an import: three takes of one scene (one soft), two of another, and a
+    /// single shot. Captures the Cull view, then imports and prints how the photos landed.
+    private static func snapshotCulling(model: LibraryModel, into folder: URL) async {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("atelier-cull-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let shots: [(String, Int, Int, Bool)] = [("Beach-1", 0, 0, false), ("Beach-2", 0, 1, true), ("Beach-3", 0, 2, false),
+                                                 ("Market-1", 1, 20, false), ("Market-2", 1, 21, false), ("Portrait", 2, 300, false)]
+        var files: [URL] = []
+        for (name, scene, second, soft) in shots {
+            let url = dir.appendingPathComponent(name + ".jpg")
+            writeScene(scene, shift: second % 3, soft: soft, second: second, to: url)
+            files.append(url)
+        }
+        let cull = CullModel(source: .importing(files: files, options: ImportOptions(target: .newGroup(name: "Cull Test"))),
+                             title: "Cull Before Importing \u{201C}Cull Test\u{201D}", model: model)
+        for _ in 0..<60 where cull.isAnalyzing { try? await Task.sleep(for: .milliseconds(250)) }
+        print("SNAPSHOT: cull groups \(cull.groups.map { $0.map { cull.photos[$0].name } }) kept \(cull.kept.map { cull.photos[$0].name }.sorted())")
+        try? await Task.sleep(for: .seconds(1))
+        await capture(AnyView(CullView(cull: cull)), size: CGSize(width: 1280, height: 800),
+                      to: folder.appendingPathComponent("cull-1280x800.png"))
+        model.cullSession = cull
+        cull.finish()
+        for _ in 0..<40 where model.importProgress != nil { try? await Task.sleep(for: .milliseconds(250)) }
+        try? await Task.sleep(for: .seconds(1))
+        let all = (try? model.catalog.assetRows(filter: LibraryFilter())) ?? []
+        print("SNAPSHOT: after cull import \(all.filter { $0.filename.hasSuffix(".jpg") && !$0.filename.hasPrefix("atelier") }.map { "\($0.filename) flag=\($0.flag) group=\($0.cullGroupSize ?? 0)" })")
+        print("SNAPSHOT: status \(model.status ?? "-")")
+        if let beach = all.first(where: { $0.filename == "Beach-2.jpg" }) {
+            model.focusedID = beach.id
+            model.showCullGroup()
+            if let review = model.cullSession {
+                for _ in 0..<40 where review.isAnalyzing { try? await Task.sleep(for: .milliseconds(250)) }
+                try? await Task.sleep(for: .seconds(1))
+                await capture(AnyView(CullView(cull: review)), size: CGSize(width: 1280, height: 800),
+                              to: folder.appendingPathComponent("cull-group-review.png"))
+                review.cancel()
+            }
+        }
+    }
+
+    private static func writeScene(_ scene: Int, shift: Int, soft: Bool, second: Int, to url: URL) {
+        let width = 1200, height = 800
+        let space = CGColorSpace(name: CGColorSpace.sRGB)!
+        guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: space, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return }
+        let palettes: [[CGColor]] = [
+            [CGColor(srgbRed: 0.2, green: 0.45, blue: 0.75, alpha: 1), CGColor(srgbRed: 0.95, green: 0.85, blue: 0.6, alpha: 1)],
+            [CGColor(srgbRed: 0.55, green: 0.15, blue: 0.1, alpha: 1), CGColor(srgbRed: 0.95, green: 0.6, blue: 0.2, alpha: 1)],
+            [CGColor(srgbRed: 0.1, green: 0.3, blue: 0.15, alpha: 1), CGColor(srgbRed: 0.7, green: 0.85, blue: 0.6, alpha: 1)],
+        ]
+        if let gradient = CGGradient(colorsSpace: space, colors: palettes[scene] as CFArray, locations: [0, 1]) {
+            context.drawLinearGradient(gradient, start: .zero, end: CGPoint(x: width, y: height), options: [])
+        }
+        // Detail to judge sharpness by: stripes for the beach, blocks for the market, a face-sized disc.
+        context.setFillColor(CGColor(gray: scene == 1 ? 0.95 : 0.1, alpha: 0.8))
+        for i in 0..<14 {
+            let x = 120 + i * 70 + shift * 12
+            switch scene {
+            case 0: context.fill(CGRect(x: x, y: 300, width: 18, height: 220))
+            case 1: context.fill(CGRect(x: x, y: 120 + (i % 3) * 160, width: 50, height: 50))
+            default: context.fillEllipse(in: CGRect(x: 420 + shift * 10, y: 220, width: 360, height: 360))
+            }
+        }
+        guard var image = context.makeImage() else { return }
+        if soft, let small = CGContext(data: nil, width: width / 12, height: height / 12, bitsPerComponent: 8, bytesPerRow: 0,
+                                       space: space, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) {
+            small.interpolationQuality = .high
+            small.draw(image, in: CGRect(x: 0, y: 0, width: width / 12, height: height / 12))
+            if let tiny = small.makeImage() {
+                context.interpolationQuality = .high
+                context.draw(tiny, in: CGRect(x: 0, y: 0, width: width, height: height))
+                image = context.makeImage() ?? image
+            }
+        }
+        let date = String(format: "2026:10:26 10:%02d:%02d", second / 60, second % 60)
+        let properties: [CFString: Any] = [kCGImagePropertyExifDictionary: [kCGImagePropertyExifDateTimeOriginal: date]]
+        guard let destination = CGImageDestinationCreateWithURL(url as CFURL, "public.jpeg" as CFString, 1, nil) else { return }
+        CGImageDestinationAddImage(destination, image, properties as CFDictionary)
+        CGImageDestinationFinalize(destination)
     }
 
     /// A synthetic 3000x2000 photo, imported into the snapshot catalog.

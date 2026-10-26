@@ -55,6 +55,11 @@ struct AtelierApp: App {
                 Button("Develop") { model.openDevelop() }
                     .keyboardShortcut("d", modifiers: [.command])
                 Divider()
+                Button("Cull Import…") {
+                    if case .importGroup(let id) = model.sidebarSelection { model.beginCull(importGroup: id) }
+                }
+                .disabled({ if case .importGroup = model.sidebarSelection { return false } else { return true } }())
+                Divider()
                 Button("Write XMP for Selection") { model.writeXMP(selectionOnly: true) }
                     .keyboardShortcut("s", modifiers: [.command])
                 Button("Write All Unsaved XMP") { model.writeXMP(selectionOnly: false) }
@@ -64,6 +69,10 @@ struct AtelierApp: App {
                     .keyboardShortcut("r", modifiers: [.command])
             }
             CommandMenu("Photo") {
+                Button("Show Cull Group") { model.showCullGroup() }
+                    .keyboardShortcut("g", modifiers: [.command, .shift])
+                    .disabled(model.focusedCullGroupSize < 2)
+                Divider()
                 Menu("Edit In") {
                     ForEach(Array(model.externalEditors.enumerated()), id: \.element.id) { index, editor in
                         if index == 0 {

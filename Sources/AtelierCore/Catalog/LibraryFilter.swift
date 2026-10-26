@@ -35,7 +35,10 @@ extension Catalog {
                    metadata.rating, metadata.flag, metadata.colorLabel,
                    stackVersion.assetId AS stackParentId, stackVersion.kind AS stackKind,
                    (SELECT COUNT(*) FROM version derived
-                    WHERE derived.assetId = asset.id AND derived.derivedAssetId IS NOT NULL) AS stackCount
+                    WHERE derived.assetId = asset.id AND derived.derivedAssetId IS NOT NULL) AS stackCount,
+                   (SELECT COUNT(*) FROM cullGroupAsset member
+                    WHERE member.cullGroupId = (SELECT cullGroupId FROM cullGroupAsset WHERE assetId = asset.id))
+                    AS cullGroupSize
             FROM asset
             JOIN metadata ON metadata.assetId = asset.id
             LEFT JOIN version stackVersion ON stackVersion.derivedAssetId = asset.id

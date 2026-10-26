@@ -51,6 +51,8 @@ public struct ImportProgress: Sendable {
     public var importedAssetIDs: [Int64] = []
     /// The import entry the photos were added to.
     public var importGroupId: Int64?
+    /// Each source file's photo, new or already in the catalog.
+    public var assetIDsBySource: [URL: Int64] = [:]
 }
 
 enum ImportOutcome {
@@ -130,6 +132,7 @@ public final class Importer: Sendable {
                     state.skipped += 1
                     assetID = id
                 }
+                state.assetIDsBySource[file] = assetID
                 if let groupID = state.importGroupId {
                     try catalog.addAssets([assetID], toImportGroup: groupID)
                 }

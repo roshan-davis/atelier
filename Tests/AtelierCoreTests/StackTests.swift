@@ -55,6 +55,31 @@ final class StackTests: XCTestCase {
         XCTAssertEqual(try catalog.detail(for: edit)?.asset.width, 40)
     }
 
+    func testCullGroupsKeepTheRejectsForReview() async throws {
+        for name in ["A", "B", "C"] { try makeJPEG(at: workDir.appendingPathComponent("\(name).jpg")) }
+        let catalog = try Catalog()
+        let result = await Importer(catalog: catalog, previews: nil)
+            .run(sources: [workDir], options: ImportOptions(buildPreviews: false))
+        let group = try XCTUnwrap(result.importGroupId)
+        let ids = result.importedAssetIDs
+        XCTAssertEqual(result.assetIDsBySource.count, 3)
+        // C was culled out before import, so it is not in the entry.
+        try catalog.removeAssets([ids[2]], fromImportGroup: group)
+        try catalog.applyCull(groups: [ids], keepers: [ids[0]])
+        XCTAssertEqual(try catalog.cullGroup(of: ids[2]), ids)
+
+        var rows = try catalog.assetRows(filter: LibraryFilter(scope: .importGroup(group)))
+        XCTAssertEqual(rows.map(\.id), [ids[0], ids[1]])
+        XCTAssertEqual(rows.map(\.flag), [.picked, .rejected])
+        XCTAssertEqual(rows.first?.cullGroupSize, 3)
+
+        // Re-review: C wins after all and joins the entry.
+        try catalog.applyCull(groups: [ids], keepers: [ids[2]])
+        rows = try catalog.assetRows(filter: LibraryFilter(scope: .importGroup(group)))
+        XCTAssertEqual(rows.map(\.id), ids)
+        XCTAssertEqual(rows.map(\.flag), [.rejected, .rejected, .picked])
+    }
+
     private func makeJPEG(at url: URL, width: Int = 120, height: Int = 80) throws {
         let space = CGColorSpace(name: CGColorSpace.sRGB)!
         let context = try XCTUnwrap(CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
