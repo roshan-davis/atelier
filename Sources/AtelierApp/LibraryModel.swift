@@ -101,6 +101,8 @@ final class LibraryModel: ObservableObject {
     @Published var zoom: ZoomLevel = .fit
     @Published var zoomReport = ZoomReport()
     @Published var showingShortcuts = false
+    /// The Cull view, while open.
+    @Published var cullSession: CullModel?
     /// The library window, which receives the single-key commands.
     weak var mainWindow: NSWindow?
 
@@ -439,7 +441,8 @@ final class LibraryModel: ObservableObject {
         showingImportSheet = true
     }
 
-    func runImport(sources: [URL], options: ImportOptions) {
+    /// `then` runs on the main actor with the result, before the status is set.
+    func runImport(sources: [URL], options: ImportOptions, then: ((ImportProgress) -> Void)? = nil) {
         let importer = Importer(catalog: catalog, previews: nil, scheduler: previewScheduler)
         importProgress = ImportStatus(phase: "Scanning…", fraction: nil)
         shownImportGroup = nil
@@ -467,6 +470,7 @@ final class LibraryModel: ObservableObject {
                 if !result.failures.isEmpty { parts.append("\(result.failures.count) could not be read") }
                 if Task.isCancelled || self.importWasCancelled { parts.insert("Import cancelled", at: 0) }
                 self.status = parts.joined(separator: ", ")
+                then?(result)
                 self.problems = result.failures.map { Problem(name: $0.url.lastPathComponent, reason: $0.reason) }
                 self.problemsTitle = "These files could not be imported"
                 self.importProgress = nil

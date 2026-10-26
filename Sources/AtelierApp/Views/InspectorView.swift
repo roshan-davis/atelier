@@ -35,6 +35,9 @@ private struct DetailForm: View {
         Form {
             Section("Photo") {
                 LabeledContent("File", value: detail.asset.filename)
+                if let copy = model.virtualCopyName(detail.asset.id) {
+                    LabeledContent("Version", value: "Virtual copy (\(copy))")
+                }
                 LabeledContent("Volume") {
                     Text(detail.volume.name + (detail.volume.isOnline ? "" : " (offline)"))
                 }

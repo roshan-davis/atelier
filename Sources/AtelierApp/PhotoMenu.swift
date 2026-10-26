@@ -31,6 +31,13 @@ extension LibraryModel {
 
         if mode != .loupe { menu.addItem(ClosureMenuItem("Open in Loupe") { self.openLoupe() }) }
         if mode != .develop { menu.addItem(ClosureMenuItem("Edit in Develop") { self.openDevelop() }) }
+        menu.addItem(ClosureMenuItem("Create Virtual Copy\(ids.count > 1 ? "\(count)" : "")") { self.createVirtualCopies() })
+        if targetsIncludeVirtualCopy {
+            menu.addItem(ClosureMenuItem("Remove Virtual Copy…") { self.removeVirtualCopies() })
+        }
+        if ids.count == 1, let size = rows.first(where: { $0.id == ids[0] })?.cullGroupSize, size > 1 {
+            menu.addItem(ClosureMenuItem("Show Cull Group (\(size) Shots)") { self.showCullGroup() })
+        }
         menu.addItem(submenu("Edit In", editInMenu()))
         let ai = NSMenu()
         for recipe in AIRecipe.allCases {

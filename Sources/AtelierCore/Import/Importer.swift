@@ -51,6 +51,8 @@ public struct ImportProgress: Sendable {
     public var importedAssetIDs: [Int64] = []
     /// The import entry the photos were added to.
     public var importGroupId: Int64?
+    /// Each source file's photo, new or already in the catalog.
+    public var assetIDsBySource: [URL: Int64] = [:]
 }
 
 enum ImportOutcome {
@@ -130,6 +132,7 @@ public final class Importer: Sendable {
                     state.skipped += 1
                     assetID = id
                 }
+                state.assetIDsBySource[file] = assetID
                 if let groupID = state.importGroupId {
                     try catalog.addAssets([assetID], toImportGroup: groupID)
                 }
@@ -214,7 +217,9 @@ public final class Importer: Sendable {
                 ?? Folder(id: nil, volumeId: volumeRecord.id!, relativePath: relativeFolder)
             if folder.id == nil { try folder.insert(db) }
 
-            if let existing = try Int64.fetchOne(db, sql: "SELECT id FROM asset WHERE folderId = ? AND filename = ?",
+            if let existing = try Int64.fetchOne(db, sql: """
+                SELECT id FROM asset WHERE folderId = ? AND filename = ? AND virtualCopyOf IS NULL
+                """,
                                                  arguments: [folder.id!, filename]) {
                 return .existing(existing)
             }
@@ -256,6 +261,7 @@ public final class Importer: Sendable {
                 JOIN folder ON folder.id = asset.folderId
                 JOIN volume ON volume.id = folder.volumeId
                 WHERE volume.identityKey = ? AND folder.relativePath = ? AND asset.filename = ?
+                  AND asset.virtualCopyOf IS NULL
                 """, arguments: [volume.identityKey, relativeFolder, url.lastPathComponent])
         }
     }
