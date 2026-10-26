@@ -34,6 +34,7 @@ extension Catalog {
             SELECT asset.id, asset.filename, asset.captureTime, asset.folderId,
                    metadata.rating, metadata.flag, metadata.colorLabel,
                    stackVersion.assetId AS stackParentId, stackVersion.kind AS stackKind,
+                   stackVersion.name AS stackName,
                    (SELECT COUNT(*) FROM version derived
                     WHERE derived.assetId = asset.id AND derived.derivedAssetId IS NOT NULL) AS stackCount,
                    (SELECT COUNT(*) FROM cullGroupAsset member

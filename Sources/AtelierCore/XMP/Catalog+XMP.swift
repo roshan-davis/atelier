@@ -11,15 +11,23 @@ public struct XMPWriteResult: Sendable {
 extension Catalog {
     /// Writes sidecars for `assetIDs`, or for every photo with unsaved changes when nil.
     public func writeXMPSidecars(for assetIDs: [Int64]? = nil) throws -> XMPWriteResult {
-        let jobs: [(Int64, URL?, XMPFields)] = try writer.read { db in
+        // A virtual copy shares its master's file, so only the master writes the sidecar.
+        let (jobs, copies): ([(Int64, URL?, XMPFields)], [Int64]) = try writer.read { db in
             let ids = try assetIDs ?? Int64.fetchAll(db, sql: "SELECT assetId FROM metadata WHERE xmpDirty = 1")
-            return try ids.compactMap { id in
-                guard let detail = try Self.fetchDetail(db, assetID: id) else { return nil }
+            var jobs: [(Int64, URL?, XMPFields)] = []
+            var copies: [Int64] = []
+            for id in ids {
+                guard let detail = try Self.fetchDetail(db, assetID: id) else { continue }
+                if detail.asset.virtualCopyOf != nil {
+                    copies.append(id)
+                    continue
+                }
                 let m = detail.metadata
                 let fields = XMPFields(rating: m.rating, flag: m.flag, colorLabel: m.colorLabel,
                                        keywords: detail.keywords, title: m.title, caption: m.caption)
-                return (id, detail.fileURL, fields)
+                jobs.append((id, detail.fileURL, fields))
             }
+            return (jobs, copies)
         }
 
         var result = XMPWriteResult()
@@ -38,7 +46,7 @@ extension Catalog {
         }
         result.written = written.count
         _ = try writer.write { db in
-            try AssetMetadata.filter(keys: written).updateAll(db, Column("xmpDirty").set(to: false))
+            try AssetMetadata.filter(keys: written + copies).updateAll(db, Column("xmpDirty").set(to: false))
         }
         return result
     }

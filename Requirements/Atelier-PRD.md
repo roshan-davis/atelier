@@ -83,6 +83,17 @@ Culling picks the keepers from groups of similar shots (bursts, the same scene t
 - **Groups are remembered.** Every photo culled with others shows "◫ n" (the group's size) in the grid. Photo > Show Cull Group (⇧⌘G), or right-click > Show Cull Group (n Shots), opens the Cull view on that one group: the keeper next to every shot it beat, rejected ones included, with the same large preview to re-review and change the keeper. A shot kept on re-review is flagged Picked and joins the group's import entry.
 - Analysis runs in the background with progress; for photos already cataloged it reads the files where they are.
 
+### Virtual copies (decided Oct 26, 2026)
+
+Rosh wants several treatments of one photo (colour and black and white, two crops) without duplicating the file, as in Lightroom.
+
+- **Create:** right-click a photo (grid, loupe or Develop) > Create Virtual Copy, or Photo > Create Virtual Copy (⌘'). With several photos selected, each gets a copy. The new copies are selected.
+- **What a copy starts with:** the photo's current develop settings (history starts at one step, "Virtual Copy"), rating, color label, title, caption, keywords, collections and import entries. Flags are not copied.
+- **Independent:** each copy has its own develop settings, history, snapshots, rating, flag, label and keywords. Editing a copy never changes the original or other copies.
+- **Shown in the stack:** copies sit right after the original in the grid with a "⧉ Copy n" badge; the original shows the stack count. A copy of a copy stacks on the same original. The loupe title and the inspector name the copy.
+- **Remove:** right-click > Remove Virtual Copy…, or Photo > Remove Virtual Copy…, after a confirmation. Only catalog data goes; the original and its file are never touched.
+- **Files:** a copy shares the original's file. Export names it `name-Copy1.jpg`. XMP sidecars are written for the original only. Re-importing the folder never mistakes a copy for the file. Culling an import entry skips copies.
+
 ## Scope by release
 
 The MVP proves the catalog, a usable develop module and one AI backend. Full develop parity and the plugin system come in v1.

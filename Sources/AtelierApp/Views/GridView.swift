@@ -255,6 +255,7 @@ final class ThumbnailItem: NSCollectionViewItem {
         switch row.stackKind {
         case .externalEdit?: stack = "  ◪ Edit"
         case .ai?: stack = "  ✦ AI"
+        case .virtualCopy?: stack = "  ⧉ \(row.stackName ?? "Copy")"
         default:
             if let count = row.stackCount, count > 0 { stack = "  ▤ \(count + 1)" }
         }

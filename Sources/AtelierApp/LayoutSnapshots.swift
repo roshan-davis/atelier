@@ -75,6 +75,7 @@ enum LayoutSnapshots {
         try? await Task.sleep(for: .seconds(2))
         await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1000, height: 584),
                       to: folder.appendingPathComponent("theme-neutralGray-grid.png"))
+        await snapshotVirtualCopy(model: model, into: folder)
         await snapshotCulling(model: model, into: folder)
         await capture(AnyView(AppearanceSettings().frame(width: 560)), size: CGSize(width: 560, height: 330),
                       to: folder.appendingPathComponent("settings-appearance.png"))
@@ -86,6 +87,30 @@ enum LayoutSnapshots {
         Theme.system.apply()
         fflush(stdout)
         exit(0)
+    }
+
+    /// A virtual copy of the sample photo turned black and white, next to the colour original.
+    private static func snapshotVirtualCopy(model: LibraryModel, into folder: URL) async {
+        guard let original = model.rows.first(where: { $0.stackKind == nil })?.id else { return }
+        model.selection = [original]
+        model.focusedID = original
+        model.createVirtualCopies()
+        for _ in 0..<20 where !model.rows.contains(where: { $0.stackKind == .virtualCopy }) {
+            try? await Task.sleep(for: .milliseconds(250))
+        }
+        guard let copy = model.rows.first(where: { $0.stackKind == .virtualCopy })?.id else {
+            print("SNAPSHOT: virtual copy missing")
+            return
+        }
+        model.focusedID = copy
+        model.mode = .develop
+        model.develop.set(.saturation, to: -100)
+        model.develop.flushSave()
+        model.mode = .grid
+        try? await Task.sleep(for: .seconds(3))
+        print("SNAPSHOT: after virtual copy, rows \(model.rows.map { "\($0.filename) kind=\($0.stackKind?.rawValue ?? "-") name=\($0.stackName ?? "-")" }), original saturation \((try? model.catalog.developSettings(for: original))?.saturation ?? .nan), copy \((try? model.catalog.developSettings(for: copy))?.saturation ?? .nan)")
+        await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1000, height: 584),
+                      to: folder.appendingPathComponent("virtual-copy-grid.png"))
     }
 
     /// Culling before an import: three takes of one scene (one soft), two of another, and a

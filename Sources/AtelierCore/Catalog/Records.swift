@@ -64,6 +64,8 @@ public struct Asset: Codable, Identifiable, Hashable, Sendable, FetchableRecord,
     public var orientation: Int?
     public var uti: String?
     public var importedAt: Date
+    /// Set on a virtual copy: the master photo whose file it shares.
+    public var virtualCopyOf: Int64? = nil
 
     public mutating func didInsert(_ inserted: InsertionSuccess) {
         id = inserted.rowID
@@ -206,6 +208,8 @@ public struct AssetRow: Codable, Hashable, Identifiable, Sendable, FetchableReco
     /// Set on an Edit In or AI result: the photo it is stacked on, and how it was made.
     public var stackParentId: Int64?
     public var stackKind: VersionKind?
+    /// The version's name, such as "Copy 2" for a virtual copy.
+    public var stackName: String?
     /// How many edits and AI results are stacked on this photo.
     public var stackCount: Int?
     /// How many photos were culled together with this one; nil when it was never in a cull group.

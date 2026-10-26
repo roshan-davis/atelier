@@ -204,7 +204,10 @@ public final class Exporter: Sendable {
             throw ExportError("Rendering failed.")
         }
 
-        let base = baseName ?? (detail.asset.filename as NSString).deletingPathExtension
+        var base = baseName ?? (detail.asset.filename as NSString).deletingPathExtension
+        if baseName == nil, detail.asset.virtualCopyOf != nil, let copy = try catalog.virtualCopyName(of: assetID) {
+            base += "-\(copy.replacingOccurrences(of: " ", with: ""))"
+        }
         let target = Self.uniqueURL(in: settings.destination, base: base, extension: settings.format.fileExtension)
         guard let destination = CGImageDestinationCreateWithURL(target as CFURL, settings.format.type.identifier as CFString,
                                                                 1, nil) else {

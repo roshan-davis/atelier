@@ -69,6 +69,12 @@ struct AtelierApp: App {
                     .keyboardShortcut("r", modifiers: [.command])
             }
             CommandMenu("Photo") {
+                Button("Create Virtual Copy") { model.createVirtualCopies() }
+                    .keyboardShortcut("'", modifiers: [.command])
+                    .disabled(model.focusedID == nil)
+                Button("Remove Virtual Copy…") { model.removeVirtualCopies() }
+                    .disabled(!model.targetsIncludeVirtualCopy)
+                Divider()
                 Button("Show Cull Group") { model.showCullGroup() }
                     .keyboardShortcut("g", modifiers: [.command, .shift])
                     .disabled(model.focusedCullGroupSize < 2)

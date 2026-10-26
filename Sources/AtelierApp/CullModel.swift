@@ -275,8 +275,10 @@ final class CullModel: ObservableObject, Identifiable {
 extension LibraryModel {
     /// Right-click an import entry > Cull…, or Library > Cull Import….
     func beginCull(importGroup id: Int64) {
+        // Virtual copies are deliberate versions, not near-duplicate shots.
         guard let entry = sidebar.imports.first(where: { $0.id == id }),
-              let rows = try? catalog.assetRows(filter: LibraryFilter(scope: .importGroup(id))), !rows.isEmpty else {
+              let rows = (try? catalog.assetRows(filter: LibraryFilter(scope: .importGroup(id))))?
+                .filter({ $0.stackKind != .virtualCopy }), !rows.isEmpty else {
             status = "This import has no photos to cull"
             return
         }

@@ -25,26 +25,7 @@ extension Catalog {
                                            derivedAssetId: derivedID, provenance: provenance)
                 try version.insert(db)
             }
-            try db.execute(sql: """
-                UPDATE metadata SET
-                    rating = (SELECT rating FROM metadata WHERE assetId = :parent),
-                    colorLabel = (SELECT colorLabel FROM metadata WHERE assetId = :parent),
-                    title = COALESCE(title, (SELECT title FROM metadata WHERE assetId = :parent)),
-                    caption = COALESCE(caption, (SELECT caption FROM metadata WHERE assetId = :parent))
-                WHERE assetId = :derived
-                """, arguments: ["parent": parentID, "derived": derivedID])
-            try db.execute(sql: """
-                INSERT OR IGNORE INTO assetKeyword (assetId, keywordId)
-                SELECT :derived, keywordId FROM assetKeyword WHERE assetId = :parent
-                """, arguments: ["parent": parentID, "derived": derivedID])
-            try db.execute(sql: """
-                INSERT OR IGNORE INTO collectionAsset (collectionId, assetId)
-                SELECT collectionId, :derived FROM collectionAsset WHERE assetId = :parent
-                """, arguments: ["parent": parentID, "derived": derivedID])
-            try db.execute(sql: """
-                INSERT OR IGNORE INTO importGroupAsset (importGroupId, assetId)
-                SELECT importGroupId, :derived FROM importGroupAsset WHERE assetId = :parent
-                """, arguments: ["parent": parentID, "derived": derivedID])
+            try Self.copyCatalogInfo(db, from: parentID, to: derivedID)
         }
     }
 

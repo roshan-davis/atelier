@@ -30,7 +30,7 @@ struct LoupeView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
                 if let detail = model.detail {
-                    LoupeInfo(detail: detail)
+                    LoupeInfo(detail: detail, copyName: model.virtualCopyName(detail.asset.id))
                         .padding(14)
                         .allowsHitTesting(false)
                 }
@@ -121,10 +121,11 @@ struct LoupeView: View {
 
 private struct LoupeInfo: View {
     let detail: AssetDetail
+    let copyName: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(detail.asset.filename).font(.headline)
+            Text(detail.asset.filename + (copyName.map { " · \($0)" } ?? "")).font(.headline)
             HStack(spacing: 8) {
                 if detail.metadata.rating > 0 {
                     Text(String(repeating: "★", count: detail.metadata.rating))
