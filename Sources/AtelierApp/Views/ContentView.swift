@@ -37,6 +37,7 @@ struct ContentView: View {
                 }
                 // Let the photo column shrink to whatever is left and never draw past it.
                 .frame(minWidth: 0, maxWidth: .infinity)
+                .background(Color(nsColor: theme.chrome))
                 .clipped()
                 if showInspector {
                     PanelResizeHandle(width: $panelWidth)

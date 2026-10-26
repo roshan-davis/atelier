@@ -73,6 +73,14 @@ enum Theme: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Behind the filter bar, the bars under the photo and the status bar.
+    var chrome: NSColor {
+        switch self {
+        case .system, .light, .dark: return .windowBackgroundColor
+        default: return panel
+        }
+    }
+
     /// Sets the appearance for every window, Settings included.
     func apply() {
         NSApp.appearance = appearanceName.flatMap(NSAppearance.init(named:))
