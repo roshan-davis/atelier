@@ -6,6 +6,7 @@ import SwiftUI
 /// The library grid. NSCollectionView rather than SwiftUI so 100k cells scroll smoothly.
 struct GridView: NSViewRepresentable {
     @ObservedObject var model: LibraryModel
+    var background: NSColor = .windowBackgroundColor
 
     func makeCoordinator() -> Coordinator {
         Coordinator(model: model)
@@ -22,7 +23,7 @@ struct GridView: NSViewRepresentable {
         collectionView.collectionViewLayout = layout
         collectionView.isSelectable = true
         collectionView.allowsMultipleSelection = true
-        collectionView.backgroundColors = [.windowBackgroundColor]
+        collectionView.backgroundColors = [background]
         collectionView.register(ThumbnailItem.self, forItemWithIdentifier: ThumbnailItem.identifier)
         collectionView.dataSource = context.coordinator
         collectionView.delegate = context.coordinator
@@ -41,6 +42,9 @@ struct GridView: NSViewRepresentable {
     }
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        if let collectionView = context.coordinator.collectionView, collectionView.backgroundColors != [background] {
+            collectionView.backgroundColors = [background]
+        }
         context.coordinator.update(rows: model.rows, selection: model.selection, revision: model.previewRevision)
     }
 

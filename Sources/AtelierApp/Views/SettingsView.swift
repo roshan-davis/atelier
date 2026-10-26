@@ -9,6 +9,8 @@ struct SettingsView: View {
         TabView {
             GeneralSettings()
                 .tabItem { Label("General", systemImage: "gearshape") }
+            AppearanceSettings()
+                .tabItem { Label("Appearance", systemImage: "paintpalette") }
             ImportSettings()
                 .tabItem { Label("Import", systemImage: "square.and.arrow.down") }
             DevelopSettingsTab()
@@ -21,6 +23,97 @@ struct SettingsView: View {
                 .tabItem { Label("Keyboard", systemImage: "keyboard") }
         }
         .frame(width: 560)
+    }
+}
+
+// MARK: - Appearance
+
+struct AppearanceSettings: View {
+    @AppStorage(Theme.defaultsKey) private var theme: Theme = .system
+
+    private let columns = [GridItem(.adaptive(minimum: 150), spacing: 14)]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Theme")
+                .font(.headline)
+            LazyVGrid(columns: columns, spacing: 14) {
+                ForEach(Theme.allCases) { option in
+                    ThemeCard(theme: option, isSelected: option == theme) { theme = option }
+                }
+            }
+            Text(theme.summary)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(20)
+        .onChange(of: theme) { _, newTheme in newTheme.apply() }
+    }
+}
+
+/// A small picture of the window in a theme: sidebar, photo on its surround, and the panel.
+private struct ThemeCard: View {
+    let theme: Theme
+    let isSelected: Bool
+    let select: () -> Void
+
+    var body: some View {
+        Button(action: select) {
+            VStack(spacing: 6) {
+                preview
+                    .frame(height: 74)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .overlay(RoundedRectangle(cornerRadius: 6)
+                        .strokeBorder(isSelected ? Color.accentColor : Color.secondary.opacity(0.3),
+                                      lineWidth: isSelected ? 3 : 1))
+                Text(theme.title)
+                    .font(.callout)
+                    .fontWeight(isSelected ? .semibold : .regular)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(theme.summary)
+    }
+
+    @ViewBuilder private var preview: some View {
+        if theme == .system {
+            // Half light, half dark.
+            HStack(spacing: 0) {
+                miniWindow(appearance: .aqua)
+                miniWindow(appearance: .darkAqua)
+            }
+        } else {
+            miniWindow(appearance: theme.appearanceName ?? .aqua)
+        }
+    }
+
+    private func miniWindow(appearance: NSAppearance.Name) -> some View {
+        let isDark = appearance == .darkAqua
+        let custom = theme != .system && theme != .light && theme != .dark
+        let sidebar = Color(white: isDark ? 0.2 : 0.9)
+        let surround = custom ? Color(nsColor: theme.surround) : Color(white: isDark ? 0.13 : 0.78)
+        let panel = custom ? Color(nsColor: theme.panel) : Color(white: isDark ? 0.18 : 0.96)
+        let line = Color(white: isDark ? 0.45 : 0.6)
+        return HStack(spacing: 0) {
+            sidebar.frame(width: 18)
+            ZStack {
+                surround
+                LinearGradient(colors: [Color(red: 0.35, green: 0.5, blue: 0.7), Color(red: 0.85, green: 0.7, blue: 0.45)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+                    .frame(width: 44, height: 30)
+            }
+            ZStack(alignment: .topLeading) {
+                panel
+                VStack(alignment: .leading, spacing: 5) {
+                    ForEach(0..<5, id: \.self) { _ in
+                        Capsule().fill(line).frame(height: 2)
+                    }
+                }
+                .padding(6)
+            }
+            .frame(width: 34)
+        }
     }
 }
 

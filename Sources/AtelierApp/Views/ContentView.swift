@@ -6,6 +6,7 @@ struct ContentView: View {
     @EnvironmentObject private var model: LibraryModel
     @State private var showInspector = true
     @AppStorage("panel.width") private var panelWidth = 320.0
+    @AppStorage(Theme.defaultsKey) private var theme: Theme = .system
 
     var body: some View {
         NavigationSplitView {
@@ -21,7 +22,7 @@ struct ContentView: View {
                     ZStack {
                         switch model.mode {
                         case .grid:
-                            GridView(model: model)
+                            GridView(model: model, background: theme.gridBackground)
                         case .loupe:
                             LoupeView()
                         case .develop:
@@ -36,6 +37,7 @@ struct ContentView: View {
                 }
                 // Let the photo column shrink to whatever is left and never draw past it.
                 .frame(minWidth: 0, maxWidth: .infinity)
+                .background(Color(nsColor: theme.chrome))
                 .clipped()
                 if showInspector {
                     PanelResizeHandle(width: $panelWidth)
@@ -43,7 +45,7 @@ struct ContentView: View {
                         .frame(width: panelWidth)
                         .clipped()
                         .layoutPriority(1)
-                        .background(Color(nsColor: .controlBackgroundColor))
+                        .background(Color(nsColor: theme.panel))
                 }
             }
         }
@@ -90,6 +92,9 @@ struct ContentView: View {
             ShortcutsSheet()
         }
         .background(WindowAccessor { model.mainWindow = $0 })
+        .environment(\.theme, theme)
+        .onAppear { theme.apply() }
+        .onChange(of: theme) { _, newTheme in newTheme.apply() }
     }
 }
 
