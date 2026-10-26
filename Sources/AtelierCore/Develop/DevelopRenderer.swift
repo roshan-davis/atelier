@@ -93,6 +93,16 @@ public final class DevelopRenderer: @unchecked Sendable {
             image = filter.outputImage ?? image
         }
 
+        // HSL and color grading share one color cube in sRGB-encoded values.
+        if let cube = ColorLUT.cube(for: settings) {
+            let filter = CIFilter.colorCubeWithColorSpace()
+            filter.inputImage = image
+            filter.cubeDimension = Float(ColorLUT.dimension)
+            filter.cubeData = cube
+            filter.colorSpace = sRGB
+            image = filter.outputImage ?? image
+        }
+
         // Detail
         if settings.luminanceNoise > 0 {
             let filter = CIFilter.noiseReduction()
@@ -226,14 +236,50 @@ public final class DevelopRenderer: @unchecked Sendable {
         ]
     }
 
-    /// The tone curve sampled as RGB triples for CIColorCurves.
+    static let curveRegions: [(DevelopSettings.Parameter, Double)] = [
+        (.curveShadows, 0.125), (.curveDarks, 0.375), (.curveLights, 0.625), (.curveHighlights, 0.875),
+    ]
+
+    public static func hasToneCurve(_ settings: DevelopSettings) -> Bool {
+        toneCurvePoints(settings) != nil || curveRegions.contains { settings[$0.0] != 0 } || settings.hasPointCurve
+    }
+
+    /// A point curve evaluated with the same monotone spline as the tone curve.
+    public static func pointCurveValue(_ points: [DevelopSettings.CurvePoint], at x: Double) -> Double {
+        guard points.count >= 2 else { return x }
+        return evaluateCurve(points.map { CGPoint(x: $0.x, y: $0.y) }, at: x)
+    }
+
+    /// The full tone curve at `x` (sRGB-encoded 0...1): Basic tone plus the Tone Curve panel's
+    /// region sliders, each a smooth bump over its quarter of the range.
+    public static func toneCurveValue(_ settings: DevelopSettings, at x: Double) -> Double {
+        var y = toneCurvePoints(settings).map { evaluateCurve($0, at: x) } ?? x
+        for (parameter, center) in curveRegions {
+            let amount = settings[parameter] / 100
+            guard amount != 0 else { continue }
+            var weight = max(0, 1 - abs(x - center) / 0.25)
+            weight = weight * weight * (3 - 2 * weight)
+            y += amount * 0.12 * weight
+        }
+        return min(1, max(0, y))
+    }
+
+    /// The tone curve sampled as RGB triples for CIColorCurves: Basic and region tone (never
+    /// decreasing, so tones keep their order), then the RGB point curve, then each channel's.
     static func toneCurveLUT(_ settings: DevelopSettings, samples: Int = 1024) -> [Float]? {
-        guard let points = toneCurvePoints(settings) else { return nil }
+        guard hasToneCurve(settings) else { return nil }
+        let master = settings.points(for: .rgb)
+        let channels = [settings.points(for: .red), settings.points(for: .green), settings.points(for: .blue)]
         var lut = [Float]()
         lut.reserveCapacity(samples * 3)
+        var previous = 0.0
         for i in 0..<samples {
-            let y = Float(evaluateCurve(points, at: Double(i) / Double(samples - 1)))
-            lut.append(contentsOf: [y, y, y])
+            let base = max(previous, toneCurveValue(settings, at: Double(i) / Double(samples - 1)))
+            previous = base
+            let y = pointCurveValue(master, at: base)
+            for points in channels {
+                lut.append(Float(pointCurveValue(points, at: y)))
+            }
         }
         return lut
     }

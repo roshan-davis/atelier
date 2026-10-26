@@ -148,6 +148,11 @@ final class DevelopController: ObservableObject {
         return settings[parameter]
     }
 
+    /// The value Reset returns to; for temperature, the photo's as-shot white balance.
+    func defaultValue(_ parameter: DevelopSettings.Parameter) -> Double {
+        parameter == .temperature ? asShotTemperature : parameter.defaultValue
+    }
+
     func set(_ parameter: DevelopSettings.Parameter, to value: Double) {
         guard assetID != nil else { return }
         settings[parameter] = value
@@ -163,8 +168,17 @@ final class DevelopController: ObservableObject {
         changed()
     }
 
+    func setPoints(_ points: [DevelopSettings.CurvePoint], for channel: DevelopSettings.CurveChannel) {
+        guard assetID != nil else { return }
+        settings.setPoints(points, for: channel)
+        changed()
+    }
+
     func reset(_ panel: DevelopSettings.Panel) {
         guard assetID != nil else { return }
+        if panel == .toneCurve {
+            for channel in DevelopSettings.CurveChannel.allCases { settings.setPoints([], for: channel) }
+        }
         for parameter in panel.parameters {
             if parameter == .temperature {
                 settings.temperature = nil
@@ -176,7 +190,8 @@ final class DevelopController: ObservableObject {
     }
 
     func isModified(_ panel: DevelopSettings.Panel) -> Bool {
-        panel.parameters.contains { parameter in
+        if panel == .toneCurve, settings.hasPointCurve { return true }
+        return panel.parameters.contains { parameter in
             parameter == .temperature ? settings.temperature != nil
                 : settings[parameter] != DevelopSettings.neutral[parameter]
         }
