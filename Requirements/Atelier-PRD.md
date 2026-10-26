@@ -1,6 +1,6 @@
 # Photo Catalog & Editor PRD
 
-Oct 25, 2026 · Rosh · Revised Oct 26, 2026 (UX principles and import flow; import entries; Phase 1 before Phase 0; before/after compare views; export dialog; panels, zoom and right-click menus)
+Oct 25, 2026 · Rosh · Revised Oct 26, 2026 (UX principles and import flow; import entries; Phase 1 before Phase 0; before/after compare views; export dialog; panels, zoom and right-click menus; Tone Curve, HSL / Color and Color Grading panels)
 
 Live doc with diagrams: https://claude.ai/artifact/1T8xvdGuJTcGPTHStzDJvn
 
@@ -131,9 +131,12 @@ Edits are a versioned list of parameters stored in the catalog, rendered live on
 - Panels follow Lightroom's layout and order in the right column, each collapsible, remembered between sessions, with a dot and a reset button when it has edits. Right-click a panel header for Solo Mode (one panel open at a time), Expand All and Collapse All.
   - Histogram: RGB, from the current render, with shadow and highlight clipping warnings.
   - Basic: White Balance (Temp, Tint), Tone (Exposure, Contrast, Highlights, Shadows, Whites, Blacks), Presence (Texture, Clarity, Dehaze, Vibrance, Saturation).
+  - Tone Curve: the combined curve drawn over the luminance histogram, with region sliders (Highlights, Lights, Darks, Shadows). Point and per-channel curves come later.
+  - HSL / Color: eight bands (Red, Orange, Yellow, Green, Aqua, Blue, Purple, Magenta) with Hue, Saturation and Luminance, shown one channel at a time or All, on colored slider tracks. Grays are never affected.
+  - Color Grading: Shadows, Midtones, Highlights and Global wheels (drag for hue and saturation, slider for luminance), plus Blending and Balance.
   - Detail: Sharpening (Amount, Radius), Noise Reduction (Luminance, Color).
   - Effects: Post-Crop Vignetting (Amount, Midpoint), Grain (Amount, Size).
-  - Next, in Lightroom's order: Tone Curve, HSL/Color, Color Grading, Lens Corrections, Transform, Calibration.
+  - Next, in Lightroom's order: Lens Corrections, Transform, Calibration.
   - Sliders: double-click the name to reset, click the value to type one; Temp, Tint, Vibrance and Saturation have colored tracks.
 - Zoom in loupe and develop: Fit, Fill, 100% (one photo pixel per screen pixel) and 200% in the bar under the photo; Z or a click toggles Fit and 100% at the clicked point; pinch, or ⌥/⌘ and scroll, zooms freely; drag to pan; View > Zoom In (⌘=), Zoom Out (⌘-), Zoom to Fit (⌘0). Zoom is kept when moving between photos.
 - Right-click a photo in the grid, loupe or develop for: Open in Loupe, Edit in Develop, zoom levels, Show in Finder, Set Rating, Set Flag, Set Color Label, Develop Settings (Copy, Paste, Reset), Add to Collection, Remove from this collection or import, Write XMP Metadata, Export. Right-clicking an unselected grid photo selects it first.

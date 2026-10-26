@@ -233,14 +233,20 @@ struct DevelopPanel: View {
                         PanelSection(title: panel.title, isExpanded: isExpanded(panel.rawValue), soloMode: $soloMode,
                                      isModified: develop.isModified(panel), reset: { develop.reset(panel) },
                                      expandAll: expandAll, collapseAll: collapseAll) {
-                            VStack(alignment: .leading, spacing: 10) {
-                                ForEach(groups(in: panel), id: \.0) { group in
-                                    Text(group.0)
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(.secondary)
-                                        .padding(.top, 4)
-                                    ForEach(group.1, id: \.self) { parameter in
-                                        ParameterSlider(parameter: parameter, develop: develop)
+                            switch panel {
+                            case .toneCurve:
+                                ToneCurvePanel(develop: develop)
+                            case .hsl:
+                                HSLPanel(develop: develop)
+                            case .colorGrading:
+                                ColorGradingPanel(develop: develop)
+                            default:
+                                VStack(alignment: .leading, spacing: 10) {
+                                    ForEach(groups(in: panel), id: \.0) { group in
+                                        GroupHeading(title: group.0)
+                                        ForEach(group.1, id: \.self) { parameter in
+                                            ParameterSlider(parameter: parameter, develop: develop)
+                                        }
                                     }
                                 }
                             }
@@ -280,6 +286,183 @@ struct DevelopPanel: View {
 
     private func collapseAll() {
         expandedList = ""
+    }
+}
+
+private struct GroupHeading: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .padding(.top, 4)
+    }
+}
+
+/// Tone Curve: the combined curve drawn over the histogram, with Lightroom's region sliders.
+private struct ToneCurvePanel: View {
+    @ObservedObject var develop: DevelopController
+
+    private let regions: [DevelopSettings.Parameter] = [.curveHighlights, .curveLights, .curveDarks, .curveShadows]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Canvas { context, size in
+                let rect = CGRect(origin: .zero, size: size)
+                // Quarter grid, like Lightroom.
+                var grid = Path()
+                for i in 1..<4 {
+                    let x = size.width * CGFloat(i) / 4, y = size.height * CGFloat(i) / 4
+                    grid.move(to: CGPoint(x: x, y: 0)); grid.addLine(to: CGPoint(x: x, y: size.height))
+                    grid.move(to: CGPoint(x: 0, y: y)); grid.addLine(to: CGPoint(x: size.width, y: y))
+                }
+                context.stroke(grid, with: .color(.white.opacity(0.12)), lineWidth: 1)
+                if let histogram = develop.histogram {
+                    var area = Path()
+                    area.move(to: CGPoint(x: 0, y: size.height))
+                    for (i, value) in histogram.luminance.enumerated() {
+                        let x = size.width * CGFloat(i) / CGFloat(histogram.luminance.count - 1)
+                        area.addLine(to: CGPoint(x: x, y: size.height * (1 - CGFloat(value) * 0.9)))
+                    }
+                    area.addLine(to: CGPoint(x: size.width, y: size.height))
+                    context.fill(area, with: .color(.white.opacity(0.12)))
+                }
+                var diagonal = Path()
+                diagonal.move(to: CGPoint(x: 0, y: size.height))
+                diagonal.addLine(to: CGPoint(x: size.width, y: 0))
+                context.stroke(diagonal, with: .color(.white.opacity(0.2)), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                var curve = Path()
+                let samples = 96
+                for i in 0...samples {
+                    let x = Double(i) / Double(samples)
+                    let y = DevelopRenderer.toneCurveValue(develop.settings, at: x)
+                    let point = CGPoint(x: rect.width * x, y: rect.height * (1 - y))
+                    if i == 0 { curve.move(to: point) } else { curve.addLine(to: point) }
+                }
+                context.stroke(curve, with: .color(.white), lineWidth: 1.5)
+            }
+            .aspectRatio(1, contentMode: .fit)
+            .background(Color.black.opacity(0.85), in: RoundedRectangle(cornerRadius: 4))
+            Text("Includes Contrast, Highlights, Whites and Blacks from Basic.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            GroupHeading(title: "Region")
+            ForEach(regions, id: \.self) { parameter in
+                ParameterSlider(parameter: parameter, develop: develop)
+            }
+        }
+    }
+}
+
+/// HSL / Color: eight color bands, shown one channel at a time or all at once.
+private struct HSLPanel: View {
+    @ObservedObject var develop: DevelopController
+    @AppStorage("develop.hslChannel") private var channel = "Hue"
+
+    private var channels: [DevelopSettings.HSLChannel] {
+        channel == "All" ? DevelopSettings.HSLChannel.allCases
+            : [DevelopSettings.HSLChannel(rawValue: channel) ?? .hue]
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Picker("Channel", selection: $channel) {
+                ForEach(DevelopSettings.HSLChannel.allCases, id: \.self) { Text($0.rawValue).tag($0.rawValue) }
+                Text("All").tag("All")
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            ForEach(channels, id: \.self) { channel in
+                if channels.count > 1 { GroupHeading(title: channel.rawValue) }
+                ForEach(DevelopSettings.ColorBand.allCases, id: \.self) { band in
+                    ParameterSlider(parameter: .hsl(channel, band), develop: develop)
+                }
+            }
+        }
+    }
+}
+
+/// Color Grading: a wheel per tonal region plus Global, then Blending and Balance.
+private struct ColorGradingPanel: View {
+    @ObservedObject var develop: DevelopController
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+                ForEach(DevelopSettings.GradeRegion.allCases, id: \.self) { region in
+                    VStack(spacing: 6) {
+                        Text(region.rawValue)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .onTapGesture(count: 2) {
+                                develop.reset(region.hue)
+                                develop.reset(region.saturation)
+                                develop.reset(region.luminance)
+                            }
+                            .help("Double-click to reset")
+                        ColorWheel(hue: Binding(get: { develop.value(region.hue) },
+                                                set: { develop.set(region.hue, to: $0) }),
+                                   saturation: Binding(get: { develop.value(region.saturation) },
+                                                       set: { develop.set(region.saturation, to: $0) }))
+                        Slider(value: Binding(get: { develop.value(region.luminance) },
+                                              set: { develop.set(region.luminance, to: $0) }),
+                               in: region.luminance.range, step: 1)
+                            .controlSize(.mini)
+                            .labelsHidden()
+                            .help("Luminance")
+                        Text("H \(Int(develop.value(region.hue))) · S \(Int(develop.value(region.saturation))) · L \(Int(develop.value(region.luminance)))")
+                            .font(.caption2)
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            GroupHeading(title: "Blend")
+            ParameterSlider(parameter: .gradeBlending, develop: develop)
+            ParameterSlider(parameter: .gradeBalance, develop: develop)
+        }
+    }
+}
+
+/// Drag inside the wheel to choose a tint: angle is hue, distance from the center is saturation.
+private struct ColorWheel: View {
+    @Binding var hue: Double
+    @Binding var saturation: Double
+
+    var body: some View {
+        GeometryReader { geometry in
+            let size = min(geometry.size.width, geometry.size.height)
+            let radius = size / 2
+            let center = CGPoint(x: geometry.size.width / 2, y: geometry.size.height / 2)
+            let angle = hue * .pi / 180
+            let distance = radius * saturation / 100
+            ZStack {
+                Circle()
+                    .fill(AngularGradient(colors: (0...6).map { Color(hue: Double($0) / 6, saturation: 0.8, brightness: 0.9) },
+                                          center: .center, startAngle: .degrees(0), endAngle: .degrees(-360)))
+                Circle()
+                    .fill(RadialGradient(colors: [Color(white: 0.5), Color(white: 0.5).opacity(0)],
+                                         center: .center, startRadius: 0, endRadius: radius))
+                Circle().stroke(Color.black.opacity(0.4), lineWidth: 1)
+                Circle()
+                    .fill(Color.white)
+                    .overlay(Circle().stroke(Color.black.opacity(0.6), lineWidth: 1))
+                    .frame(width: 10, height: 10)
+                    .position(x: center.x + distance * cos(angle), y: center.y - distance * sin(angle))
+            }
+            .frame(width: size, height: size)
+            .position(center)
+            .contentShape(Circle())
+            .gesture(DragGesture(minimumDistance: 0).onChanged { value in
+                let dx = value.location.x - center.x, dy = center.y - value.location.y
+                var degrees = atan2(dy, dx) * 180 / .pi
+                if degrees < 0 { degrees += 360 }
+                hue = degrees.rounded()
+                saturation = min(100, (dx * dx + dy * dy).squareRoot() / radius * 100).rounded()
+            })
+        }
+        .aspectRatio(1, contentMode: .fit)
     }
 }
 
@@ -465,6 +648,18 @@ private struct ParameterSlider: View {
 
     /// Colored tracks where Lightroom has them.
     private var trackGradient: [Color]? {
+        if let pair = parameter.hslBand {
+            let (channel, band) = pair
+            let color = Color(hue: band.hue / 360, saturation: 0.85, brightness: 0.95)
+            switch channel {
+            case .hue:
+                return [Color(hue: ((band.hue - 30 + 360).truncatingRemainder(dividingBy: 360)) / 360, saturation: 0.85, brightness: 0.95),
+                        color,
+                        Color(hue: ((band.hue + 30).truncatingRemainder(dividingBy: 360)) / 360, saturation: 0.85, brightness: 0.95)]
+            case .saturation: return [Color.gray, color]
+            case .luminance: return [Color.black, color, Color.white]
+            }
+        }
         switch parameter {
         case .temperature: return [Color(red: 0.3, green: 0.5, blue: 1), Color(red: 1, green: 0.85, blue: 0.3)]
         case .tint: return [Color(red: 0.3, green: 0.8, blue: 0.3), Color(red: 0.85, green: 0.3, blue: 0.85)]
