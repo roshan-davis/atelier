@@ -117,6 +117,8 @@ private struct DetailForm: View {
             }
         }
         .formStyle(.grouped)
+        // Let the theme's panel color show through.
+        .scrollContentBackground(.hidden)
         .onAppear(perform: syncFields)
         .onChange(of: detail) { syncFields() }
     }
