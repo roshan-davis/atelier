@@ -15,9 +15,7 @@ struct AtelierApp: App {
                 .onAppear {
                     appDelegate.model = model
                     if let folder = LayoutSnapshots.outputFolder {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                            LayoutSnapshots.run(model: model, into: folder)
-                        }
+                        Task { await LayoutSnapshots.run(model: model, into: folder) }
                     }
                 }
         }
