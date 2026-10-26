@@ -1,7 +1,9 @@
 name: Build and test
 
 on:
+  # PR branches build through pull_request only, so each push costs one macOS run, not two.
   push:
+    branches: [main]
   pull_request:
 
 jobs:
