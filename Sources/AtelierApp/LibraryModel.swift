@@ -33,6 +33,12 @@ struct ImportStatus: Equatable {
     var fraction: Double?
 }
 
+/// A file the last import or export could not handle, shown from the status bar.
+struct Problem: Hashable {
+    var name: String
+    var reason: String
+}
+
 struct SidebarData: Equatable, Sendable {
     var volumes: [Volume] = []
     var folders: [Folder] = []
@@ -76,8 +82,14 @@ final class LibraryModel: ObservableObject {
     /// Import entry preselected in the import sheet, when importing more into an existing one.
     @Published var pendingImportGroup: Int64?
     @Published var importProgress: ImportStatus?
-    /// Files the last import could not read, shown on request from the status bar.
-    @Published var importFailures: [ImportFailure] = []
+    /// Files the last import or export could not handle, shown on request from the status bar.
+    @Published var problems: [Problem] = []
+    @Published var problemsTitle = ""
+    @Published var showingExportSheet = false
+    /// Photos the open export dialog will export, in grid order.
+    @Published private(set) var exportIDs: [Int64] = []
+    @Published var exportProgress: ImportStatus?
+    private var exportTask: Task<Void, Never>?
     private var importTask: Task<Void, Never>?
     private var importWasCancelled = false
     private var shownImportGroup: Int64?
@@ -354,7 +366,8 @@ final class LibraryModel: ObservableObject {
                 if !result.failures.isEmpty { parts.append("\(result.failures.count) could not be read") }
                 if Task.isCancelled || self.importWasCancelled { parts.insert("Import cancelled", at: 0) }
                 self.status = parts.joined(separator: ", ")
-                self.importFailures = result.failures
+                self.problems = result.failures.map { Problem(name: $0.url.lastPathComponent, reason: $0.reason) }
+                self.problemsTitle = "These files could not be imported"
                 self.importProgress = nil
                 self.importTask = nil
                 self.importWasCancelled = false
@@ -367,6 +380,62 @@ final class LibraryModel: ObservableObject {
         importWasCancelled = true
         importTask?.cancel()
         importProgress = ImportStatus(phase: "Cancelling…", fraction: nil)
+    }
+
+    // MARK: Export
+
+    /// Opens the export dialog for the selection, or the open photo in loupe and develop.
+    func beginExport() {
+        guard exportTask == nil else {
+            status = "An export is already running."
+            return
+        }
+        develop.flushSave()
+        let targets = Set(targetIDs)
+        guard !targets.isEmpty else {
+            status = "Select the photos to export first."
+            return
+        }
+        let ordered = rows.map(\.id).filter { targets.contains($0) }
+        exportIDs = ordered.isEmpty ? Array(targets) : ordered
+        showingExportSheet = true
+    }
+
+    func runExport(settings: ExportSettings, revealWhenDone: Bool) {
+        let ids = exportIDs
+        let exporter = Exporter(catalog: catalog)
+        exportProgress = ImportStatus(phase: "Exporting…", fraction: 0)
+        exportTask = Task.detached {
+            let result = await exporter.run(assetIDs: ids, settings: settings) { progress in
+                let phase = "Exporting \(min(progress.processed + 1, progress.total)) of \(progress.total)"
+                let fraction = Double(progress.processed) / Double(max(progress.total, 1))
+                Task { @MainActor in
+                    if self.exportTask != nil, self.exportProgress?.phase != "Cancelling…" {
+                        self.exportProgress = ImportStatus(phase: phase, fraction: fraction)
+                    }
+                }
+            }
+            let cancelled = Task.isCancelled
+            await MainActor.run {
+                let count = result.exported.count
+                var parts = ["Exported \(count) photo\(count == 1 ? "" : "s")"]
+                if !result.failures.isEmpty { parts.append("\(result.failures.count) could not be exported") }
+                if cancelled { parts.insert("Export cancelled", at: 0) }
+                self.status = parts.joined(separator: ", ")
+                self.problems = result.failures.map { Problem(name: $0.filename, reason: $0.reason) }
+                self.problemsTitle = "These photos could not be exported"
+                self.exportProgress = nil
+                self.exportTask = nil
+                if revealWhenDone, !result.exported.isEmpty {
+                    NSWorkspace.shared.activateFileViewerSelecting(result.exported)
+                }
+            }
+        }
+    }
+
+    func cancelExport() {
+        exportTask?.cancel()
+        exportProgress = ImportStatus(phase: "Cancelling…", fraction: nil)
     }
 
     // MARK: Previews
@@ -441,6 +510,7 @@ final class LibraryModel: ObservableObject {
         case "d": openDevelop()
         case "g": mode = .grid
         case "\\" where mode == .develop: develop.showingBefore.toggle()
+        case "y" where mode == .develop: develop.cycleCompareMode()
         default: return false
         }
         return true

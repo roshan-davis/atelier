@@ -18,6 +18,8 @@ struct AtelierApp: App {
             CommandGroup(after: .newItem) {
                 Button("Import Photos…") { model.beginImport() }
                     .keyboardShortcut("i", modifiers: [.command, .shift])
+                Button("Export…") { model.beginExport() }
+                    .keyboardShortcut("e", modifiers: [.command, .shift])
             }
             CommandMenu("Library") {
                 Button("Grid") { model.mode = .grid }
@@ -44,9 +46,15 @@ struct AtelierApp: App {
                 Button("Reset All Settings") { model.develop.resetAll() }
                     .keyboardShortcut("r", modifiers: [.command, .shift])
                     .disabled(model.mode != .develop)
-                // The \ key itself is handled by the culling key monitor.
+                // The \ and Y keys themselves are handled by the culling key monitor.
                 Button("Show Before (\\)") { model.develop.showingBefore.toggle() }
                     .disabled(model.mode != .develop)
+                Menu("Before and After (Y)") {
+                    ForEach(CompareMode.allCases, id: \.self) { mode in
+                        Button(mode.label) { model.develop.compareMode = mode }
+                    }
+                }
+                .disabled(model.mode != .develop)
             }
         }
     }

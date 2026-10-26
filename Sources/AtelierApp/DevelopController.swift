@@ -2,6 +2,27 @@ import AppKit
 import AtelierCore
 import Foundation
 
+/// How the Develop view shows the photo before edits next to the edited one.
+enum CompareMode: String, CaseIterable {
+    case off, sideBySide, slider
+
+    var label: String {
+        switch self {
+        case .off: return "Off"
+        case .sideBySide: return "Side by Side"
+        case .slider: return "Slider"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .off: return "rectangle"
+        case .sideBySide: return "rectangle.split.2x1"
+        case .slider: return "rectangle.lefthalf.inset.filled"
+        }
+    }
+}
+
 /// State for the Develop view: the open photo's settings, its live proxy render, and saving.
 ///
 /// Rendering is "latest wins": while one render runs, further slider changes collapse into a
@@ -20,6 +41,14 @@ final class DevelopController: ObservableObject {
     @Published var showingBefore = false {
         didSet { if showingBefore != oldValue { scheduleRender() } }
     }
+
+    @Published var compareMode: CompareMode = .off {
+        didSet { if compareMode != .off { renderBeforeIfNeeded() } }
+    }
+    /// The photo without edits, rendered once per open photo for the compare views.
+    @Published private(set) var beforeImage: NSImage?
+    /// Where the slider divides before (left) and after (right), 0...1.
+    @Published var sliderPosition = 0.5
 
     /// Copy/paste settings clipboard, shared across photos.
     @Published private(set) var clipboard: DevelopSettings?
@@ -47,6 +76,7 @@ final class DevelopController: ObservableObject {
         self.assetID = assetID
         session = nil
         image = nil
+        beforeImage = nil
         errorMessage = nil
         showingBefore = false
         guard let assetID else { return }
@@ -74,9 +104,15 @@ final class DevelopController: ObservableObject {
                     self.session = session
                     self.asShotTemperature = session.asShotTemperature
                     self.scheduleRender()
+                    if self.compareMode != .off { self.renderBeforeIfNeeded() }
                 }
             }
         }
+    }
+
+    func cycleCompareMode() {
+        let all = CompareMode.allCases
+        compareMode = all[(all.firstIndex(of: compareMode)! + 1) % all.count]
     }
 
     // MARK: Editing
@@ -158,6 +194,20 @@ final class DevelopController: ObservableObject {
                         self.needsRender = false
                         self.scheduleRender()
                     }
+                }
+            }
+        }
+    }
+
+    private func renderBeforeIfNeeded() {
+        guard beforeImage == nil, let session else { return }
+        let assetID = self.assetID
+        queue.async {
+            let cgImage = session.render(.neutral)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard self.assetID == assetID, let cgImage else { return }
+                    self.beforeImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
                 }
             }
         }

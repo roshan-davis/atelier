@@ -2,42 +2,170 @@ import AppKit
 import AtelierCore
 import SwiftUI
 
-/// The photo being developed, rendered live from the original.
+/// The photo being developed, rendered live from the original, with optional before/after views.
 struct DevelopImageView: View {
     @EnvironmentObject private var model: LibraryModel
     @ObservedObject var develop: DevelopController
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            Color(nsColor: .underPageBackgroundColor)
-            if let image = develop.image {
-                Image(nsImage: image)
-                    .resizable()
-                    .interpolation(.high)
-                    .aspectRatio(contentMode: .fit)
-                    .padding(16)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+        VStack(spacing: 0) {
+            ZStack(alignment: .topLeading) {
+                Color(nsColor: .underPageBackgroundColor)
+                if let image = develop.image {
+                    if develop.showingBefore || develop.compareMode == .off {
+                        PhotoImage(image: image)
+                            .padding(16)
+                    } else if develop.compareMode == .sideBySide {
+                        HStack(spacing: 12) {
+                            ComparePane(image: develop.beforeImage, label: "Before")
+                            ComparePane(image: image, label: "After")
+                        }
+                        .padding(16)
+                    } else {
+                        SliderCompareView(before: develop.beforeImage, after: image, position: $develop.sliderPosition)
+                            .padding(16)
+                    }
+                }
+                if develop.isLoading {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                if let message = develop.errorMessage {
+                    Text(message)
+                        .padding(10)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 6))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                if develop.showingBefore {
+                    Badge(text: "Before").padding(14)
+                }
             }
-            if develop.isLoading {
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            Divider()
+            HStack(spacing: 10) {
+                Text("Before and After")
+                    .foregroundStyle(.secondary)
+                Picker("Before and After", selection: $develop.compareMode) {
+                    ForEach(CompareMode.allCases, id: \.self) { mode in
+                        Label(mode.label, systemImage: mode.symbol).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                .help("Compare with the original: side by side, or drag a slider across the photo (Y)")
+                Spacer()
+                if develop.compareMode == .slider {
+                    Text("Drag across the photo to move the divider")
+                        .foregroundStyle(.secondary)
+                }
             }
-            if let message = develop.errorMessage {
-                Text(message)
-                    .padding(10)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 6))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-            if develop.showingBefore {
-                Text("Before")
-                    .font(.callout.bold())
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .background(.regularMaterial, in: Capsule())
-                    .padding(14)
-            }
+            .font(.callout)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
         }
         .onAppear { develop.open(model.focusedID) }
+    }
+}
+
+private struct PhotoImage: View {
+    let image: NSImage
+
+    var body: some View {
+        Image(nsImage: image)
+            .resizable()
+            .interpolation(.high)
+            .aspectRatio(contentMode: .fit)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+private struct Badge: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.callout.bold())
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(.regularMaterial, in: Capsule())
+    }
+}
+
+private struct ComparePane: View {
+    let image: NSImage?
+    let label: String
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            if let image {
+                PhotoImage(image: image)
+            } else {
+                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            Badge(text: label).padding(8)
+        }
+    }
+}
+
+/// The edited photo with the original revealed to the left of a draggable divider.
+private struct SliderCompareView: View {
+    let before: NSImage?
+    let after: NSImage
+    @Binding var position: Double
+
+    var body: some View {
+        GeometryReader { geometry in
+            let rect = fittedRect(for: after.size, in: geometry.size)
+            let dividerX = rect.minX + rect.width * position
+            ZStack(alignment: .topLeading) {
+                Image(nsImage: after)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: rect.width, height: rect.height)
+                    .position(x: rect.midX, y: rect.midY)
+                if let before {
+                    Image(nsImage: before)
+                        .resizable()
+                        .interpolation(.high)
+                        .frame(width: rect.width, height: rect.height)
+                        .mask(alignment: .leading) {
+                            Rectangle().frame(width: rect.width * position)
+                        }
+                        .position(x: rect.midX, y: rect.midY)
+                }
+                Rectangle()
+                    .fill(Color.white)
+                    .frame(width: 2, height: rect.height)
+                    .shadow(color: .black.opacity(0.5), radius: 2)
+                    .position(x: dividerX, y: rect.midY)
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: 30, height: 30)
+                    .overlay(Image(systemName: "arrow.left.and.right").font(.caption.bold()).foregroundStyle(Color.black))
+                    .shadow(color: .black.opacity(0.4), radius: 3)
+                    .position(x: dividerX, y: rect.midY)
+                Badge(text: "Before")
+                    .fixedSize()
+                    .position(x: rect.minX + 44, y: rect.minY + 20)
+                    .opacity(position > 0.12 ? 1 : 0)
+                Badge(text: "After")
+                    .fixedSize()
+                    .position(x: rect.maxX - 38, y: rect.minY + 20)
+                    .opacity(position < 0.88 ? 1 : 0)
+            }
+            .contentShape(Rectangle())
+            .gesture(DragGesture(minimumDistance: 0).onChanged { value in
+                guard rect.width > 0 else { return }
+                position = min(1, max(0, (value.location.x - rect.minX) / rect.width))
+            })
+        }
+    }
+
+    private func fittedRect(for size: NSSize, in bounds: CGSize) -> CGRect {
+        guard size.width > 0, size.height > 0 else { return .zero }
+        let scale = min(bounds.width / size.width, bounds.height / size.height)
+        let width = size.width * scale, height = size.height * scale
+        return CGRect(x: (bounds.width - width) / 2, y: (bounds.height - height) / 2, width: width, height: height)
     }
 }
 

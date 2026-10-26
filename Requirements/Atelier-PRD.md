@@ -1,6 +1,6 @@
 # Photo Catalog & Editor PRD
 
-Oct 25, 2026 · Rosh · Revised Oct 26, 2026 (UX principles and import flow; import entries; Phase 1 before Phase 0)
+Oct 25, 2026 · Rosh · Revised Oct 26, 2026 (UX principles and import flow; import entries; Phase 1 before Phase 0; before/after compare views; export dialog)
 
 Live doc with diagrams: https://claude.ai/artifact/1T8xvdGuJTcGPTHStzDJvn
 
@@ -79,7 +79,7 @@ The MVP proves the catalog, a usable develop module and one AI backend. Full dev
 | Develop | RAW decode, white balance, exposure, contrast, highlights, shadows, crop, straighten, history, snapshots | Tone curve, HSL, color grading, lens profiles, linear and radial masks, AI subject and sky masks, presets, batch sync | Brush masks with edge-aware refine, HDR and panorama merge, focus stacking |
 | External editors | Edit In with any app, TIFF round-trip, stacked version | PSD round-trip, per-app settings, file watcher for live updates | Smart-object style re-edit |
 | AI | ComfyUI backend, 3 recipes (object removal, upscale, background replace) | Core ML and MLX backends, recipe builder, batch queue, model registry with license gate | Natural-language search, auto-keywording, MCP server for agents |
-| Export | JPEG, TIFF, PNG, WebP; size, sharpen, sRGB | Watermark, metadata rules, named presets, publish to folder | WooCommerce and Instagram publish services |
+| Export | JPEG, HEIC, 16-bit TIFF, PNG; long edge, sharpen for screen, sRGB, Display P3 or Adobe RGB; metadata all, without location, or none; quick settings for website and full size. WebP waits for an encoder (macOS ImageIO reads WebP but cannot write it) | Watermark, metadata rules, named presets, publish to folder | WooCommerce and Instagram publish services |
 
 ## Catalog and library management
 
@@ -132,9 +132,13 @@ Edits are a versioned list of parameters stored in the catalog, rendered live on
 - History: unlimited undo per photo; named snapshots; virtual copies share one original.
 - Presets: save any subset of settings; apply on import, by drag, or by batch sync.
 - Copy and paste settings with a checkbox picker; auto-sync across a selection.
-- Before and after: split, side by side, toggle.
+- Before and after, chosen from a bar under the photo or with Y: side by side, a slider you drag across the photo (original on the left, edit on the right), and a full toggle with \.
 - Color management: soft-proofing for sRGB web output and print profiles.
 - Artwork profile: a DCP-style profile built from a ColorChecker shot, applied to all artwork photos for consistent color.
+
+### Export dialog
+
+File > Export… (⇧⌘E) or the toolbar Export button opens a dialog for the selected photos, or the open photo in loupe and develop. The dialog shows the count on its title and button, offers quick settings (Website: JPEG 2048 px, sRGB, sharpened, no location; Full-Size JPEG; Full-Size TIFF), and remembers the last choices. Exports run in the background with progress and Cancel in the status bar, keep original file names, never replace an existing file (a number is added), write the catalog's keywords, title, caption and rating, and reveal the files in Finder when done. Offline originals are listed as problems instead of stopping the batch.
 
 ### Settings format
 
