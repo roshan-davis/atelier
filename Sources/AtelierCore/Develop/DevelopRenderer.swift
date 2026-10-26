@@ -51,24 +51,15 @@ public final class DevelopRenderer: @unchecked Sendable {
             image = filter.outputImage ?? image
         }
 
-        // Tone curve in a gamma-encoded space so contrast behaves perceptually.
-        let c = settings.contrast / 100
-        let h = max(0, settings.highlights) / 100
-        let w = settings.whites / 100
-        let b = settings.blacks / 100
-        if c != 0 || h != 0 || w != 0 || b != 0 {
-            let toGamma = CIFilter.linearToSRGBToneCurve()
-            toGamma.inputImage = image
-            let curve = CIFilter.toneCurve()
-            curve.inputImage = toGamma.outputImage
-            curve.point0 = CGPoint(x: max(0, -b) * 0.1, y: max(0, b) * 0.1)
-            curve.point1 = CGPoint(x: 0.25, y: 0.25 - c * 0.08)
-            curve.point2 = CGPoint(x: 0.5, y: 0.5)
-            curve.point3 = CGPoint(x: 0.75, y: min(1, 0.75 + c * 0.08 + h * 0.08))
-            curve.point4 = CGPoint(x: 1 - max(0, w) * 0.1, y: 1 - max(0, -w) * 0.1)
-            let toLinear = CIFilter.sRGBToneCurveToLinear()
-            toLinear.inputImage = curve.outputImage
-            image = toLinear.outputImage ?? image
+        // Tone curve, applied in sRGB-encoded values so contrast behaves perceptually.
+        // CIColorCurves names its color space explicitly, so no gamma round trip is needed.
+        if let lut = toneCurveLUT(settings) {
+            let filter = CIFilter.colorCurves()
+            filter.inputImage = image
+            filter.curvesData = lut.withUnsafeBufferPointer { Data(buffer: $0) }
+            filter.curvesDomain = CIVector(x: 0, y: 1)
+            filter.colorSpace = sRGB
+            image = filter.outputImage ?? image
         }
 
         if settings.vibrance != 0 {
@@ -86,6 +77,74 @@ public final class DevelopRenderer: @unchecked Sendable {
             image = filter.outputImage ?? image
         }
         return image
+    }
+
+    /// Control points of the tone curve in sRGB-encoded values, or nil when it is the identity.
+    public static func toneCurvePoints(_ settings: DevelopSettings) -> [CGPoint]? {
+        let c = settings.contrast / 100
+        let h = max(0, settings.highlights) / 100
+        let w = settings.whites / 100
+        let b = settings.blacks / 100
+        guard c != 0 || h != 0 || w != 0 || b != 0 else { return nil }
+        return [
+            CGPoint(x: max(0, -b) * 0.1, y: max(0, b) * 0.1),
+            CGPoint(x: 0.25, y: 0.25 - c * 0.08),
+            CGPoint(x: 0.5, y: 0.5),
+            CGPoint(x: 0.75, y: min(1, 0.75 + c * 0.08 + h * 0.08)),
+            CGPoint(x: 1 - max(0, w) * 0.1, y: 1 - max(0, -w) * 0.1),
+        ]
+    }
+
+    /// The tone curve sampled as RGB triples for CIColorCurves.
+    static func toneCurveLUT(_ settings: DevelopSettings, samples: Int = 1024) -> [Float]? {
+        guard let points = toneCurvePoints(settings) else { return nil }
+        var lut = [Float]()
+        lut.reserveCapacity(samples * 3)
+        for i in 0..<samples {
+            let y = Float(evaluateCurve(points, at: Double(i) / Double(samples - 1)))
+            lut.append(contentsOf: [y, y, y])
+        }
+        return lut
+    }
+
+    /// Monotone cubic (Fritsch-Carlson) through the points, flat outside them, so the curve
+    /// never overshoots and never inverts tones.
+    public static func evaluateCurve(_ points: [CGPoint], at x: Double) -> Double {
+        guard let first = points.first, let last = points.last else { return x }
+        if x <= first.x { return min(1, max(0, first.y)) }
+        if x >= last.x { return min(1, max(0, last.y)) }
+        let n = points.count
+        var deltas = [Double](repeating: 0, count: n - 1)
+        for i in 0..<(n - 1) {
+            deltas[i] = (points[i + 1].y - points[i].y) / (points[i + 1].x - points[i].x)
+        }
+        var slopes = [Double](repeating: 0, count: n)
+        slopes[0] = deltas[0]
+        slopes[n - 1] = deltas[n - 2]
+        for i in 1..<(n - 1) {
+            slopes[i] = deltas[i - 1] * deltas[i] <= 0 ? 0 : (deltas[i - 1] + deltas[i]) / 2
+        }
+        for i in 0..<(n - 1) {
+            if deltas[i] == 0 {
+                slopes[i] = 0
+                slopes[i + 1] = 0
+                continue
+            }
+            let a = slopes[i] / deltas[i], b = slopes[i + 1] / deltas[i]
+            let sum = a * a + b * b
+            if sum > 9 {
+                let t = 3 / sum.squareRoot()
+                slopes[i] = t * a * deltas[i]
+                slopes[i + 1] = t * b * deltas[i]
+            }
+        }
+        var k = 0
+        while x > points[k + 1].x { k += 1 }
+        let x0 = points[k].x, x1 = points[k + 1].x, span = x1 - x0
+        let t = (x - x0) / span, t2 = t * t, t3 = t2 * t
+        let y = (2 * t3 - 3 * t2 + 1) * points[k].y + (t3 - 2 * t2 + t) * span * slopes[k]
+            + (-2 * t3 + 3 * t2) * points[k + 1].y + (t3 - t2) * span * slopes[k + 1]
+        return min(1, max(0, y))
     }
 }
 

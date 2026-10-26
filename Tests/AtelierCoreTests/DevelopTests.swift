@@ -73,6 +73,22 @@ final class DevelopTests: XCTestCase {
         XCTAssertLessThan(dark, neutral, "neutral \(neutral), contrast/blacks \(dark)")
     }
 
+    func testToneCurveIsMonotoneAndContrastDarkensLowMidtones() {
+        var settings = DevelopSettings()
+        settings.contrast = 100
+        settings.blacks = -100
+        let points = DevelopRenderer.toneCurvePoints(settings)!
+        var previous = -1.0
+        for i in 0...100 {
+            let y = DevelopRenderer.evaluateCurve(points, at: Double(i) / 100)
+            XCTAssertGreaterThanOrEqual(y, previous)
+            previous = y
+        }
+        XCTAssertLessThan(DevelopRenderer.evaluateCurve(points, at: 0.4), 0.4)
+        XCTAssertGreaterThan(DevelopRenderer.evaluateCurve(points, at: 0.6), 0.6)
+        XCTAssertNil(DevelopRenderer.toneCurvePoints(.neutral))
+    }
+
     // MARK: Helpers
 
     private func centerLuma(_ image: CGImage) throws -> Double {
