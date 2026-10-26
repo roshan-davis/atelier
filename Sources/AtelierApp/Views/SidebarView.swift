@@ -7,6 +7,7 @@ struct SidebarView: View {
     @State private var newName = ""
     @State private var renaming: RenameTarget?
     @State private var renameText = ""
+    @State private var deleting: RenameTarget?
 
     enum RenameTarget: Equatable {
         case importGroup(Int64)
@@ -41,8 +42,8 @@ struct SidebarView: View {
                                 model.beginImport(into: entry.id)
                             }
                             Divider()
-                            Button("Delete Import (Keeps Photos)", role: .destructive) {
-                                model.deleteImportGroup(entry.id)
+                            Button("Delete Import…", role: .destructive) {
+                                deleting = .importGroup(entry.id)
                             }
                         }
                     }
@@ -78,7 +79,7 @@ struct SidebarView: View {
                             .contextMenu {
                                 Button("Rename…") { startRename(.collection(id), current: collection.name) }
                                 Divider()
-                                Button("Delete Collection", role: .destructive) { model.deleteCollection(id) }
+                                Button("Delete Collection…", role: .destructive) { deleting = .collection(id) }
                             }
                     }
                 }
@@ -114,6 +115,31 @@ struct SidebarView: View {
                 renaming = nil
             }
             Button("Cancel", role: .cancel) { renaming = nil }
+        }
+        .confirmationDialog(deleteTitle, isPresented: Binding(get: { deleting != nil },
+                                                              set: { if !$0 { deleting = nil } })) {
+            Button("Delete", role: .destructive) {
+                switch deleting {
+                case .importGroup(let id): model.deleteImportGroup(id)
+                case .collection(let id): model.deleteCollection(id)
+                case nil: break
+                }
+                deleting = nil
+            }
+            Button("Cancel", role: .cancel) { deleting = nil }
+        } message: {
+            Text("The photos stay in your catalog and on disk. Only this list is removed.")
+        }
+    }
+
+    private var deleteTitle: String {
+        switch deleting {
+        case .importGroup(let id):
+            return "Delete the import \"\(model.sidebar.imports.first { $0.id == id }?.name ?? "")\"?"
+        case .collection(let id):
+            return "Delete the collection \"\(model.sidebar.collections.first { $0.id == id }?.name ?? "")\"?"
+        case nil:
+            return "Delete?"
         }
     }
 

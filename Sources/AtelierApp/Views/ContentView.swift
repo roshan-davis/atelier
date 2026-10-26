@@ -32,6 +32,12 @@ struct ContentView: View {
                     .inspectorColumnWidth(min: 240, ideal: 280, max: 360)
             }
         }
+        // Dropping folders or photos anywhere on the window starts an import with them.
+        .dropDestination(for: URL.self) { urls, _ in
+            guard !urls.isEmpty, !model.showingImportSheet else { return false }
+            model.beginImport(sources: urls)
+            return true
+        }
         .toolbar {
             ToolbarItemGroup {
                 Button { model.beginImport() } label: {
@@ -70,7 +76,10 @@ private struct EmptyLibraryView: View {
             Text(model.sidebar.totalCount == 0 ? "No photos yet" : "No photos match")
                 .font(.title3)
             if model.sidebar.totalCount == 0 {
+                Text("Drag folders or photos onto this window, or")
+                    .foregroundStyle(.secondary)
                 Button("Import Photos…") { model.beginImport() }
+                    .controlSize(.large)
             }
         }
     }
@@ -78,6 +87,7 @@ private struct EmptyLibraryView: View {
 
 private struct StatusBar: View {
     @EnvironmentObject private var model: LibraryModel
+    @State private var showingFailures = false
 
     var body: some View {
         HStack {
@@ -86,8 +96,26 @@ private struct StatusBar: View {
                 Text("· \(model.selection.count) selected")
             }
             Spacer()
-            if let status = model.status {
+            if let progress = model.importProgress {
+                Text(progress.phase).lineLimit(1).monospacedDigit()
+                Group {
+                    if let fraction = progress.fraction {
+                        ProgressView(value: fraction)
+                    } else {
+                        ProgressView()
+                    }
+                }
+                .progressViewStyle(.linear)
+                .frame(width: 140)
+                Button("Cancel") { model.cancelImport() }
+                    .controlSize(.small)
+            } else if let status = model.status {
                 Text(status).lineLimit(1)
+                if !model.importFailures.isEmpty {
+                    Button("Show Problems") { showingFailures = true }
+                        .controlSize(.small)
+                        .popover(isPresented: $showingFailures) { ImportFailuresView(failures: model.importFailures) }
+                }
             }
         }
         .font(.callout)
@@ -141,5 +169,23 @@ private struct CollectionMenu: View {
             Button("Create") { model.createCollection(named: newName, addingSelection: true) }
             Button("Cancel", role: .cancel) {}
         }
+    }
+}
+
+private struct ImportFailuresView: View {
+    let failures: [ImportFailure]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("These files could not be imported").font(.headline)
+            List(failures, id: \.self) { failure in
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(failure.url.lastPathComponent)
+                    Text(failure.reason).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            .frame(width: 380, height: 220)
+        }
+        .padding(14)
     }
 }

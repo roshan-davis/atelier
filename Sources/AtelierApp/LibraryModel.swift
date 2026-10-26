@@ -26,6 +26,12 @@ enum SidebarItem: Hashable {
     }
 }
 
+struct ImportStatus: Equatable {
+    var phase: String
+    /// nil shows an indeterminate bar.
+    var fraction: Double?
+}
+
 struct SidebarData: Equatable, Sendable {
     var volumes: [Volume] = []
     var folders: [Folder] = []
@@ -58,6 +64,12 @@ final class LibraryModel: ObservableObject {
     @Published var pendingImportSources: [URL] = []
     /// Import entry preselected in the import sheet, when importing more into an existing one.
     @Published var pendingImportGroup: Int64?
+    @Published var importProgress: ImportStatus?
+    /// Files the last import could not read, shown on request from the status bar.
+    @Published var importFailures: [ImportFailure] = []
+    private var importTask: Task<Void, Never>?
+    private var importWasCancelled = false
+    private var shownImportGroup: Int64?
     /// Bumped when previews are generated so visible cells reload their images.
     @Published var previewRevision = 0
 
@@ -265,47 +277,64 @@ final class LibraryModel: ObservableObject {
 
     // MARK: Import
 
-    func beginImport(into groupID: Int64? = nil) {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = true
-        panel.allowsMultipleSelection = true
-        panel.prompt = "Choose"
-        panel.message = "Choose folders or photos to import"
-        guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
-        pendingImportSources = panel.urls
+    /// Opens the import dialog. Sources are chosen inside it, or arrive by drag and drop.
+    func beginImport(into groupID: Int64? = nil, sources: [URL] = []) {
+        guard importTask == nil else {
+            status = "An import is already running."
+            return
+        }
+        pendingImportSources = sources
         pendingImportGroup = groupID
         showingImportSheet = true
     }
 
-    func runImport(options: ImportOptions) {
-        let sources = pendingImportSources
+    func runImport(sources: [URL], options: ImportOptions) {
         let importer = Importer(catalog: catalog, previews: previews)
-        status = "Scanning…"
-        Task.detached {
+        importProgress = ImportStatus(phase: "Scanning…", fraction: nil)
+        shownImportGroup = nil
+        importTask = Task.detached {
             let result = await importer.run(sources: sources, options: options) { progress in
-                let text: String
+                let phase: String
+                let fraction: Double?
                 if progress.processed < progress.total {
-                    text = "Importing \(progress.processed) of \(progress.total)…"
+                    phase = "Importing \(progress.processed + 1) of \(progress.total)"
+                    fraction = Double(progress.processed) / Double(max(progress.total, 1))
                 } else {
-                    text = "Building previews \(progress.previewsBuilt) of \(progress.imported)…"
+                    phase = "Building previews \(progress.previewsBuilt) of \(progress.imported)"
+                    fraction = Double(progress.previewsBuilt) / Double(max(progress.imported, 1))
                 }
+                let groupID = progress.importGroupId
                 Task { @MainActor in
-                    self.status = text
+                    // Show the entry right away so photos appear as they arrive.
+                    if let groupID, self.shownImportGroup != groupID {
+                        self.shownImportGroup = groupID
+                        self.sidebarSelection = .importGroup(groupID)
+                    }
+                    if self.importTask != nil {
+                        self.importProgress = ImportStatus(phase: phase, fraction: fraction)
+                    }
                     self.previewRevision += 1
                 }
             }
             await MainActor.run {
-                var parts = ["Imported \(result.imported)"]
-                if result.skipped > 0 { parts.append("\(result.skipped) already in catalog") }
-                if !result.failures.isEmpty { parts.append("\(result.failures.count) failed") }
+                var parts = ["Imported \(result.imported) photo\(result.imported == 1 ? "" : "s")"]
+                if result.skipped > 0 { parts.append("\(result.skipped) already in the catalog") }
+                if !result.failures.isEmpty { parts.append("\(result.failures.count) could not be read") }
+                if Task.isCancelled || self.importWasCancelled { parts.insert("Import cancelled", at: 0) }
                 self.status = parts.joined(separator: ", ")
+                self.importFailures = result.failures
+                self.importProgress = nil
+                self.importTask = nil
+                self.importWasCancelled = false
                 self.previewRevision += 1
-                if let groupID = result.importGroupId {
-                    self.sidebarSelection = .importGroup(groupID)
-                }
             }
         }
+    }
+
+    func cancelImport() {
+        importWasCancelled = true
+        importTask?.cancel()
+        importProgress = ImportStatus(phase: "Cancelling…", fraction: nil)
     }
 
     // MARK: Previews
