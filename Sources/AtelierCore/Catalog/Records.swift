@@ -159,6 +159,41 @@ public struct CollectionAsset: Codable, Hashable, Sendable, FetchableRecord, Per
     public var assetId: Int64
 }
 
+/// A named set of photos created by an import. More photos can be imported into it later,
+/// and photos can be added or removed by hand. Removing a photo from an import, or deleting
+/// the import, never removes the photo from the catalog.
+public struct ImportGroup: Codable, Identifiable, Hashable, Sendable, FetchableRecord, MutablePersistableRecord {
+    public static let databaseTableName = "importGroup"
+
+    public var id: Int64?
+    public var name: String
+    public var createdAt: Date
+
+    public init(id: Int64? = nil, name: String, createdAt: Date = Date()) {
+        self.id = id
+        self.name = name
+        self.createdAt = createdAt
+    }
+
+    public mutating func didInsert(_ inserted: InsertionSuccess) {
+        id = inserted.rowID
+    }
+}
+
+public struct ImportGroupAsset: Codable, Hashable, Sendable, FetchableRecord, PersistableRecord {
+    public static let databaseTableName = "importGroupAsset"
+    public var importGroupId: Int64
+    public var assetId: Int64
+}
+
+/// An import entry for the sidebar, with its photo count and latest activity.
+public struct ImportGroupSummary: Codable, Hashable, Identifiable, Sendable, FetchableRecord {
+    public var id: Int64
+    public var name: String
+    public var createdAt: Date
+    public var photoCount: Int
+}
+
 /// One grid cell's worth of data, fetched in a single query.
 public struct AssetRow: Codable, Hashable, Identifiable, Sendable, FetchableRecord {
     public var id: Int64

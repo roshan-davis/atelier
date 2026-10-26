@@ -74,6 +74,45 @@ final class AtelierCoreTests: XCTestCase {
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: expected.path).count, 2)
     }
 
+    // MARK: Import entries
+
+    func testEachImportGetsAnEntryAndMoreCanBeAddedToIt() async throws {
+        let first = try makeShoot(count: 2)
+        let second = try makeShoot(count: 3)
+        let catalog = try Catalog()
+        let importer = Importer(catalog: catalog, previews: nil)
+
+        let a = await importer.run(sources: [first], options: ImportOptions(buildPreviews: false))
+        let groupA = try XCTUnwrap(a.importGroupId)
+        let b = await importer.run(sources: [second],
+                                   options: ImportOptions(target: .newGroup(name: "Studio"), buildPreviews: false))
+        let groupB = try XCTUnwrap(b.importGroupId)
+
+        var summaries = try catalog.importGroupSummaries()
+        XCTAssertEqual(summaries.map(\.name), ["Studio", first.lastPathComponent])  // newest first
+        XCTAssertEqual(summaries.map(\.photoCount), [3, 2])
+        XCTAssertEqual(try catalog.assetRows(filter: LibraryFilter(scope: .importGroup(groupA))).count, 2)
+
+        // Importing more into an existing entry, including files already cataloged.
+        let more = try makeShoot(count: 1)
+        _ = await importer.run(sources: [more, first],
+                               options: ImportOptions(target: .existingGroup(groupB), buildPreviews: false))
+        XCTAssertEqual(try catalog.assetRows(filter: LibraryFilter(scope: .importGroup(groupB))).count, 6)
+        XCTAssertEqual(try catalog.assetRows(filter: LibraryFilter()).count, 6)
+
+        // Rename, remove photos, delete: photos always stay in the catalog.
+        try catalog.renameImportGroup(groupB, to: "Studio Week")
+        let inB = try catalog.assetRows(filter: LibraryFilter(scope: .importGroup(groupB))).map(\.id)
+        try catalog.removeAssets(Array(inB.prefix(2)), fromImportGroup: groupB)
+        summaries = try catalog.importGroupSummaries()
+        XCTAssertEqual(summaries.first { $0.id == groupB }?.name, "Studio Week")
+        XCTAssertEqual(summaries.first { $0.id == groupB }?.photoCount, 4)
+
+        try catalog.deleteImportGroup(groupB)
+        XCTAssertEqual(try catalog.importGroupSummaries().map(\.id), [groupA])
+        XCTAssertEqual(try catalog.assetRows(filter: LibraryFilter()).count, 6)
+    }
+
     // MARK: Editing and filtering
 
     func testRatingsFlagsLabelsAndFilters() async throws {

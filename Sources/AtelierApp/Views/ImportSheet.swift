@@ -10,8 +10,23 @@ struct ImportSheet: View {
     @AppStorage("import.destination") private var destinationPath = FileManager.default
         .urls(for: .picturesDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("Atelier Library").path
-    @State private var eventName = ""
+    /// nil means a new import entry.
+    @State private var existingGroup: Int64?
+    @State private var name = ""
     @State private var keywords = ""
+
+    private var suggestedName: String {
+        model.pendingImportSources.first?.lastPathComponent ?? "Import"
+    }
+
+    /// The entry name, which also names the event folder in copy mode.
+    private var effectiveName: String {
+        if let existingGroup, let entry = model.sidebar.imports.first(where: { $0.id == existingGroup }) {
+            return entry.name
+        }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? suggestedName : trimmed
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -24,9 +39,24 @@ struct ImportSheet: View {
                 }
             }
 
-            Picker("Mode", selection: $copyFiles) {
-                Text("Add (reference files where they are)").tag(false)
-                Text("Copy to library").tag(true)
+            Form {
+                Picker("Import into", selection: $existingGroup) {
+                    Text("New import").tag(Int64?.none)
+                    if !model.sidebar.imports.isEmpty {
+                        Divider()
+                        ForEach(model.sidebar.imports) { entry in
+                            Text("\(entry.name) (\(entry.photoCount))").tag(Int64?.some(entry.id))
+                        }
+                    }
+                }
+                if existingGroup == nil {
+                    TextField("Name", text: $name, prompt: Text(suggestedName))
+                }
+            }
+
+            Picker("Files", selection: $copyFiles) {
+                Text("Add (leave files where they are)").tag(false)
+                Text("Copy to library folder").tag(true)
             }
             .pickerStyle(.radioGroup)
 
@@ -38,8 +68,7 @@ struct ImportSheet: View {
                             Button("Choose…", action: chooseDestination)
                         }
                     }
-                    TextField("Event name", text: $eventName, prompt: Text("e.g. Kochi Backwaters"))
-                    Text("Files go to YYYY/YYYY-MM-DD \(eventName.isEmpty ? "Event" : eventName)/ and every copy is verified by hash.")
+                    Text("Files go to YYYY/YYYY-MM-DD \(effectiveName)/ and every copy is verified by hash.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -60,13 +89,15 @@ struct ImportSheet: View {
         }
         .padding(20)
         .frame(width: 520)
+        .onAppear { existingGroup = model.pendingImportGroup }
     }
 
     private var options: ImportOptions {
         let mode: ImportMode = copyFiles
-            ? .copy(destinationRoot: URL(fileURLWithPath: destinationPath, isDirectory: true), eventName: eventName)
+            ? .copy(destinationRoot: URL(fileURLWithPath: destinationPath, isDirectory: true), eventName: effectiveName)
             : .reference
-        return ImportOptions(mode: mode, keywords: keywords.split(separator: ",").map(String.init))
+        let target: ImportTarget = existingGroup.map { .existingGroup($0) } ?? .newGroup(name: effectiveName)
+        return ImportOptions(mode: mode, target: target, keywords: keywords.split(separator: ",").map(String.init))
     }
 
     private func chooseDestination() {

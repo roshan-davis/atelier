@@ -116,14 +116,26 @@ private struct CollectionMenu: View {
                     }
                 }
             }
+            if !model.sidebar.imports.isEmpty {
+                Divider()
+                Menu("Add to Import") {
+                    ForEach(model.sidebar.imports) { entry in
+                        Button(entry.name) { model.addSelection(toImportGroup: entry.id) }
+                    }
+                }
+            }
             if case .collection = model.sidebarSelection {
                 Divider()
                 Button("Remove from This Collection") { model.removeSelectionFromCurrentCollection() }
             }
+            if case .importGroup = model.sidebarSelection {
+                Divider()
+                Button("Remove from This Import") { model.removeSelectionFromCurrentImport() }
+            }
         } label: {
-            Label("Collections", systemImage: "rectangle.stack.badge.plus")
+            Label("Organize", systemImage: "rectangle.stack.badge.plus")
         }
-        .help("Add the selection to a collection")
+        .help("Add the selection to a collection or import, or remove it from the current one")
         .alert("New Collection", isPresented: $askingForName) {
             TextField("Name", text: $newName)
             Button("Create") { model.createCollection(named: newName, addingSelection: true) }

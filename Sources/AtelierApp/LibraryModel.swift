@@ -13,6 +13,7 @@ enum SidebarItem: Hashable {
     case volume(Int64)
     case folder(Int64)
     case collection(Int64)
+    case importGroup(Int64)
 
     var scope: LibraryScope {
         switch self {
@@ -20,6 +21,7 @@ enum SidebarItem: Hashable {
         case .volume(let id): return .volume(id)
         case .folder(let id): return .folder(id)
         case .collection(let id): return .collection(id)
+        case .importGroup(let id): return .importGroup(id)
         }
     }
 }
@@ -28,6 +30,7 @@ struct SidebarData: Equatable, Sendable {
     var volumes: [Volume] = []
     var folders: [Folder] = []
     var collections: [PhotoCollection] = []
+    var imports: [ImportGroupSummary] = []
     var totalCount = 0
 }
 
@@ -53,6 +56,8 @@ final class LibraryModel: ObservableObject {
     @Published var status: String?
     @Published var showingImportSheet = false
     @Published var pendingImportSources: [URL] = []
+    /// Import entry preselected in the import sheet, when importing more into an existing one.
+    @Published var pendingImportGroup: Int64?
     /// Bumped when previews are generated so visible cells reload their images.
     @Published var previewRevision = 0
 
@@ -109,6 +114,7 @@ final class LibraryModel: ObservableObject {
                 volumes: try Volume.order(Column("name")).fetchAll(db),
                 folders: try Folder.order(Column("relativePath")).fetchAll(db),
                 collections: try PhotoCollection.order(Column("name")).fetchAll(db),
+                imports: try Catalog.fetchImportGroupSummaries(db),
                 totalCount: try Asset.fetchCount(db))
         }
         let writer = catalog.writer
@@ -195,6 +201,31 @@ final class LibraryModel: ObservableObject {
         perform { try $0.removeAssets(self.targetIDs, fromCollection: id) }
     }
 
+    func renameCollection(_ id: Int64, to name: String) {
+        perform { try $0.renameCollection(id, to: name) }
+    }
+
+    // MARK: Import entries
+
+    func addSelection(toImportGroup id: Int64) {
+        perform { try $0.addAssets(self.targetIDs, toImportGroup: id) }
+    }
+
+    func removeSelectionFromCurrentImport() {
+        guard case .importGroup(let id) = sidebarSelection else { return }
+        perform { try $0.removeAssets(self.targetIDs, fromImportGroup: id) }
+    }
+
+    func renameImportGroup(_ id: Int64, to name: String) {
+        perform { try $0.renameImportGroup(id, to: name) }
+    }
+
+    /// Deletes the entry; its photos stay in All Photographs and their folders.
+    func deleteImportGroup(_ id: Int64) {
+        if sidebarSelection == .importGroup(id) { sidebarSelection = .all }
+        perform { try $0.deleteImportGroup(id) }
+    }
+
     func deleteCollection(_ id: Int64) {
         if sidebarSelection == .collection(id) { sidebarSelection = .all }
         perform { try $0.deleteCollection(id) }
@@ -234,7 +265,7 @@ final class LibraryModel: ObservableObject {
 
     // MARK: Import
 
-    func beginImport() {
+    func beginImport(into groupID: Int64? = nil) {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = true
@@ -243,6 +274,7 @@ final class LibraryModel: ObservableObject {
         panel.message = "Choose folders or photos to import"
         guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
         pendingImportSources = panel.urls
+        pendingImportGroup = groupID
         showingImportSheet = true
     }
 
@@ -269,6 +301,9 @@ final class LibraryModel: ObservableObject {
                 if !result.failures.isEmpty { parts.append("\(result.failures.count) failed") }
                 self.status = parts.joined(separator: ", ")
                 self.previewRevision += 1
+                if let groupID = result.importGroupId {
+                    self.sidebarSelection = .importGroup(groupID)
+                }
             }
         }
     }

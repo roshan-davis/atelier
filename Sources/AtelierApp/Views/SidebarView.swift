@@ -5,20 +5,48 @@ struct SidebarView: View {
     @EnvironmentObject private var model: LibraryModel
     @State private var askingForName = false
     @State private var newName = ""
+    @State private var renaming: RenameTarget?
+    @State private var renameText = ""
+
+    enum RenameTarget: Equatable {
+        case importGroup(Int64)
+        case collection(Int64)
+    }
 
     var body: some View {
         List(selection: $model.sidebarSelection) {
             Section("Library") {
                 Label {
-                    HStack {
-                        Text("All Photographs")
-                        Spacer()
-                        Text("\(model.sidebar.totalCount)").foregroundStyle(.secondary)
-                    }
+                    CountedName(name: "All Photographs", count: model.sidebar.totalCount)
                 } icon: {
                     Image(systemName: "photo.stack")
                 }
                 .tag(SidebarItem.all)
+            }
+
+            if !model.sidebar.imports.isEmpty {
+                Section("Imports") {
+                    ForEach(model.sidebar.imports) { entry in
+                        Label {
+                            CountedName(name: entry.name, count: entry.photoCount)
+                        } icon: {
+                            Image(systemName: "square.and.arrow.down.on.square")
+                        }
+                        .help("Imported \(entry.createdAt.formatted(date: .abbreviated, time: .shortened))")
+                        .tag(SidebarItem.importGroup(entry.id))
+                        .contextMenu {
+                            Button("Rename…") { startRename(.importGroup(entry.id), current: entry.name) }
+                            Button("Import More Photos Into This…") {
+                                model.sidebarSelection = .importGroup(entry.id)
+                                model.beginImport(into: entry.id)
+                            }
+                            Divider()
+                            Button("Delete Import (Keeps Photos)", role: .destructive) {
+                                model.deleteImportGroup(entry.id)
+                            }
+                        }
+                    }
+                }
             }
 
             Section("Volumes") {
@@ -48,6 +76,8 @@ struct SidebarView: View {
                         Label(collection.name, systemImage: "rectangle.stack")
                             .tag(SidebarItem.collection(id))
                             .contextMenu {
+                                Button("Rename…") { startRename(.collection(id), current: collection.name) }
+                                Divider()
                                 Button("Delete Collection", role: .destructive) { model.deleteCollection(id) }
                             }
                     }
@@ -72,6 +102,36 @@ struct SidebarView: View {
             TextField("Name", text: $newName)
             Button("Create") { model.createCollection(named: newName, addingSelection: false) }
             Button("Cancel", role: .cancel) {}
+        }
+        .alert("Rename", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
+            TextField("Name", text: $renameText)
+            Button("Rename") {
+                switch renaming {
+                case .importGroup(let id): model.renameImportGroup(id, to: renameText)
+                case .collection(let id): model.renameCollection(id, to: renameText)
+                case nil: break
+                }
+                renaming = nil
+            }
+            Button("Cancel", role: .cancel) { renaming = nil }
+        }
+    }
+
+    private func startRename(_ target: RenameTarget, current: String) {
+        renameText = current
+        renaming = target
+    }
+}
+
+private struct CountedName: View {
+    let name: String
+    let count: Int
+
+    var body: some View {
+        HStack {
+            Text(name).lineLimit(1)
+            Spacer()
+            Text("\(count)").foregroundStyle(.secondary)
         }
     }
 }

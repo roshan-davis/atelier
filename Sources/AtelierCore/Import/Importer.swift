@@ -8,14 +8,25 @@ public enum ImportMode: Sendable, Hashable {
     case copy(destinationRoot: URL, eventName: String)
 }
 
+/// Which import entry the photos land in.
+public enum ImportTarget: Sendable, Hashable {
+    /// A new entry. A blank name falls back to the first source folder's name.
+    case newGroup(name: String)
+    /// Add to an entry that already exists.
+    case existingGroup(Int64)
+}
+
 public struct ImportOptions: Sendable {
     public var mode: ImportMode
+    public var target: ImportTarget
     /// Applied to every imported photo (metadata preset, keywords part).
     public var keywords: [String]
     public var buildPreviews: Bool
 
-    public init(mode: ImportMode = .reference, keywords: [String] = [], buildPreviews: Bool = true) {
+    public init(mode: ImportMode = .reference, target: ImportTarget = .newGroup(name: ""),
+                keywords: [String] = [], buildPreviews: Bool = true) {
         self.mode = mode
+        self.target = target
         self.keywords = keywords
         self.buildPreviews = buildPreviews
     }
@@ -35,6 +46,14 @@ public struct ImportProgress: Sendable {
     public var previewsBuilt = 0
     public var failures: [ImportFailure] = []
     public var importedAssetIDs: [Int64] = []
+    /// The import entry the photos were added to.
+    public var importGroupId: Int64?
+}
+
+enum ImportOutcome {
+    case imported(Int64)
+    /// Already in the catalog; it still joins the import entry.
+    case existing(Int64)
 }
 
 /// Imports files into the catalog. Originals are only ever read, never modified.
@@ -73,16 +92,29 @@ public final class Importer: Sendable {
         let files = Self.collectFiles(from: sources)
         var state = ImportProgress()
         state.total = files.count
+        do {
+            state.importGroupId = try resolveGroup(options.target, sources: sources)
+        } catch {
+            state.failures.append(ImportFailure(url: sources.first ?? URL(fileURLWithPath: "/"),
+                                                reason: error.localizedDescription))
+        }
         progress(state)
 
         for file in files {
             if Task.isCancelled { break }
             do {
-                if let assetID = try importFile(file, options: options) {
+                let assetID: Int64
+                switch try importFile(file, options: options) {
+                case .imported(let id):
                     state.imported += 1
-                    state.importedAssetIDs.append(assetID)
-                } else {
+                    state.importedAssetIDs.append(id)
+                    assetID = id
+                case .existing(let id):
                     state.skipped += 1
+                    assetID = id
+                }
+                if let groupID = state.importGroupId {
+                    try catalog.addAssets([assetID], toImportGroup: groupID)
                 }
             } catch {
                 state.failures.append(ImportFailure(url: file, reason: error.localizedDescription))
@@ -103,10 +135,25 @@ public final class Importer: Sendable {
         return state
     }
 
-    /// Returns the new asset id, or nil when the file was already cataloged.
-    func importFile(_ source: URL, options: ImportOptions) throws -> Int64? {
+    func resolveGroup(_ target: ImportTarget, sources: [URL]) throws -> Int64 {
+        switch target {
+        case .existingGroup(let id):
+            return id
+        case .newGroup(let name):
+            let fallback = sources.first.map { url -> String in
+                var isDirectory: ObjCBool = false
+                _ = FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
+                return isDirectory.boolValue ? url.lastPathComponent : url.deletingLastPathComponent().lastPathComponent
+            } ?? ""
+            return try catalog.createImportGroup(named: name.nilIfBlank ?? fallback).id!
+        }
+    }
+
+    func importFile(_ source: URL, options: ImportOptions) throws -> ImportOutcome {
         // Re-importing a referenced folder should not re-hash files that are already cataloged.
-        if options.mode == .reference, try isCataloged(source) { return nil }
+        if options.mode == .reference, let existing = try existingAssetID(for: source) {
+            return .existing(existing)
+        }
 
         let metadata = MetadataReader.read(source)
         let sourceValues = try source.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
@@ -125,7 +172,7 @@ public final class Importer: Sendable {
                                                          inVolumeAt: volume.rootURL)
         let filename = fileURL.lastPathComponent
 
-        return try catalog.writer.write { db -> Int64? in
+        return try catalog.writer.write { db -> ImportOutcome in
             var volumeRecord = try Volume.filter(Column("identityKey") == volume.identityKey).fetchOne(db)
                 ?? Volume(id: nil, identityKey: volume.identityKey, name: volume.name, kind: volume.kind,
                           mountPath: nil, lastSeen: nil, isOnline: true)
@@ -142,10 +189,10 @@ public final class Importer: Sendable {
                 ?? Folder(id: nil, volumeId: volumeRecord.id!, relativePath: relativeFolder)
             if folder.id == nil { try folder.insert(db) }
 
-            let exists = try Asset
-                .filter(Column("folderId") == folder.id! && Column("filename") == filename)
-                .fetchCount(db) > 0
-            if exists { return nil }
+            if let existing = try Int64.fetchOne(db, sql: "SELECT id FROM asset WHERE folderId = ? AND filename = ?",
+                                                 arguments: [folder.id!, filename]) {
+                return .existing(existing)
+            }
 
             var asset = Asset(
                 id: nil, folderId: folder.id!, filename: filename,
@@ -170,21 +217,21 @@ public final class Importer: Sendable {
             ).insert(db)
 
             try Catalog.addKeywords(db, names: metadata.xmp.keywords + options.keywords, to: [assetID])
-            return assetID
+            return .imported(assetID)
         }
     }
 
-    func isCataloged(_ url: URL) throws -> Bool {
+    func existingAssetID(for url: URL) throws -> Int64? {
         let volume = try VolumeIdentity.volume(containing: url)
         let relativeFolder = VolumeIdentity.relativePath(of: url.deletingLastPathComponent(),
                                                          inVolumeAt: volume.rootURL)
         return try catalog.writer.read { db in
-            (try Int.fetchOne(db, sql: """
-                SELECT COUNT(*) FROM asset
+            try Int64.fetchOne(db, sql: """
+                SELECT asset.id FROM asset
                 JOIN folder ON folder.id = asset.folderId
                 JOIN volume ON volume.id = folder.volumeId
                 WHERE volume.identityKey = ? AND folder.relativePath = ? AND asset.filename = ?
-                """, arguments: [volume.identityKey, relativeFolder, url.lastPathComponent]) ?? 0) > 0
+                """, arguments: [volume.identityKey, relativeFolder, url.lastPathComponent])
         }
     }
 

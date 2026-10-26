@@ -6,6 +6,7 @@ public enum LibraryScope: Hashable, Sendable {
     case volume(Int64)
     case folder(Int64)
     case collection(Int64)
+    case importGroup(Int64)
 }
 
 /// The filter bar plus sidebar scope. Conditions combine with AND.
@@ -49,6 +50,9 @@ extension Catalog {
             arguments.append(id)
         case .collection(let id):
             conditions.append("asset.id IN (SELECT assetId FROM collectionAsset WHERE collectionId = ?)")
+            arguments.append(id)
+        case .importGroup(let id):
+            conditions.append("asset.id IN (SELECT assetId FROM importGroupAsset WHERE importGroupId = ?)")
             arguments.append(id)
         }
         if filter.minRating > 0 {

@@ -125,6 +125,20 @@ public final class Catalog: Sendable {
                 t.primaryKey(["collectionId", "assetId"])
             }
         }
+        migrator.registerMigration("v2-import-groups") { db in
+            try db.create(table: "importGroup") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("name", .text).notNull()
+                t.column("createdAt", .datetime).notNull()
+            }
+            try db.create(table: "importGroupAsset") { t in
+                t.column("importGroupId", .integer).notNull()
+                    .references("importGroup", onDelete: .cascade)
+                t.column("assetId", .integer).notNull().indexed()
+                    .references("asset", onDelete: .cascade)
+                t.primaryKey(["importGroupId", "assetId"])
+            }
+        }
         return migrator
     }
 }

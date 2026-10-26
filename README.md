@@ -12,8 +12,10 @@ Scope and architecture follow `Requirements/Atelier-PRD.md`.
   EXIF, GPS, embedded XMP and existing XMP sidecars are read on import. Keywords can be applied to
   the whole import.
 - Previews: 256 px thumbnails and 2560 px previews built in the background, so offline photos stay browsable.
-- Library: grid (NSCollectionView) and loupe, folders, collections, filter bar (rating, flag,
-  label, text over filename, title, caption and keywords).
+- Imports: every import becomes a named entry in the sidebar. Import more photos into an existing
+  entry, rename it, remove photos from it, or delete it. Photos always stay in the catalog.
+- Library: grid (NSCollectionView) and loupe, folders, collections (rename, delete), filter bar
+  (rating, flag, label, text over filename, title, caption and keywords).
 - XMP sidecars written on demand (Library > Write XMP, ⌘S), merged into existing sidecars.
 - Catalog snapshot on quit, last 10 kept in `Backups/`.
 
