@@ -10,28 +10,35 @@ struct ContentView: View {
             SidebarView()
                 .navigationSplitViewColumnWidth(min: 200, ideal: 240)
         } detail: {
-            VStack(spacing: 0) {
-                FilterBar()
-                Divider()
-                ZStack {
-                    switch model.mode {
-                    case .grid:
-                        GridView(model: model)
-                    case .loupe:
-                        LoupeView()
-                    case .develop:
-                        DevelopImageView(develop: model.develop)
+            // The right panel sits beside the content, below the toolbar, like Lightroom's,
+            // rather than as a full-height inspector the toolbar floats over.
+            HStack(spacing: 0) {
+                VStack(spacing: 0) {
+                    FilterBar()
+                    Divider()
+                    ZStack {
+                        switch model.mode {
+                        case .grid:
+                            GridView(model: model)
+                        case .loupe:
+                            LoupeView()
+                        case .develop:
+                            DevelopImageView(develop: model.develop)
+                        }
+                        if model.rows.isEmpty {
+                            EmptyLibraryView()
+                        }
                     }
-                    if model.rows.isEmpty {
-                        EmptyLibraryView()
-                    }
+                    Divider()
+                    StatusBar()
                 }
-                Divider()
-                StatusBar()
-            }
-            .inspector(isPresented: $showInspector) {
-                InspectorView()
-                    .inspectorColumnWidth(min: 240, ideal: 280, max: 360)
+                .frame(maxWidth: .infinity)
+                if showInspector {
+                    Divider()
+                    InspectorView()
+                        .frame(width: model.mode == .develop ? 320 : 290)
+                        .background(Color(nsColor: .controlBackgroundColor))
+                }
             }
         }
         // Dropping folders or photos anywhere on the window starts an import with them.

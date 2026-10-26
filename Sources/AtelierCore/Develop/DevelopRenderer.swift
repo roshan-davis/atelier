@@ -241,7 +241,13 @@ public final class DevelopRenderer: @unchecked Sendable {
     ]
 
     static func hasToneCurve(_ settings: DevelopSettings) -> Bool {
-        toneCurvePoints(settings) != nil || curveRegions.contains { settings[$0.0] != 0 }
+        toneCurvePoints(settings) != nil || curveRegions.contains { settings[$0.0] != 0 } || settings.hasPointCurve
+    }
+
+    /// A point curve evaluated with the same monotone spline as the tone curve.
+    public static func pointCurveValue(_ points: [DevelopSettings.CurvePoint], at x: Double) -> Double {
+        guard points.count >= 2 else { return x }
+        return evaluateCurve(points.map { CGPoint(x: $0.x, y: $0.y) }, at: x)
     }
 
     /// The full tone curve at `x` (sRGB-encoded 0...1): Basic tone plus the Tone Curve panel's
@@ -258,17 +264,22 @@ public final class DevelopRenderer: @unchecked Sendable {
         return min(1, max(0, y))
     }
 
-    /// The tone curve sampled as RGB triples for CIColorCurves; never decreasing, so tones
-    /// keep their order however the sliders combine.
+    /// The tone curve sampled as RGB triples for CIColorCurves: Basic and region tone (never
+    /// decreasing, so tones keep their order), then the RGB point curve, then each channel's.
     static func toneCurveLUT(_ settings: DevelopSettings, samples: Int = 1024) -> [Float]? {
         guard hasToneCurve(settings) else { return nil }
+        let master = settings.points(for: .rgb)
+        let channels = [settings.points(for: .red), settings.points(for: .green), settings.points(for: .blue)]
         var lut = [Float]()
         lut.reserveCapacity(samples * 3)
-        var previous: Float = 0
+        var previous = 0.0
         for i in 0..<samples {
-            let y = max(previous, Float(toneCurveValue(settings, at: Double(i) / Double(samples - 1))))
-            previous = y
-            lut.append(contentsOf: [y, y, y])
+            let base = max(previous, toneCurveValue(settings, at: Double(i) / Double(samples - 1)))
+            previous = base
+            let y = pointCurveValue(master, at: base)
+            for points in channels {
+                lut.append(Float(pointCurveValue(points, at: y)))
+            }
         }
         return lut
     }

@@ -45,6 +45,26 @@ final class ColorTests: XCTestCase {
         XCTAssertNil(DevelopRenderer.toneCurveLUT(.neutral))
     }
 
+    func testPointCurves() throws {
+        typealias Point = DevelopSettings.CurvePoint
+        var settings = DevelopSettings()
+        settings.setPoints(Point.identity, for: .rgb)
+        XCTAssertEqual(settings, .neutral, "a straight line is not stored")
+
+        settings.setPoints([Point(x: 0, y: 0), Point(x: 0.5, y: 0.3), Point(x: 0.5001, y: 0.9), Point(x: 1, y: 1)], for: .rgb)
+        XCTAssertEqual(settings.points(for: .rgb).count, 3, "points too close together collapse")
+        settings.setPoints([Point(x: 0, y: 0.2), Point(x: 1, y: 1)], for: .blue)
+        let decoded = try DevelopSettings.decoded(from: settings.encoded())
+        XCTAssertEqual(decoded, settings)
+        XCTAssertTrue(decoded.hasPointCurve)
+
+        let lut = try XCTUnwrap(DevelopRenderer.toneCurveLUT(settings, samples: 11))
+        // Sample 5 is x = 0.5: the RGB curve darkens it; blue is lifted on top.
+        XCTAssertEqual(Double(lut[15]), 0.3, accuracy: 0.01)
+        XCTAssertGreaterThan(lut[17], lut[15])
+        XCTAssertEqual(lut[15], lut[16])
+    }
+
     func testHSLWeightsAndGrays() {
         for hue in stride(from: 0.0, to: 360, by: 7.5) {
             XCTAssertEqual(HSLAdjustment.weights(for: hue).reduce(0, +), 1, accuracy: 1e-9)

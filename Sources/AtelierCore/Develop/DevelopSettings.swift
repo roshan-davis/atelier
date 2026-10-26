@@ -16,7 +16,26 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
 
     private var values: [Parameter: Double] = [:]
 
+    /// Point curves by channel, applied after the Basic tone and region curve. Each list runs
+    /// from x 0 to 1 with at least two points; a missing channel is a straight line.
+    private var pointCurves: [String: [CurvePoint]] = [:]
+
     public init() {}
+
+    public func points(for channel: CurveChannel) -> [CurvePoint] {
+        pointCurves[channel.rawValue] ?? CurvePoint.identity
+    }
+
+    public mutating func setPoints(_ points: [CurvePoint], for channel: CurveChannel) {
+        // The spline needs strictly increasing x.
+        var sorted: [CurvePoint] = []
+        for point in points.sorted(by: { $0.x < $1.x }) where sorted.last.map({ point.x - $0.x > 0.005 }) ?? true {
+            sorted.append(point)
+        }
+        pointCurves[channel.rawValue] = sorted.count < 2 || sorted == CurvePoint.identity ? nil : sorted
+    }
+
+    public var hasPointCurve: Bool { !pointCurves.isEmpty }
 
     public var tint: Double {
         get { self[.tint] }
@@ -138,6 +157,10 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
                 self[parameter] = value
             }
         }
+        let curves = try c.decodeIfPresent([String: [CurvePoint]].self, forKey: Key("pointCurves")) ?? [:]
+        for channel in CurveChannel.allCases {
+            if let points = curves[channel.rawValue] { setPoints(points, for: channel) }
+        }
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -147,11 +170,12 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         for (parameter, value) in values {
             try c.encode(value, forKey: Key(parameter.rawValue))
         }
+        if !pointCurves.isEmpty { try c.encode(pointCurves, forKey: Key("pointCurves")) }
     }
 
     public static let neutral = DevelopSettings()
 
-    public var isNeutral: Bool { temperature == nil && values.isEmpty }
+    public var isNeutral: Bool { temperature == nil && values.isEmpty && pointCurves.isEmpty }
 
     public func encoded() throws -> String {
         let encoder = JSONEncoder()
@@ -164,6 +188,24 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
     }
 
     // MARK: Panels and parameters
+
+    public enum CurveChannel: String, CaseIterable, Sendable {
+        case rgb, red, green, blue
+
+        public var label: String { self == .rgb ? "RGB" : rawValue.capitalized }
+    }
+
+    public struct CurvePoint: Codable, Hashable, Sendable {
+        public var x: Double
+        public var y: Double
+
+        public init(x: Double, y: Double) {
+            self.x = min(1, max(0, x))
+            self.y = min(1, max(0, y))
+        }
+
+        public static let identity = [CurvePoint(x: 0, y: 0), CurvePoint(x: 1, y: 1)]
+    }
 
     /// The Develop panels, in Lightroom's order.
     public enum Panel: String, CaseIterable, Sendable {
