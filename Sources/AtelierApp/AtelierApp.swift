@@ -77,6 +77,11 @@ struct AtelierApp: App {
                     Button("Other Application…") { model.editInOtherApp() }
                 }
                 .disabled(model.focusedID == nil)
+                Divider()
+                ForEach(AIRecipe.allCases, id: \.self) { recipe in
+                    Button("\(recipe.title)…") { model.openAI(recipe) }
+                        .disabled(model.focusedID == nil)
+                }
             }
             CommandGroup(replacing: .help) {
                 Button("Keyboard Shortcuts") { model.showingShortcuts = true }

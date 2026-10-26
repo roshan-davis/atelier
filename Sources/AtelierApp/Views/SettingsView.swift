@@ -20,12 +20,14 @@ struct SettingsView: View {
                 .tabItem { Label("Export", systemImage: "square.and.arrow.up") }
             EditInSettings()
                 .tabItem { Label("Edit In", systemImage: "paintbrush") }
+            AISettingsTab()
+                .tabItem { Label("AI", systemImage: "wand.and.stars") }
             MetadataSettings()
                 .tabItem { Label("Metadata", systemImage: "tag") }
             KeyboardSettings()
                 .tabItem { Label("Keyboard", systemImage: "keyboard") }
         }
-        .frame(width: 560)
+        .frame(width: 640)
     }
 }
 
@@ -389,6 +391,115 @@ private struct EditorRow: View {
             Toggle("Include develop adjustments", isOn: $editor.applyDevelop)
         }
         .padding(.vertical, 4)
+    }
+}
+
+// MARK: - AI
+
+/// Where ComfyUI runs and which models the AI recipes use.
+struct AISettingsTab: View {
+    @AppStorage("ai.server") private var server = AISettings.defaultServer.absoluteString
+    @AppStorage("ai.checkpoint") private var checkpoint = ""
+    @AppStorage("ai.upscaleModel") private var upscaleModel = ""
+    @AppStorage("ai.generationSize") private var generationSize = 1024
+    @State private var status: String?
+    @State private var connected = false
+    @State private var checkpoints: [String] = []
+    @State private var upscalers: [String] = []
+
+    var body: some View {
+        Form {
+            Section {
+                LabeledContent("Server") {
+                    HStack {
+                        TextField("Server", text: $server, prompt: Text(AISettings.defaultServer.absoluteString))
+                            .labelsHidden()
+                            .onSubmit { connect() }
+                        Button("Connect") { connect() }
+                    }
+                }
+                if let status {
+                    Label(status, systemImage: connected ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                        .foregroundStyle(connected ? .green : .orange)
+                        .font(.callout)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } header: {
+                Text("ComfyUI")
+            } footer: {
+                Text("Atelier sends photos to a ComfyUI server you run, on this Mac or another one, and never bundles models.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                modelPicker("Inpainting checkpoint", selection: $checkpoint, choices: checkpoints)
+                Picker("Generation size", selection: $generationSize) {
+                    Text("768 px (SD 1.5)").tag(768)
+                    Text("1024 px (SDXL)").tag(1024)
+                    Text("1536 px").tag(1536)
+                }
+                modelPicker("Upscale model (4×)", selection: $upscaleModel, choices: upscalers)
+            } header: {
+                Text("Models")
+            } footer: {
+                Text("Remove Object and Replace Background use an inpainting checkpoint; Upscale uses a 4× upscale model. For website and shop images, use only models licensed Apache 2.0 or MIT.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                LabeledContent("Workflows") {
+                    Button("Show Workflows Folder") {
+                        try? AIRecipe.installWorkflowTemplates()
+                        NSWorkspace.shared.activateFileViewerSelecting([AIRecipe.workflowsFolder])
+                    }
+                }
+            } footer: {
+                Text("To use your own ComfyUI workflow, save it in API format as remove-object.json, replace-background.json or upscale.json in this folder. Title its nodes Atelier Image, Atelier Mask, Atelier Prompt, Atelier Sampler and Atelier Output, as in the .example.json files.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .onAppear { connect() }
+    }
+
+    @ViewBuilder private func modelPicker(_ title: String, selection: Binding<String>, choices: [String]) -> some View {
+        if choices.isEmpty {
+            TextField(title, text: selection, prompt: Text("Workflow default"))
+        } else {
+            Picker(title, selection: selection) {
+                Text("Workflow default").tag("")
+                ForEach(choices, id: \.self) { Text($0).tag($0) }
+                if !selection.wrappedValue.isEmpty, !choices.contains(selection.wrappedValue) {
+                    Text(selection.wrappedValue + " (not on server)").tag(selection.wrappedValue)
+                }
+            }
+        }
+    }
+
+    private func connect() {
+        guard let url = URL(string: server.trimmingCharacters(in: .whitespaces)), url.scheme != nil else {
+            status = "Enter an address like http://127.0.0.1:8188"
+            connected = false
+            return
+        }
+        status = "Connecting…"
+        Task {
+            let client = ComfyClient(baseURL: url)
+            do {
+                let version = try await client.ping()
+                checkpoints = (try? await client.options(node: "CheckpointLoaderSimple", input: "ckpt_name")) ?? []
+                upscalers = (try? await client.options(node: "UpscaleModelLoader", input: "model_name")) ?? []
+                connected = true
+                status = "Connected" + (version == "connected" ? "" : " to ComfyUI \(version)")
+                    + " · \(checkpoints.count) checkpoints, \(upscalers.count) upscale models"
+            } catch {
+                connected = false
+                status = error.localizedDescription
+            }
+        }
     }
 }
 

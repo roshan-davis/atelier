@@ -32,6 +32,11 @@ extension LibraryModel {
         if mode != .loupe { menu.addItem(ClosureMenuItem("Open in Loupe") { self.openLoupe() }) }
         if mode != .develop { menu.addItem(ClosureMenuItem("Edit in Develop") { self.openDevelop() }) }
         menu.addItem(submenu("Edit In", editInMenu()))
+        let ai = NSMenu()
+        for recipe in AIRecipe.allCases {
+            ai.addItem(ClosureMenuItem("\(recipe.title)…", enabled: ids.count == 1) { self.openAI(recipe) })
+        }
+        menu.addItem(submenu("AI", ai))
 
         if includeZoom {
             menu.addItem(.separator())

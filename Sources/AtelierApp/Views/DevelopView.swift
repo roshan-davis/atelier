@@ -15,6 +15,8 @@ struct DevelopImageView: View {
                 if let image = develop.image {
                     if develop.isCropping {
                         CropEditorView(develop: develop, image: image)
+                    } else if develop.isAIOpen {
+                        AIBrushView(ai: model.ai, image: image, assetID: develop.assetID)
                     } else if develop.showingBefore || develop.compareMode == .off {
                         ZoomableImageView(image: develop.displayImage ?? image,
                                           pixelSize: pixelSize,
@@ -79,13 +81,13 @@ struct DevelopImageView: View {
                 Text("Before and After").foregroundStyle(.secondary).fixedSize()
             }
             comparePicker(iconsOnly: compact)
-                .disabled(develop.isCropping)
+                .disabled(develop.isCropping || develop.isAIOpen)
             if !compact, develop.compareMode == .slider {
                 Text("Drag across the photo to move the divider").foregroundStyle(.secondary).fixedSize()
             }
             Spacer(minLength: 8)
             ZoomControls(zoom: $model.zoom, report: model.zoomReport, compact: compact)
-                .disabled(develop.compareMode != .off || develop.isCropping)
+                .disabled(develop.compareMode != .off || develop.isCropping || develop.isAIOpen)
         }
     }
 
@@ -260,6 +262,12 @@ struct DevelopPanel: View {
                                      isModified: develop.settings.crop != nil, reset: { develop.setCrop(Crop()) },
                                      expandAll: expandAll, collapseAll: collapseAll) {
                             CropPanel(develop: develop)
+                        }
+                    }
+                    if develop.isAIOpen {
+                        PanelSection(title: "AI", isExpanded: .constant(true), soloMode: $soloMode,
+                                     expandAll: expandAll, collapseAll: collapseAll) {
+                            AIPanel(ai: model.ai)
                         }
                     }
                     ForEach(DevelopSettings.Panel.allCases, id: \.self) { panel in
@@ -928,6 +936,10 @@ private struct ToolStrip: View {
             tool("crop", title: "Crop & Straighten (R)", active: develop.isCropping,
                  modified: develop.settings.crop != nil) {
                 develop.isCropping.toggle()
+            }
+            tool("wand.and.stars", title: "AI: Remove Object, Replace Background, Upscale", active: develop.isAIOpen,
+                 modified: false) {
+                develop.isAIOpen.toggle()
             }
             Spacer()
         }

@@ -54,6 +54,7 @@ final class LibraryModel: ObservableObject {
     let previewScheduler: PreviewScheduler
     let develop: DevelopController
     let editWatcher = EditWatcher()
+    let ai = AIController()
 
     @Published var rows: [AssetRow] = []
     @Published var sidebar = SidebarData()
@@ -130,6 +131,7 @@ final class LibraryModel: ObservableObject {
             ThumbnailLoader.shared.invalidate(id)
             self?.previewsChanged()
         }
+        ai.model = self
         editWatcher.onChange = { [weak self] id in self?.editedFileChanged(id) }
         // Folder events can be missed on network shares; coming back from the editor checks too.
         NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil,
@@ -581,6 +583,13 @@ final class LibraryModel: ObservableObject {
         // Only the library window; never Settings or other windows.
         guard let window = NSApp.keyWindow, window === mainWindow, window.attachedSheet == nil else { return false }
         if window.firstResponder is NSText { return false }
+
+        // [ and ] size the AI brush, as in Lightroom.
+        if mode == .develop, develop.isAIOpen, event.keyCode == 33 || event.keyCode == 30 {
+            let factor = event.keyCode == 30 ? 1.25 : 0.8
+            ai.brushSize = min(max(ai.brushSize * factor, 0.005), 0.15)
+            return true
+        }
 
         switch event.keyCode {
         case 123 where mode != .grid: step(-1); return true           // left arrow

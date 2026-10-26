@@ -56,8 +56,20 @@ final class DevelopController: ObservableObject {
     @Published var isCropping = false {
         didSet {
             guard isCropping != oldValue else { return }
-            if isCropping { showingBefore = false }
+            if isCropping {
+                showingBefore = false
+                isAIOpen = false
+            }
             scheduleRender()
+        }
+    }
+    /// The AI tool is open: the photo shows under the AI brush and the AI panel replaces Crop.
+    @Published var isAIOpen = false {
+        didSet {
+            guard isAIOpen != oldValue, isAIOpen else { return }
+            isCropping = false
+            showingBefore = false
+            compareMode = .off
         }
     }
     /// The decoded photo's size (upright, uncropped) at proxy scale; its aspect drives the crop tool.

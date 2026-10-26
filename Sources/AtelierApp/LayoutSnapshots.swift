@@ -50,6 +50,14 @@ enum LayoutSnapshots {
         await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
                       to: folder.appendingPathComponent("develop-crop-1280x800.png"))
         model.develop.isCropping = false
+        // The AI tool with a brush stroke painted.
+        model.develop.isAIOpen = true
+        model.ai.strokes = [BrushStroke(points: [CGPoint(x: 0.42, y: 0.5), CGPoint(x: 0.5, y: 0.56), CGPoint(x: 0.58, y: 0.52)],
+                                        radius: 0.03)]
+        try? await Task.sleep(for: .seconds(1))
+        await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
+                      to: folder.appendingPathComponent("develop-ai-1280x800.png"))
+        model.develop.isAIOpen = false
         // Each theme in Develop at the size in Rosh's screenshot, and the theme picker itself.
         for theme in Theme.allCases where theme != .system {
             UserDefaults.standard.set(theme.rawValue, forKey: Theme.defaultsKey)
@@ -69,8 +77,10 @@ enum LayoutSnapshots {
                       to: folder.appendingPathComponent("theme-neutralGray-grid.png"))
         await capture(AnyView(AppearanceSettings().frame(width: 560)), size: CGSize(width: 560, height: 330),
                       to: folder.appendingPathComponent("settings-appearance.png"))
-        await capture(AnyView(EditInSettings().frame(width: 560)), size: CGSize(width: 560, height: 360),
+        await capture(AnyView(EditInSettings().frame(width: 640)), size: CGSize(width: 640, height: 360),
                       to: folder.appendingPathComponent("settings-editin.png"))
+        await capture(AnyView(AISettingsTab().frame(width: 640)), size: CGSize(width: 640, height: 600),
+                      to: folder.appendingPathComponent("settings-ai.png"))
         UserDefaults.standard.removeObject(forKey: Theme.defaultsKey)
         Theme.system.apply()
         fflush(stdout)
