@@ -34,6 +34,43 @@ public final class DevelopRenderer: @unchecked Sendable {
         context.createCGImage(image, from: image.extent.integral, format: .RGBA8, colorSpace: colorSpace)
     }
 
+    // MARK: Geometry
+
+    /// Turns, flips, straightens and crops (the order is described on `DevelopSettings.Crop`).
+    /// With `cropping` false the straightened photo is returned whole, for the crop tool,
+    /// and its extent is the rotated photo's bounding box around the turned photo's frame.
+    public static func applyGeometry(_ crop: DevelopSettings.Crop, to input: CIImage, cropping: Bool = true) -> CIImage {
+        var image = input.transformed(by: CGAffineTransform(translationX: -input.extent.minX, y: -input.extent.minY))
+        let turns = ((crop.quarterTurns % 4) + 4) % 4
+        if turns != 0 {
+            // Clockwise in a y-up space is a negative angle.
+            image = image.transformed(by: CGAffineTransform(rotationAngle: -CGFloat(turns) * .pi / 2))
+            image = image.transformed(by: CGAffineTransform(translationX: -image.extent.minX, y: -image.extent.minY))
+        }
+        let size = image.extent.size
+        if crop.flipHorizontal {
+            image = image.transformed(by: CGAffineTransform(a: -1, b: 0, c: 0, d: 1, tx: size.width, ty: 0))
+        }
+        if crop.flipVertical {
+            image = image.transformed(by: CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: size.height))
+        }
+        if crop.angle != 0 {
+            let center = CGPoint(x: size.width / 2, y: size.height / 2)
+            let rotation = CGAffineTransform(translationX: center.x, y: center.y)
+                .rotated(by: -CGFloat(crop.angle) * .pi / 180)
+                .translatedBy(x: -center.x, y: -center.y)
+            // Clamp first so the edges stay sharp when sampled.
+            image = image.clampedToExtent().transformed(by: rotation)
+                .cropped(to: CGRect(origin: .zero, size: size).applying(rotation))
+        }
+        guard cropping else { return image }
+        // The crop is measured from the top left; Core Image's y axis points up.
+        let rect = CGRect(x: crop.x * size.width, y: (1 - crop.y - crop.height) * size.height,
+                          width: crop.width * size.width, height: crop.height * size.height).integral
+        image = image.cropped(to: rect)
+        return image.transformed(by: CGAffineTransform(translationX: -rect.minX, y: -rect.minY))
+    }
+
     // MARK: Adjustments after decode
 
     /// Steps 2 to 7 of the pipeline; white balance and exposure happen at decode.
@@ -338,6 +375,8 @@ public final class DevelopSession: @unchecked Sendable {
     public let asShotTint: Double
     /// Rendered size relative to the full-size photo.
     public let renderScale: Double
+    /// The decoded photo's size at `renderScale`, upright, before any crop or turn.
+    public let sourceSize: CGSize
     private let lock = NSLock()
 
     init?(url: URL, maxPixelSize: Int?, renderer: DevelopRenderer) {
@@ -353,6 +392,7 @@ public final class DevelopSession: @unchecked Sendable {
                 if longEdge > 0 { raw.scaleFactor = Float(min(1, Double(maxPixelSize) / Double(longEdge))) }
             }
             renderScale = Double(raw.scaleFactor)
+            sourceSize = raw.outputImage?.extent.size ?? raw.nativeSize
             asShotTemperature = Double(raw.neutralTemperature)
             asShotTint = Double(raw.neutralTint)
         } else {
@@ -366,6 +406,7 @@ public final class DevelopSession: @unchecked Sendable {
                 }
             }
             renderScale = scale
+            sourceSize = image.extent.size
             isRAW = false
             rawFilter = nil
             baseImage = image
@@ -374,8 +415,9 @@ public final class DevelopSession: @unchecked Sendable {
         }
     }
 
-    /// The developed image in the working space.
-    public func image(with settings: DevelopSettings) -> CIImage? {
+    /// The developed image in the working space. With `cropping` false the crop is left out
+    /// (the photo is still turned and straightened), for the crop tool.
+    public func image(with settings: DevelopSettings, cropping: Bool = true) -> CIImage? {
         lock.lock()
         defer { lock.unlock() }
         var image: CIImage
@@ -408,12 +450,15 @@ public final class DevelopSession: @unchecked Sendable {
                 image = filter.outputImage ?? image
             }
         }
+        if let crop = settings.crop {
+            image = DevelopRenderer.applyGeometry(crop, to: image, cropping: cropping)
+        }
         return DevelopRenderer.applyAdjustments(settings, to: image, scale: renderScale)
     }
 
     /// Rendered for display in Display P3.
-    public func render(_ settings: DevelopSettings) -> CGImage? {
-        guard let image = image(with: settings) else { return nil }
+    public func render(_ settings: DevelopSettings, cropping: Bool = true) -> CGImage? {
+        guard let image = image(with: settings, cropping: cropping) else { return nil }
         return renderer.cgImage(image)
     }
 }

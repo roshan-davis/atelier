@@ -52,6 +52,26 @@ final class DevelopController: ObservableObject {
 
     @Published private(set) var histogram: Histogram?
 
+    /// The crop tool is open: the photo renders whole (turned and straightened) under the crop frame.
+    @Published var isCropping = false {
+        didSet {
+            guard isCropping != oldValue else { return }
+            if isCropping { showingBefore = false }
+            scheduleRender()
+        }
+    }
+    /// The decoded photo's size (upright, uncropped) at proxy scale; its aspect drives the crop tool.
+    @Published private(set) var sourceSize: CGSize?
+
+    var crop: DevelopSettings.Crop { settings.crop ?? DevelopSettings.Crop() }
+
+    /// The turned photo's width / height, which crop fractions are measured against.
+    var orientedAspect: Double {
+        guard let size = sourceSize, size.height > 0 else { return 1.5 }
+        let oriented = crop.orientedSize(size)
+        return Double(oriented.width / oriented.height)
+    }
+
     /// Set while the photo is zoomed past fit; renders the full-resolution image as well.
     @Published var wantsFullResolution = false {
         didSet { if wantsFullResolution, !oldValue { scheduleFullRender() } }
@@ -66,6 +86,7 @@ final class DevelopController: ObservableObject {
 
     /// The sharpest image that matches the current settings.
     var displayImage: NSImage? {
+        if isCropping { return image }
         if !showingBefore, let fullImage, fullImageSettings == settings { return fullImage }
         return image
     }
@@ -104,6 +125,8 @@ final class DevelopController: ObservableObject {
         sourceURL = nil
         errorMessage = nil
         showingBefore = false
+        isCropping = false
+        sourceSize = nil
         guard let assetID else { return }
 
         settings = (try? catalog.developSettings(for: assetID)) ?? .neutral
@@ -128,6 +151,7 @@ final class DevelopController: ObservableObject {
                         return
                     }
                     self.session = session
+                    self.sourceSize = session.sourceSize
                     self.asShotTemperature = session.asShotTemperature
                     self.scheduleRender()
                     if self.compareMode != .off { self.renderBeforeIfNeeded() }
@@ -197,6 +221,30 @@ final class DevelopController: ObservableObject {
         }
     }
 
+    func setCrop(_ crop: DevelopSettings.Crop) {
+        guard assetID != nil, crop != self.crop else { return }
+        settings.crop = crop
+        beforeImage = nil
+        changed()
+        if compareMode != .off { renderBeforeIfNeeded() }
+    }
+
+    /// The photo without edits but with the same crop, so before and after line up.
+    private var beforeSettings: DevelopSettings {
+        var before = DevelopSettings.neutral
+        before.crop = settings.crop
+        return before
+    }
+
+    /// The full-size photo's size after the crop, for 100% zoom. `assetSize` is the original's
+    /// pixel size from the catalog.
+    func croppedPixelSize(assetSize: CGSize?) -> CGSize? {
+        guard let assetSize, let sourceSize, sourceSize.width > 0, sourceSize.height > 0 else { return assetSize }
+        let factor = max(assetSize.width, assetSize.height) / max(sourceSize.width, sourceSize.height)
+        let full = CGSize(width: sourceSize.width * factor, height: sourceSize.height * factor)
+        return crop.outputSize(full)
+    }
+
     func resetAll() {
         guard assetID != nil else { return }
         settings = .neutral
@@ -249,10 +297,11 @@ final class DevelopController: ObservableObject {
             return
         }
         rendering = true
-        let settings = showingBefore ? DevelopSettings.neutral : self.settings
+        let settings = showingBefore ? beforeSettings : self.settings
+        let cropping = !isCropping
         let assetID = self.assetID
         queue.async {
-            let cgImage = session.render(settings)
+            let cgImage = session.render(settings, cropping: cropping)
             let histogram = cgImage.flatMap { Histogram(image: $0) }
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
@@ -274,7 +323,7 @@ final class DevelopController: ObservableObject {
 
     /// Full-resolution render for zoomed views, after the proxy settles. Latest wins.
     private func scheduleFullRender() {
-        guard wantsFullResolution, !showingBefore, let url = sourceURL, fullImageSettings != settings else { return }
+        guard wantsFullResolution, !showingBefore, !isCropping, let url = sourceURL, fullImageSettings != settings else { return }
         if fullRendering {
             fullNeedsRender = true
             return
@@ -307,8 +356,9 @@ final class DevelopController: ObservableObject {
     private func renderBeforeIfNeeded() {
         guard beforeImage == nil, let session else { return }
         let assetID = self.assetID
+        let before = beforeSettings
         queue.async {
-            let cgImage = session.render(.neutral)
+            let cgImage = session.render(before)
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     guard self.assetID == assetID, let cgImage else { return }

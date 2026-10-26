@@ -212,6 +212,11 @@ final class LibraryModel: ObservableObject {
         develop.pasteSettings(onto: targetIDs)
     }
 
+    func rotate(clockwise: Bool) {
+        guard mode == .develop else { return }
+        develop.setCrop(develop.crop.turned(clockwise: clockwise))
+    }
+
     func resetDevelopSettings() {
         develop.resetSettings(of: targetIDs)
     }
@@ -579,7 +584,13 @@ final class LibraryModel: ObservableObject {
         case .labelGreen: toggleLabel(.green)
         case .labelBlue: toggleLabel(.blue)
         case .pick: setFlag(.picked)
-        case .reject: setFlag(.rejected)
+        case .reject:
+            // As in Lightroom, X in the crop tool swaps the crop's orientation instead.
+            if mode == .develop, develop.isCropping {
+                develop.setCrop(develop.crop.switchedOrientation(imageAspect: develop.orientedAspect))
+            } else {
+                setFlag(.rejected)
+            }
         case .unflag: setFlag(.none)
         case .loupe: openLoupe()
         case .develop: openDevelop()
@@ -591,6 +602,10 @@ final class LibraryModel: ObservableObject {
             guard mode == .develop else { return false }
             develop.cycleCompareMode()
         case .zoom: toggleZoom()
+        case .crop:
+            if mode != .develop { openDevelop() }
+            guard mode == .develop else { return false }
+            develop.isCropping.toggle()
         }
         return true
     }

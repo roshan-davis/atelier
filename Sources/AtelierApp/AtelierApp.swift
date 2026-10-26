@@ -69,6 +69,15 @@ struct AtelierApp: App {
                     .keyboardShortcut("r", modifiers: [.command, .shift])
                     .disabled(model.mode != .develop)
                 // The \ and Y keys themselves are handled by the culling key monitor.
+                Button("Crop & Straighten (R)") { model.perform(.crop) }
+                    .disabled(model.focusedID == nil)
+                Button("Rotate Left") { model.rotate(clockwise: false) }
+                    .keyboardShortcut("[", modifiers: [.command])
+                    .disabled(model.mode != .develop)
+                Button("Rotate Right") { model.rotate(clockwise: true) }
+                    .keyboardShortcut("]", modifiers: [.command])
+                    .disabled(model.mode != .develop)
+                Divider()
                 Button("Show Before (\\)") { model.develop.showingBefore.toggle() }
                     .disabled(model.mode != .develop)
                 Menu("Before and After (Y)") {

@@ -157,7 +157,16 @@ public final class Exporter: Sendable {
             throw ExportError("The original is offline. Connect its drive and export again.")
         }
         let develop = try catalog.developSettings(for: assetID)
-        guard let session = renderer.session(for: source, maxPixelSize: settings.longEdge),
+        // A crop keeps only part of the photo, so decode larger to still reach the long edge.
+        var decodeEdge = settings.longEdge
+        if let longEdge = settings.longEdge, let crop = develop.crop,
+           let width = detail.asset.width, let height = detail.asset.height, width > 0, height > 0 {
+            let full = CGSize(width: width, height: height)
+            let cropped = crop.outputSize(full)
+            let fraction = max(cropped.width, cropped.height) / max(full.width, full.height)
+            decodeEdge = Int((Double(longEdge) / max(0.05, Double(fraction))).rounded(.up))
+        }
+        guard let session = renderer.session(for: source, maxPixelSize: decodeEdge),
               var image = session.image(with: develop) else {
             throw ExportError("This file can't be rendered.")
         }
