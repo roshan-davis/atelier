@@ -126,7 +126,7 @@ struct CullView: View {
                 Text(title).font(.headline)
                 Text("\(group.count) photo\(group.count == 1 ? "" : "s")")
                     .foregroundStyle(.secondary)
-                if let time = cull.photos[group[0]].captureTime {
+                if !isSingles, let time = cull.photos[group[0]].captureTime {
                     Text(time.formatted(date: .omitted, time: .standard)).foregroundStyle(.secondary)
                 }
                 Spacer()

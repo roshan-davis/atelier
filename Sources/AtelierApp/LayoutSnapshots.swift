@@ -104,6 +104,16 @@ enum LayoutSnapshots {
         let cull = CullModel(source: .importing(files: files, options: ImportOptions(target: .newGroup(name: "Cull Test"))),
                              title: "Cull Before Importing \u{201C}Cull Test\u{201D}", model: model)
         for _ in 0..<60 where cull.isAnalyzing { try? await Task.sleep(for: .milliseconds(250)) }
+        let names = cull.photos.map(\.name)
+        for a in cull.photos.indices {
+            let row = cull.photos.indices.map { b -> String in
+                guard let x = cull.photos[a].signals, let y = cull.photos[b].signals,
+                      let d = Culling.distance(x, y) else { return "  -  " }
+                return String(format: "%.2f", d)
+            }
+            print("SNAPSHOT: distance \(names[a]) \(row.joined(separator: " "))")
+        }
+        print("SNAPSHOT: sharpness \(cull.photos.map { "\($0.name)=\(Int($0.signals?.sharpness ?? 0))" })")
         print("SNAPSHOT: cull groups \(cull.groups.map { $0.map { cull.photos[$0].name } }) kept \(cull.kept.map { cull.photos[$0].name }.sorted())")
         try? await Task.sleep(for: .seconds(1))
         await capture(AnyView(CullView(cull: cull)), size: CGSize(width: 1280, height: 800),
@@ -152,10 +162,10 @@ enum LayoutSnapshots {
             }
         }
         guard var image = context.makeImage() else { return }
-        if soft, let small = CGContext(data: nil, width: width / 12, height: height / 12, bitsPerComponent: 8, bytesPerRow: 0,
+        if soft, let small = CGContext(data: nil, width: width / 4, height: height / 4, bitsPerComponent: 8, bytesPerRow: 0,
                                        space: space, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) {
             small.interpolationQuality = .high
-            small.draw(image, in: CGRect(x: 0, y: 0, width: width / 12, height: height / 12))
+            small.draw(image, in: CGRect(x: 0, y: 0, width: width / 4, height: height / 4))
             if let tiny = small.makeImage() {
                 context.interpolationQuality = .high
                 context.draw(tiny, in: CGRect(x: 0, y: 0, width: width, height: height))
