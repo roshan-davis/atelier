@@ -240,7 +240,7 @@ public final class DevelopRenderer: @unchecked Sendable {
         (.curveShadows, 0.125), (.curveDarks, 0.375), (.curveLights, 0.625), (.curveHighlights, 0.875),
     ]
 
-    static func hasToneCurve(_ settings: DevelopSettings) -> Bool {
+    public static func hasToneCurve(_ settings: DevelopSettings) -> Bool {
         toneCurvePoints(settings) != nil || curveRegions.contains { settings[$0.0] != 0 } || settings.hasPointCurve
     }
 
