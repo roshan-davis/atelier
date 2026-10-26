@@ -34,12 +34,15 @@ struct ContentView: View {
                     Divider()
                     StatusBar()
                 }
-                .frame(maxWidth: .infinity)
+                // Let the photo column shrink to whatever is left and never draw past it.
+                .frame(minWidth: 0, maxWidth: .infinity)
+                .clipped()
                 if showInspector {
                     PanelResizeHandle(width: $panelWidth)
                     InspectorView()
                         .frame(width: panelWidth)
                         .clipped()
+                        .layoutPriority(1)
                         .background(Color(nsColor: .controlBackgroundColor))
                 }
             }
