@@ -22,13 +22,16 @@ public struct ImportOptions: Sendable {
     /// Applied to every imported photo (metadata preset, keywords part).
     public var keywords: [String]
     public var buildPreviews: Bool
+    /// Develop preset applied to newly imported photos.
+    public var developPreset: DevelopPreset?
 
     public init(mode: ImportMode = .reference, target: ImportTarget = .newGroup(name: ""),
-                keywords: [String] = [], buildPreviews: Bool = true) {
+                keywords: [String] = [], buildPreviews: Bool = true, developPreset: DevelopPreset? = nil) {
         self.mode = mode
         self.target = target
         self.keywords = keywords
         self.buildPreviews = buildPreviews
+        self.developPreset = developPreset
     }
 }
 
@@ -114,7 +117,15 @@ public final class Importer: Sendable {
                     state.imported += 1
                     state.importedAssetIDs.append(id)
                     assetID = id
-                    if options.buildPreviews { scheduler?.request(.thumbnail, for: id, source: url) }
+                    var developed: DevelopSettings?
+                    if let preset = options.developPreset {
+                        let settings = preset.applied(to: .neutral)
+                        try? catalog.saveDevelopSettings(settings, for: id, step: "Import Preset: \(preset.name)")
+                        developed = settings
+                    }
+                    if options.buildPreviews {
+                        scheduler?.request(.thumbnail, for: id, source: url, settings: developed)
+                    }
                 case .existing(let id):
                     state.skipped += 1
                     assetID = id
@@ -132,7 +143,8 @@ public final class Importer: Sendable {
         if options.buildPreviews, let scheduler {
             for id in state.importedAssetIDs {
                 if let url = try? catalog.fileURL(for: id) {
-                    scheduler.request(.preview, for: id, source: url)
+                    let settings = options.developPreset.map { $0.applied(to: .neutral) }
+                    scheduler.request(.preview, for: id, source: url, settings: settings)
                 }
             }
         } else if options.buildPreviews, let previews {
@@ -261,7 +273,7 @@ public final class Importer: Sendable {
             var pending = jobs.makeIterator()
             for _ in 0..<workers {
                 guard case let (id, url)? = pending.next() else { break }
-                group.addTask { (try? cache.generate(for: id, from: url)) != nil }
+                group.addTask { Self.generate(id, url, cache: cache, catalog: catalog) }
             }
             for await ok in group {
                 if ok {
@@ -269,11 +281,19 @@ public final class Importer: Sendable {
                     progress(built)
                 }
                 if case let (id, url)? = pending.next() {
-                    group.addTask { (try? cache.generate(for: id, from: url)) != nil }
+                    group.addTask { Self.generate(id, url, cache: cache, catalog: catalog) }
                 }
             }
             return built
         }
+    }
+
+    /// Builds a photo's previews, developed when it already has settings.
+    private static func generate(_ id: Int64, _ url: URL, cache: PreviewCache, catalog: Catalog) -> Bool {
+        if let settings = try? catalog.developSettings(for: id), !settings.isNeutral {
+            return (try? cache.generateDeveloped(for: id, from: url, settings: settings)) != nil
+        }
+        return (try? cache.generate(for: id, from: url)) != nil
     }
 
     // MARK: Copy mode

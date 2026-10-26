@@ -10,8 +10,14 @@ struct ContentView: View {
 
     var body: some View {
         NavigationSplitView {
-            SidebarView()
-                .navigationSplitViewColumnWidth(min: 200, ideal: 240)
+            Group {
+                if model.mode == .develop {
+                    DevelopSidebar(develop: model.develop)
+                } else {
+                    SidebarView()
+                }
+            }
+            .navigationSplitViewColumnWidth(min: 200, ideal: 240)
         } detail: {
             // The right panel sits beside the content, below the toolbar, like Lightroom's,
             // rather than as a full-height inspector the toolbar floats over.

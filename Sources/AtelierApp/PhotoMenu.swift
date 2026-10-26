@@ -75,6 +75,20 @@ extension LibraryModel {
         develop.addItem(ClosureMenuItem("Reset All Settings\(count)") { self.resetDevelopSettings() })
         menu.addItem(submenu("Develop Settings", develop))
 
+        let presets = NSMenu()
+        var lastGroup: String?
+        for preset in self.develop.presets {
+            if preset.group != lastGroup {
+                if lastGroup != nil { presets.addItem(.separator()) }
+                let header = NSMenuItem(title: preset.group, action: nil, keyEquivalent: "")
+                header.isEnabled = false
+                presets.addItem(header)
+                lastGroup = preset.group
+            }
+            presets.addItem(ClosureMenuItem(preset.name) { self.develop.applyPreset(preset, onto: ids) })
+        }
+        menu.addItem(submenu("Apply Develop Preset\(count)", presets))
+
         if !sidebar.collections.isEmpty {
             let collections = NSMenu()
             for collection in sidebar.collections {

@@ -20,6 +20,8 @@ struct ImportSheet: View {
     @State private var existingGroup: Int64?
     @State private var name = ""
     @State private var keywords = ""
+    /// The develop preset applied to new photos, remembered between imports.
+    @AppStorage("import.developPreset") private var presetID = ""
     @State private var dropTargeted = false
 
     private var photoCount: Int? {
@@ -109,9 +111,15 @@ struct ImportSheet: View {
                     }
                 }
 
-                Section("Keywords") {
+                Section("Apply During Import") {
+                    Picker("Develop Settings", selection: $presetID) {
+                        Text("None").tag("")
+                        ForEach(model.develop.presets) { preset in
+                            Text(preset.group == "Atelier" ? preset.name : "\(preset.group) › \(preset.name)")
+                                .tag(preset.id.uuidString)
+                        }
+                    }
                     TextField("Keywords", text: $keywords, prompt: Text("Added to every photo, comma separated"))
-                        .labelsHidden()
                 }
             }
             .formStyle(.grouped)
@@ -121,6 +129,8 @@ struct ImportSheet: View {
                 Button("Cancel", role: .cancel) { dismiss() }
                     .keyboardShortcut(.cancelAction)
                 Button(importButtonTitle) {
+                    var options = self.options
+                    options.developPreset = model.develop.presets.first { $0.id.uuidString == presetID }
                     model.runImport(sources: sources, options: options)
                     dismiss()
                 }

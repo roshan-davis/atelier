@@ -212,6 +212,22 @@ final class LibraryModel: ObservableObject {
         develop.pasteSettings(onto: targetIDs)
     }
 
+    func undo() {
+        if let textView = NSApp.keyWindow?.firstResponder as? NSTextView {
+            textView.undoManager?.undo()
+        } else if mode == .develop {
+            develop.undo()
+        }
+    }
+
+    func redo() {
+        if let textView = NSApp.keyWindow?.firstResponder as? NSTextView {
+            textView.undoManager?.redo()
+        } else if mode == .develop {
+            develop.redo()
+        }
+    }
+
     func rotate(clockwise: Bool) {
         guard mode == .develop else { return }
         develop.setCrop(develop.crop.turned(clockwise: clockwise))

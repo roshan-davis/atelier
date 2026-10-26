@@ -26,6 +26,14 @@ struct AtelierApp: App {
                 Button("Export…") { model.beginExport() }
                     .keyboardShortcut("e", modifiers: [.command, .shift])
             }
+            // Undo and redo step through the open photo's develop history; text fields keep
+            // their own undo.
+            CommandGroup(replacing: .undoRedo) {
+                Button("Undo") { model.undo() }
+                    .keyboardShortcut("z", modifiers: [.command])
+                Button("Redo") { model.redo() }
+                    .keyboardShortcut("z", modifiers: [.command, .shift])
+            }
             CommandGroup(after: .toolbar) {
                 Button("Zoom In") { model.zoomIn() }
                     .keyboardShortcut("=", modifiers: [.command])

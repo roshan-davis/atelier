@@ -437,6 +437,7 @@ struct ShortcutsSheet: View {
         ("Zoom", [("⌘=", "Zoom in"), ("⌘-", "Zoom out"), ("⌘0", "Zoom to fit"), ("⌥⌘1", "Zoom to 100%"),
                   ("⌥ scroll / pinch", "Zoom freely"), ("Drag", "Move around when zoomed")]),
         ("Develop", [("⇧⌘C", "Copy settings"), ("⇧⌘V", "Paste settings"), ("⇧⌘R", "Reset all settings"),
+                     ("⌘Z", "Undo"), ("⇧⌘Z", "Redo"), ("⌘[", "Rotate left"), ("⌘]", "Rotate right"),
                      ("Double-click name", "Reset a slider")]),
         ("App", [("⌘,", "Settings"), ("⌘/", "This list")]),
     ]
