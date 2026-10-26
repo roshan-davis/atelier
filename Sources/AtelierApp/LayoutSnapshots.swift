@@ -36,34 +36,25 @@ enum LayoutSnapshots {
         // The whole right panel at its default width, tall enough to show every section.
         shots.append(("panel-320x2600", CGSize(width: 320, height: 2600),
                       AnyView(DevelopPanel(develop: model.develop).environmentObject(model))))
+        UserDefaults.standard.set(Theme.light.rawValue, forKey: Theme.defaultsKey)
+        Theme.light.apply()
         for (name, size, view) in shots {
-            // Borderless, so the window isn't limited to the CI machine's small screen.
-            let window = NSWindow(contentRect: CGRect(origin: .zero, size: size),
-                                  styleMask: [.borderless], backing: .buffered, defer: false)
-            let host = NSHostingView(rootView: view)
-            window.contentView = host
-            window.setContentSize(size)
-            window.orderFront(nil)
-            // Let SwiftUI lay out and AppKit controls settle.
-            try? await Task.sleep(for: .seconds(2))
-            host.layoutSubtreeIfNeeded()
-            if let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
-                host.cacheDisplay(in: host.bounds, to: rep)
-                try? rep.representation(using: .png, properties: [:])?
-                    .write(to: folder.appendingPathComponent(name + ".png"))
-            }
-            window.orderOut(nil)
+            await capture(view, size: size, to: folder.appendingPathComponent(name + ".png"))
         }
-        // The app's real window too, with its toolbar, at the size in Rosh's screenshot.
-        if let window = model.mainWindow, let frameView = window.contentView?.superview {
-            window.setContentSize(CGSize(width: 1000, height: 584))
-            try? await Task.sleep(for: .seconds(2))
-            if let rep = frameView.bitmapImageRepForCachingDisplay(in: frameView.bounds) {
-                frameView.cacheDisplay(in: frameView.bounds, to: rep)
-                try? rep.representation(using: .png, properties: [:])?
-                    .write(to: folder.appendingPathComponent("window-1000x584.png"))
-            }
+        // Each theme in Develop at the size in Rosh's screenshot, and the theme picker itself.
+        for theme in Theme.allCases where theme != .system {
+            UserDefaults.standard.set(theme.rawValue, forKey: Theme.defaultsKey)
+            theme.apply()
+            await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1000, height: 584),
+                          to: folder.appendingPathComponent("theme-\(theme.rawValue).png"))
         }
+        model.mode = .grid
+        await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1000, height: 584),
+                      to: folder.appendingPathComponent("theme-neutralGray-grid.png"))
+        await capture(AnyView(AppearanceSettings().frame(width: 560)), size: CGSize(width: 560, height: 330),
+                      to: folder.appendingPathComponent("settings-appearance.png"))
+        UserDefaults.standard.removeObject(forKey: Theme.defaultsKey)
+        Theme.system.apply()
         fflush(stdout)
         exit(0)
     }
@@ -90,5 +81,23 @@ enum LayoutSnapshots {
             try? await Task.sleep(for: .milliseconds(500))
         }
         print("SNAPSHOT: catalog has \(model.rows.count) photo(s)")
+    }
+
+    private static func capture(_ view: AnyView, size: CGSize, to url: URL) async {
+        // Borderless, so the window isn't limited to the CI machine's small screen.
+        let window = NSWindow(contentRect: CGRect(origin: .zero, size: size),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        let host = NSHostingView(rootView: view)
+        window.contentView = host
+        window.setContentSize(size)
+        window.orderFront(nil)
+        // Let SwiftUI lay out and AppKit controls settle.
+        try? await Task.sleep(for: .seconds(2))
+        host.layoutSubtreeIfNeeded()
+        if let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
+            host.cacheDisplay(in: host.bounds, to: rep)
+            try? rep.representation(using: .png, properties: [:])?.write(to: url)
+        }
+        window.orderOut(nil)
     }
 }

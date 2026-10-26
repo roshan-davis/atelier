@@ -1,6 +1,6 @@
 # Photo Catalog & Editor PRD
 
-Oct 25, 2026 · Rosh · Revised Oct 26, 2026 (UX principles and import flow; import entries; Phase 1 before Phase 0; before/after compare views; export dialog; panels, zoom and right-click menus; Tone Curve, HSL / Color and Color Grading panels; editable point curve, panel below the toolbar, slider rows; Settings window, custom keys, resizable panel)
+Oct 25, 2026 · Rosh · Revised Oct 26, 2026 (UX principles and import flow; import entries; Phase 1 before Phase 0; before/after compare views; export dialog; panels, zoom and right-click menus; Tone Curve, HSL / Color and Color Grading panels; editable point curve, panel below the toolbar, slider rows; Settings window, custom keys, resizable panel; themes)
 
 Live doc with diagrams: https://claude.ai/artifact/1T8xvdGuJTcGPTHStzDJvn
 
@@ -153,6 +153,7 @@ Edits are a versioned list of parameters stored in the catalog, rendered live on
 
 Atelier > Settings… (⌘,) has these tabs:
 - **General:** catalog location (Show in Finder), photo count, backups kept on quit (default 10), Back Up Now, preview cache size.
+- **Appearance:** theme, picked from small previews: System (follows macOS), Light, Dark, Graphite (charcoal panels and a dark surround, like Lightroom), Darkroom (near black, so only the photo stands out) and Neutral Gray (a mid-gray surround for judging color and brightness). The theme changes every window at once, Settings included.
 - **Import:** default for new imports (leave files or copy into the library folder) and the library folder. The Import dialog starts from these.
 - **Develop:** what a click or Z zooms to (50%, 100%, 200%, 400%), solo mode, and the histogram clipping warnings.
 - **Export:** default export folder and whether to show exports in Finder.

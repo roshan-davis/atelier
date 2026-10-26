@@ -5,6 +5,7 @@ import SwiftUI
 /// One photo at a time from the 2560 px preview. Arrow keys step, Esc or G returns to the grid.
 struct LoupeView: View {
     @EnvironmentObject private var model: LibraryModel
+    @Environment(\.theme) private var theme
     @State private var image: NSImage?
     @State private var loadedID: Int64?
     /// Full-resolution render, loaded once the photo is zoomed past fit.
@@ -14,7 +15,7 @@ struct LoupeView: View {
     var body: some View {
         VStack(spacing: 0) {
             ZStack(alignment: .bottomLeading) {
-                Color(nsColor: .underPageBackgroundColor)
+                Color(nsColor: theme.surround)
                 if let image {
                     ZoomableImageView(image: fullKey == currentFullKey ? fullImage ?? image : image,
                                       pixelSize: pixelSize,

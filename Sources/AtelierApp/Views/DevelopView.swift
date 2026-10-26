@@ -5,12 +5,13 @@ import SwiftUI
 /// The photo being developed, rendered live from the original, with optional before/after views.
 struct DevelopImageView: View {
     @EnvironmentObject private var model: LibraryModel
+    @Environment(\.theme) private var theme
     @ObservedObject var develop: DevelopController
 
     var body: some View {
         VStack(spacing: 0) {
             ZStack(alignment: .topLeading) {
-                Color(nsColor: .underPageBackgroundColor)
+                Color(nsColor: theme.surround)
                 if let image = develop.image {
                     if develop.showingBefore || develop.compareMode == .off {
                         ZoomableImageView(image: develop.displayImage ?? image,

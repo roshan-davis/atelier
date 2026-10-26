@@ -94,6 +94,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Launched from `swift run` the process has no bundle; make it a regular foreground app.
         NSApp.setActivationPolicy(.regular)
+        MainActor.assumeIsolated { Theme.current.apply() }
         NSApp.activate(ignoringOtherApps: true)
     }
 
