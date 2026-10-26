@@ -89,7 +89,68 @@ final class DevelopTests: XCTestCase {
         XCTAssertNil(DevelopRenderer.toneCurvePoints(.neutral))
     }
 
+    func testNewParametersDefaultWhenMissing() throws {
+        let old = try DevelopSettings.decoded(from: #"{"schemaVersion":1,"exposure":0.5}"#)
+        XCTAssertEqual(old.sharpenRadius, 1)
+        XCTAssertEqual(old.vignetteMidpoint, 50)
+        XCTAssertEqual(old.grainSize, 25)
+        XCTAssertEqual(old.clarity, 0)
+        XCTAssertEqual(DevelopSettings.Panel.detail.parameters, [.sharpening, .sharpenRadius, .luminanceNoise, .colorNoise])
+        XCTAssertEqual(Set(DevelopSettings.Parameter.allCases.map(\.panel)).count, DevelopSettings.Panel.allCases.count)
+    }
+
+    func testEffectsAndPresenceChangeTheRender() throws {
+        let file = workDir.appendingPathComponent("gray.jpg")
+        try makeJPEG(at: file, gray: 0.5)
+        let session = try XCTUnwrap(DevelopRenderer.shared.session(for: file, maxPixelSize: 64))
+        let neutral = try XCTUnwrap(session.render(.neutral))
+
+        var vignette = DevelopSettings()
+        vignette.vignette = -100
+        let vignetted = try XCTUnwrap(session.render(vignette))
+        XCTAssertLessThan(try luma(vignetted, x: 1, y: 1), try luma(neutral, x: 1, y: 1) - 0.05, "corners darken")
+
+        var dehaze = DevelopSettings()
+        dehaze.dehaze = 100
+        XCTAssertNotEqual(try centerLuma(XCTUnwrap(session.render(dehaze))), try centerLuma(neutral))
+
+        var grain = DevelopSettings()
+        grain.grain = 100
+        let grainy = try XCTUnwrap(session.render(grain))
+        let values = try (0..<16).map { try luma(grainy, x: 8 + $0 * 3, y: 30) }
+        XCTAssertGreaterThan(Set(values).count, 3, "grain varies pixel to pixel")
+
+        for parameter in [DevelopSettings.Parameter.clarity, .texture, .sharpening, .luminanceNoise, .colorNoise] {
+            var settings = DevelopSettings()
+            settings[parameter] = parameter.range.upperBound
+            XCTAssertNotNil(session.render(settings), "\(parameter) renders")
+        }
+    }
+
+    func testHistogramOfGrayImage() throws {
+        let space = CGColorSpace(name: CGColorSpace.sRGB)!
+        let context = try XCTUnwrap(CGContext(data: nil, width: 32, height: 32, bitsPerComponent: 8, bytesPerRow: 0,
+                                              space: space, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue))
+        context.setFillColor(CGColor(colorSpace: space, components: [0.5, 0.5, 0.5, 1])!)
+        context.fill(CGRect(x: 0, y: 0, width: 32, height: 32))
+        let histogram = try XCTUnwrap(Histogram(image: XCTUnwrap(context.makeImage())))
+        let peak = try XCTUnwrap(histogram.luminance.firstIndex(of: histogram.luminance.max()!))
+        XCTAssertEqual(peak, Histogram.binCount / 2, accuracy: 1)
+        XCTAssertEqual(histogram.highlightClipping, 0)
+        XCTAssertEqual(histogram.shadowClipping, 0)
+    }
+
     // MARK: Helpers
+
+    private func luma(_ image: CGImage, x: Int, y: Int) throws -> Double {
+        let space = CGColorSpace(name: CGColorSpace.sRGB)!
+        var pixel = [UInt8](repeating: 0, count: 4)
+        let context = try XCTUnwrap(CGContext(data: &pixel, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+                                              space: space, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue))
+        let cropped = try XCTUnwrap(image.cropping(to: CGRect(x: x, y: y, width: 1, height: 1)))
+        context.draw(cropped, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+        return (0.2126 * Double(pixel[0]) + 0.7152 * Double(pixel[1]) + 0.0722 * Double(pixel[2])) / 255
+    }
 
     private func centerLuma(_ image: CGImage) throws -> Double {
         let space = CGColorSpace(name: CGColorSpace.sRGB)!

@@ -50,6 +50,26 @@ final class DevelopController: ObservableObject {
     /// Where the slider divides before (left) and after (right), 0...1.
     @Published var sliderPosition = 0.5
 
+    @Published private(set) var histogram: Histogram?
+
+    /// Set while the photo is zoomed past fit; renders the full-resolution image as well.
+    @Published var wantsFullResolution = false {
+        didSet { if wantsFullResolution, !oldValue { scheduleFullRender() } }
+    }
+    @Published private(set) var fullImage: NSImage?
+    private var fullImageSettings: DevelopSettings?
+    private var fullSession: DevelopSession?
+    private var sourceURL: URL?
+    private var fullRendering = false
+    private var fullNeedsRender = false
+    private let fullQueue = DispatchQueue(label: "atelier.develop.full", qos: .userInitiated)
+
+    /// The sharpest image that matches the current settings.
+    var displayImage: NSImage? {
+        if !showingBefore, let fullImage, fullImageSettings == settings { return fullImage }
+        return image
+    }
+
     /// Copy/paste settings clipboard, shared across photos.
     @Published private(set) var clipboard: DevelopSettings?
 
@@ -77,6 +97,11 @@ final class DevelopController: ObservableObject {
         session = nil
         image = nil
         beforeImage = nil
+        histogram = nil
+        fullImage = nil
+        fullImageSettings = nil
+        fullSession = nil
+        sourceURL = nil
         errorMessage = nil
         showingBefore = false
         guard let assetID else { return }
@@ -90,6 +115,7 @@ final class DevelopController: ObservableObject {
             errorMessage = "The original is offline. Connect its drive to edit this photo."
             return
         }
+        sourceURL = url
         isLoading = true
         queue.async {
             let session = DevelopRenderer.shared.session(for: url, maxPixelSize: Self.proxySize)
@@ -137,6 +163,25 @@ final class DevelopController: ObservableObject {
         changed()
     }
 
+    func reset(_ panel: DevelopSettings.Panel) {
+        guard assetID != nil else { return }
+        for parameter in panel.parameters {
+            if parameter == .temperature {
+                settings.temperature = nil
+            } else {
+                settings[parameter] = DevelopSettings.neutral[parameter]
+            }
+        }
+        changed()
+    }
+
+    func isModified(_ panel: DevelopSettings.Panel) -> Bool {
+        panel.parameters.contains { parameter in
+            parameter == .temperature ? settings.temperature != nil
+                : settings[parameter] != DevelopSettings.neutral[parameter]
+        }
+    }
+
     func resetAll() {
         guard assetID != nil else { return }
         settings = .neutral
@@ -154,13 +199,22 @@ final class DevelopController: ObservableObject {
     /// Pastes onto the open photo, or onto every photo in `assetIDs` when given.
     func pasteSettings(onto assetIDs: [Int64]? = nil) {
         guard let clipboard else { return }
+        apply(clipboard, onto: assetIDs)
+    }
+
+    /// Clears all edits on the photos (Lightroom's Reset).
+    func resetSettings(of assetIDs: [Int64]) {
+        apply(.neutral, onto: assetIDs)
+    }
+
+    private func apply(_ newSettings: DevelopSettings, onto assetIDs: [Int64]?) {
         let targets = assetIDs ?? assetID.map { [$0] } ?? []
         for id in targets where id != assetID {
-            try? catalog.saveDevelopSettings(clipboard, for: id)
-            refreshPreviews(for: id, settings: clipboard)
+            try? catalog.saveDevelopSettings(newSettings, for: id)
+            refreshPreviews(for: id, settings: newSettings)
         }
         if let assetID, targets.contains(assetID) {
-            settings = clipboard
+            settings = newSettings
             changed()
         }
     }
@@ -184,15 +238,51 @@ final class DevelopController: ObservableObject {
         let assetID = self.assetID
         queue.async {
             let cgImage = session.render(settings)
+            let histogram = cgImage.flatMap { Histogram(image: $0) }
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     self.rendering = false
                     if self.assetID == assetID, let cgImage {
                         self.image = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+                        self.histogram = histogram
                     }
                     if self.needsRender {
                         self.needsRender = false
                         self.scheduleRender()
+                    } else {
+                        self.scheduleFullRender()
+                    }
+                }
+            }
+        }
+    }
+
+    /// Full-resolution render for zoomed views, after the proxy settles. Latest wins.
+    private func scheduleFullRender() {
+        guard wantsFullResolution, !showingBefore, let url = sourceURL, fullImageSettings != settings else { return }
+        if fullRendering {
+            fullNeedsRender = true
+            return
+        }
+        fullRendering = true
+        let settings = self.settings
+        let assetID = self.assetID
+        let existing = fullSession
+        fullQueue.async {
+            let session = existing ?? DevelopRenderer.shared.session(for: url, maxPixelSize: nil)
+            let cgImage = session?.render(settings)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    self.fullRendering = false
+                    guard self.assetID == assetID, let session else { return }
+                    self.fullSession = session
+                    if let cgImage {
+                        self.fullImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+                        self.fullImageSettings = settings
+                    }
+                    if self.fullNeedsRender {
+                        self.fullNeedsRender = false
+                        if !self.rendering { self.scheduleFullRender() }
                     }
                 }
             }

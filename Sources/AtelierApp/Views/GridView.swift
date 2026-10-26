@@ -27,6 +27,9 @@ struct GridView: NSViewRepresentable {
         collectionView.dataSource = context.coordinator
         collectionView.delegate = context.coordinator
         collectionView.onDoubleClick = { [weak model] in model?.openLoupe() }
+        collectionView.menuForItem = { [weak coordinator = context.coordinator] index in
+            coordinator?.menu(forItemAt: index)
+        }
         context.coordinator.collectionView = collectionView
 
         let scrollView = NSScrollView()
@@ -101,6 +104,20 @@ struct GridView: NSViewRepresentable {
             pushSelection(focus: nil)
         }
 
+        /// Right-click: select the photo under the pointer (unless it is already selected).
+        func menu(forItemAt index: Int) -> NSMenu? {
+            guard let collectionView, rows.indices.contains(index) else { return nil }
+            let id = rows[index].id
+            let indexPath = IndexPath(item: index, section: 0)
+            if !collectionView.selectionIndexPaths.contains(indexPath) {
+                applyingSelection = true
+                collectionView.selectionIndexPaths = [indexPath]
+                applyingSelection = false
+            }
+            model.prepareContextMenu(for: id)
+            return model.photoMenu(includeZoom: false)
+        }
+
         private func pushSelection(focus: Int?) {
             guard !applyingSelection, let collectionView else { return }
             let ids = Set(collectionView.selectionIndexPaths.map { rows[$0.item].id })
@@ -120,6 +137,13 @@ struct GridView: NSViewRepresentable {
 
 final class GridCollectionView: NSCollectionView {
     var onDoubleClick: (() -> Void)?
+    var menuForItem: ((Int) -> NSMenu?)?
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let point = convert(event.locationInWindow, from: nil)
+        guard let indexPath = indexPathForItem(at: point) else { return nil }
+        return menuForItem?(indexPath.item)
+    }
 
     override func mouseDown(with event: NSEvent) {
         super.mouseDown(with: event)

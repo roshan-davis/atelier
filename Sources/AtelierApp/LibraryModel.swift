@@ -95,6 +95,9 @@ final class LibraryModel: ObservableObject {
     private var shownImportGroup: Int64?
     /// Bumped when previews are generated so visible cells reload their images.
     @Published var previewRevision = 0
+    /// Zoom shared by loupe and develop; kept when moving between photos, as in Lightroom.
+    @Published var zoom: ZoomLevel = .fit
+    @Published var zoomReport = ZoomReport()
 
     private var rowsTask: Task<Void, Never>?
     private var sidebarTask: Task<Void, Never>?
@@ -204,6 +207,49 @@ final class LibraryModel: ObservableObject {
     /// Pastes copied develop settings onto the selection (grid) or the open photo.
     func pasteDevelopSettings() {
         develop.pasteSettings(onto: targetIDs)
+    }
+
+    func resetDevelopSettings() {
+        develop.resetSettings(of: targetIDs)
+    }
+
+    func showInFinder() {
+        let urls = targetIDs.compactMap { try? catalog.fileURL(for: $0) }
+            .filter { FileManager.default.fileExists(atPath: $0.path) }
+        if urls.isEmpty {
+            status = "The originals are offline. Connect their drive to show them in Finder."
+        } else {
+            NSWorkspace.shared.activateFileViewerSelecting(urls)
+        }
+    }
+
+    /// Makes a right-clicked grid photo the selection unless it is already part of it.
+    func prepareContextMenu(for id: Int64) {
+        if !selection.contains(id) { selection = [id] }
+        focusedID = id
+    }
+
+    // MARK: Zoom
+
+    func toggleZoom() {
+        if mode == .grid {
+            openLoupe()
+            zoom = .percent(100)
+        } else {
+            zoom = zoomReport.isZoomedPastFit ? .fit : .percent(100)
+        }
+    }
+
+    func zoomIn() {
+        guard mode != .grid else { return toggleZoom() }
+        let current = zoomReport.percent > 0 ? zoomReport.percent : 100
+        zoom = .percent(min(1600, current * 1.5))
+    }
+
+    func zoomOut() {
+        guard mode != .grid else { return }
+        let next = zoomReport.percent / 1.5
+        zoom = next <= zoomReport.fitPercent * 1.01 ? .fit : .percent(next)
     }
 
     func copyDevelopSettings() {
@@ -511,6 +557,7 @@ final class LibraryModel: ObservableObject {
         case "g": mode = .grid
         case "\\" where mode == .develop: develop.showingBefore.toggle()
         case "y" where mode == .develop: develop.cycleCompareMode()
+        case "z": toggleZoom()
         default: return false
         }
         return true

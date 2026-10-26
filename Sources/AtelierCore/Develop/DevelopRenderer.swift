@@ -36,9 +36,13 @@ public final class DevelopRenderer: @unchecked Sendable {
 
     // MARK: Adjustments after decode
 
-    /// Steps 2 to 4 of the pipeline; white balance and exposure happen at decode.
-    public static func applyAdjustments(_ settings: DevelopSettings, to input: CIImage) -> CIImage {
+    /// Steps 2 to 7 of the pipeline; white balance and exposure happen at decode.
+    /// `scale` is the rendered size relative to the full-size photo, so pixel radii such as
+    /// sharpening look the same on the live proxy and in an export.
+    public static func applyAdjustments(_ settings: DevelopSettings, to input: CIImage, scale: Double = 1) -> CIImage {
         var image = input
+        let extent = input.extent
+        let longEdge = Double(max(extent.width, extent.height))
 
         // Highlights and shadows. CIHighlightShadowAdjust only recovers highlights, so positive
         // highlights are handled by the tone curve below.
@@ -62,6 +66,18 @@ public final class DevelopRenderer: @unchecked Sendable {
             image = filter.outputImage ?? image
         }
 
+        if settings.dehaze != 0 {
+            image = dehaze(image, amount: settings.dehaze / 100)
+        }
+        // Clarity works on midtone local contrast with a wide radius, texture on fine detail.
+        if settings.clarity != 0 {
+            image = localContrast(image, amount: settings.clarity / 100 * 0.6, radius: longEdge * 0.012, extent: extent)
+        }
+        if settings.texture != 0 {
+            image = localContrast(image, amount: settings.texture / 100 * 0.5, radius: max(1, longEdge * 0.003),
+                                  extent: extent)
+        }
+
         if settings.vibrance != 0 {
             let filter = CIFilter.vibrance()
             filter.inputImage = image
@@ -76,7 +92,122 @@ public final class DevelopRenderer: @unchecked Sendable {
             filter.contrast = 1
             image = filter.outputImage ?? image
         }
+
+        // Detail
+        if settings.luminanceNoise > 0 {
+            let filter = CIFilter.noiseReduction()
+            filter.inputImage = image
+            filter.noiseLevel = Float(settings.luminanceNoise / 100 * 0.06)
+            filter.sharpness = 0.4
+            image = filter.outputImage?.cropped(to: extent) ?? image
+        }
+        if settings.colorNoise > 0 {
+            // Keep the original luminance and take color from a blurred copy.
+            let blurred = image.clampedToExtent()
+                .applyingGaussianBlur(sigma: max(0.5, 4 * scale * settings.colorNoise / 50))
+                .cropped(to: extent)
+            let blend = CIFilter.luminosityBlendMode()
+            blend.inputImage = image
+            blend.backgroundImage = blurred
+            if let output = blend.outputImage?.cropped(to: extent) {
+                image = mix(image, output, amount: min(1, settings.colorNoise / 50))
+            }
+        }
+        if settings.sharpening > 0 {
+            let filter = CIFilter.sharpenLuminance()
+            filter.inputImage = image
+            filter.sharpness = Float(settings.sharpening / 150 * 1.2)
+            filter.radius = Float(max(0.3, settings.sharpenRadius * scale * 1.5))
+            image = filter.outputImage?.cropped(to: extent) ?? image
+        }
+
+        // Effects
+        if settings.vignette != 0 {
+            let filter = CIFilter.vignetteEffect()
+            filter.inputImage = image
+            filter.center = CGPoint(x: extent.midX, y: extent.midY)
+            let diagonal = (extent.width * extent.width + extent.height * extent.height).squareRoot() / 2
+            filter.radius = Float(diagonal * (0.35 + settings.vignetteMidpoint / 100 * 0.6))
+            filter.falloff = 0.6
+            filter.intensity = Float(-settings.vignette / 100)
+            image = filter.outputImage?.cropped(to: extent) ?? image
+        }
+        if settings.grain > 0 {
+            image = addGrain(image, amount: settings.grain / 100, size: settings.grainSize / 100, scale: scale,
+                             extent: extent)
+        }
         return image
+    }
+
+    /// Removes (positive) or adds (negative) a flat veil of haze, then restores saturation.
+    static func dehaze(_ image: CIImage, amount: Double) -> CIImage {
+        let airlight = 0.18
+        let gain: Double, bias: Double
+        if amount > 0 {
+            let k = 0.35 * amount
+            gain = 1 / (1 - k)
+            bias = -k * airlight / (1 - k)
+        } else {
+            let k = 0.35 * -amount
+            gain = 1 - k
+            bias = k * airlight
+        }
+        let matrix = CIFilter.colorMatrix()
+        matrix.inputImage = image
+        matrix.rVector = CIVector(x: gain, y: 0, z: 0, w: 0)
+        matrix.gVector = CIVector(x: 0, y: gain, z: 0, w: 0)
+        matrix.bVector = CIVector(x: 0, y: 0, z: gain, w: 0)
+        matrix.aVector = CIVector(x: 0, y: 0, z: 0, w: 1)
+        matrix.biasVector = CIVector(x: bias, y: bias, z: bias, w: 0)
+        let color = CIFilter.colorControls()
+        color.inputImage = matrix.outputImage
+        color.saturation = Float(1 + 0.25 * amount)
+        color.brightness = 0
+        color.contrast = 1
+        return color.outputImage ?? image
+    }
+
+    /// Unsharp mask for positive amounts, a blend toward a blurred copy for negative ones.
+    static func localContrast(_ image: CIImage, amount: Double, radius: Double, extent: CGRect) -> CIImage {
+        let source = image.clampedToExtent()
+        if amount > 0 {
+            let filter = CIFilter.unsharpMask()
+            filter.inputImage = source
+            filter.radius = Float(radius)
+            filter.intensity = Float(amount)
+            return filter.outputImage?.cropped(to: extent) ?? image
+        }
+        let blurred = source.applyingGaussianBlur(sigma: radius / 2).cropped(to: extent)
+        return mix(image, blurred, amount: min(1, -amount * 1.2))
+    }
+
+    static func mix(_ image: CIImage, _ other: CIImage, amount: Double) -> CIImage {
+        let filter = CIFilter.dissolveTransition()
+        filter.inputImage = image
+        filter.targetImage = other
+        filter.time = Float(amount)
+        return filter.outputImage ?? image
+    }
+
+    /// Film-like monochrome grain, multiplied in so blacks stay black.
+    static func addGrain(_ image: CIImage, amount: Double, size: Double, scale: Double, extent: CGRect) -> CIImage {
+        guard let noise = CIFilter.randomGenerator().outputImage else { return image }
+        let grainScale = max(0.5, (1 + size * 3) * scale)
+        let strength = amount * 0.35
+        let matrix = CIFilter.colorMatrix()
+        matrix.inputImage = noise
+            .transformed(by: CGAffineTransform(scaleX: grainScale, y: grainScale))
+            .transformed(by: CGAffineTransform(translationX: extent.minX, y: extent.minY))
+        matrix.rVector = CIVector(x: strength, y: 0, z: 0, w: 0)
+        matrix.gVector = CIVector(x: strength, y: 0, z: 0, w: 0)
+        matrix.bVector = CIVector(x: strength, y: 0, z: 0, w: 0)
+        matrix.aVector = CIVector(x: 0, y: 0, z: 0, w: 0)
+        matrix.biasVector = CIVector(x: 1 - strength / 2, y: 1 - strength / 2, z: 1 - strength / 2, w: 1)
+        guard let grain = matrix.outputImage?.cropped(to: extent) else { return image }
+        let multiply = CIFilter.multiplyCompositing()
+        multiply.inputImage = grain
+        multiply.backgroundImage = image
+        return multiply.outputImage?.cropped(to: extent) ?? image
     }
 
     /// Control points of the tone curve in sRGB-encoded values, or nil when it is the identity.
@@ -159,6 +290,8 @@ public final class DevelopSession: @unchecked Sendable {
     /// As-shot white balance, shown on the temperature slider until the user changes it.
     public let asShotTemperature: Double
     public let asShotTint: Double
+    /// Rendered size relative to the full-size photo.
+    public let renderScale: Double
     private let lock = NSLock()
 
     init?(url: URL, maxPixelSize: Int?, renderer: DevelopRenderer) {
@@ -173,17 +306,20 @@ public final class DevelopSession: @unchecked Sendable {
                 let longEdge = max(raw.nativeSize.width, raw.nativeSize.height)
                 if longEdge > 0 { raw.scaleFactor = Float(min(1, Double(maxPixelSize) / Double(longEdge))) }
             }
+            renderScale = Double(raw.scaleFactor)
             asShotTemperature = Double(raw.neutralTemperature)
             asShotTint = Double(raw.neutralTint)
         } else {
             guard var image = CIImage(contentsOf: url, options: [.applyOrientationProperty: true]) else { return nil }
+            var scale = 1.0
             if let maxPixelSize {
                 let longEdge = max(image.extent.width, image.extent.height)
                 if longEdge > CGFloat(maxPixelSize) {
-                    let scale = CGFloat(maxPixelSize) / longEdge
+                    scale = Double(CGFloat(maxPixelSize) / longEdge)
                     image = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
                 }
             }
+            renderScale = scale
             isRAW = false
             rawFilter = nil
             baseImage = image
@@ -226,7 +362,7 @@ public final class DevelopSession: @unchecked Sendable {
                 image = filter.outputImage ?? image
             }
         }
-        return DevelopRenderer.applyAdjustments(settings, to: image)
+        return DevelopRenderer.applyAdjustments(settings, to: image, scale: renderScale)
     }
 
     /// Rendered for display in Display P3.

@@ -21,6 +21,19 @@ struct AtelierApp: App {
                 Button("Export…") { model.beginExport() }
                     .keyboardShortcut("e", modifiers: [.command, .shift])
             }
+            CommandGroup(after: .toolbar) {
+                Button("Zoom In") { model.zoomIn() }
+                    .keyboardShortcut("=", modifiers: [.command])
+                Button("Zoom Out") { model.zoomOut() }
+                    .keyboardShortcut("-", modifiers: [.command])
+                Button("Zoom to Fit") { model.zoom = .fit }
+                    .keyboardShortcut("0", modifiers: [.command])
+                Button("Zoom to 100%") { model.zoom = .percent(100) }
+                    .keyboardShortcut("1", modifiers: [.command, .option])
+                // Z itself is handled by the culling key monitor.
+                Button("Toggle Zoom (Z)") { model.toggleZoom() }
+                Divider()
+            }
             CommandMenu("Library") {
                 Button("Grid") { model.mode = .grid }
                     .keyboardShortcut("g", modifiers: [.command])
