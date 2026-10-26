@@ -1,6 +1,6 @@
 # Photo Catalog & Editor PRD
 
-Oct 25, 2026 · Rosh · Revised Oct 26, 2026 (UX principles and import flow; import entries; Phase 1 before Phase 0)
+Oct 25, 2026 · Rosh · Revised Oct 26, 2026 (UX principles and import flow; import entries; Phase 1 before Phase 0; before/after compare views; export dialog; panels, zoom and right-click menus)
 
 Live doc with diagrams: https://claude.ai/artifact/1T8xvdGuJTcGPTHStzDJvn
 
@@ -79,7 +79,7 @@ The MVP proves the catalog, a usable develop module and one AI backend. Full dev
 | Develop | RAW decode, white balance, exposure, contrast, highlights, shadows, crop, straighten, history, snapshots | Tone curve, HSL, color grading, lens profiles, linear and radial masks, AI subject and sky masks, presets, batch sync | Brush masks with edge-aware refine, HDR and panorama merge, focus stacking |
 | External editors | Edit In with any app, TIFF round-trip, stacked version | PSD round-trip, per-app settings, file watcher for live updates | Smart-object style re-edit |
 | AI | ComfyUI backend, 3 recipes (object removal, upscale, background replace) | Core ML and MLX backends, recipe builder, batch queue, model registry with license gate | Natural-language search, auto-keywording, MCP server for agents |
-| Export | JPEG, TIFF, PNG, WebP; size, sharpen, sRGB | Watermark, metadata rules, named presets, publish to folder | WooCommerce and Instagram publish services |
+| Export | JPEG, HEIC, 16-bit TIFF, PNG; long edge, sharpen for screen, sRGB, Display P3 or Adobe RGB; metadata all, without location, or none; quick settings for website and full size. WebP waits for an encoder (macOS ImageIO reads WebP but cannot write it) | Watermark, metadata rules, named presets, publish to folder | WooCommerce and Instagram publish services |
 
 ## Catalog and library management
 
@@ -95,7 +95,7 @@ The catalog never modifies an original file. Every photo is a database record po
 
 - Formats: all RAW formats Apple's RAW engine supports, plus DNG, JPEG, HEIC, TIFF, PNG, WebP, PSD (composite only). Video files cataloged with poster frames.
 - Import applies a metadata preset (copyright, creator, keywords) and a develop preset.
-- Previews: a 256 px thumbnail and a 2560 px preview per photo, generated in the background. Optional smart preview (lossy DNG, 2560 px long edge) for offline editing.
+- Previews: a 256 px thumbnail and a 2560 px preview per photo, generated in the background. Thumbnails come first, from the file's embedded preview when it is large enough, and appear in the grid while the import is still running; 2560 px previews follow at lower priority, except the photo open in the loupe, which jumps the queue. Optional smart preview (lossy DNG, 2560 px long edge) for offline editing.
 - Metadata: EXIF, IPTC and XMP read on import. Ratings, labels, keywords and develop settings written to XMP sidecars on demand or automatically, so other apps can read them.
 - Organization: folders mirror disk; collections and collection sets are virtual; smart collections are saved queries; stacks group versions and bursts.
 - Import entries: every import lands in a named entry listed in the sidebar (default name: the source folder, or the event name for copied imports). An import can create a new entry or add to an existing one; files already in the catalog join the entry without being imported twice. Entries can be renamed and deleted, and photos added to or removed from them by hand. Removing a photo from an entry, or deleting an entry, never removes the photo from the catalog.
@@ -127,14 +127,27 @@ Edits are a versioned list of parameters stored in the catalog, rendered live on
 
 ### Tools and requirements
 
-- Live preview at 60 fps on a 2560 px proxy; full-resolution render for zoom above 100% and export.
+- Live preview at 60 fps on a 2560 px proxy; full-resolution render once the photo is zoomed past fit, and for export.
+- Panels follow Lightroom's layout and order in the right column, each collapsible, remembered between sessions, with a dot and a reset button when it has edits. Right-click a panel header for Solo Mode (one panel open at a time), Expand All and Collapse All.
+  - Histogram: RGB, from the current render, with shadow and highlight clipping warnings.
+  - Basic: White Balance (Temp, Tint), Tone (Exposure, Contrast, Highlights, Shadows, Whites, Blacks), Presence (Texture, Clarity, Dehaze, Vibrance, Saturation).
+  - Detail: Sharpening (Amount, Radius), Noise Reduction (Luminance, Color).
+  - Effects: Post-Crop Vignetting (Amount, Midpoint), Grain (Amount, Size).
+  - Next, in Lightroom's order: Tone Curve, HSL/Color, Color Grading, Lens Corrections, Transform, Calibration.
+  - Sliders: double-click the name to reset, click the value to type one; Temp, Tint, Vibrance and Saturation have colored tracks.
+- Zoom in loupe and develop: Fit, Fill, 100% (one photo pixel per screen pixel) and 200% in the bar under the photo; Z or a click toggles Fit and 100% at the clicked point; pinch, or ⌥/⌘ and scroll, zooms freely; drag to pan; View > Zoom In (⌘=), Zoom Out (⌘-), Zoom to Fit (⌘0). Zoom is kept when moving between photos.
+- Right-click a photo in the grid, loupe or develop for: Open in Loupe, Edit in Develop, zoom levels, Show in Finder, Set Rating, Set Flag, Set Color Label, Develop Settings (Copy, Paste, Reset), Add to Collection, Remove from this collection or import, Write XMP Metadata, Export. Right-clicking an unselected grid photo selects it first.
 - Masks: linear gradient, radial, brush, luminance range, color range, and AI masks (subject, sky, background, person) from Vision and Core ML. Masks combine with add, subtract, intersect.
 - History: unlimited undo per photo; named snapshots; virtual copies share one original.
 - Presets: save any subset of settings; apply on import, by drag, or by batch sync.
 - Copy and paste settings with a checkbox picker; auto-sync across a selection.
-- Before and after: split, side by side, toggle.
+- Before and after, chosen from a bar under the photo or with Y: side by side, a slider you drag across the photo (original on the left, edit on the right), and a full toggle with \.
 - Color management: soft-proofing for sRGB web output and print profiles.
 - Artwork profile: a DCP-style profile built from a ColorChecker shot, applied to all artwork photos for consistent color.
+
+### Export dialog
+
+File > Export… (⇧⌘E) or the toolbar Export button opens a dialog for the selected photos, or the open photo in loupe and develop. The dialog shows the count on its title and button, offers quick settings (Website: JPEG 2048 px, sRGB, sharpened, no location; Full-Size JPEG; Full-Size TIFF), and remembers the last choices. Exports run in the background with progress and Cancel in the status bar, keep original file names, never replace an existing file (a number is added), write the catalog's keywords, title, caption and rating, and reveal the files in Finder when done. Offline originals are listed as problems instead of stopping the batch.
 
 ### Settings format
 
@@ -245,7 +258,7 @@ Targets assume an M4 Mac and a catalog of 100k photos. They are starting targets
 
 | Area | Requirement |
 | --- | --- |
-| Grid performance | Scroll 100k thumbnails without dropped frames; filter results in under 200 ms |
+| Grid performance | Scroll 100k thumbnails without dropped frames; filter results in under 200 ms; opening a folder or import shows cached thumbnails immediately, and missing ones load asynchronously, on-screen first |
 | Import | Catalog and thumbnail 1,000 RAW files in under 3 minutes from local SSD; NAS imports never block the UI |
 | Develop | Slider changes reflect in under 50 ms on the proxy; loupe opens in under 300 ms from preview cache |
 | AI jobs | Run in a separate process; a crash or out-of-memory never takes down the app or corrupts the catalog |
@@ -262,7 +275,7 @@ Five phases, each closed by a gate you can test on your own photos. No dates yet
 1. **Phase 0: Spike.** RAW decode on Metal, ComfyUI round-trip, SQLite catalog prototype.
    - Gate 1: a RAW renders, goes through ComfyUI and returns as a version.
 2. **Phase 1: Catalog MVP.** Referenced and copied import, import entries, grid and loupe, ratings, keywords, collections, XMP sidecars.
-   - Gate 2: 10k photos from SSD and NAS cataloged without errors.
+   - Gate 2: a real shoot (a few hundred photos) from the SSD and one from the NAS cataloged without errors, with folders opening fast. Automated scale tests in CI cover larger catalogs (filtering 20k photos, importing 300 with previews).
 3. **Phase 2: Develop basics and Edit In.** Basic panel, crop, history, presets, export presets, Photoshop and Affinity round-trip.
    - Gate 3: one full shoot culled, edited and exported without Lightroom.
 4. **Phase 3: AI MVP.** ComfyUI recipes, masked compositing, model registry, license gate on export.

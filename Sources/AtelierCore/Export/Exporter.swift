@@ -1,0 +1,263 @@
+import CoreImage
+import CoreImage.CIFilterBuiltins
+import Foundation
+import ImageIO
+import UniformTypeIdentifiers
+
+public enum ExportFormat: String, CaseIterable, Codable, Sendable {
+    case jpeg, heic, tiff, png
+
+    public var label: String {
+        switch self {
+        case .jpeg: return "JPEG"
+        case .heic: return "HEIC"
+        case .tiff: return "TIFF (16-bit)"
+        case .png: return "PNG"
+        }
+    }
+
+    public var fileExtension: String {
+        switch self {
+        case .jpeg: return "jpg"
+        case .heic: return "heic"
+        case .tiff: return "tif"
+        case .png: return "png"
+        }
+    }
+
+    var type: UTType {
+        switch self {
+        case .jpeg: return .jpeg
+        case .heic: return .heic
+        case .tiff: return .tiff
+        case .png: return .png
+        }
+    }
+
+    public var hasQuality: Bool { self == .jpeg || self == .heic }
+    var isSixteenBit: Bool { self == .tiff }
+}
+
+public enum ExportColorSpace: String, CaseIterable, Codable, Sendable {
+    case sRGB, displayP3, adobeRGB
+
+    public var label: String {
+        switch self {
+        case .sRGB: return "sRGB (web and social)"
+        case .displayP3: return "Display P3"
+        case .adobeRGB: return "Adobe RGB (1998)"
+        }
+    }
+
+    var cgColorSpace: CGColorSpace {
+        switch self {
+        case .sRGB: return CGColorSpace(name: CGColorSpace.sRGB)!
+        case .displayP3: return CGColorSpace(name: CGColorSpace.displayP3)!
+        case .adobeRGB: return CGColorSpace(name: CGColorSpace.adobeRGB1998)!
+        }
+    }
+}
+
+public enum ExportMetadata: String, CaseIterable, Codable, Sendable {
+    case all, allExceptLocation, none
+
+    public var label: String {
+        switch self {
+        case .all: return "All metadata"
+        case .allExceptLocation: return "All except location"
+        case .none: return "None"
+        }
+    }
+}
+
+public enum ExportSharpening: String, CaseIterable, Codable, Sendable {
+    case none, screen
+
+    public var label: String {
+        switch self {
+        case .none: return "None"
+        case .screen: return "For screen"
+        }
+    }
+}
+
+public struct ExportSettings: Codable, Hashable, Sendable {
+    public var format: ExportFormat = .jpeg
+    /// 0...1, for JPEG and HEIC.
+    public var quality: Double = 0.9
+    /// Long edge in pixels; nil keeps the original size.
+    public var longEdge: Int?
+    public var colorSpace: ExportColorSpace = .sRGB
+    public var metadata: ExportMetadata = .allExceptLocation
+    public var sharpening: ExportSharpening = .none
+    public var destination: URL
+
+    public init(destination: URL) {
+        self.destination = destination
+    }
+}
+
+public struct ExportProgress: Sendable {
+    public var processed: Int
+    public var total: Int
+    public var filename: String
+}
+
+public struct ExportFailure: Sendable, Hashable {
+    public var filename: String
+    public var reason: String
+}
+
+public struct ExportResult: Sendable {
+    public var exported: [URL] = []
+    public var failures: [ExportFailure] = []
+}
+
+/// Renders photos with their develop settings at full quality and writes them to a folder.
+/// Originals are only read; nothing in the catalog changes.
+public final class Exporter: Sendable {
+    private let catalog: Catalog
+    private let renderer: DevelopRenderer
+
+    public init(catalog: Catalog, renderer: DevelopRenderer = .shared) {
+        self.catalog = catalog
+        self.renderer = renderer
+    }
+
+    public func run(assetIDs: [Int64], settings: ExportSettings,
+                    progress: (@Sendable (ExportProgress) -> Void)? = nil) async -> ExportResult {
+        var result = ExportResult()
+        do {
+            try FileManager.default.createDirectory(at: settings.destination, withIntermediateDirectories: true)
+        } catch {
+            result.failures.append(ExportFailure(filename: settings.destination.lastPathComponent,
+                                                 reason: "Can't create the export folder: \(error.localizedDescription)"))
+            return result
+        }
+        for (index, id) in assetIDs.enumerated() {
+            if Task.isCancelled { break }
+            let filename = (try? catalog.detail(for: id))?.asset.filename ?? "Photo \(id)"
+            progress?(ExportProgress(processed: index, total: assetIDs.count, filename: filename))
+            do {
+                let url = try autoreleasepool { try export(id, settings: settings) }
+                result.exported.append(url)
+            } catch {
+                result.failures.append(ExportFailure(filename: filename, reason: error.localizedDescription))
+            }
+        }
+        progress?(ExportProgress(processed: result.exported.count + result.failures.count,
+                                 total: assetIDs.count, filename: ""))
+        return result
+    }
+
+    /// Exports one photo and returns the written file.
+    public func export(_ assetID: Int64, settings: ExportSettings) throws -> URL {
+        guard let detail = try catalog.detail(for: assetID) else { throw ExportError("The photo is no longer in the catalog.") }
+        guard let source = detail.fileURL, FileManager.default.fileExists(atPath: source.path) else {
+            throw ExportError("The original is offline. Connect its drive and export again.")
+        }
+        let develop = try catalog.developSettings(for: assetID)
+        guard let session = renderer.session(for: source, maxPixelSize: settings.longEdge),
+              var image = session.image(with: develop) else {
+            throw ExportError("This file can't be rendered.")
+        }
+
+        // RAW decode scales approximately; land exactly on the requested long edge.
+        if let longEdge = settings.longEdge {
+            let current = max(image.extent.width, image.extent.height)
+            if current > CGFloat(longEdge) + 0.5 {
+                let scale = CIFilter.lanczosScaleTransform()
+                scale.inputImage = image
+                scale.scale = Float(CGFloat(longEdge) / current)
+                scale.aspectRatio = 1
+                image = scale.outputImage ?? image
+            }
+        }
+        if settings.sharpening == .screen {
+            let sharpen = CIFilter.sharpenLuminance()
+            sharpen.inputImage = image
+            sharpen.sharpness = 0.4
+            sharpen.radius = 1.2
+            image = sharpen.outputImage ?? image
+        }
+        image = image.cropped(to: image.extent.integral)
+
+        let format: CIFormat = settings.format.isSixteenBit ? .RGBA16 : .RGBA8
+        guard let cgImage = renderer.context.createCGImage(image, from: image.extent, format: format,
+                                                            colorSpace: settings.colorSpace.cgColorSpace) else {
+            throw ExportError("Rendering failed.")
+        }
+
+        let base = (detail.asset.filename as NSString).deletingPathExtension
+        let target = Self.uniqueURL(in: settings.destination, base: base, extension: settings.format.fileExtension)
+        guard let destination = CGImageDestinationCreateWithURL(target as CFURL, settings.format.type.identifier as CFString,
+                                                                1, nil) else {
+            throw ExportError("\(settings.format.label) export isn't supported on this Mac.")
+        }
+        let properties = Self.properties(source: source, detail: detail, settings: settings,
+                                         width: cgImage.width, height: cgImage.height)
+        CGImageDestinationAddImage(destination, cgImage, properties as CFDictionary)
+        guard CGImageDestinationFinalize(destination) else {
+            try? FileManager.default.removeItem(at: target)
+            throw ExportError("The file could not be written.")
+        }
+        return target
+    }
+
+    /// `name.jpg`, then `name (2).jpg`, and so on; existing files are never overwritten.
+    static func uniqueURL(in folder: URL, base: String, extension ext: String) -> URL {
+        var candidate = folder.appendingPathComponent(base).appendingPathExtension(ext)
+        var counter = 2
+        while FileManager.default.fileExists(atPath: candidate.path) {
+            candidate = folder.appendingPathComponent("\(base) (\(counter))").appendingPathExtension(ext)
+            counter += 1
+        }
+        return candidate
+    }
+
+    static func properties(source: URL, detail: AssetDetail, settings: ExportSettings,
+                           width: Int, height: Int) -> [CFString: Any] {
+        var properties: [CFString: Any] = [kCGImagePropertyOrientation: 1]
+        if settings.format.hasQuality {
+            properties[kCGImageDestinationLossyCompressionQuality] = settings.quality
+        }
+        guard settings.metadata != .none else { return properties }
+
+        if let imageSource = CGImageSourceCreateWithURL(source as CFURL, nil),
+           let original = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [CFString: Any] {
+            var keys: [CFString] = [kCGImagePropertyExifDictionary, kCGImagePropertyExifAuxDictionary,
+                                    kCGImagePropertyTIFFDictionary, kCGImagePropertyIPTCDictionary]
+            if settings.metadata == .all { keys.append(kCGImagePropertyGPSDictionary) }
+            for key in keys { if let value = original[key] { properties[key] = value } }
+        }
+
+        // Pixels are already upright and resized.
+        var tiff = properties[kCGImagePropertyTIFFDictionary] as? [CFString: Any] ?? [:]
+        tiff[kCGImagePropertyTIFFOrientation] = 1
+        tiff[kCGImagePropertyTIFFSoftware] = "Atelier"
+        properties[kCGImagePropertyTIFFDictionary] = tiff
+        var exif = properties[kCGImagePropertyExifDictionary] as? [CFString: Any] ?? [:]
+        exif[kCGImagePropertyExifPixelXDimension] = width
+        exif[kCGImagePropertyExifPixelYDimension] = height
+        properties[kCGImagePropertyExifDictionary] = exif
+
+        // Catalog values win over what the camera wrote.
+        var iptc = properties[kCGImagePropertyIPTCDictionary] as? [CFString: Any] ?? [:]
+        if !detail.keywords.isEmpty { iptc[kCGImagePropertyIPTCKeywords] = detail.keywords }
+        if let title = detail.metadata.title { iptc[kCGImagePropertyIPTCObjectName] = title }
+        if let caption = detail.metadata.caption {
+            iptc[kCGImagePropertyIPTCCaptionAbstract] = caption
+            tiff[kCGImagePropertyTIFFImageDescription] = caption
+            properties[kCGImagePropertyTIFFDictionary] = tiff
+        }
+        if detail.metadata.rating > 0 { iptc[kCGImagePropertyIPTCStarRating] = detail.metadata.rating }
+        if !iptc.isEmpty { properties[kCGImagePropertyIPTCDictionary] = iptc }
+        return properties
+    }
+}
+
+struct ExportError: LocalizedError {
+    let message: String
+    init(_ message: String) { self.message = message }
+    var errorDescription: String? { message }
+}

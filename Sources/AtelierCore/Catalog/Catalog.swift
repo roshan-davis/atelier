@@ -139,6 +139,7 @@ public final class Catalog: Sendable {
                 t.primaryKey(["importGroupId", "assetId"])
             }
         }
+        registerDevelopMigration(&migrator)
         return migrator
     }
 }

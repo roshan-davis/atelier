@@ -19,6 +19,8 @@ struct ContentView: View {
                         GridView(model: model)
                     case .loupe:
                         LoupeView()
+                    case .develop:
+                        DevelopImageView(develop: model.develop)
                     }
                     if model.rows.isEmpty {
                         EmptyLibraryView()
@@ -45,12 +47,18 @@ struct ContentView: View {
                 }
                 .help("Import photos (⇧⌘I)")
 
+                Button { model.beginExport() } label: {
+                    Label("Export", systemImage: "square.and.arrow.up")
+                }
+                .help("Export the selected photos with their edits (⇧⌘E)")
+
                 Picker("View", selection: $model.mode) {
                     Label("Grid", systemImage: "square.grid.3x3").tag(ViewMode.grid)
                     Label("Loupe", systemImage: "photo").tag(ViewMode.loupe)
+                    Label("Develop", systemImage: "slider.horizontal.3").tag(ViewMode.develop)
                 }
                 .pickerStyle(.segmented)
-                .help("Grid (G) or loupe (E)")
+                .help("Grid (G), loupe (E) or develop (D)")
 
                 CollectionMenu()
 
@@ -61,6 +69,9 @@ struct ContentView: View {
         }
         .sheet(isPresented: $model.showingImportSheet) {
             ImportSheet()
+        }
+        .sheet(isPresented: $model.showingExportSheet) {
+            ExportSheet()
         }
     }
 }
@@ -97,24 +108,19 @@ private struct StatusBar: View {
             }
             Spacer()
             if let progress = model.importProgress {
-                Text(progress.phase).lineLimit(1).monospacedDigit()
-                Group {
-                    if let fraction = progress.fraction {
-                        ProgressView(value: fraction)
-                    } else {
-                        ProgressView()
-                    }
-                }
-                .progressViewStyle(.linear)
-                .frame(width: 140)
-                Button("Cancel") { model.cancelImport() }
-                    .controlSize(.small)
-            } else if let status = model.status {
+                ProgressItem(progress: progress) { model.cancelImport() }
+            }
+            if let progress = model.exportProgress {
+                ProgressItem(progress: progress) { model.cancelExport() }
+            }
+            if model.importProgress == nil, model.exportProgress == nil, let status = model.status {
                 Text(status).lineLimit(1)
-                if !model.importFailures.isEmpty {
+                if !model.problems.isEmpty {
                     Button("Show Problems") { showingFailures = true }
                         .controlSize(.small)
-                        .popover(isPresented: $showingFailures) { ImportFailuresView(failures: model.importFailures) }
+                        .popover(isPresented: $showingFailures) {
+                            ProblemsView(title: model.problemsTitle, problems: model.problems)
+                        }
                 }
             }
         }
@@ -172,15 +178,36 @@ private struct CollectionMenu: View {
     }
 }
 
-private struct ImportFailuresView: View {
-    let failures: [ImportFailure]
+private struct ProgressItem: View {
+    let progress: ImportStatus
+    let cancel: () -> Void
+
+    var body: some View {
+        Text(progress.phase).lineLimit(1).monospacedDigit()
+        Group {
+            if let fraction = progress.fraction {
+                ProgressView(value: fraction)
+            } else {
+                ProgressView()
+            }
+        }
+        .progressViewStyle(.linear)
+        .frame(width: 140)
+        Button("Cancel", action: cancel)
+            .controlSize(.small)
+    }
+}
+
+private struct ProblemsView: View {
+    let title: String
+    let problems: [Problem]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("These files could not be imported").font(.headline)
-            List(failures, id: \.self) { failure in
+            Text(title).font(.headline)
+            List(problems, id: \.self) { failure in
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(failure.url.lastPathComponent)
+                    Text(failure.name)
                     Text(failure.reason).font(.caption).foregroundStyle(.secondary)
                 }
             }

@@ -6,6 +6,7 @@ import GRDB
 enum ViewMode {
     case grid
     case loupe
+    case develop
 }
 
 enum SidebarItem: Hashable {
@@ -32,6 +33,12 @@ struct ImportStatus: Equatable {
     var fraction: Double?
 }
 
+/// A file the last import or export could not handle, shown from the status bar.
+struct Problem: Hashable {
+    var name: String
+    var reason: String
+}
+
 struct SidebarData: Equatable, Sendable {
     var volumes: [Volume] = []
     var folders: [Folder] = []
@@ -44,6 +51,8 @@ struct SidebarData: Equatable, Sendable {
 final class LibraryModel: ObservableObject {
     let catalog: Catalog
     let previews: PreviewCache
+    let previewScheduler: PreviewScheduler
+    let develop: DevelopController
 
     @Published var rows: [AssetRow] = []
     @Published var sidebar = SidebarData()
@@ -55,28 +64,45 @@ final class LibraryModel: ObservableObject {
     }
     @Published var selection: Set<Int64> = []
     @Published var focusedID: Int64? {
-        didSet { if focusedID != oldValue { reloadDetail() } }
+        didSet {
+            guard focusedID != oldValue else { return }
+            reloadDetail()
+            if mode == .develop { develop.open(focusedID) }
+        }
     }
     @Published var detail: AssetDetail?
-    @Published var mode: ViewMode = .grid
+    @Published var mode: ViewMode = .grid {
+        didSet {
+            if mode == .develop { develop.open(focusedID) } else if oldValue == .develop { develop.flushSave() }
+        }
+    }
     @Published var status: String?
     @Published var showingImportSheet = false
     @Published var pendingImportSources: [URL] = []
     /// Import entry preselected in the import sheet, when importing more into an existing one.
     @Published var pendingImportGroup: Int64?
     @Published var importProgress: ImportStatus?
-    /// Files the last import could not read, shown on request from the status bar.
-    @Published var importFailures: [ImportFailure] = []
+    /// Files the last import or export could not handle, shown on request from the status bar.
+    @Published var problems: [Problem] = []
+    @Published var problemsTitle = ""
+    @Published var showingExportSheet = false
+    /// Photos the open export dialog will export, in grid order.
+    @Published private(set) var exportIDs: [Int64] = []
+    @Published var exportProgress: ImportStatus?
+    private var exportTask: Task<Void, Never>?
     private var importTask: Task<Void, Never>?
     private var importWasCancelled = false
     private var shownImportGroup: Int64?
     /// Bumped when previews are generated so visible cells reload their images.
     @Published var previewRevision = 0
+    /// Zoom shared by loupe and develop; kept when moving between photos, as in Lightroom.
+    @Published var zoom: ZoomLevel = .fit
+    @Published var zoomReport = ZoomReport()
 
     private var rowsTask: Task<Void, Never>?
     private var sidebarTask: Task<Void, Never>?
     private var keyMonitor: Any?
-    private var previewRequests = Set<Int64>()
+    private var revisionScheduled = false
 
     init() {
         let packageURL = Catalog.defaultPackageURL
@@ -86,11 +112,20 @@ final class LibraryModel: ObservableObject {
             fatalError("Could not open the catalog at \(packageURL.path): \(error)")
         }
         previews = PreviewCache(rootURL: catalog.previewsURL!)
+        previewScheduler = PreviewScheduler(cache: previews)
+        develop = DevelopController(catalog: catalog, previews: previews)
         try? catalog.refreshVolumes()
         observeRows()
         observeSidebar()
         installKeyMonitor()
         observeMounts()
+        previewScheduler.onFinish { [weak self] _, _ in
+            Task { @MainActor in self?.previewsChanged() }
+        }
+        develop.onPreviewsUpdated = { [weak self] id in
+            ThumbnailLoader.shared.invalidate(id)
+            self?.previewsChanged()
+        }
     }
 
     // MARK: Observation
@@ -158,10 +193,71 @@ final class LibraryModel: ObservableObject {
 
     /// Photos that an edit applies to: the loupe photo, or the grid selection.
     var targetIDs: [Int64] {
-        if mode == .loupe || selection.isEmpty {
+        if mode != .grid || selection.isEmpty {
             return focusedID.map { [$0] } ?? []
         }
         return Array(selection)
+    }
+
+    func openDevelop() {
+        if focusedID == nil { focusedID = selection.first ?? rows.first?.id }
+        if focusedID != nil { mode = .develop }
+    }
+
+    /// Pastes copied develop settings onto the selection (grid) or the open photo.
+    func pasteDevelopSettings() {
+        develop.pasteSettings(onto: targetIDs)
+    }
+
+    func resetDevelopSettings() {
+        develop.resetSettings(of: targetIDs)
+    }
+
+    func showInFinder() {
+        let urls = targetIDs.compactMap { try? catalog.fileURL(for: $0) }
+            .filter { FileManager.default.fileExists(atPath: $0.path) }
+        if urls.isEmpty {
+            status = "The originals are offline. Connect their drive to show them in Finder."
+        } else {
+            NSWorkspace.shared.activateFileViewerSelecting(urls)
+        }
+    }
+
+    /// Makes a right-clicked grid photo the selection unless it is already part of it.
+    func prepareContextMenu(for id: Int64) {
+        if !selection.contains(id) { selection = [id] }
+        focusedID = id
+    }
+
+    // MARK: Zoom
+
+    func toggleZoom() {
+        if mode == .grid {
+            openLoupe()
+            zoom = .percent(100)
+        } else {
+            zoom = zoomReport.isZoomedPastFit ? .fit : .percent(100)
+        }
+    }
+
+    func zoomIn() {
+        guard mode != .grid else { return toggleZoom() }
+        let current = zoomReport.percent > 0 ? zoomReport.percent : 100
+        zoom = .percent(min(1600, current * 1.5))
+    }
+
+    func zoomOut() {
+        guard mode != .grid else { return }
+        let next = zoomReport.percent / 1.5
+        zoom = next <= zoomReport.fitPercent * 1.01 ? .fit : .percent(next)
+    }
+
+    func copyDevelopSettings() {
+        if mode == .develop {
+            develop.copySettings()
+        } else if let id = focusedID {
+            develop.copySettings(of: id)
+        }
     }
 
     func openLoupe() {
@@ -289,20 +385,15 @@ final class LibraryModel: ObservableObject {
     }
 
     func runImport(sources: [URL], options: ImportOptions) {
-        let importer = Importer(catalog: catalog, previews: previews)
+        let importer = Importer(catalog: catalog, previews: nil, scheduler: previewScheduler)
         importProgress = ImportStatus(phase: "Scanning…", fraction: nil)
         shownImportGroup = nil
         importTask = Task.detached {
             let result = await importer.run(sources: sources, options: options) { progress in
                 let phase: String
                 let fraction: Double?
-                if progress.processed < progress.total {
-                    phase = "Importing \(progress.processed + 1) of \(progress.total)"
-                    fraction = Double(progress.processed) / Double(max(progress.total, 1))
-                } else {
-                    phase = "Building previews \(progress.previewsBuilt) of \(progress.imported)"
-                    fraction = Double(progress.previewsBuilt) / Double(max(progress.imported, 1))
-                }
+                phase = "Importing \(min(progress.processed + 1, progress.total)) of \(progress.total)"
+                fraction = Double(progress.processed) / Double(max(progress.total, 1))
                 let groupID = progress.importGroupId
                 Task { @MainActor in
                     // Show the entry right away so photos appear as they arrive.
@@ -313,7 +404,6 @@ final class LibraryModel: ObservableObject {
                     if self.importTask != nil {
                         self.importProgress = ImportStatus(phase: phase, fraction: fraction)
                     }
-                    self.previewRevision += 1
                 }
             }
             await MainActor.run {
@@ -322,7 +412,8 @@ final class LibraryModel: ObservableObject {
                 if !result.failures.isEmpty { parts.append("\(result.failures.count) could not be read") }
                 if Task.isCancelled || self.importWasCancelled { parts.insert("Import cancelled", at: 0) }
                 self.status = parts.joined(separator: ", ")
-                self.importFailures = result.failures
+                self.problems = result.failures.map { Problem(name: $0.url.lastPathComponent, reason: $0.reason) }
+                self.problemsTitle = "These files could not be imported"
                 self.importProgress = nil
                 self.importTask = nil
                 self.importWasCancelled = false
@@ -337,26 +428,87 @@ final class LibraryModel: ObservableObject {
         importProgress = ImportStatus(phase: "Cancelling…", fraction: nil)
     }
 
+    // MARK: Export
+
+    /// Opens the export dialog for the selection, or the open photo in loupe and develop.
+    func beginExport() {
+        guard exportTask == nil else {
+            status = "An export is already running."
+            return
+        }
+        develop.flushSave()
+        let targets = Set(targetIDs)
+        guard !targets.isEmpty else {
+            status = "Select the photos to export first."
+            return
+        }
+        let ordered = rows.map(\.id).filter { targets.contains($0) }
+        exportIDs = ordered.isEmpty ? Array(targets) : ordered
+        showingExportSheet = true
+    }
+
+    func runExport(settings: ExportSettings, revealWhenDone: Bool) {
+        let ids = exportIDs
+        let exporter = Exporter(catalog: catalog)
+        exportProgress = ImportStatus(phase: "Exporting…", fraction: 0)
+        exportTask = Task.detached {
+            let result = await exporter.run(assetIDs: ids, settings: settings) { progress in
+                let phase = "Exporting \(min(progress.processed + 1, progress.total)) of \(progress.total)"
+                let fraction = Double(progress.processed) / Double(max(progress.total, 1))
+                Task { @MainActor in
+                    if self.exportTask != nil, self.exportProgress?.phase != "Cancelling…" {
+                        self.exportProgress = ImportStatus(phase: phase, fraction: fraction)
+                    }
+                }
+            }
+            let cancelled = Task.isCancelled
+            await MainActor.run {
+                let count = result.exported.count
+                var parts = ["Exported \(count) photo\(count == 1 ? "" : "s")"]
+                if !result.failures.isEmpty { parts.append("\(result.failures.count) could not be exported") }
+                if cancelled { parts.insert("Export cancelled", at: 0) }
+                self.status = parts.joined(separator: ", ")
+                self.problems = result.failures.map { Problem(name: $0.filename, reason: $0.reason) }
+                self.problemsTitle = "These photos could not be exported"
+                self.exportProgress = nil
+                self.exportTask = nil
+                if revealWhenDone, !result.exported.isEmpty {
+                    NSWorkspace.shared.activateFileViewerSelecting(result.exported)
+                }
+            }
+        }
+    }
+
+    func cancelExport() {
+        exportTask?.cancel()
+        exportProgress = ImportStatus(phase: "Cancelling…", fraction: nil)
+    }
+
     // MARK: Previews
 
+    /// The cached preview, or nil after queueing it. Thumbnails come first; the loupe's
+    /// 2560 px preview is marked urgent so it jumps the queue.
     func thumbnailURL(for id: Int64, size: PreviewCache.Size = .thumbnail) -> URL? {
-        let url = previews.url(for: id, size: size)
-        if FileManager.default.fileExists(atPath: url.path) { return url }
-        requestPreview(for: id)
+        if previews.has(size, for: id) { return previews.url(for: id, size: size) }
+        if let source = try? catalog.fileURL(for: id) {
+            previewScheduler.request(size, for: id, source: source, urgent: size == .preview || mode == .grid)
+        }
         return nil
     }
 
-    /// Generates missing previews on demand, for example after the cache was cleared.
-    func requestPreview(for id: Int64) {
-        guard !previewRequests.contains(id), let url = try? catalog.fileURL(for: id) else { return }
-        previewRequests.insert(id)
-        let previews = self.previews
-        Task.detached(priority: .utility) {
-            try? previews.generate(for: id, from: url)
-            await MainActor.run {
-                self.previewRequests.remove(id)
-                self.previewRevision += 1
-            }
+    /// A grid cell scrolled away before its thumbnail started.
+    func cancelThumbnail(for id: Int64) {
+        previewScheduler.cancel(.thumbnail, for: id)
+    }
+
+    /// Coalesces preview completions into one grid refresh every 150 ms.
+    private func previewsChanged() {
+        guard !revisionScheduled else { return }
+        revisionScheduled = true
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(150))
+            revisionScheduled = false
+            previewRevision += 1
         }
     }
 
@@ -377,12 +529,12 @@ final class LibraryModel: ObservableObject {
         if window.firstResponder is NSText { return false }
 
         switch event.keyCode {
-        case 123 where mode == .loupe: step(-1); return true          // left arrow
-        case 124 where mode == .loupe: step(1); return true           // right arrow
-        case 36, 76:                                                   // return, enter
+        case 123 where mode != .grid: step(-1); return true           // left arrow
+        case 124 where mode != .grid: step(1); return true            // right arrow
+        case 36 where mode != .develop, 76 where mode != .develop:     // return, enter
             if mode == .loupe { mode = .grid } else { openLoupe() }
             return true
-        case 53 where mode == .loupe: mode = .grid; return true       // escape
+        case 53 where mode != .grid: mode = .grid; return true        // escape
         default: break
         }
 
@@ -401,7 +553,11 @@ final class LibraryModel: ObservableObject {
         case "x": setFlag(.rejected)
         case "u": setFlag(.none)
         case "e": openLoupe()
+        case "d": openDevelop()
         case "g": mode = .grid
+        case "\\" where mode == .develop: develop.showingBefore.toggle()
+        case "y" where mode == .develop: develop.cycleCompareMode()
+        case "z": toggleZoom()
         default: return false
         }
         return true

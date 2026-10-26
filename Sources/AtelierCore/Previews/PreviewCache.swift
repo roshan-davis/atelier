@@ -29,9 +29,39 @@ public final class PreviewCache: Sendable {
 
     /// Renders both sizes from the original. RAW files are decoded by Apple's RAW engine.
     public func generate(for assetID: Int64, from original: URL) throws {
-        guard let source = CGImageSourceCreateWithURL(original as CFURL, nil) else {
+        try generateThumbnail(for: assetID, from: original)
+        try generatePreview(for: assetID, from: original)
+    }
+
+    /// The fast path: uses the photo's embedded preview when it is big enough, so a RAW
+    /// thumbnail costs a JPEG decode instead of a full RAW render.
+    public func generateThumbnail(for assetID: Int64, from original: URL) throws {
+        let source = try Self.imageSource(original)
+        let maxSize = Size.thumbnail.rawValue
+        var options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageIfAbsent: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxSize,
+            kCGImageSourceShouldCacheImmediately: true,
+        ]
+        var image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+        // Embedded thumbnails are sometimes tiny (160 px); render from the image instead.
+        if let small = image, max(small.width, small.height) < maxSize * 3 / 4 {
+            image = nil
+        }
+        if image == nil {
+            options[kCGImageSourceCreateThumbnailFromImageAlways] = true
+            image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+        }
+        guard let image else {
             throw CocoaError(.fileReadCorruptFile, userInfo: [NSFilePathErrorKey: original.path])
         }
+        try write(image, assetID: assetID, size: .thumbnail)
+    }
+
+    /// The 2560 px loupe preview, rendered from the full image.
+    public func generatePreview(for assetID: Int64, from original: URL) throws {
+        let source = try Self.imageSource(original)
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceCreateThumbnailWithTransform: true,
@@ -41,12 +71,38 @@ public final class PreviewCache: Sendable {
         guard let preview = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
             throw CocoaError(.fileReadCorruptFile, userInfo: [NSFilePathErrorKey: original.path])
         }
-        let shard = url(for: assetID, size: .preview).deletingLastPathComponent()
-        try FileManager.default.createDirectory(at: shard, withIntermediateDirectories: true)
-        try writeJPEG(preview, to: url(for: assetID, size: .preview))
+        try write(preview, assetID: assetID, size: .preview)
+    }
 
-        let thumbnail = Self.scaled(preview, maxPixelSize: Size.thumbnail.rawValue) ?? preview
-        try writeJPEG(thumbnail, to: url(for: assetID, size: .thumbnail))
+    /// Stores an already rendered image, for example a developed photo, scaled to `size`.
+    public func store(_ image: CGImage, for assetID: Int64, size: Size) throws {
+        let scaled = Self.scaled(image, maxPixelSize: size.rawValue) ?? image
+        try write(scaled, assetID: assetID, size: size)
+    }
+
+    public func has(_ size: Size, for assetID: Int64) -> Bool {
+        FileManager.default.fileExists(atPath: url(for: assetID, size: size).path)
+    }
+
+    private static func imageSource(_ url: URL) throws -> CGImageSource {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary) else {
+            throw CocoaError(.fileReadCorruptFile, userInfo: [NSFilePathErrorKey: url.path])
+        }
+        return source
+    }
+
+    private func write(_ image: CGImage, assetID: Int64, size: Size) throws {
+        let destination = url(for: assetID, size: size)
+        try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true)
+        // Write beside the target and swap it in, so readers never see a half-written file.
+        let temporary = destination.deletingPathExtension().appendingPathExtension("tmp.jpg")
+        try writeJPEG(image, to: temporary)
+        if FileManager.default.fileExists(atPath: destination.path) {
+            _ = try FileManager.default.replaceItemAt(destination, withItemAt: temporary)
+        } else {
+            try FileManager.default.moveItem(at: temporary, to: destination)
+        }
     }
 
     public func remove(for assetID: Int64) {

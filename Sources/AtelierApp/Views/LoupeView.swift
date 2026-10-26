@@ -7,33 +7,73 @@ struct LoupeView: View {
     @EnvironmentObject private var model: LibraryModel
     @State private var image: NSImage?
     @State private var loadedID: Int64?
+    /// Full-resolution render, loaded once the photo is zoomed past fit.
+    @State private var fullImage: NSImage?
+    @State private var fullKey: FullKey?
 
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
-            Color(nsColor: .underPageBackgroundColor)
-            if let image {
-                Image(nsImage: image)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .padding(16)
-                    .opacity(model.detail?.metadata.flag == .rejected ? 0.4 : 1)
-            } else if model.focusedID != nil {
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+        VStack(spacing: 0) {
+            ZStack(alignment: .bottomLeading) {
+                Color(nsColor: .underPageBackgroundColor)
+                if let image {
+                    ZoomableImageView(image: fullKey == currentFullKey ? fullImage ?? image : image,
+                                      pixelSize: pixelSize,
+                                      zoom: $model.zoom,
+                                      dimmed: model.detail?.metadata.flag == .rejected,
+                                      onReport: { report in
+                                          if model.zoomReport != report { model.zoomReport = report }
+                                      },
+                                      menu: { model.photoMenu(includeZoom: true) })
+                } else if model.focusedID != nil {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                if let detail = model.detail {
+                    LoupeInfo(detail: detail)
+                        .padding(14)
+                        .allowsHitTesting(false)
+                }
             }
-            if let detail = model.detail {
-                LoupeInfo(detail: detail)
-                    .padding(14)
+            Divider()
+            HStack {
+                Text("Click the photo to zoom, drag to move around")
+                    .foregroundStyle(.secondary)
+                Spacer()
+                ZoomControls(zoom: $model.zoom, report: model.zoomReport)
             }
+            .font(.callout)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
         }
         .task(id: LoadKey(id: model.focusedID, revision: model.previewRevision)) {
             await load()
+        }
+        .task(id: wantedFullKey) {
+            await loadFullResolution()
         }
     }
 
     private struct LoadKey: Equatable {
         var id: Int64?
         var revision: Int
+    }
+
+    private struct FullKey: Equatable {
+        var id: Int64
+        var revision: Int
+    }
+
+    private var currentFullKey: FullKey? {
+        model.focusedID.map { FullKey(id: $0, revision: model.previewRevision) }
+    }
+
+    private var wantedFullKey: FullKey? {
+        model.zoomReport.isZoomedPastFit ? currentFullKey : nil
+    }
+
+    private var pixelSize: CGSize? {
+        guard let width = model.detail?.asset.width, let height = model.detail?.asset.height else { return nil }
+        return CGSize(width: width, height: height)
     }
 
     private func load() async {
@@ -50,6 +90,20 @@ struct LoupeView: View {
             image = loaded
             loadedID = id
         }
+    }
+
+    /// Renders the original with its develop settings at full size.
+    private func loadFullResolution() async {
+        guard let key = wantedFullKey, key != fullKey else { return }
+        guard let url = try? model.catalog.fileURL(for: key.id),
+              let settings = try? model.catalog.developSettings(for: key.id) else { return }
+        let rendered = await Task.detached(priority: .userInitiated) { () -> NSImage? in
+            guard let cgImage = DevelopRenderer.shared.session(for: url, maxPixelSize: nil)?.render(settings) else { return nil }
+            return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+        }.value
+        guard !Task.isCancelled, currentFullKey == key, let rendered else { return }
+        fullImage = rendered
+        fullKey = key
     }
 }
 

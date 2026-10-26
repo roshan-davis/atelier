@@ -22,7 +22,7 @@ let package = Package(
         ),
         .testTarget(
             name: "AtelierCoreTests",
-            dependencies: ["AtelierCore"]
+            dependencies: ["AtelierCore", .product(name: "GRDB", package: "GRDB.swift")]
         ),
     ],
     swiftLanguageModes: [.v5]
