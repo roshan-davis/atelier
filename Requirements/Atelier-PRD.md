@@ -142,8 +142,9 @@ Edits are a versioned list of parameters stored in the catalog, rendered live on
 - Zoom in loupe and develop: Fit, Fill, 100% (one photo pixel per screen pixel) and 200% in the bar under the photo; Z or a click toggles Fit and 100% at the clicked point; pinch, or ⌥/⌘ and scroll, zooms freely; drag to pan; View > Zoom In (⌘=), Zoom Out (⌘-), Zoom to Fit (⌘0). Zoom is kept when moving between photos.
 - Right-click a photo in the grid, loupe or develop for: Open in Loupe, Edit in Develop, zoom levels, Show in Finder, Set Rating, Set Flag, Set Color Label, Develop Settings (Copy, Paste, Reset), Add to Collection, Remove from this collection or import, Write XMP Metadata, Export. Right-clicking an unselected grid photo selects it first.
 - Masks: linear gradient, radial, brush, luminance range, color range, and AI masks (subject, sky, background, person) from Vision and Core ML. Masks combine with add, subtract, intersect.
-- History: unlimited undo per photo; named snapshots; virtual copies share one original.
-- Presets: save any subset of settings; apply on import, by drag, or by batch sync.
+- Crop & Straighten (R, or the crop button in the tool strip under the histogram): drag corners and edges to crop, inside the frame to move, outside to straighten; rule-of-thirds grid while dragging, a finer grid while rotating. The panel has an aspect picker (Original, 1 × 1, 4 × 5, 5 × 7, 2 × 3, 3 × 4, 16 × 10, 16 × 9, Free), a swap button (or X) and a lock, an Angle slider (±45°), rotate left and right (⌘[ and ⌘]), flip horizontal and vertical, Reset and Done (Return). Straightening shrinks the frame so it never shows past the photo's edge. The crop applies to previews, exports, Edit In and AI.
+- History: unlimited undo per photo; named snapshots; virtual copies share one original. Every change is a named step (Exposure +0.60, Straighten 4.0°, Preset: Punchy, Import Preset: name) listed in the Develop sidebar; click a step to go back to it, Edit > Undo (⌘Z) and Redo (⇧⌘Z) step through it, and Clear History keeps the current look. Snapshots save the current look by name and can be applied, updated with the current settings, renamed and deleted. History and snapshots are stored with the photo.
+- Presets: save any subset of settings; apply on import, by drag, or by batch sync. The Develop sidebar lists presets in groups (built-in Atelier looks plus the user's own); click one to apply it. New Preset (the + button) asks for a name, a group and which settings to include, like Lightroom. Right-click a photo > Apply Develop Preset applies to the whole selection; the Import dialog's Apply During Import picks a preset for new photos, whose previews are then rendered with it.
 - Copy and paste settings with a checkbox picker; auto-sync across a selection.
 - Before and after, chosen from a bar under the photo or with Y: side by side, a slider you drag across the photo (original on the left, edit on the right), and a full toggle with \.
 - Color management: soft-proofing for sRGB web output and print profiles.
@@ -157,6 +158,8 @@ Atelier > Settings… (⌘,) has these tabs:
 - **Import:** default for new imports (leave files or copy into the library folder) and the library folder. The Import dialog starts from these.
 - **Develop:** what a click or Z zooms to (50%, 100%, 200%, 400%), solo mode, and the histogram clipping warnings.
 - **Export:** default export folder and whether to show exports in Finder.
+- **Edit In:** the external editors and what each is sent (see External editor integration).
+- **AI:** the ComfyUI server, models, generation size and workflows (see AI processing).
 - **Metadata:** automatically write ratings, flags, labels, keywords, title and caption to XMP sidecars as they change.
 - **Keyboard:** every single-key command with its key (Lightroom's by default: 0–5 rating, 6–9 labels, P/X/U flags, G/E/D views, \ before, Y before/after, Z zoom). Click a key and press a new one; a key moves from any action that had it; Delete removes it, Esc cancels; Restore Defaults. Single-key commands only act in the library window, never while typing or in Settings.
 
@@ -183,6 +186,13 @@ Every outside tool, whether a desktop app or an AI model, plugs in through one *
 5. The edited file is cataloged as a version, stacked on top, inheriting metadata and keywords.
 
 Per-app settings: file format, bit depth, color space, resolution, filename template, and whether to apply develop settings first.
+
+As built (Oct 26, 2026):
+- Photo > Edit In (the first app is ⌥⌘E) and right-click > Edit In list the installed editors Atelier knows (Photoshop, Affinity Photo, Pixelmator Pro, Photomator, GIMP, Krita), then Other Application…, which adds the chosen app to the list.
+- Settings > Edit In edits the list: add any app, rename, remove, Find Installed Editors, and per app the file (16-bit TIFF or JPEG), color space (sRGB, Display P3, Adobe RGB or ProPhoto RGB, the default) and Include develop adjustments.
+- The copy is named `<name>-Edit.tif` next to the original, or in Pictures/Atelier/Edits when that folder is read-only. It is cataloged stacked on the original: it sorts right after it, joins the same import entries and collections, and inherits rating, label, title, caption and keywords. Grid badges show "▤ n" on the original and "◪ Edit" on the copy.
+- Saves in the editor are picked up by watching the folder (and on switching back to Atelier, and when the photo is shown after a relaunch): the file's size and dimensions are re-read and the previews rebuilt. Edit In on a photo that already is an edit opens it as it is (Lightroom's Edit Original).
+- PSD and RAW pass-through wait for v1.
 
 ### Processor plugins (headless tools)
 
@@ -226,6 +236,13 @@ AI runs locally through swappable backends behind the Processor contract. The ap
 - **Inputs.** Prompt, negative prompt, mask, up to 4 reference images picked from the catalog, seed, steps, strength.
 - **Provenance.** Every AI version records model, version, recipe, seed and prompt in the catalog and in XMP, so any result can be reproduced or audited.
 - **Queue.** One GPU job at a time, background priority, cancel, retry, and an estimate per job. The UI stays responsive while a job runs.
+- **As built (Oct 26, 2026).** The AI tool in Develop (the wand button in the tool strip, or Photo > Remove Object…, Replace Background…, Upscale…) shows the ComfyUI connection, the three recipes, and Generate with progress and Cancel.
+  - Remove Object: paint over what should go (Brush Size, [ and ] to resize, Paint or Erase, Clear) and optionally say what fills it. Only the area around the strokes is sent, at the generation size, so detail stays high; the result is blended back with a grown, feathered mask.
+  - Replace Background: Vision finds the subject on the photo (the background to regenerate is tinted), and the prompt describes the new background. The subject's pixels are kept.
+  - Upscale: 2× or 4× with a 4× upscale model.
+  - Results are 16-bit TIFFs named `<name>-AI <Recipe>.tif` next to the original, stacked on it with a "✦ AI" badge, and record recipe, workflow, checkpoint, prompt, seed, generation size, region and server as provenance. The original never changes.
+  - Settings > AI: server address (default http://127.0.0.1:8188) with Connect, the inpainting checkpoint and upscale model picked from what the server has, generation size (768, 1024 or 1536 px), and Show Workflows Folder. The built-in workflows use core ComfyUI nodes only; a workflow saved in API format as remove-object.json, replace-background.json or upscale.json replaces the built-in one, with inputs found by node title (Atelier Image, Atelier Mask, Atelier Prompt, Atelier Sampler, Atelier Checkpoint, Atelier Upscale Model, Atelier Output Scale, Atelier Output).
+  - Still to come: model registry, license gate on export, reference images, batch queue.
 - **Agent access (later).** An MCP server exposes search, develop and recipe tools so an AI agent can drive the catalog.
 
 ## Architecture and tech stack

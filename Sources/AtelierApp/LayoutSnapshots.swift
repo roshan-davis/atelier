@@ -45,7 +45,7 @@ enum LayoutSnapshots {
         model.develop.isCropping = true
         var crop = model.develop.crop
         crop.angle = 4
-        model.develop.setCrop(crop)
+        model.develop.setCrop(crop.fitted(imageAspect: model.develop.orientedAspect))
         try? await Task.sleep(for: .seconds(1))
         await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
                       to: folder.appendingPathComponent("develop-crop-1280x800.png"))
