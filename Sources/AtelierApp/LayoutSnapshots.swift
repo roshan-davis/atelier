@@ -104,6 +104,8 @@ enum LayoutSnapshots {
         }
         model.focusedID = copy
         model.mode = .develop
+        // Let Develop load the photo, so saving renders the new thumbnail.
+        try? await Task.sleep(for: .seconds(2))
         model.develop.set(.saturation, to: -100)
         model.develop.flushSave()
         model.mode = .grid
