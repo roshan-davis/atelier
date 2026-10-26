@@ -10,6 +10,8 @@ jobs:
   build:
     runs-on: macos-15
     timeout-minutes: 30
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - name: Toolchain
@@ -30,3 +32,11 @@ jobs:
         with:
           name: layout-snapshots
           path: snapshots
+      - name: Publish snapshots to the layout-snapshots branch
+        if: always() && github.event_name == 'pull_request'
+        run: |
+          cd snapshots
+          git init -q -b layout-snapshots
+          git -c user.name=ci -c user.email=ci@localhost add .
+          git -c user.name=ci -c user.email=ci@localhost commit -qm "Snapshots for ${{ github.event.pull_request.head.sha }}"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" layout-snapshots
