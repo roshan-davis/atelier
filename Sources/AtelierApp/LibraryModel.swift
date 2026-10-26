@@ -98,6 +98,9 @@ final class LibraryModel: ObservableObject {
     /// Zoom shared by loupe and develop; kept when moving between photos, as in Lightroom.
     @Published var zoom: ZoomLevel = .fit
     @Published var zoomReport = ZoomReport()
+    @Published var showingShortcuts = false
+    /// The library window, which receives the single-key commands.
+    weak var mainWindow: NSWindow?
 
     private var rowsTask: Task<Void, Never>?
     private var sidebarTask: Task<Void, Never>?
@@ -234,10 +237,16 @@ final class LibraryModel: ObservableObject {
     func toggleZoom() {
         if mode == .grid {
             openLoupe()
-            zoom = .percent(100)
+            zoom = .percent(Self.clickZoomPercent)
         } else {
-            zoom = zoomReport.isZoomedPastFit ? .fit : .percent(100)
+            zoom = zoomReport.isZoomedPastFit ? .fit : .percent(Self.clickZoomPercent)
         }
+    }
+
+    /// Settings > Develop: the zoom a click or Z goes to (Lightroom's 1:1 by default).
+    nonisolated static var clickZoomPercent: Double {
+        let value = UserDefaults.standard.double(forKey: "zoom.clickPercent")
+        return value > 0 ? value : 100
     }
 
     func zoomIn() {
@@ -343,6 +352,7 @@ final class LibraryModel: ObservableObject {
         do {
             try edit(catalog)
             reloadDetail()
+            if UserDefaults.standard.bool(forKey: "xmp.autoWrite") { autoWriteXMP(targetIDs) }
         } catch {
             status = error.localizedDescription
         }
@@ -350,6 +360,16 @@ final class LibraryModel: ObservableObject {
 
     func refreshVolumes() {
         perform { try $0.refreshVolumes() }
+    }
+
+    /// Settings > Metadata: keeps sidecars in step with catalog edits, quietly.
+    private func autoWriteXMP(_ ids: [Int64]) {
+        guard !ids.isEmpty else { return }
+        let catalog = self.catalog
+        Task.detached(priority: .utility) {
+            _ = try? catalog.writeXMPSidecars(for: ids)
+            await MainActor.run { self.reloadDetail() }
+        }
     }
 
     func writeXMP(selectionOnly: Bool) {
@@ -525,7 +545,8 @@ final class LibraryModel: ObservableObject {
     /// Lightroom-style culling keys. Ignored while typing in a text field or a sheet is open.
     private func handleKey(_ event: NSEvent) -> Bool {
         if !event.modifierFlags.intersection([.command, .control, .option]).isEmpty { return false }
-        guard let window = NSApp.keyWindow, window.sheetParent == nil, window.attachedSheet == nil else { return false }
+        // Only the library window; never Settings or other windows.
+        guard let window = NSApp.keyWindow, window === mainWindow, window.attachedSheet == nil else { return false }
         if window.firstResponder is NSText { return false }
 
         switch event.keyCode {
@@ -538,27 +559,38 @@ final class LibraryModel: ObservableObject {
         default: break
         }
 
-        switch event.charactersIgnoringModifiers?.lowercased() {
-        case "0": setRating(0)
-        case "1": setRating(1)
-        case "2": setRating(2)
-        case "3": setRating(3)
-        case "4": setRating(4)
-        case "5": setRating(5)
-        case "6": toggleLabel(.red)
-        case "7": toggleLabel(.yellow)
-        case "8": toggleLabel(.green)
-        case "9": toggleLabel(.blue)
-        case "p": setFlag(.picked)
-        case "x": setFlag(.rejected)
-        case "u": setFlag(.none)
-        case "e": openLoupe()
-        case "d": openDevelop()
-        case "g": mode = .grid
-        case "\\" where mode == .develop: develop.showingBefore.toggle()
-        case "y" where mode == .develop: develop.cycleCompareMode()
-        case "z": toggleZoom()
-        default: return false
+        guard let key = event.charactersIgnoringModifiers?.lowercased(),
+              let action = KeyBindings.action(for: key) else { return false }
+        return perform(action)
+    }
+
+    /// Runs a single-key command. Returns false when it doesn't apply in the current view.
+    @discardableResult
+    func perform(_ action: KeyAction) -> Bool {
+        switch action {
+        case .rating0: setRating(0)
+        case .rating1: setRating(1)
+        case .rating2: setRating(2)
+        case .rating3: setRating(3)
+        case .rating4: setRating(4)
+        case .rating5: setRating(5)
+        case .labelRed: toggleLabel(.red)
+        case .labelYellow: toggleLabel(.yellow)
+        case .labelGreen: toggleLabel(.green)
+        case .labelBlue: toggleLabel(.blue)
+        case .pick: setFlag(.picked)
+        case .reject: setFlag(.rejected)
+        case .unflag: setFlag(.none)
+        case .loupe: openLoupe()
+        case .develop: openDevelop()
+        case .grid: mode = .grid
+        case .beforeAfter:
+            guard mode == .develop else { return false }
+            develop.showingBefore.toggle()
+        case .compareMode:
+            guard mode == .develop else { return false }
+            develop.cycleCompareMode()
+        case .zoom: toggleZoom()
         }
         return true
     }

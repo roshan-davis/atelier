@@ -142,7 +142,7 @@ final class ZoomScrollView: NSScrollView {
     }
 
     func toggleZoom(at point: NSPoint) {
-        let next: ZoomLevel = lastReport.isZoomedPastFit ? .fit : .percent(100)
+        let next: ZoomLevel = lastReport.isZoomedPastFit ? .fit : .percent(LibraryModel.clickZoomPercent)
         applyLevel(next, anchor: point)
         onZoomChange?(next)
     }
@@ -274,20 +274,36 @@ final class CenteringClipView: NSClipView {
 struct ZoomControls: View {
     @Binding var zoom: ZoomLevel
     let report: ZoomReport
+    /// A single menu instead of the segmented buttons, for narrow columns.
+    var compact = false
+
+    private var percentText: String {
+        report.percent > 0 ? "\(Int(report.percent.rounded()))%" : "Zoom"
+    }
 
     var body: some View {
-        HStack(spacing: 8) {
-            Picker("Zoom", selection: $zoom) {
-                ForEach(ZoomLevel.presets, id: \.self) { Text($0.label).tag($0) }
+        if compact {
+            Menu(percentText) {
+                ForEach(ZoomLevel.presets, id: \.self) { level in
+                    Button(level.label) { zoom = level }
+                }
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
             .fixedSize()
             .help("Zoom (Z toggles Fit and 100%; pinch, or hold ⌥ and scroll)")
-            Text(report.percent > 0 ? "\(Int(report.percent.rounded()))%" : "")
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
-                .frame(width: 44, alignment: .trailing)
+        } else {
+            HStack(spacing: 8) {
+                Picker("Zoom", selection: $zoom) {
+                    ForEach(ZoomLevel.presets, id: \.self) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                .help("Zoom (Z toggles Fit and 100%; pinch, or hold ⌥ and scroll)")
+                Text(report.percent > 0 ? percentText : "")
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .frame(width: 44, alignment: .trailing)
+            }
         }
     }
 }

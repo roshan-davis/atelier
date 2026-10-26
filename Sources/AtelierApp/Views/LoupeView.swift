@@ -35,11 +35,22 @@ struct LoupeView: View {
                 }
             }
             Divider()
-            HStack {
-                Text("Click the photo to zoom, drag to move around")
-                    .foregroundStyle(.secondary)
-                Spacer()
-                ZoomControls(zoom: $model.zoom, report: model.zoomReport)
+            ViewThatFits(in: .horizontal) {
+                HStack {
+                    Text("Click the photo to zoom, drag to move around")
+                        .foregroundStyle(.secondary)
+                        .fixedSize()
+                    Spacer(minLength: 8)
+                    ZoomControls(zoom: $model.zoom, report: model.zoomReport)
+                }
+                HStack {
+                    Spacer(minLength: 0)
+                    ZoomControls(zoom: $model.zoom, report: model.zoomReport)
+                }
+                HStack {
+                    Spacer(minLength: 0)
+                    ZoomControls(zoom: $model.zoom, report: model.zoomReport, compact: true)
+                }
             }
             .font(.callout)
             .padding(.horizontal, 12)

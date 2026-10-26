@@ -49,25 +49,14 @@ struct DevelopImageView: View {
                 }
             }
             Divider()
-            HStack(spacing: 10) {
-                Text("Before and After")
-                    .foregroundStyle(.secondary)
-                Picker("Before and After", selection: $develop.compareMode) {
-                    ForEach(CompareMode.allCases, id: \.self) { mode in
-                        Label(mode.label, systemImage: mode.symbol).tag(mode)
-                    }
+            // Narrow columns drop the words first, then the hint, so the bar always fits.
+            ViewThatFits(in: .horizontal) {
+                bottomBar(compact: false)
+                bottomBar(compact: true)
+                HStack {
+                    comparePicker(iconsOnly: true)
+                    Spacer(minLength: 0)
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
-                .help("Compare with the original: side by side, or drag a slider across the photo (Y)")
-                if develop.compareMode == .slider {
-                    Text("Drag across the photo to move the divider")
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                ZoomControls(zoom: $model.zoom, report: model.zoomReport)
-                    .disabled(develop.compareMode != .off)
             }
             .font(.callout)
             .padding(.horizontal, 12)
@@ -79,6 +68,37 @@ struct DevelopImageView: View {
     private var pixelSize: CGSize? {
         guard let width = model.detail?.asset.width, let height = model.detail?.asset.height else { return nil }
         return CGSize(width: width, height: height)
+    }
+
+    private func bottomBar(compact: Bool) -> some View {
+        HStack(spacing: 10) {
+            if !compact {
+                Text("Before and After").foregroundStyle(.secondary).fixedSize()
+            }
+            comparePicker(iconsOnly: compact)
+            if !compact, develop.compareMode == .slider {
+                Text("Drag across the photo to move the divider").foregroundStyle(.secondary).fixedSize()
+            }
+            Spacer(minLength: 8)
+            ZoomControls(zoom: $model.zoom, report: model.zoomReport, compact: compact)
+                .disabled(develop.compareMode != .off)
+        }
+    }
+
+    private func comparePicker(iconsOnly: Bool) -> some View {
+        Picker("Before and After", selection: $develop.compareMode) {
+            ForEach(CompareMode.allCases, id: \.self) { mode in
+                if iconsOnly {
+                    Image(systemName: mode.symbol).tag(mode).help(mode.label)
+                } else {
+                    Label(mode.label, systemImage: mode.symbol).tag(mode)
+                }
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .fixedSize()
+        .help("Compare with the original: side by side, or drag a slider across the photo (Y)")
     }
 }
 
@@ -223,7 +243,8 @@ struct DevelopPanel: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ScrollView {
+            GeometryReader { geometry in
+            ScrollView(.vertical) {
                 VStack(spacing: 0) {
                     PanelSection(title: "Histogram", isExpanded: isExpanded("histogram"), soloMode: $soloMode,
                                  expandAll: expandAll, collapseAll: collapseAll) {
@@ -253,6 +274,9 @@ struct DevelopPanel: View {
                         }
                     }
                 }
+                // Lay everything out at exactly the panel's measured width so nothing spills past it.
+                .frame(width: geometry.size.width)
+            }
             }
             Divider()
             VStack(spacing: 8) {
@@ -319,6 +343,7 @@ private struct ToneCurvePanel: View {
                     ForEach(DevelopSettings.CurveChannel.allCases, id: \.self) { Text($0.label).tag($0.rawValue) }
                 }
                 .pickerStyle(.segmented)
+                .controlSize(.small)
                 .labelsHidden()
                 Button {
                     develop.setPoints([], for: channel)
@@ -499,6 +524,7 @@ private struct HSLPanel: View {
                 Text("All").tag("All")
             }
             .pickerStyle(.segmented)
+            .controlSize(.small)
             .labelsHidden()
             ForEach(channels, id: \.self) { channel in
                 if channels.count > 1 { GroupHeading(title: channel.rawValue) }
@@ -651,6 +677,7 @@ private struct PanelSection<Content: View>: View {
 /// RGB histogram of the current render, with clipping warnings.
 private struct HistogramView: View {
     let histogram: Histogram?
+    @AppStorage("develop.showClipping") private var showClipping = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -691,7 +718,7 @@ private struct HistogramView: View {
 
     @ViewBuilder
     private func clipping(_ name: String, _ share: Double?) -> some View {
-        if let share, share >= 0.005 {
+        if showClipping, let share, share >= 0.005 {
             Label("\(name) clipped \(String(format: "%.1f", share * 100))%", systemImage: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
         } else {
