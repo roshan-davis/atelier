@@ -31,6 +31,12 @@ extension LibraryModel {
 
         if mode != .loupe { menu.addItem(ClosureMenuItem("Open in Loupe") { self.openLoupe() }) }
         if mode != .develop { menu.addItem(ClosureMenuItem("Edit in Develop") { self.openDevelop() }) }
+        menu.addItem(submenu("Edit In", editInMenu()))
+        let ai = NSMenu()
+        for recipe in AIRecipe.allCases {
+            ai.addItem(ClosureMenuItem("\(recipe.title)…", enabled: ids.count == 1) { self.openAI(recipe) })
+        }
+        menu.addItem(submenu("AI", ai))
 
         if includeZoom {
             menu.addItem(.separator())
@@ -75,6 +81,20 @@ extension LibraryModel {
         develop.addItem(ClosureMenuItem("Reset All Settings\(count)") { self.resetDevelopSettings() })
         menu.addItem(submenu("Develop Settings", develop))
 
+        let presets = NSMenu()
+        var lastGroup: String?
+        for preset in self.develop.presets {
+            if preset.group != lastGroup {
+                if lastGroup != nil { presets.addItem(.separator()) }
+                let header = NSMenuItem(title: preset.group, action: nil, keyEquivalent: "")
+                header.isEnabled = false
+                presets.addItem(header)
+                lastGroup = preset.group
+            }
+            presets.addItem(ClosureMenuItem(preset.name) { self.develop.applyPreset(preset, onto: ids) })
+        }
+        menu.addItem(submenu("Apply Develop Preset\(count)", presets))
+
         if !sidebar.collections.isEmpty {
             let collections = NSMenu()
             for collection in sidebar.collections {
@@ -93,6 +113,22 @@ extension LibraryModel {
         menu.addItem(.separator())
         menu.addItem(ClosureMenuItem("Write XMP Metadata") { self.writeXMP(selectionOnly: true) })
         menu.addItem(ClosureMenuItem("Export\(count)…") { self.beginExport() })
+        return menu
+    }
+
+    /// The installed editors, then Other Application… and the Edit In settings.
+    func editInMenu() -> NSMenu {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        for editor in externalEditors {
+            let item = ClosureMenuItem("Edit in \(editor.name)") { self.editIn(editor) }
+            let icon = editor.icon
+            icon.size = NSSize(width: 16, height: 16)
+            item.image = icon
+            menu.addItem(item)
+        }
+        if !externalEditors.isEmpty { menu.addItem(.separator()) }
+        menu.addItem(ClosureMenuItem("Other Application…") { self.editInOtherApp() })
         return menu
     }
 

@@ -13,7 +13,11 @@ struct DevelopImageView: View {
             ZStack(alignment: .topLeading) {
                 Color(nsColor: theme.surround)
                 if let image = develop.image {
-                    if develop.showingBefore || develop.compareMode == .off {
+                    if develop.isCropping {
+                        CropEditorView(develop: develop, image: image)
+                    } else if develop.isAIOpen {
+                        AIBrushView(ai: model.ai, image: image, assetID: develop.assetID)
+                    } else if develop.showingBefore || develop.compareMode == .off {
                         ZoomableImageView(image: develop.displayImage ?? image,
                                           pixelSize: pixelSize,
                                           zoom: $model.zoom,
@@ -68,7 +72,7 @@ struct DevelopImageView: View {
 
     private var pixelSize: CGSize? {
         guard let width = model.detail?.asset.width, let height = model.detail?.asset.height else { return nil }
-        return CGSize(width: width, height: height)
+        return develop.croppedPixelSize(assetSize: CGSize(width: width, height: height))
     }
 
     private func bottomBar(compact: Bool) -> some View {
@@ -77,12 +81,13 @@ struct DevelopImageView: View {
                 Text("Before and After").foregroundStyle(.secondary).fixedSize()
             }
             comparePicker(iconsOnly: compact)
+                .disabled(develop.isCropping || develop.isAIOpen)
             if !compact, develop.compareMode == .slider {
                 Text("Drag across the photo to move the divider").foregroundStyle(.secondary).fixedSize()
             }
             Spacer(minLength: 8)
             ZoomControls(zoom: $model.zoom, report: model.zoomReport, compact: compact)
-                .disabled(develop.compareMode != .off)
+                .disabled(develop.compareMode != .off || develop.isCropping || develop.isAIOpen)
         }
     }
 
@@ -251,6 +256,20 @@ struct DevelopPanel: View {
                                  expandAll: expandAll, collapseAll: collapseAll) {
                         HistogramView(histogram: develop.histogram)
                     }
+                    ToolStrip(develop: develop)
+                    if develop.isCropping {
+                        PanelSection(title: "Crop & Straighten", isExpanded: .constant(true), soloMode: $soloMode,
+                                     isModified: develop.settings.crop != nil, reset: { develop.setCrop(Crop()) },
+                                     expandAll: expandAll, collapseAll: collapseAll) {
+                            CropPanel(develop: develop)
+                        }
+                    }
+                    if develop.isAIOpen {
+                        PanelSection(title: "AI", isExpanded: .constant(true), soloMode: $soloMode,
+                                     expandAll: expandAll, collapseAll: collapseAll) {
+                            AIPanel(ai: model.ai)
+                        }
+                    }
                     ForEach(DevelopSettings.Panel.allCases, id: \.self) { panel in
                         PanelSection(title: panel.title, isExpanded: isExpanded(panel.rawValue), soloMode: $soloMode,
                                      isModified: develop.isModified(panel), reset: { develop.reset(panel) },
@@ -314,7 +333,7 @@ struct DevelopPanel: View {
     }
 }
 
-private struct GroupHeading: View {
+struct GroupHeading: View {
     let title: String
 
     var body: some View {
@@ -620,7 +639,7 @@ private struct ColorWheel: View {
 }
 
 /// A collapsible panel with a Lightroom-style header.
-private struct PanelSection<Content: View>: View {
+struct PanelSection<Content: View>: View {
     let title: String
     @Binding var isExpanded: Bool
     @Binding var soloMode: Bool
@@ -836,7 +855,7 @@ private struct ParameterSlider: View {
 
 /// A slim Lightroom-style slider: thin track (colored where Lightroom colors it), a mark at the
 /// default, the change from the default filled in, and a small round knob.
-private struct DevelopSlider: View {
+struct DevelopSlider: View {
     @Binding var value: Double
     let range: ClosedRange<Double>
     let step: Double
@@ -905,5 +924,43 @@ private struct DevelopSlider: View {
             })
         }
         .frame(height: 16)
+    }
+}
+
+/// Lightroom's tool strip under the histogram.
+private struct ToolStrip: View {
+    @ObservedObject var develop: DevelopController
+
+    var body: some View {
+        HStack(spacing: 14) {
+            tool("crop", title: "Crop & Straighten (R)", active: develop.isCropping,
+                 modified: develop.settings.crop != nil) {
+                develop.isCropping.toggle()
+            }
+            tool("wand.and.stars", title: "AI: Remove Object, Replace Background, Upscale", active: develop.isAIOpen,
+                 modified: false) {
+                develop.isAIOpen.toggle()
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .overlay(alignment: .bottom) { Divider() }
+    }
+
+    private func tool(_ symbol: String, title: String, active: Bool, modified: Bool,
+                      action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 14))
+                .frame(width: 30, height: 24)
+                .background(active ? Color.accentColor.opacity(0.25) : Color.clear, in: RoundedRectangle(cornerRadius: 5))
+                .overlay(alignment: .topTrailing) {
+                    if modified { Circle().fill(Color.accentColor).frame(width: 5, height: 5).offset(x: -2, y: 2) }
+                }
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(title)
     }
 }

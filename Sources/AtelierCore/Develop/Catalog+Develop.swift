@@ -22,6 +22,23 @@ public struct PhotoVersion: Codable, Identifiable, Hashable, Sendable, Fetchable
     /// Rendered file for external edits and AI results; nil for parameter-only versions.
     public var filePath: String?
     public var createdAt: Date
+    /// The cataloged photo holding an external edit or AI result, stacked on `assetId`.
+    public var derivedAssetId: Int64?
+    /// How an AI result was made (model, recipe, seed, prompt), as JSON.
+    public var provenance: String?
+
+    public init(id: Int64? = nil, assetId: Int64, kind: VersionKind, parentVersionId: Int64? = nil, name: String? = nil,
+                filePath: String? = nil, createdAt: Date = Date(), derivedAssetId: Int64? = nil, provenance: String? = nil) {
+        self.id = id
+        self.assetId = assetId
+        self.kind = kind
+        self.parentVersionId = parentVersionId
+        self.name = name
+        self.filePath = filePath
+        self.createdAt = createdAt
+        self.derivedAssetId = derivedAssetId
+        self.provenance = provenance
+    }
 
     public mutating func didInsert(_ inserted: InsertionSuccess) {
         id = inserted.rowID
@@ -80,19 +97,37 @@ extension Catalog {
         }
     }
 
-    public func saveDevelopSettings(_ settings: DevelopSettings, for assetID: Int64) throws {
-        let json = try settings.encoded()
-        try writer.write { db in
-            guard let versionID = try Self.masterVersionID(db, assetID: assetID, create: true) else { return }
-            let history = try String.fetchOne(db, sql: "SELECT historyJson FROM developSettings WHERE versionId = ?",
-                                              arguments: [versionID]) ?? "[]"
-            try DevelopSettingsRecord(versionId: versionID, schemaVersion: settings.schemaVersion, json: json,
-                                      historyJson: history, updatedAt: Date()).save(db)
+    /// The master version's edit history and snapshots.
+    public func developHistory(for assetID: Int64) throws -> DevelopHistory {
+        try writer.read { db in
+            guard let versionID = try Self.masterVersionID(db, assetID: assetID, create: false),
+                  let json = try String.fetchOne(db, sql: "SELECT historyJson FROM developSettings WHERE versionId = ?",
+                                                 arguments: [versionID]) else { return DevelopHistory() }
+            return DevelopHistory.decoded(from: json)
         }
     }
 
+    /// Saves settings and history together (the open photo in Develop keeps both in memory).
+    public func saveDevelop(_ settings: DevelopSettings, history: DevelopHistory, for assetID: Int64) throws {
+        let json = try settings.encoded()
+        let historyJSON = try history.encoded()
+        try writer.write { db in
+            guard let versionID = try Self.masterVersionID(db, assetID: assetID, create: true) else { return }
+            try DevelopSettingsRecord(versionId: versionID, schemaVersion: settings.schemaVersion, json: json,
+                                      historyJson: historyJSON, updatedAt: Date()).save(db)
+        }
+    }
+
+    /// Saves settings and adds a history step named `step` (paste, presets, sync).
+    public func saveDevelopSettings(_ settings: DevelopSettings, for assetID: Int64, step: String = "Edit") throws {
+        var history = try developHistory(for: assetID)
+        let previous = try developSettings(for: assetID)
+        history.record(step, settings: settings, previous: previous)
+        try saveDevelop(settings, history: history, for: assetID)
+    }
+
     /// Copies the settings of one photo onto others (paste settings, sync).
-    public func applyDevelopSettings(_ settings: DevelopSettings, to assetIDs: [Int64]) throws {
-        for id in assetIDs { try saveDevelopSettings(settings, for: id) }
+    public func applyDevelopSettings(_ settings: DevelopSettings, to assetIDs: [Int64], step: String = "Paste Settings") throws {
+        for id in assetIDs { try saveDevelopSettings(settings, for: id, step: step) }
     }
 }

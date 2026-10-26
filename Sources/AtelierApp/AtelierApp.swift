@@ -26,6 +26,14 @@ struct AtelierApp: App {
                 Button("Export…") { model.beginExport() }
                     .keyboardShortcut("e", modifiers: [.command, .shift])
             }
+            // Undo and redo step through the open photo's develop history; text fields keep
+            // their own undo.
+            CommandGroup(replacing: .undoRedo) {
+                Button("Undo") { model.undo() }
+                    .keyboardShortcut("z", modifiers: [.command])
+                Button("Redo") { model.redo() }
+                    .keyboardShortcut("z", modifiers: [.command, .shift])
+            }
             CommandGroup(after: .toolbar) {
                 Button("Zoom In") { model.zoomIn() }
                     .keyboardShortcut("=", modifiers: [.command])
@@ -55,6 +63,26 @@ struct AtelierApp: App {
                 Button("Refresh Volumes") { model.refreshVolumes() }
                     .keyboardShortcut("r", modifiers: [.command])
             }
+            CommandMenu("Photo") {
+                Menu("Edit In") {
+                    ForEach(Array(model.externalEditors.enumerated()), id: \.element.id) { index, editor in
+                        if index == 0 {
+                            Button("Edit in \(editor.name)") { model.editIn(editor) }
+                                .keyboardShortcut("e", modifiers: [.command, .option])
+                        } else {
+                            Button("Edit in \(editor.name)") { model.editIn(editor) }
+                        }
+                    }
+                    Divider()
+                    Button("Other Application…") { model.editInOtherApp() }
+                }
+                .disabled(model.focusedID == nil)
+                Divider()
+                ForEach(AIRecipe.allCases, id: \.self) { recipe in
+                    Button("\(recipe.title)…") { model.openAI(recipe) }
+                        .disabled(model.focusedID == nil)
+                }
+            }
             CommandGroup(replacing: .help) {
                 Button("Keyboard Shortcuts") { model.showingShortcuts = true }
                     .keyboardShortcut("/", modifiers: [.command])
@@ -69,6 +97,15 @@ struct AtelierApp: App {
                     .keyboardShortcut("r", modifiers: [.command, .shift])
                     .disabled(model.mode != .develop)
                 // The \ and Y keys themselves are handled by the culling key monitor.
+                Button("Crop & Straighten (R)") { model.perform(.crop) }
+                    .disabled(model.focusedID == nil)
+                Button("Rotate Left") { model.rotate(clockwise: false) }
+                    .keyboardShortcut("[", modifiers: [.command])
+                    .disabled(model.mode != .develop)
+                Button("Rotate Right") { model.rotate(clockwise: true) }
+                    .keyboardShortcut("]", modifiers: [.command])
+                    .disabled(model.mode != .develop)
+                Divider()
                 Button("Show Before (\\)") { model.develop.showingBefore.toggle() }
                     .disabled(model.mode != .develop)
                 Menu("Before and After (Y)") {

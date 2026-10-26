@@ -37,7 +37,9 @@ public final class PreviewScheduler: @unchecked Sendable {
 
     /// Queues a preview unless it exists or is already queued. `urgent` moves it to the front,
     /// for the photo open in the loupe or a cell on screen.
-    public func request(_ size: PreviewCache.Size, for assetID: Int64, source: URL, urgent: Bool = false) {
+    /// With non-neutral `settings` both sizes are rendered developed.
+    public func request(_ size: PreviewCache.Size, for assetID: Int64, source: URL, urgent: Bool = false,
+                        settings: DevelopSettings? = nil) {
         if cache.has(size, for: assetID) { return }
         let key = Key(assetID: assetID, size: size)
         let operation: BlockOperation? = lock.withLock {
@@ -47,9 +49,15 @@ public final class PreviewScheduler: @unchecked Sendable {
             }
             let cache = self.cache
             let operation = BlockOperation { [weak self] in
-                switch size {
-                case .thumbnail: try? cache.generateThumbnail(for: assetID, from: source)
-                case .preview: try? cache.generatePreview(for: assetID, from: source)
+                if let settings, !settings.isNeutral {
+                    if !cache.has(size, for: assetID) {
+                        try? cache.generateDeveloped(for: assetID, from: source, settings: settings)
+                    }
+                } else {
+                    switch size {
+                    case .thumbnail: try? cache.generateThumbnail(for: assetID, from: source)
+                    case .preview: try? cache.generatePreview(for: assetID, from: source)
+                    }
                 }
                 self?.finish(key)
             }

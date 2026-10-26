@@ -76,7 +76,7 @@ struct ExportSheet: View {
 
                 Section("Color and sharpening") {
                     Picker("Color space", selection: $colorSpace) {
-                        ForEach(ExportColorSpace.allCases, id: \.self) { Text($0.label).tag($0) }
+                        ForEach(ExportColorSpace.exportChoices, id: \.self) { Text($0.label).tag($0) }
                     }
                     Picker("Sharpening", selection: $sharpening) {
                         ForEach(ExportSharpening.allCases, id: \.self) { Text($0.label).tag($0) }

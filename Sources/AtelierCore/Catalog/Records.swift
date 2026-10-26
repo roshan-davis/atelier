@@ -203,6 +203,11 @@ public struct AssetRow: Codable, Hashable, Identifiable, Sendable, FetchableReco
     public var rating: Int
     public var flag: Flag
     public var colorLabel: ColorLabel?
+    /// Set on an Edit In or AI result: the photo it is stacked on, and how it was made.
+    public var stackParentId: Int64?
+    public var stackKind: VersionKind?
+    /// How many edits and AI results are stacked on this photo.
+    public var stackCount: Int?
 }
 
 /// Everything the inspector and loupe need for one photo.

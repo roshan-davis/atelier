@@ -1,6 +1,7 @@
 import AppKit
 import AtelierCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Atelier > Settings… (⌘,). Values live in user defaults under the same keys the dialogs use,
 /// so a default set here is what the Import and Export dialogs start with.
@@ -17,12 +18,16 @@ struct SettingsView: View {
                 .tabItem { Label("Develop", systemImage: "slider.horizontal.3") }
             ExportSettingsTab()
                 .tabItem { Label("Export", systemImage: "square.and.arrow.up") }
+            EditInSettings()
+                .tabItem { Label("Edit In", systemImage: "paintbrush") }
+            AISettingsTab()
+                .tabItem { Label("AI", systemImage: "wand.and.stars") }
             MetadataSettings()
                 .tabItem { Label("Metadata", systemImage: "tag") }
             KeyboardSettings()
                 .tabItem { Label("Keyboard", systemImage: "keyboard") }
         }
-        .frame(width: 560)
+        .frame(width: 640)
     }
 }
 
@@ -301,6 +306,203 @@ private struct ExportSettingsTab: View {
     }
 }
 
+// MARK: - Edit In
+
+/// The apps offered under Photo > Edit In, and the file each one is sent.
+struct EditInSettings: View {
+    @State private var editors = ExternalEditorStore.load()
+
+    var body: some View {
+        Form {
+            Section {
+                if editors.isEmpty {
+                    Text("No photo editors found. Click Add App… to pick one.")
+                        .foregroundStyle(.secondary)
+                }
+                ForEach($editors) { $editor in
+                    EditorRow(editor: $editor) {
+                        editors.removeAll { $0.id == editor.id }
+                    }
+                }
+                HStack {
+                    Button("Add App…", systemImage: "plus") { addApp() }
+                    Spacer()
+                    Button("Find Installed Editors") {
+                        for found in ExternalEditorStore.detected() where !editors.contains(where: { $0.id == found.id }) {
+                            editors.append(found)
+                        }
+                    }
+                }
+            } header: {
+                Text("Edit In")
+            } footer: {
+                Text("Photo > Edit In saves a copy next to the original (or in Pictures/Atelier/Edits when that folder is read-only), stacks it with the original, and opens it in the app. Saves in the app update Atelier.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .onChange(of: editors) { _, newValue in ExternalEditorStore.save(newValue) }
+    }
+
+    private func addApp() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose an App to Edit In"
+        panel.prompt = "Add"
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+        panel.allowedContentTypes = [.application]
+        guard panel.runModal() == .OK, let url = panel.url,
+              !editors.contains(where: { $0.appPath == url.path }) else { return }
+        editors.append(ExternalEditor(appURL: url))
+    }
+}
+
+private struct EditorRow: View {
+    @Binding var editor: ExternalEditor
+    let remove: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(nsImage: editor.icon)
+                    .resizable()
+                    .frame(width: 24, height: 24)
+                TextField("Name", text: $editor.name)
+                    .textFieldStyle(.plain)
+                    .font(.headline)
+                if !editor.isInstalled {
+                    Text("Not installed").font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button(role: .destructive, action: remove) { Image(systemName: "minus.circle") }
+                    .buttonStyle(.borderless)
+                    .help("Remove from Edit In")
+            }
+            HStack(spacing: 12) {
+                Picker("File", selection: $editor.format) {
+                    ForEach(ExternalEditor.FileFormat.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
+                .fixedSize()
+                Picker("Color", selection: $editor.colorSpace) {
+                    ForEach(ExportColorSpace.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
+                .fixedSize()
+            }
+            Toggle("Include develop adjustments", isOn: $editor.applyDevelop)
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+// MARK: - AI
+
+/// Where ComfyUI runs and which models the AI recipes use.
+struct AISettingsTab: View {
+    @AppStorage("ai.server") private var server = AISettings.defaultServer.absoluteString
+    @AppStorage("ai.checkpoint") private var checkpoint = ""
+    @AppStorage("ai.upscaleModel") private var upscaleModel = ""
+    @AppStorage("ai.generationSize") private var generationSize = 1024
+    @State private var status: String?
+    @State private var connected = false
+    @State private var checkpoints: [String] = []
+    @State private var upscalers: [String] = []
+
+    var body: some View {
+        Form {
+            Section {
+                LabeledContent("Server") {
+                    HStack {
+                        TextField("Server", text: $server, prompt: Text(AISettings.defaultServer.absoluteString))
+                            .labelsHidden()
+                            .onSubmit { connect() }
+                        Button("Connect") { connect() }
+                    }
+                }
+                if let status {
+                    Label(status, systemImage: connected ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                        .foregroundStyle(connected ? .green : .orange)
+                        .font(.callout)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } header: {
+                Text("ComfyUI")
+            } footer: {
+                Text("Atelier sends photos to a ComfyUI server you run, on this Mac or another one, and never bundles models.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                modelPicker("Inpainting checkpoint", selection: $checkpoint, choices: checkpoints)
+                Picker("Generation size", selection: $generationSize) {
+                    Text("768 px (SD 1.5)").tag(768)
+                    Text("1024 px (SDXL)").tag(1024)
+                    Text("1536 px").tag(1536)
+                }
+                modelPicker("Upscale model (4×)", selection: $upscaleModel, choices: upscalers)
+            } header: {
+                Text("Models")
+            } footer: {
+                Text("Remove Object and Replace Background use an inpainting checkpoint; Upscale uses a 4× upscale model. For website and shop images, use only models licensed Apache 2.0 or MIT.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                LabeledContent("Workflows") {
+                    Button("Show Workflows Folder") {
+                        try? AIRecipe.installWorkflowTemplates()
+                        NSWorkspace.shared.activateFileViewerSelecting([AIRecipe.workflowsFolder])
+                    }
+                }
+            } footer: {
+                Text("To use your own ComfyUI workflow, save it in API format as remove-object.json, replace-background.json or upscale.json in this folder. Title its nodes Atelier Image, Atelier Mask, Atelier Prompt, Atelier Sampler and Atelier Output, as in the .example.json files.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .onAppear { connect() }
+    }
+
+    @ViewBuilder private func modelPicker(_ title: String, selection: Binding<String>, choices: [String]) -> some View {
+        if choices.isEmpty {
+            TextField(title, text: selection, prompt: Text("Workflow default"))
+        } else {
+            Picker(title, selection: selection) {
+                Text("Workflow default").tag("")
+                ForEach(choices, id: \.self) { Text($0).tag($0) }
+                if !selection.wrappedValue.isEmpty, !choices.contains(selection.wrappedValue) {
+                    Text(selection.wrappedValue + " (not on server)").tag(selection.wrappedValue)
+                }
+            }
+        }
+    }
+
+    private func connect() {
+        guard let url = URL(string: server.trimmingCharacters(in: .whitespaces)), url.scheme != nil else {
+            status = "Enter an address like http://127.0.0.1:8188"
+            connected = false
+            return
+        }
+        status = "Connecting…"
+        Task {
+            let client = ComfyClient(baseURL: url)
+            do {
+                let version = try await client.ping()
+                checkpoints = (try? await client.options(node: "CheckpointLoaderSimple", input: "ckpt_name")) ?? []
+                upscalers = (try? await client.options(node: "UpscaleModelLoader", input: "model_name")) ?? []
+                connected = true
+                status = "Connected" + (version == "connected" ? "" : " to ComfyUI \(version)")
+                    + " · \(checkpoints.count) checkpoints, \(upscalers.count) upscale models"
+            } catch {
+                connected = false
+                status = error.localizedDescription
+            }
+        }
+    }
+}
+
 // MARK: - Metadata
 
 private struct MetadataSettings: View {
@@ -437,6 +639,7 @@ struct ShortcutsSheet: View {
         ("Zoom", [("⌘=", "Zoom in"), ("⌘-", "Zoom out"), ("⌘0", "Zoom to fit"), ("⌥⌘1", "Zoom to 100%"),
                   ("⌥ scroll / pinch", "Zoom freely"), ("Drag", "Move around when zoomed")]),
         ("Develop", [("⇧⌘C", "Copy settings"), ("⇧⌘V", "Paste settings"), ("⇧⌘R", "Reset all settings"),
+                     ("⌘Z", "Undo"), ("⇧⌘Z", "Redo"), ("⌘[", "Rotate left"), ("⌘]", "Rotate right"),
                      ("Double-click name", "Reset a slider")]),
         ("App", [("⌘,", "Settings"), ("⌘/", "This list")]),
     ]

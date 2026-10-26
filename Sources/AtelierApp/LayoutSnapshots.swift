@@ -41,6 +41,23 @@ enum LayoutSnapshots {
         for (name, size, view) in shots {
             await capture(view, size: size, to: folder.appendingPathComponent(name + ".png"))
         }
+        // The crop tool, straightened a little.
+        model.develop.isCropping = true
+        var crop = model.develop.crop
+        crop.angle = 4
+        model.develop.setCrop(crop.fitted(imageAspect: model.develop.orientedAspect))
+        try? await Task.sleep(for: .seconds(1))
+        await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
+                      to: folder.appendingPathComponent("develop-crop-1280x800.png"))
+        model.develop.isCropping = false
+        // The AI tool with a brush stroke painted.
+        model.develop.isAIOpen = true
+        model.ai.strokes = [BrushStroke(points: [CGPoint(x: 0.42, y: 0.5), CGPoint(x: 0.5, y: 0.56), CGPoint(x: 0.58, y: 0.52)],
+                                        radius: 0.03)]
+        try? await Task.sleep(for: .seconds(1))
+        await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
+                      to: folder.appendingPathComponent("develop-ai-1280x800.png"))
+        model.develop.isAIOpen = false
         // Each theme in Develop at the size in Rosh's screenshot, and the theme picker itself.
         for theme in Theme.allCases where theme != .system {
             UserDefaults.standard.set(theme.rawValue, forKey: Theme.defaultsKey)
@@ -49,10 +66,21 @@ enum LayoutSnapshots {
                           to: folder.appendingPathComponent("theme-\(theme.rawValue).png"))
         }
         model.mode = .grid
+        // Edit In end to end, with Preview standing in for Photoshop: the copy is stacked next to the original.
+        model.selection = Set(model.rows.map(\.id))
+        model.editIn(ExternalEditor(name: "Preview", appURL: URL(fileURLWithPath: "/System/Applications/Preview.app")))
+        for _ in 0..<40 where model.rows.count < 2 { try? await Task.sleep(for: .milliseconds(250)) }
+        print("SNAPSHOT: after Edit In, rows \(model.rows.map { "\($0.filename) parent=\($0.stackParentId.map(String.init) ?? "-") kind=\($0.stackKind?.rawValue ?? "-") count=\($0.stackCount ?? 0)" })")
+        if let problem = model.problems.first { print("SNAPSHOT: Edit In problem \(problem.name): \(problem.reason)") }
+        try? await Task.sleep(for: .seconds(2))
         await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1000, height: 584),
                       to: folder.appendingPathComponent("theme-neutralGray-grid.png"))
         await capture(AnyView(AppearanceSettings().frame(width: 560)), size: CGSize(width: 560, height: 330),
                       to: folder.appendingPathComponent("settings-appearance.png"))
+        await capture(AnyView(EditInSettings().frame(width: 640)), size: CGSize(width: 640, height: 360),
+                      to: folder.appendingPathComponent("settings-editin.png"))
+        await capture(AnyView(AISettingsTab().frame(width: 640)), size: CGSize(width: 640, height: 600),
+                      to: folder.appendingPathComponent("settings-ai.png"))
         UserDefaults.standard.removeObject(forKey: Theme.defaultsKey)
         Theme.system.apply()
         fflush(stdout)

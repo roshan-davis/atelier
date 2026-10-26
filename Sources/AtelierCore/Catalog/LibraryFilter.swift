@@ -32,9 +32,14 @@ extension Catalog {
     public static func fetchAssetRows(_ db: Database, filter: LibraryFilter) throws -> [AssetRow] {
         var sql = """
             SELECT asset.id, asset.filename, asset.captureTime, asset.folderId,
-                   metadata.rating, metadata.flag, metadata.colorLabel
+                   metadata.rating, metadata.flag, metadata.colorLabel,
+                   stackVersion.assetId AS stackParentId, stackVersion.kind AS stackKind,
+                   (SELECT COUNT(*) FROM version derived
+                    WHERE derived.assetId = asset.id AND derived.derivedAssetId IS NOT NULL) AS stackCount
             FROM asset
             JOIN metadata ON metadata.assetId = asset.id
+            LEFT JOIN version stackVersion ON stackVersion.derivedAssetId = asset.id
+            LEFT JOIN asset stackParent ON stackParent.id = stackVersion.assetId
             """
         var conditions: [String] = []
         var arguments: [(any DatabaseValueConvertible)?] = []
@@ -81,7 +86,11 @@ extension Catalog {
         if !conditions.isEmpty {
             sql += " WHERE " + conditions.joined(separator: " AND ")
         }
-        sql += " ORDER BY COALESCE(asset.captureTime, asset.importedAt), asset.id"
+        // Stacked edits sort right after the photo they came from.
+        sql += """
+             ORDER BY COALESCE(stackParent.captureTime, stackParent.importedAt, asset.captureTime, asset.importedAt),
+                      COALESCE(stackParent.id, asset.id), asset.id
+            """
         return try AssetRow.fetchAll(db, sql: sql, arguments: StatementArguments(arguments))
     }
 

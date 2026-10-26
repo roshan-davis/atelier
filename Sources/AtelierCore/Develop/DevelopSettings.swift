@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 
 /// Non-destructive develop parameters: a versioned JSON document the renderer reads directly.
 /// Nothing is baked into a file until export or Edit In.
@@ -19,6 +20,13 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
     /// Point curves by channel, applied after the Basic tone and region curve. Each list runs
     /// from x 0 to 1 with at least two points; a missing channel is a straight line.
     private var pointCurves: [String: [CurvePoint]] = [:]
+
+    /// Crop, straighten, rotation and flips; nil when the photo is uncropped and upright.
+    public var crop: Crop? {
+        get { storedCrop }
+        set { storedCrop = newValue?.isIdentity == true ? nil : newValue }
+    }
+    private var storedCrop: Crop?
 
     public init() {}
 
@@ -161,6 +169,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         for channel in CurveChannel.allCases {
             if let points = curves[channel.rawValue] { setPoints(points, for: channel) }
         }
+        crop = try c.decodeIfPresent(Crop.self, forKey: Key("crop"))
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -171,11 +180,12 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             try c.encode(value, forKey: Key(parameter.rawValue))
         }
         if !pointCurves.isEmpty { try c.encode(pointCurves, forKey: Key("pointCurves")) }
+        try c.encodeIfPresent(storedCrop, forKey: Key("crop"))
     }
 
     public static let neutral = DevelopSettings()
 
-    public var isNeutral: Bool { temperature == nil && values.isEmpty && pointCurves.isEmpty }
+    public var isNeutral: Bool { temperature == nil && values.isEmpty && pointCurves.isEmpty && storedCrop == nil }
 
     public func encoded() throws -> String {
         let encoder = JSONEncoder()
@@ -392,6 +402,116 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             default:
                 return GradeRegion.allCases.first { rawValue.hasPrefix("grade\($0.rawValue)") }?.rawValue ?? ""
             }
+        }
+    }
+
+    /// Geometry, applied before every other adjustment so the histogram, vignette and grain
+    /// follow the crop (Lightroom's post-crop vignetting).
+    ///
+    /// The photo is first turned and flipped, then rotated by `angle` around its center, and
+    /// then cut to `x, y, width, height`: fractions of the turned photo's width and height,
+    /// measured from its top left in a frame that rotates with it, so straightening never
+    /// moves the crop.
+    public struct Crop: Codable, Hashable, Sendable {
+        /// Quarter turns clockwise, 0...3.
+        public var quarterTurns = 0
+        public var flipHorizontal = false
+        public var flipVertical = false
+        /// Straighten angle in degrees, -45...45; positive turns the photo clockwise.
+        public var angle = 0.0
+        public var x = 0.0
+        public var y = 0.0
+        public var width = 1.0
+        public var height = 1.0
+        /// The aspect ratio (width / height, in pixels) the crop is locked to; nil is free.
+        public var lockedAspect: Double?
+
+        public init() {}
+
+        public var isIdentity: Bool {
+            quarterTurns % 4 == 0 && !flipHorizontal && !flipVertical && angle == 0
+                && x == 0 && y == 0 && width == 1 && height == 1 && lockedAspect == nil
+        }
+
+        public var hasCut: Bool { x != 0 || y != 0 || width != 1 || height != 1 || angle != 0 }
+
+        /// The turned photo's size, for a photo of `size` pixels.
+        public func orientedSize(_ size: CGSize) -> CGSize {
+            quarterTurns % 2 == 1 ? CGSize(width: size.height, height: size.width) : size
+        }
+
+        /// The cropped photo's size, for a photo of `size` pixels.
+        public func outputSize(_ size: CGSize) -> CGSize {
+            let oriented = orientedSize(size)
+            return CGSize(width: (oriented.width * width).rounded(), height: (oriented.height * height).rounded())
+        }
+
+        /// Whether every corner of the crop lies on the photo once it is straightened.
+        /// `imageAspect` is the turned photo's width / height.
+        public func fits(imageAspect: Double) -> Bool {
+            corners(imageAspect: imageAspect).allSatisfy { point in
+                point.x >= -1e-6 && point.x <= imageAspect + 1e-6 && point.y >= -1e-6 && point.y <= 1 + 1e-6
+            }
+        }
+
+        /// The crop's corners mapped back onto the unrotated photo, in units of its height.
+        private func corners(imageAspect: Double) -> [CGPoint] {
+            let w = imageAspect
+            let center = CGPoint(x: w / 2, y: 0.5)
+            let radians = angle * .pi / 180
+            let cosA = cos(radians), sinA = sin(radians)
+            let rect = [(x, y), (x + width, y), (x, y + height), (x + width, y + height)]
+            return rect.map { corner in
+                let dx = corner.0 * w - center.x, dy = corner.1 - center.y
+                // Undo a clockwise turn (y points down).
+                return CGPoint(x: center.x + dx * cosA + dy * sinA, y: center.y - dx * sinA + dy * cosA)
+            }
+        }
+
+        /// The largest version of this crop, shrunk about its center (and moved toward the
+        /// photo's center if needed), that stays on the straightened photo.
+        public func fitted(imageAspect: Double) -> Crop {
+            if fits(imageAspect: imageAspect) { return self }
+            var moved = self
+            if !moved.scaled(by: 0.001).fits(imageAspect: imageAspect) {
+                // Slide the center toward the photo's center until a tiny crop fits there.
+                var low = 0.0, high = 1.0
+                let cx = x + width / 2, cy = y + height / 2
+                for _ in 0..<30 {
+                    let t = (low + high) / 2
+                    var candidate = self
+                    candidate.x = cx + (0.5 - cx) * t - width / 2
+                    candidate.y = cy + (0.5 - cy) * t - height / 2
+                    if candidate.scaled(by: 0.001).fits(imageAspect: imageAspect) { high = t } else { low = t }
+                }
+                moved.x = cx + (0.5 - cx) * high - width / 2
+                moved.y = cy + (0.5 - cy) * high - height / 2
+            }
+            var low = 0.0, high = 1.0
+            for _ in 0..<30 {
+                let scale = (low + high) / 2
+                if moved.scaled(by: scale).fits(imageAspect: imageAspect) { low = scale } else { high = scale }
+            }
+            return moved.scaled(by: low)
+        }
+
+        /// Scaled about its center.
+        public func scaled(by factor: Double) -> Crop {
+            var copy = self
+            copy.width = width * factor
+            copy.height = height * factor
+            copy.x = x + (width - copy.width) / 2
+            copy.y = y + (height - copy.height) / 2
+            return copy
+        }
+
+        /// The largest crop of `aspect` (pixel width / height) centered on the photo.
+        /// `imageAspect` is the turned photo's width / height.
+        public static func centered(aspect: Double, imageAspect: Double) -> (width: Double, height: Double) {
+            if aspect > imageAspect {
+                return (1, imageAspect / aspect)
+            }
+            return (aspect / imageAspect, 1)
         }
     }
 }

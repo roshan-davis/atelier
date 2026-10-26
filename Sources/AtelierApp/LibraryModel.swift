@@ -53,6 +53,8 @@ final class LibraryModel: ObservableObject {
     let previews: PreviewCache
     let previewScheduler: PreviewScheduler
     let develop: DevelopController
+    let editWatcher = EditWatcher()
+    let ai = AIController()
 
     @Published var rows: [AssetRow] = []
     @Published var sidebar = SidebarData()
@@ -129,6 +131,13 @@ final class LibraryModel: ObservableObject {
             ThumbnailLoader.shared.invalidate(id)
             self?.previewsChanged()
         }
+        ai.model = self
+        editWatcher.onChange = { [weak self] id in self?.editedFileChanged(id) }
+        // Folder events can be missed on network shares; coming back from the editor checks too.
+        NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil,
+                                               queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.editWatcher.check() }
+        }
     }
 
     // MARK: Observation
@@ -190,6 +199,11 @@ final class LibraryModel: ObservableObject {
 
     func reloadDetail() {
         detail = focusedID.flatMap { try? catalog.detail(for: $0) }
+        // An edit saved while Atelier was not watching (after a relaunch) is picked up when shown.
+        if let detail, let id = detail.asset.id, rows.first(where: { $0.id == id })?.stackKind == .externalEdit,
+           let url = detail.fileURL {
+            editWatcher.watch(id, at: url, known: detail.asset.modifiedAt)
+        }
     }
 
     // MARK: Selection
@@ -210,6 +224,27 @@ final class LibraryModel: ObservableObject {
     /// Pastes copied develop settings onto the selection (grid) or the open photo.
     func pasteDevelopSettings() {
         develop.pasteSettings(onto: targetIDs)
+    }
+
+    func undo() {
+        if let textView = NSApp.keyWindow?.firstResponder as? NSTextView {
+            textView.undoManager?.undo()
+        } else if mode == .develop {
+            develop.undo()
+        }
+    }
+
+    func redo() {
+        if let textView = NSApp.keyWindow?.firstResponder as? NSTextView {
+            textView.undoManager?.redo()
+        } else if mode == .develop {
+            develop.redo()
+        }
+    }
+
+    func rotate(clockwise: Bool) {
+        guard mode == .develop else { return }
+        develop.setCrop(develop.crop.turned(clockwise: clockwise))
     }
 
     func resetDevelopSettings() {
@@ -549,6 +584,13 @@ final class LibraryModel: ObservableObject {
         guard let window = NSApp.keyWindow, window === mainWindow, window.attachedSheet == nil else { return false }
         if window.firstResponder is NSText { return false }
 
+        // [ and ] size the AI brush, as in Lightroom.
+        if mode == .develop, develop.isAIOpen, event.keyCode == 33 || event.keyCode == 30 {
+            let factor = event.keyCode == 30 ? 1.25 : 0.8
+            ai.brushSize = min(max(ai.brushSize * factor, 0.005), 0.15)
+            return true
+        }
+
         switch event.keyCode {
         case 123 where mode != .grid: step(-1); return true           // left arrow
         case 124 where mode != .grid: step(1); return true            // right arrow
@@ -579,7 +621,13 @@ final class LibraryModel: ObservableObject {
         case .labelGreen: toggleLabel(.green)
         case .labelBlue: toggleLabel(.blue)
         case .pick: setFlag(.picked)
-        case .reject: setFlag(.rejected)
+        case .reject:
+            // As in Lightroom, X in the crop tool swaps the crop's orientation instead.
+            if mode == .develop, develop.isCropping {
+                develop.setCrop(develop.crop.switchedOrientation(imageAspect: develop.orientedAspect))
+            } else {
+                setFlag(.rejected)
+            }
         case .unflag: setFlag(.none)
         case .loupe: openLoupe()
         case .develop: openDevelop()
@@ -591,6 +639,10 @@ final class LibraryModel: ObservableObject {
             guard mode == .develop else { return false }
             develop.cycleCompareMode()
         case .zoom: toggleZoom()
+        case .crop:
+            if mode != .develop { openDevelop() }
+            guard mode == .develop else { return false }
+            develop.isCropping.toggle()
         }
         return true
     }

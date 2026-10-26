@@ -8,7 +8,7 @@ enum KeyAction: String, CaseIterable, Identifiable {
     case labelRed, labelYellow, labelGreen, labelBlue
     case pick, reject, unflag
     case grid, loupe, develop
-    case beforeAfter, compareMode, zoom
+    case beforeAfter, compareMode, zoom, crop
 
     var id: String { rawValue }
 
@@ -23,7 +23,7 @@ enum KeyAction: String, CaseIterable, Identifiable {
         case .labelGreen: return "Green label"
         case .labelBlue: return "Blue label"
         case .pick: return "Flag as picked"
-        case .reject: return "Flag as rejected"
+        case .reject: return "Flag as rejected (in the crop tool: switch landscape and portrait)"
         case .unflag: return "Remove flag"
         case .grid: return "Grid view"
         case .loupe: return "Loupe view"
@@ -31,6 +31,7 @@ enum KeyAction: String, CaseIterable, Identifiable {
         case .beforeAfter: return "Show before (toggle)"
         case .compareMode: return "Before and after: off, side by side, slider"
         case .zoom: return "Zoom: fit and 100%"
+        case .crop: return "Crop & Straighten"
         }
     }
 
@@ -40,7 +41,7 @@ enum KeyAction: String, CaseIterable, Identifiable {
         case .labelRed, .labelYellow, .labelGreen, .labelBlue: return "Color labels"
         case .pick, .reject, .unflag: return "Flags"
         case .grid, .loupe, .develop, .zoom: return "Views"
-        case .beforeAfter, .compareMode: return "Develop"
+        case .beforeAfter, .compareMode, .crop: return "Develop"
         }
     }
 
@@ -66,6 +67,7 @@ enum KeyAction: String, CaseIterable, Identifiable {
         case .beforeAfter: return "\\"
         case .compareMode: return "y"
         case .zoom: return "z"
+        case .crop: return "r"
         }
     }
 }

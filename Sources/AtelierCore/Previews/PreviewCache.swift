@@ -74,6 +74,17 @@ public final class PreviewCache: Sendable {
         try write(preview, assetID: assetID, size: .preview)
     }
 
+    /// Renders both sizes with develop settings, for photos edited before their previews exist
+    /// (a preset applied during import).
+    public func generateDeveloped(for assetID: Int64, from original: URL, settings: DevelopSettings) throws {
+        guard let session = DevelopRenderer.shared.session(for: original, maxPixelSize: Size.preview.rawValue),
+              let image = session.render(settings) else {
+            throw CocoaError(.fileReadCorruptFile, userInfo: [NSFilePathErrorKey: original.path])
+        }
+        try store(image, for: assetID, size: .preview)
+        try store(image, for: assetID, size: .thumbnail)
+    }
+
     /// Stores an already rendered image, for example a developed photo, scaled to `size`.
     public func store(_ image: CGImage, for assetID: Int64, size: Size) throws {
         let scaled = Self.scaled(image, maxPixelSize: size.rawValue) ?? image
