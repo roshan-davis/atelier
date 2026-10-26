@@ -87,10 +87,9 @@ enum LayoutSnapshots {
         // Borderless, so the window isn't limited to the CI machine's small screen.
         let window = NSWindow(contentRect: CGRect(origin: .zero, size: size),
                               styleMask: [.borderless], backing: .buffered, defer: false)
-        // A borderless window draws no background of its own; give it the normal one, as a titled window has.
         window.appearance = NSApp.appearance
-        window.backgroundColor = .windowBackgroundColor
-        let host = NSHostingView(rootView: view)
+        // cacheDisplay draws only the view, not the window's background behind it, so paint that in.
+        let host = NSHostingView(rootView: view.background(Color(nsColor: .windowBackgroundColor)))
         window.contentView = host
         window.setContentSize(size)
         window.orderFront(nil)
