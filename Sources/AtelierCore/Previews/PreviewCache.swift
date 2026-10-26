@@ -74,6 +74,12 @@ public final class PreviewCache: Sendable {
         try write(preview, assetID: assetID, size: .preview)
     }
 
+    /// Stores an already rendered image, for example a developed photo, scaled to `size`.
+    public func store(_ image: CGImage, for assetID: Int64, size: Size) throws {
+        let scaled = Self.scaled(image, maxPixelSize: size.rawValue) ?? image
+        try write(scaled, assetID: assetID, size: size)
+    }
+
     public func has(_ size: Size, for assetID: Int64) -> Bool {
         FileManager.default.fileExists(atPath: url(for: assetID, size: size).path)
     }

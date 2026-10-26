@@ -19,6 +19,8 @@ struct ContentView: View {
                         GridView(model: model)
                     case .loupe:
                         LoupeView()
+                    case .develop:
+                        DevelopImageView(develop: model.develop)
                     }
                     if model.rows.isEmpty {
                         EmptyLibraryView()
@@ -48,9 +50,10 @@ struct ContentView: View {
                 Picker("View", selection: $model.mode) {
                     Label("Grid", systemImage: "square.grid.3x3").tag(ViewMode.grid)
                     Label("Loupe", systemImage: "photo").tag(ViewMode.loupe)
+                    Label("Develop", systemImage: "slider.horizontal.3").tag(ViewMode.develop)
                 }
                 .pickerStyle(.segmented)
-                .help("Grid (G) or loupe (E)")
+                .help("Grid (G), loupe (E) or develop (D)")
 
                 CollectionMenu()
 

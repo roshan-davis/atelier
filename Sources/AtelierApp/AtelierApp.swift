@@ -24,6 +24,8 @@ struct AtelierApp: App {
                     .keyboardShortcut("g", modifiers: [.command])
                 Button("Loupe") { model.openLoupe() }
                     .keyboardShortcut("e", modifiers: [.command])
+                Button("Develop") { model.openDevelop() }
+                    .keyboardShortcut("d", modifiers: [.command])
                 Divider()
                 Button("Write XMP for Selection") { model.writeXMP(selectionOnly: true) }
                     .keyboardShortcut("s", modifiers: [.command])
@@ -32,6 +34,19 @@ struct AtelierApp: App {
                 Divider()
                 Button("Refresh Volumes") { model.refreshVolumes() }
                     .keyboardShortcut("r", modifiers: [.command])
+            }
+            CommandMenu("Develop") {
+                Button("Copy Settings") { model.copyDevelopSettings() }
+                    .keyboardShortcut("c", modifiers: [.command, .shift])
+                Button("Paste Settings") { model.pasteDevelopSettings() }
+                    .keyboardShortcut("v", modifiers: [.command, .shift])
+                Divider()
+                Button("Reset All Settings") { model.develop.resetAll() }
+                    .keyboardShortcut("r", modifiers: [.command, .shift])
+                    .disabled(model.mode != .develop)
+                // The \ key itself is handled by the culling key monitor.
+                Button("Show Before (\\)") { model.develop.showingBefore.toggle() }
+                    .disabled(model.mode != .develop)
             }
         }
     }

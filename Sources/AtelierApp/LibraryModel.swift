@@ -6,6 +6,7 @@ import GRDB
 enum ViewMode {
     case grid
     case loupe
+    case develop
 }
 
 enum SidebarItem: Hashable {
@@ -45,6 +46,7 @@ final class LibraryModel: ObservableObject {
     let catalog: Catalog
     let previews: PreviewCache
     let previewScheduler: PreviewScheduler
+    let develop: DevelopController
 
     @Published var rows: [AssetRow] = []
     @Published var sidebar = SidebarData()
@@ -56,10 +58,18 @@ final class LibraryModel: ObservableObject {
     }
     @Published var selection: Set<Int64> = []
     @Published var focusedID: Int64? {
-        didSet { if focusedID != oldValue { reloadDetail() } }
+        didSet {
+            guard focusedID != oldValue else { return }
+            reloadDetail()
+            if mode == .develop { develop.open(focusedID) }
+        }
     }
     @Published var detail: AssetDetail?
-    @Published var mode: ViewMode = .grid
+    @Published var mode: ViewMode = .grid {
+        didSet {
+            if mode == .develop { develop.open(focusedID) } else if oldValue == .develop { develop.flushSave() }
+        }
+    }
     @Published var status: String?
     @Published var showingImportSheet = false
     @Published var pendingImportSources: [URL] = []
@@ -88,6 +98,7 @@ final class LibraryModel: ObservableObject {
         }
         previews = PreviewCache(rootURL: catalog.previewsURL!)
         previewScheduler = PreviewScheduler(cache: previews)
+        develop = DevelopController(catalog: catalog, previews: previews)
         try? catalog.refreshVolumes()
         observeRows()
         observeSidebar()
@@ -95,6 +106,10 @@ final class LibraryModel: ObservableObject {
         observeMounts()
         previewScheduler.onFinish { [weak self] _, _ in
             Task { @MainActor in self?.previewsChanged() }
+        }
+        develop.onPreviewsUpdated = { [weak self] id in
+            ThumbnailLoader.shared.invalidate(id)
+            self?.previewsChanged()
         }
     }
 
@@ -163,10 +178,28 @@ final class LibraryModel: ObservableObject {
 
     /// Photos that an edit applies to: the loupe photo, or the grid selection.
     var targetIDs: [Int64] {
-        if mode == .loupe || selection.isEmpty {
+        if mode != .grid || selection.isEmpty {
             return focusedID.map { [$0] } ?? []
         }
         return Array(selection)
+    }
+
+    func openDevelop() {
+        if focusedID == nil { focusedID = selection.first ?? rows.first?.id }
+        if focusedID != nil { mode = .develop }
+    }
+
+    /// Pastes copied develop settings onto the selection (grid) or the open photo.
+    func pasteDevelopSettings() {
+        develop.pasteSettings(onto: targetIDs)
+    }
+
+    func copyDevelopSettings() {
+        if mode == .develop {
+            develop.copySettings()
+        } else if let id = focusedID {
+            develop.copySettings(of: id)
+        }
     }
 
     func openLoupe() {
@@ -381,12 +414,12 @@ final class LibraryModel: ObservableObject {
         if window.firstResponder is NSText { return false }
 
         switch event.keyCode {
-        case 123 where mode == .loupe: step(-1); return true          // left arrow
-        case 124 where mode == .loupe: step(1); return true           // right arrow
-        case 36, 76:                                                   // return, enter
+        case 123 where mode != .grid: step(-1); return true           // left arrow
+        case 124 where mode != .grid: step(1); return true            // right arrow
+        case 36 where mode != .develop, 76 where mode != .develop:     // return, enter
             if mode == .loupe { mode = .grid } else { openLoupe() }
             return true
-        case 53 where mode == .loupe: mode = .grid; return true       // escape
+        case 53 where mode != .grid: mode = .grid; return true        // escape
         default: break
         }
 
@@ -405,7 +438,9 @@ final class LibraryModel: ObservableObject {
         case "x": setFlag(.rejected)
         case "u": setFlag(.none)
         case "e": openLoupe()
+        case "d": openDevelop()
         case "g": mode = .grid
+        case "\\" where mode == .develop: develop.showingBefore.toggle()
         default: return false
         }
         return true

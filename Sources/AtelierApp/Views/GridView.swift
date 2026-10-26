@@ -246,6 +246,10 @@ final class ThumbnailLoader: @unchecked Sendable {
         cache.countLimit = 4000
     }
 
+    func invalidate(_ id: Int64) {
+        cache.removeObject(forKey: NSNumber(value: id))
+    }
+
     func cached(_ id: Int64) -> NSImage? {
         cache.object(forKey: NSNumber(value: id))
     }

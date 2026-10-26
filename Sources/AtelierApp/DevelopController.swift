@@ -1,0 +1,217 @@
+import AppKit
+import AtelierCore
+import Foundation
+
+/// State for the Develop view: the open photo's settings, its live proxy render, and saving.
+///
+/// Rendering is "latest wins": while one render runs, further slider changes collapse into a
+/// single follow-up render, so dragging a slider never queues up stale frames.
+@MainActor
+final class DevelopController: ObservableObject {
+    /// Long edge of the live proxy, per the PRD.
+    nonisolated static let proxySize = 2560
+
+    @Published private(set) var assetID: Int64?
+    @Published private(set) var settings = DevelopSettings()
+    @Published private(set) var image: NSImage?
+    @Published private(set) var isLoading = false
+    @Published private(set) var errorMessage: String?
+    @Published private(set) var asShotTemperature: Double = 5500
+    @Published var showingBefore = false {
+        didSet { if showingBefore != oldValue { scheduleRender() } }
+    }
+
+    /// Copy/paste settings clipboard, shared across photos.
+    @Published private(set) var clipboard: DevelopSettings?
+
+    private let catalog: Catalog
+    private let previews: PreviewCache
+    private var session: DevelopSession?
+    private var rendering = false
+    private var needsRender = false
+    private var saveTask: Task<Void, Never>?
+    private var dirty = false
+    private let queue = DispatchQueue(label: "atelier.develop", qos: .userInteractive)
+    var onPreviewsUpdated: ((Int64) -> Void)?
+
+    init(catalog: Catalog, previews: PreviewCache) {
+        self.catalog = catalog
+        self.previews = previews
+    }
+
+    // MARK: Opening
+
+    func open(_ assetID: Int64?) {
+        guard assetID != self.assetID else { return }
+        flushSave()
+        self.assetID = assetID
+        session = nil
+        image = nil
+        errorMessage = nil
+        showingBefore = false
+        guard let assetID else { return }
+
+        settings = (try? catalog.developSettings(for: assetID)) ?? .neutral
+        // Show the cached preview immediately while the editable proxy decodes.
+        let cachedPreview = previews.url(for: assetID, size: .preview)
+        if previews.has(.preview, for: assetID) { image = NSImage(contentsOf: cachedPreview) }
+
+        guard let url = try? catalog.fileURL(for: assetID) else {
+            errorMessage = "The original is offline. Connect its drive to edit this photo."
+            return
+        }
+        isLoading = true
+        queue.async {
+            let session = DevelopRenderer.shared.session(for: url, maxPixelSize: Self.proxySize)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard self.assetID == assetID else { return }
+                    self.isLoading = false
+                    guard let session else {
+                        self.errorMessage = "This file can't be opened for editing."
+                        return
+                    }
+                    self.session = session
+                    self.asShotTemperature = session.asShotTemperature
+                    self.scheduleRender()
+                }
+            }
+        }
+    }
+
+    // MARK: Editing
+
+    func value(_ parameter: DevelopSettings.Parameter) -> Double {
+        if parameter == .temperature, settings.temperature == nil { return asShotTemperature }
+        return settings[parameter]
+    }
+
+    func set(_ parameter: DevelopSettings.Parameter, to value: Double) {
+        guard assetID != nil else { return }
+        settings[parameter] = value
+        changed()
+    }
+
+    func reset(_ parameter: DevelopSettings.Parameter) {
+        guard assetID != nil else { return }
+        switch parameter {
+        case .temperature: settings.temperature = nil
+        default: settings[parameter] = DevelopSettings.neutral[parameter]
+        }
+        changed()
+    }
+
+    func resetAll() {
+        guard assetID != nil else { return }
+        settings = .neutral
+        changed()
+    }
+
+    func copySettings() {
+        clipboard = settings
+    }
+
+    func copySettings(of assetID: Int64) {
+        clipboard = (try? catalog.developSettings(for: assetID)) ?? .neutral
+    }
+
+    /// Pastes onto the open photo, or onto every photo in `assetIDs` when given.
+    func pasteSettings(onto assetIDs: [Int64]? = nil) {
+        guard let clipboard else { return }
+        let targets = assetIDs ?? assetID.map { [$0] } ?? []
+        for id in targets where id != assetID {
+            try? catalog.saveDevelopSettings(clipboard, for: id)
+            refreshPreviews(for: id, settings: clipboard)
+        }
+        if let assetID, targets.contains(assetID) {
+            settings = clipboard
+            changed()
+        }
+    }
+
+    private func changed() {
+        dirty = true
+        scheduleRender()
+        scheduleSave()
+    }
+
+    // MARK: Rendering
+
+    private func scheduleRender() {
+        guard let session else { return }
+        if rendering {
+            needsRender = true
+            return
+        }
+        rendering = true
+        let settings = showingBefore ? DevelopSettings.neutral : self.settings
+        let assetID = self.assetID
+        queue.async {
+            let cgImage = session.render(settings)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    self.rendering = false
+                    if self.assetID == assetID, let cgImage {
+                        self.image = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+                    }
+                    if self.needsRender {
+                        self.needsRender = false
+                        self.scheduleRender()
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: Saving
+
+    private func scheduleSave() {
+        saveTask?.cancel()
+        saveTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled else { return }
+            self?.flushSave()
+        }
+    }
+
+    /// Writes pending settings and refreshes the grid thumbnail and loupe preview.
+    func flushSave() {
+        saveTask?.cancel()
+        guard dirty, let assetID else { return }
+        dirty = false
+        let settings = self.settings
+        do {
+            try catalog.saveDevelopSettings(settings, for: assetID)
+        } catch {
+            errorMessage = "Could not save: \(error.localizedDescription)"
+            return
+        }
+        if let session {
+            let previews = self.previews
+            queue.async {
+                if let cgImage = session.render(settings) {
+                    try? previews.store(cgImage, for: assetID, size: .preview)
+                    try? previews.store(cgImage, for: assetID, size: .thumbnail)
+                }
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated { self.onPreviewsUpdated?(assetID) }
+                }
+            }
+        }
+    }
+
+    /// Re-renders previews for a photo that is not open, after pasting settings onto it.
+    private func refreshPreviews(for assetID: Int64, settings: DevelopSettings) {
+        guard let url = try? catalog.fileURL(for: assetID) else { return }
+        let previews = self.previews
+        DispatchQueue.global(qos: .utility).async {
+            guard let session = DevelopRenderer.shared.session(for: url, maxPixelSize: Self.proxySize),
+                  let cgImage = session.render(settings) else { return }
+            try? previews.store(cgImage, for: assetID, size: .preview)
+            try? previews.store(cgImage, for: assetID, size: .thumbnail)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated { self.onPreviewsUpdated?(assetID) }
+            }
+        }
+    }
+}

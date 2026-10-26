@@ -5,7 +5,9 @@ struct InspectorView: View {
     @EnvironmentObject private var model: LibraryModel
 
     var body: some View {
-        if let detail = model.detail {
+        if model.mode == .develop {
+            DevelopPanel(develop: model.develop)
+        } else if let detail = model.detail {
             DetailForm(detail: detail)
                 .id(detail.asset.id)
         } else {
