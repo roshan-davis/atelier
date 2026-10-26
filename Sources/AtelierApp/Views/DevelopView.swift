@@ -253,6 +253,8 @@ struct DevelopPanel: View {
                         }
                     }
                 }
+                // Lay everything out at exactly the column's width so nothing spills past it.
+                .containerRelativeFrame(.horizontal)
             }
             Divider()
             VStack(spacing: 8) {
@@ -319,6 +321,7 @@ private struct ToneCurvePanel: View {
                     ForEach(DevelopSettings.CurveChannel.allCases, id: \.self) { Text($0.label).tag($0.rawValue) }
                 }
                 .pickerStyle(.segmented)
+                .controlSize(.small)
                 .labelsHidden()
                 Button {
                     develop.setPoints([], for: channel)
@@ -499,6 +502,7 @@ private struct HSLPanel: View {
                 Text("All").tag("All")
             }
             .pickerStyle(.segmented)
+            .controlSize(.small)
             .labelsHidden()
             ForEach(channels, id: \.self) { channel in
                 if channels.count > 1 { GroupHeading(title: channel.rawValue) }
@@ -651,6 +655,7 @@ private struct PanelSection<Content: View>: View {
 /// RGB histogram of the current render, with clipping warnings.
 private struct HistogramView: View {
     let histogram: Histogram?
+    @AppStorage("develop.showClipping") private var showClipping = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -691,7 +696,7 @@ private struct HistogramView: View {
 
     @ViewBuilder
     private func clipping(_ name: String, _ share: Double?) -> some View {
-        if let share, share >= 0.005 {
+        if showClipping, let share, share >= 0.005 {
             Label("\(name) clipped \(String(format: "%.1f", share * 100))%", systemImage: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
         } else {

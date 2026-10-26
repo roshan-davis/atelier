@@ -50,6 +50,10 @@ struct AtelierApp: App {
                 Button("Refresh Volumes") { model.refreshVolumes() }
                     .keyboardShortcut("r", modifiers: [.command])
             }
+            CommandGroup(replacing: .help) {
+                Button("Keyboard Shortcuts") { model.showingShortcuts = true }
+                    .keyboardShortcut("/", modifiers: [.command])
+            }
             CommandMenu("Develop") {
                 Button("Copy Settings") { model.copyDevelopSettings() }
                     .keyboardShortcut("c", modifiers: [.command, .shift])
@@ -70,6 +74,12 @@ struct AtelierApp: App {
                 .disabled(model.mode != .develop)
             }
         }
+
+        // Atelier > Settings… (⌘,)
+        Settings {
+            SettingsView()
+                .environmentObject(model)
+        }
     }
 }
 
@@ -88,7 +98,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         _ = MainActor.assumeIsolated {
-            try? model?.catalog.snapshot()
+            let keep = UserDefaults.standard.object(forKey: "backups.keep") as? Int ?? 10
+            try? model?.catalog.snapshot(keep: max(1, keep))
         }
     }
 }

@@ -1,6 +1,6 @@
 # Photo Catalog & Editor PRD
 
-Oct 25, 2026 · Rosh · Revised Oct 26, 2026 (UX principles and import flow; import entries; Phase 1 before Phase 0; before/after compare views; export dialog; panels, zoom and right-click menus; Tone Curve, HSL / Color and Color Grading panels; editable point curve, panel below the toolbar, slider rows)
+Oct 25, 2026 · Rosh · Revised Oct 26, 2026 (UX principles and import flow; import entries; Phase 1 before Phase 0; before/after compare views; export dialog; panels, zoom and right-click menus; Tone Curve, HSL / Color and Color Grading panels; editable point curve, panel below the toolbar, slider rows; Settings window, custom keys, resizable panel)
 
 Live doc with diagrams: https://claude.ai/artifact/1T8xvdGuJTcGPTHStzDJvn
 
@@ -128,7 +128,7 @@ Edits are a versioned list of parameters stored in the catalog, rendered live on
 ### Tools and requirements
 
 - Live preview at 60 fps on a 2560 px proxy; full-resolution render once the photo is zoomed past fit, and for export.
-- The right column sits beside the photo and below the toolbar (never under it), like Lightroom's panel strip.
+- The right column sits beside the photo and below the toolbar (never under it), like Lightroom's panel strip. Drag its left edge to resize it (280 to 560 points); its content always fits the column.
 - Panels follow Lightroom's layout and order in the right column, each collapsible, remembered between sessions, with a dot and a reset button when it has edits. Right-click a panel header for Solo Mode (one panel open at a time), Expand All and Collapse All.
   - Histogram: RGB, from the current render, with shadow and highlight clipping warnings.
   - Basic: White Balance (Temp, Tint), Tone (Exposure, Contrast, Highlights, Shadows, Whites, Blacks), Presence (Texture, Clarity, Dehaze, Vibrance, Saturation).
@@ -148,6 +148,18 @@ Edits are a versioned list of parameters stored in the catalog, rendered live on
 - Before and after, chosen from a bar under the photo or with Y: side by side, a slider you drag across the photo (original on the left, edit on the right), and a full toggle with \.
 - Color management: soft-proofing for sRGB web output and print profiles.
 - Artwork profile: a DCP-style profile built from a ColorChecker shot, applied to all artwork photos for consistent color.
+
+### Settings and keyboard
+
+Atelier > Settings… (⌘,) has these tabs:
+- **General:** catalog location (Show in Finder), photo count, backups kept on quit (default 10), Back Up Now, preview cache size.
+- **Import:** default for new imports (leave files or copy into the library folder) and the library folder. The Import dialog starts from these.
+- **Develop:** what a click or Z zooms to (50%, 100%, 200%, 400%), solo mode, and the histogram clipping warnings.
+- **Export:** default export folder and whether to show exports in Finder.
+- **Metadata:** automatically write ratings, flags, labels, keywords, title and caption to XMP sidecars as they change.
+- **Keyboard:** every single-key command with its key (Lightroom's by default: 0–5 rating, 6–9 labels, P/X/U flags, G/E/D views, \ before, Y before/after, Z zoom). Click a key and press a new one; a key moves from any action that had it; Delete removes it, Esc cancels; Restore Defaults. Single-key commands only act in the library window, never while typing or in Settings.
+
+Help > Keyboard Shortcuts (⌘/) lists all single-key commands with their current keys plus the menu shortcuts, with a link to change keys.
 
 ### Export dialog
 

@@ -142,7 +142,7 @@ final class ZoomScrollView: NSScrollView {
     }
 
     func toggleZoom(at point: NSPoint) {
-        let next: ZoomLevel = lastReport.isZoomedPastFit ? .fit : .percent(100)
+        let next: ZoomLevel = lastReport.isZoomedPastFit ? .fit : .percent(LibraryModel.clickZoomPercent)
         applyLevel(next, anchor: point)
         onZoomChange?(next)
     }

@@ -1,9 +1,11 @@
+import AppKit
 import AtelierCore
 import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject private var model: LibraryModel
     @State private var showInspector = true
+    @AppStorage("panel.width") private var panelWidth = 320.0
 
     var body: some View {
         NavigationSplitView {
@@ -34,9 +36,10 @@ struct ContentView: View {
                 }
                 .frame(maxWidth: .infinity)
                 if showInspector {
-                    Divider()
+                    PanelResizeHandle(width: $panelWidth)
                     InspectorView()
-                        .frame(width: model.mode == .develop ? 320 : 290)
+                        .frame(width: panelWidth)
+                        .clipped()
                         .background(Color(nsColor: .controlBackgroundColor))
                 }
             }
@@ -80,6 +83,10 @@ struct ContentView: View {
         .sheet(isPresented: $model.showingExportSheet) {
             ExportSheet()
         }
+        .sheet(isPresented: $model.showingShortcuts) {
+            ShortcutsSheet()
+        }
+        .background(WindowAccessor { model.mainWindow = $0 })
     }
 }
 
@@ -221,5 +228,54 @@ private struct ProblemsView: View {
             .frame(width: 380, height: 220)
         }
         .padding(14)
+    }
+}
+
+/// The divider between the photo and the right panel; drag it to resize the panel.
+private struct PanelResizeHandle: View {
+    @Binding var width: Double
+    @State private var startWidth: Double?
+
+    var body: some View {
+        Divider()
+            .overlay(
+                Color.clear
+                    .frame(width: 8)
+                    .contentShape(Rectangle())
+                    .onHover { inside in
+                        if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+                    }
+                    .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                        .onChanged { value in
+                            let start = startWidth ?? width
+                            startWidth = start
+                            width = min(560, max(280, start - value.translation.width))
+                        }
+                        .onEnded { _ in startWidth = nil })
+            )
+            .help("Drag to resize the panel")
+    }
+}
+
+/// Hands the hosting NSWindow to a closure once the view is in a window.
+struct WindowAccessor: NSViewRepresentable {
+    let onWindow: (NSWindow?) -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = WindowReportingView()
+        view.onWindow = onWindow
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    private final class WindowReportingView: NSView {
+        var onWindow: ((NSWindow?) -> Void)?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            let window = self.window
+            DispatchQueue.main.async { [onWindow] in onWindow?(window) }
+        }
     }
 }
