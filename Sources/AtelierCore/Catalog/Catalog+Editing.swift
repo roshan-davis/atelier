@@ -6,14 +6,14 @@ import GRDB
 extension Catalog {
     public func setRating(_ rating: Int, for assetIDs: [Int64]) throws {
         let rating = min(max(rating, 0), 5)
-        try writer.write { db in
+        _ = try writer.write { db in
             try AssetMetadata.filter(keys: assetIDs)
                 .updateAll(db, Column("rating").set(to: rating), Column("xmpDirty").set(to: true))
         }
     }
 
     public func setFlag(_ flag: Flag, for assetIDs: [Int64]) throws {
-        try writer.write { db in
+        _ = try writer.write { db in
             try AssetMetadata.filter(keys: assetIDs)
                 .updateAll(db, Column("flag").set(to: flag.rawValue), Column("xmpDirty").set(to: true))
         }
@@ -32,7 +32,7 @@ extension Catalog {
     }
 
     public func setTitle(_ title: String?, caption: String?, for assetID: Int64) throws {
-        try writer.write { db in
+        _ = try writer.write { db in
             try AssetMetadata.filter(key: assetID)
                 .updateAll(db, Column("title").set(to: title?.nilIfBlank),
                            Column("caption").set(to: caption?.nilIfBlank),

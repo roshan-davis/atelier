@@ -37,7 +37,7 @@ extension Catalog {
             }
         }
         result.written = written.count
-        try writer.write { db in
+        _ = try writer.write { db in
             try AssetMetadata.filter(keys: written).updateAll(db, Column("xmpDirty").set(to: false))
         }
         return result

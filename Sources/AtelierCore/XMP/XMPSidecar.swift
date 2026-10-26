@@ -59,8 +59,8 @@ public enum XMPSidecar {
            let values = CGImageMetadataTagCopyValue(tag) as? [Any] {
             fields.keywords = values.compactMap(stringValue)
         }
-        fields.title = string(metadata, "dc:title")
-        fields.caption = string(metadata, "dc:description")
+        fields.title = altText(metadata, "dc:title")
+        fields.caption = altText(metadata, "dc:description")
         // Paths need the prefix registered; do that on a copy since `metadata` may be immutable.
         if let mutable = CGImageMetadataCreateMutableCopy(metadata) {
             CGImageMetadataRegisterNamespaceForPrefix(mutable, atelierNamespace as CFString,
@@ -129,18 +129,38 @@ public enum XMPSidecar {
         }
     }
 
-    /// dc:title and dc:description are language alternatives keyed by x-default.
+    /// dc:title and dc:description are rdf:Alt language alternatives keyed by x-default.
+    /// ImageIO has no public way to build one, so parse a tiny XMP packet and copy its tag over.
     private static func setAltText(_ metadata: CGMutableImageMetadata, name: String, _ value: String?) {
         let path = "dc:\(name)" as CFString
-        guard let value else {
-            CGImageMetadataRemoveTagWithPath(metadata, nil, path)
-            return
+        CGImageMetadataRemoveTagWithPath(metadata, nil, path)
+        guard let value else { return }
+        let packet = """
+            <x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">\
+            <rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:\(name)><rdf:Alt>\
+            <rdf:li xml:lang="x-default">\(xmlEscaped(value))</rdf:li></rdf:Alt></dc:\(name)>\
+            </rdf:Description></rdf:RDF></x:xmpmeta>
+            """
+        guard let parsed = CGImageMetadataCreateFromXMPData(Data(packet.utf8) as CFData),
+              let tag = CGImageMetadataCopyTagWithPath(parsed, nil, path) else { return }
+        CGImageMetadataSetTagWithPath(metadata, nil, path, tag)
+    }
+
+    /// Reads a plain or language-alternative string.
+    private static func altText(_ metadata: CGImageMetadata, _ path: String) -> String? {
+        if let value = string(metadata, path) { return value }
+        guard let tag = CGImageMetadataCopyTagWithPath(metadata, nil, path as CFString),
+              let value = CGImageMetadataTagCopyValue(tag) else { return nil }
+        if let items = value as? [Any] { return items.lazy.compactMap(stringValue).first }
+        if let dictionary = value as? [String: Any] {
+            return (dictionary["x-default"] ?? dictionary.values.first).flatMap(stringValue)
         }
-        if let tag = CGImageMetadataTagCreate(kCGImageMetadataNamespaceDublinCore,
-                                              kCGImageMetadataPrefixDublinCore,
-                                              name as CFString, .alternateText,
-                                              ["x-default": value] as CFDictionary) {
-            CGImageMetadataSetTagWithPath(metadata, nil, path, tag)
-        }
+        return stringValue(value)
+    }
+
+    private static func xmlEscaped(_ text: String) -> String {
+        text.replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
     }
 }
