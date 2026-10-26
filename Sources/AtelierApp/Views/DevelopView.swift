@@ -243,7 +243,8 @@ struct DevelopPanel: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ScrollView {
+            GeometryReader { geometry in
+            ScrollView(.vertical) {
                 VStack(spacing: 0) {
                     PanelSection(title: "Histogram", isExpanded: isExpanded("histogram"), soloMode: $soloMode,
                                  expandAll: expandAll, collapseAll: collapseAll) {
@@ -273,8 +274,9 @@ struct DevelopPanel: View {
                         }
                     }
                 }
-                // Lay everything out at exactly the column's width so nothing spills past it.
-                .containerRelativeFrame(.horizontal)
+                // Lay everything out at exactly the panel's measured width so nothing spills past it.
+                .frame(width: geometry.size.width)
+            }
             }
             Divider()
             VStack(spacing: 8) {

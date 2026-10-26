@@ -20,3 +20,13 @@ jobs:
         run: swift build
       - name: Test
         run: swift test
+      - name: Layout snapshots
+        run: |
+          export ATELIER_SNAPSHOTS="$PWD/snapshots"
+          perl -e 'alarm 120; exec @ARGV' .build/debug/AtelierApp
+          ls -l snapshots
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: layout-snapshots
+          path: snapshots

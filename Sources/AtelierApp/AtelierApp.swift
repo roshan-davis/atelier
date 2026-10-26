@@ -12,7 +12,14 @@ struct AtelierApp: App {
             ContentView()
                 .environmentObject(model)
                 .frame(minWidth: 1000, minHeight: 640)
-                .onAppear { appDelegate.model = model }
+                .onAppear {
+                    appDelegate.model = model
+                    if let folder = LayoutSnapshots.outputFolder {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                            LayoutSnapshots.run(model: model, into: folder)
+                        }
+                    }
+                }
         }
         .commands {
             CommandGroup(after: .newItem) {
