@@ -44,6 +44,7 @@ struct SidebarData: Equatable, Sendable {
 final class LibraryModel: ObservableObject {
     let catalog: Catalog
     let previews: PreviewCache
+    let previewScheduler: PreviewScheduler
 
     @Published var rows: [AssetRow] = []
     @Published var sidebar = SidebarData()
@@ -76,7 +77,7 @@ final class LibraryModel: ObservableObject {
     private var rowsTask: Task<Void, Never>?
     private var sidebarTask: Task<Void, Never>?
     private var keyMonitor: Any?
-    private var previewRequests = Set<Int64>()
+    private var revisionScheduled = false
 
     init() {
         let packageURL = Catalog.defaultPackageURL
@@ -86,11 +87,15 @@ final class LibraryModel: ObservableObject {
             fatalError("Could not open the catalog at \(packageURL.path): \(error)")
         }
         previews = PreviewCache(rootURL: catalog.previewsURL!)
+        previewScheduler = PreviewScheduler(cache: previews)
         try? catalog.refreshVolumes()
         observeRows()
         observeSidebar()
         installKeyMonitor()
         observeMounts()
+        previewScheduler.onFinish { [weak self] _, _ in
+            Task { @MainActor in self?.previewsChanged() }
+        }
     }
 
     // MARK: Observation
@@ -289,20 +294,15 @@ final class LibraryModel: ObservableObject {
     }
 
     func runImport(sources: [URL], options: ImportOptions) {
-        let importer = Importer(catalog: catalog, previews: previews)
+        let importer = Importer(catalog: catalog, previews: nil, scheduler: previewScheduler)
         importProgress = ImportStatus(phase: "Scanning…", fraction: nil)
         shownImportGroup = nil
         importTask = Task.detached {
             let result = await importer.run(sources: sources, options: options) { progress in
                 let phase: String
                 let fraction: Double?
-                if progress.processed < progress.total {
-                    phase = "Importing \(progress.processed + 1) of \(progress.total)"
-                    fraction = Double(progress.processed) / Double(max(progress.total, 1))
-                } else {
-                    phase = "Building previews \(progress.previewsBuilt) of \(progress.imported)"
-                    fraction = Double(progress.previewsBuilt) / Double(max(progress.imported, 1))
-                }
+                phase = "Importing \(min(progress.processed + 1, progress.total)) of \(progress.total)"
+                fraction = Double(progress.processed) / Double(max(progress.total, 1))
                 let groupID = progress.importGroupId
                 Task { @MainActor in
                     // Show the entry right away so photos appear as they arrive.
@@ -313,7 +313,6 @@ final class LibraryModel: ObservableObject {
                     if self.importTask != nil {
                         self.importProgress = ImportStatus(phase: phase, fraction: fraction)
                     }
-                    self.previewRevision += 1
                 }
             }
             await MainActor.run {
@@ -339,24 +338,29 @@ final class LibraryModel: ObservableObject {
 
     // MARK: Previews
 
+    /// The cached preview, or nil after queueing it. Thumbnails come first; the loupe's
+    /// 2560 px preview is marked urgent so it jumps the queue.
     func thumbnailURL(for id: Int64, size: PreviewCache.Size = .thumbnail) -> URL? {
-        let url = previews.url(for: id, size: size)
-        if FileManager.default.fileExists(atPath: url.path) { return url }
-        requestPreview(for: id)
+        if previews.has(size, for: id) { return previews.url(for: id, size: size) }
+        if let source = try? catalog.fileURL(for: id) {
+            previewScheduler.request(size, for: id, source: source, urgent: size == .preview || mode == .grid)
+        }
         return nil
     }
 
-    /// Generates missing previews on demand, for example after the cache was cleared.
-    func requestPreview(for id: Int64) {
-        guard !previewRequests.contains(id), let url = try? catalog.fileURL(for: id) else { return }
-        previewRequests.insert(id)
-        let previews = self.previews
-        Task.detached(priority: .utility) {
-            try? previews.generate(for: id, from: url)
-            await MainActor.run {
-                self.previewRequests.remove(id)
-                self.previewRevision += 1
-            }
+    /// A grid cell scrolled away before its thumbnail started.
+    func cancelThumbnail(for id: Int64) {
+        previewScheduler.cancel(.thumbnail, for: id)
+    }
+
+    /// Coalesces preview completions into one grid refresh every 150 ms.
+    private func previewsChanged() {
+        guard !revisionScheduled else { return }
+        revisionScheduled = true
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(150))
+            revisionScheduled = false
+            previewRevision += 1
         }
     }
 

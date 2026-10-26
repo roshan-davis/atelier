@@ -95,7 +95,7 @@ The catalog never modifies an original file. Every photo is a database record po
 
 - Formats: all RAW formats Apple's RAW engine supports, plus DNG, JPEG, HEIC, TIFF, PNG, WebP, PSD (composite only). Video files cataloged with poster frames.
 - Import applies a metadata preset (copyright, creator, keywords) and a develop preset.
-- Previews: a 256 px thumbnail and a 2560 px preview per photo, generated in the background. Optional smart preview (lossy DNG, 2560 px long edge) for offline editing.
+- Previews: a 256 px thumbnail and a 2560 px preview per photo, generated in the background. Thumbnails come first, from the file's embedded preview when it is large enough, and appear in the grid while the import is still running; 2560 px previews follow at lower priority, except the photo open in the loupe, which jumps the queue. Optional smart preview (lossy DNG, 2560 px long edge) for offline editing.
 - Metadata: EXIF, IPTC and XMP read on import. Ratings, labels, keywords and develop settings written to XMP sidecars on demand or automatically, so other apps can read them.
 - Organization: folders mirror disk; collections and collection sets are virtual; smart collections are saved queries; stacks group versions and bursts.
 - Import entries: every import lands in a named entry listed in the sidebar (default name: the source folder, or the event name for copied imports). An import can create a new entry or add to an existing one; files already in the catalog join the entry without being imported twice. Entries can be renamed and deleted, and photos added to or removed from them by hand. Removing a photo from an entry, or deleting an entry, never removes the photo from the catalog.
@@ -245,7 +245,7 @@ Targets assume an M4 Mac and a catalog of 100k photos. They are starting targets
 
 | Area | Requirement |
 | --- | --- |
-| Grid performance | Scroll 100k thumbnails without dropped frames; filter results in under 200 ms |
+| Grid performance | Scroll 100k thumbnails without dropped frames; filter results in under 200 ms; opening a folder or import shows cached thumbnails immediately, and missing ones load asynchronously, on-screen first |
 | Import | Catalog and thumbnail 1,000 RAW files in under 3 minutes from local SSD; NAS imports never block the UI |
 | Develop | Slider changes reflect in under 50 ms on the proxy; loupe opens in under 300 ms from preview cache |
 | AI jobs | Run in a separate process; a crash or out-of-memory never takes down the app or corrupts the catalog |
@@ -262,7 +262,7 @@ Five phases, each closed by a gate you can test on your own photos. No dates yet
 1. **Phase 0: Spike.** RAW decode on Metal, ComfyUI round-trip, SQLite catalog prototype.
    - Gate 1: a RAW renders, goes through ComfyUI and returns as a version.
 2. **Phase 1: Catalog MVP.** Referenced and copied import, import entries, grid and loupe, ratings, keywords, collections, XMP sidecars.
-   - Gate 2: 10k photos from SSD and NAS cataloged without errors.
+   - Gate 2: a real shoot (a few hundred photos) from the SSD and one from the NAS cataloged without errors, with folders opening fast. Automated scale tests in CI cover larger catalogs (filtering 20k photos, importing 300 with previews).
 3. **Phase 2: Develop basics and Edit In.** Basic panel, crop, history, presets, export presets, Photoshop and Affinity round-trip.
    - Gate 3: one full shoot culled, edited and exported without Lightroom.
 4. **Phase 3: AI MVP.** ComfyUI recipes, masked compositing, model registry, license gate on export.

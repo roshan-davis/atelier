@@ -51,7 +51,7 @@ public struct ImportProgress: Sendable {
 }
 
 enum ImportOutcome {
-    case imported(Int64)
+    case imported(Int64, URL)
     /// Already in the catalog; it still joins the import entry.
     case existing(Int64)
 }
@@ -60,10 +60,15 @@ enum ImportOutcome {
 public final class Importer: Sendable {
     let catalog: Catalog
     let previews: PreviewCache?
+    let scheduler: PreviewScheduler?
 
-    public init(catalog: Catalog, previews: PreviewCache?) {
+    /// With a scheduler, each photo's thumbnail is queued as soon as it is cataloged and the
+    /// 2560 px previews follow on the slow lane, so the grid fills in during the import.
+    /// Without one, `previews` are built synchronously at the end.
+    public init(catalog: Catalog, previews: PreviewCache?, scheduler: PreviewScheduler? = nil) {
         self.catalog = catalog
-        self.previews = previews
+        self.previews = previews ?? scheduler?.cache
+        self.scheduler = scheduler
     }
 
     /// Expands folders recursively into supported image files, sorted by path.
@@ -105,10 +110,11 @@ public final class Importer: Sendable {
             do {
                 let assetID: Int64
                 switch try importFile(file, options: options) {
-                case .imported(let id):
+                case .imported(let id, let url):
                     state.imported += 1
                     state.importedAssetIDs.append(id)
                     assetID = id
+                    if options.buildPreviews { scheduler?.request(.thumbnail, for: id, source: url) }
                 case .existing(let id):
                     state.skipped += 1
                     assetID = id
@@ -123,7 +129,13 @@ public final class Importer: Sendable {
             progress(state)
         }
 
-        if options.buildPreviews, let previews {
+        if options.buildPreviews, let scheduler {
+            for id in state.importedAssetIDs {
+                if let url = try? catalog.fileURL(for: id) {
+                    scheduler.request(.preview, for: id, source: url)
+                }
+            }
+        } else if options.buildPreviews, let previews {
             let base = state
             state.previewsBuilt = await buildPreviews(for: state.importedAssetIDs, cache: previews) { built in
                 var snapshot = base
@@ -171,6 +183,7 @@ public final class Importer: Sendable {
         let relativeFolder = VolumeIdentity.relativePath(of: fileURL.deletingLastPathComponent(),
                                                          inVolumeAt: volume.rootURL)
         let filename = fileURL.lastPathComponent
+        let importedURL = fileURL
 
         return try catalog.writer.write { db -> ImportOutcome in
             var volumeRecord = try Volume.filter(Column("identityKey") == volume.identityKey).fetchOne(db)
@@ -217,7 +230,7 @@ public final class Importer: Sendable {
             ).insert(db)
 
             try Catalog.addKeywords(db, names: metadata.xmp.keywords + options.keywords, to: [assetID])
-            return .imported(assetID)
+            return .imported(assetID, importedURL)
         }
     }
 

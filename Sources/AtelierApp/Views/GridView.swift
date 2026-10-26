@@ -1,4 +1,5 @@
 import AppKit
+import ImageIO
 import AtelierCore
 import SwiftUI
 
@@ -185,6 +186,9 @@ final class ThumbnailItem: NSCollectionViewItem {
     @MainActor
     func configure(with row: AssetRow, model: LibraryModel) {
         let changedPhoto = assetID != row.id
+        if changedPhoto, let previous = assetID, thumbnailView.image == nil {
+            model.cancelThumbnail(for: previous)
+        }
         assetID = row.id
         nameLabel.stringValue = row.filename
         badgeLabel.stringValue = Self.badge(for: row)
@@ -246,9 +250,17 @@ final class ThumbnailLoader: @unchecked Sendable {
         cache.object(forKey: NSNumber(value: id))
     }
 
+    /// Decodes fully off the main thread; NSImage(contentsOf:) would defer decoding to the first draw.
+    private static func decode(_ url: URL) -> NSImage? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let image = CGImageSourceCreateImageAtIndex(
+                source, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary) else { return nil }
+        return NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))
+    }
+
     func load(_ id: Int64, from url: URL, completion: @escaping @MainActor (NSImage?) -> Void) {
         queue.async {
-            let image = NSImage(contentsOf: url)
+            let image = Self.decode(url)
             if let image { self.cache.setObject(image, forKey: NSNumber(value: id)) }
             DispatchQueue.main.async {
                 MainActor.assumeIsolated { completion(image) }
