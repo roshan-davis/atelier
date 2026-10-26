@@ -316,7 +316,7 @@ struct EditInSettings: View {
         Form {
             Section {
                 if editors.isEmpty {
-                    Text("No photo editors found. Add one with the + button.")
+                    Text("No photo editors found. Click Add App… to pick one.")
                         .foregroundStyle(.secondary)
                 }
                 ForEach($editors) { $editor in
