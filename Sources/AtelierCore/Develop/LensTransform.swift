@@ -124,7 +124,7 @@ public struct LensGeometry: Sendable {
         (focalLength35 > 1 ? focalLength35 : 35) / 36
     }
 
-    public var isIdentity: Bool { distortion == 0 && matrix == .identity }
+    public var isIdentity: Bool { distortion == 0 && matrix.isNearlyIdentity }
 
     /// Where a corrected-photo point (0...1 from the top left) lands in the output.
     public func outputPoint(fromSource point: CGPoint) -> CGPoint {
@@ -257,6 +257,13 @@ public struct Matrix3: Equatable, Sendable {
         Matrix3(rows: [SIMD3(1, 0, x), SIMD3(0, 1, y), SIMD3(0, 0, 1)])
     }
 
+    /// Equal to the identity but for rounding (f × 1/f is not always exactly 1).
+    var isNearlyIdentity: Bool {
+        zip(rows, Matrix3.identity.rows).allSatisfy { a, b in
+            abs(a.x - b.x) < 1e-9 && abs(a.y - b.y) < 1e-9 && abs(a.z - b.z) < 1e-9
+        }
+    }
+
     public static func * (a: Matrix3, b: Matrix3) -> Matrix3 {
         let columns = (0..<3).map { j in SIMD3(b.rows[0][j], b.rows[1][j], b.rows[2][j]) }
         return Matrix3(rows: a.rows.map { row in
@@ -338,7 +345,7 @@ public enum UprightSolver {
         }
         if mode == .vertical, !free.contains(0) { return nil }
         let regularization = mode == .auto ? 0.08 : 0.0002
-        let limits = mode == .auto ? [20.0, 20.0, 15.0] : [40.0, 40.0, 45.0]
+        let limits = mode == .auto ? [20.0, 20.0, 15.0] : [50.0, 50.0, 45.0]
         let focal = LensGeometry.focal(focalLength35)
 
         func cost(_ params: [Double], _ lines: [Line]) -> Double {

@@ -144,8 +144,8 @@ enum LayoutSnapshots {
         UserDefaults.standard.set("histogram,basic,lensCorrections,transform", forKey: "develop.expandedPanels")
         develop.setUpright(.guided)
         develop.setGuides([
-            .init(start: .init(x: 0.3, y: 0.85), end: .init(x: 0.36, y: 0.2)),
-            .init(start: .init(x: 0.72, y: 0.85), end: .init(x: 0.66, y: 0.2)),
+            .init(start: .init(x: 0.3, y: 0.85), end: .init(x: 0.33, y: 0.2)),
+            .init(start: .init(x: 0.72, y: 0.85), end: .init(x: 0.69, y: 0.2)),
         ])
         develop.setConstrainCrop(true)
         develop.set(.lensDistortion, to: 15)

@@ -90,8 +90,8 @@ final class TransformTests: XCTestCase {
 
     func testGuidesSolveTheirOwnLines() throws {
         // Two leaning guides, as drawn along a painting's sides.
-        let guides = [LineSegment(start: CGPoint(x: 0.3, y: 0.85), end: CGPoint(x: 0.36, y: 0.2)),
-                      LineSegment(start: CGPoint(x: 0.72, y: 0.85), end: CGPoint(x: 0.66, y: 0.2))]
+        let guides = [LineSegment(start: CGPoint(x: 0.3, y: 0.85), end: CGPoint(x: 0.33, y: 0.2)),
+                      LineSegment(start: CGPoint(x: 0.72, y: 0.85), end: CGPoint(x: 0.69, y: 0.2))]
         let upright = try XCTUnwrap(UprightSolver.solve(.guided, lines: guides, size: size, focalLength35: 50))
         var settings = DevelopSettings()
         settings.upright = upright
@@ -175,13 +175,15 @@ final class TransformTests: XCTestCase {
         let renderer = DevelopRenderer()
         let red = CIImage(color: CIColor(red: 1, green: 0, blue: 0)).cropped(to: CGRect(x: 0, y: 0, width: 300, height: 200))
         var settings = DevelopSettings()
-        settings[.transformVertical] = -60
+        settings[.transformRotate] = 10
         let open = LensGeometry(settings: settings, size: red.extent.size, focalLength35: 35).apply(to: red)
         XCTAssertEqual(open.extent, red.extent)
         let openImage = try XCTUnwrap(renderer.cgImage(open, colorSpace: DevelopRenderer.sRGB))
-        // The top widens, so the bottom corners are left empty (gray); the middle is the photo.
-        let corner = pixel(openImage, x: 2, y: 197)
-        XCTAssertLessThan(abs(corner.0 - corner.1), 10, "bottom corner \(corner)")
+        // Turning leaves the corners empty (gray); the middle is the photo.
+        for (x, y) in [(2, 2), (297, 2), (2, 197), (297, 197)] {
+            let corner = pixel(openImage, x: x, y: y)
+            XCTAssertLessThan(abs(corner.0 - corner.1), 10, "corner \(x),\(y) \(corner)")
+        }
         let middle = pixel(openImage, x: 150, y: 100)
         XCTAssertGreaterThan(middle.0, 200)
         XCTAssertLessThan(middle.1, 40)
