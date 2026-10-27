@@ -2,6 +2,7 @@
 
 A personal Lightroom-style photo catalog and editor for macOS (Swift, SwiftUI + AppKit, Apple Silicon, macOS 15+).
 Scope and architecture follow [Requirements/Atelier-PRD.md](Requirements/Atelier-PRD.md), the source of truth; update it in the same PR as any change it covers.
+Agents working in this repo follow [AGENTS.md](AGENTS.md).
 
 ## Features
 
