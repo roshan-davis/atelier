@@ -75,8 +75,10 @@ public final class DevelopRenderer: @unchecked Sendable {
 
     /// Steps 2 to 7 of the pipeline; white balance and exposure happen at decode.
     /// `scale` is the rendered size relative to the full-size photo, so pixel radii such as
-    /// sharpening look the same on the live proxy and in an export.
-    public static func applyAdjustments(_ settings: DevelopSettings, to input: CIImage, scale: Double = 1) -> CIImage {
+    /// sharpening look the same on the live proxy and in an export. `masks` supplies the masks'
+    /// drawn parts lined up with the crop; `overlay` names a mask to tint red on top.
+    public static func applyAdjustments(_ settings: DevelopSettings, to input: CIImage, scale: Double = 1,
+                                        masks: MaskProvider? = nil, overlay: UUID? = nil) -> CIImage {
         var image = input
         let extent = input.extent
         let longEdge = Double(max(extent.width, extent.height))
@@ -168,6 +170,12 @@ public final class DevelopRenderer: @unchecked Sendable {
             image = filter.outputImage?.cropped(to: extent) ?? image
         }
 
+        // Local adjustments, before vignetting and grain.
+        let beforeMasks = image
+        if !settings.masks.isEmpty {
+            image = applyMasks(settings, to: image, scale: scale, masks: masks)
+        }
+
         // Effects
         if settings.vignette != 0 {
             let filter = CIFilter.vignetteEffect()
@@ -182,6 +190,9 @@ public final class DevelopRenderer: @unchecked Sendable {
         if settings.grain > 0 {
             image = addGrain(image, amount: settings.grain / 100, size: settings.grainSize / 100, scale: scale,
                              extent: extent)
+        }
+        if let overlay, let mask = settings.masks.first(where: { $0.id == overlay }) {
+            image = self.overlay(mask, on: image, base: beforeMasks, provider: masks)
         }
         return image
     }
@@ -378,6 +389,10 @@ public final class DevelopSession: @unchecked Sendable {
     /// The decoded photo's size at `renderScale`, upright, before any crop or turn.
     public let sourceSize: CGSize
     private let lock = NSLock()
+    private let brushCache = BrushCache()
+    /// Select Subject's mask on the upright photo, found once per session; .some(nil) when
+    /// Vision found nothing.
+    private var subjectMask: CIImage??
 
     init?(url: URL, maxPixelSize: Int?, renderer: DevelopRenderer) {
         self.url = url
@@ -416,8 +431,9 @@ public final class DevelopSession: @unchecked Sendable {
     }
 
     /// The developed image in the working space. With `cropping` false the crop is left out
-    /// (the photo is still turned and straightened), for the crop tool.
-    public func image(with settings: DevelopSettings, cropping: Bool = true) -> CIImage? {
+    /// (the photo is still turned and straightened), for the crop tool. `overlay` names a mask
+    /// to tint red, for the Masks panel's Show Overlay.
+    public func image(with settings: DevelopSettings, cropping: Bool = true, overlay: UUID? = nil) -> CIImage? {
         lock.lock()
         defer { lock.unlock() }
         var image: CIImage
@@ -450,15 +466,48 @@ public final class DevelopSession: @unchecked Sendable {
                 image = filter.outputImage ?? image
             }
         }
-        if let crop = settings.crop {
+        // Masks are drawn on the upright photo's frame, so start it at the origin.
+        if image.extent.origin != .zero {
+            image = image.transformed(by: CGAffineTransform(translationX: -image.extent.minX, y: -image.extent.minY))
+        }
+        let sourceExtent = image.extent
+        let source = image
+        let crop = settings.crop
+        if let crop {
             image = DevelopRenderer.applyGeometry(crop, to: image, cropping: cropping)
         }
-        return DevelopRenderer.applyAdjustments(settings, to: image, scale: renderScale)
+        let provider: MaskProvider = { [self] component in
+            if case .luminance = component.shape { return nil }
+            guard let mask = DevelopRenderer.sourceMask(component, extent: sourceExtent,
+                                                        subject: { self.subject(of: source) },
+                                                        brushCache: brushCache) else { return nil }
+            guard let crop else { return mask }
+            return DevelopRenderer.applyGeometry(crop, to: mask, cropping: cropping)
+        }
+        return DevelopRenderer.applyAdjustments(settings, to: image, scale: renderScale, masks: provider, overlay: overlay)
+    }
+
+    /// Finds the subject with Vision on a small copy of the photo, once.
+    private func subject(of source: CIImage) -> CIImage? {
+        if let found = subjectMask { return found }
+        var found: CIImage?
+        let extent = source.extent
+        let factor = min(1, 1024 / max(extent.width, extent.height))
+        let small = source.transformed(by: CGAffineTransform(scaleX: factor, y: factor))
+        if let cgImage = renderer.context.createCGImage(small, from: small.extent.integral, format: .RGBA8,
+                                                        colorSpace: DevelopRenderer.sRGB),
+           let mask = try? AIImaging.subjectMask(for: cgImage) {
+            let image = CIImage(cgImage: mask)
+            found = image.transformed(by: CGAffineTransform(scaleX: extent.width / image.extent.width,
+                                                            y: extent.height / image.extent.height))
+        }
+        subjectMask = .some(found)
+        return found
     }
 
     /// Rendered for display in Display P3.
-    public func render(_ settings: DevelopSettings, cropping: Bool = true) -> CGImage? {
-        guard let image = image(with: settings, cropping: cropping) else { return nil }
+    public func render(_ settings: DevelopSettings, cropping: Bool = true, overlay: UUID? = nil) -> CGImage? {
+        guard let image = image(with: settings, cropping: cropping, overlay: overlay) else { return nil }
         return renderer.cgImage(image)
     }
 }

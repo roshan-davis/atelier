@@ -588,6 +588,8 @@ final class LibraryModel: ObservableObject {
         guard let window = NSApp.keyWindow, window === mainWindow, window.attachedSheet == nil else { return false }
         if window.firstResponder is NSText { return false }
 
+        if mode == .develop, handleMaskingKey(event) { return true }
+
         // [ and ] size the AI brush, as in Lightroom.
         if mode == .develop, develop.isAIOpen, event.keyCode == 33 || event.keyCode == 30 {
             let factor = event.keyCode == 30 ? 1.25 : 0.8
@@ -647,7 +649,48 @@ final class LibraryModel: ObservableObject {
             if mode != .develop { openDevelop() }
             guard mode == .develop else { return false }
             develop.isCropping.toggle()
+        case .linearGradient, .brush:
+            if mode != .develop { openDevelop() }
+            guard mode == .develop else { return false }
+            develop.startMaskTool(action == .brush ? .brush : .linear)
+        case .maskOverlay:
+            guard mode == .develop, develop.isMasking else { return false }
+            develop.showMaskOverlay.toggle()
         }
         return true
+    }
+
+    /// Lightroom's Masking keys: ⇧W opens it, ⇧M draws a radial gradient, [ and ] size the brush
+    /// (with ⇧, its feather), Delete removes the selected part, Esc cancels the tool or closes.
+    private func handleMaskingKey(_ event: NSEvent) -> Bool {
+        let shift = event.modifierFlags.contains(.shift)
+        let key = event.charactersIgnoringModifiers?.lowercased()
+        if shift, key == "w" {
+            develop.isMasking.toggle()
+            return true
+        }
+        if shift, key == "m" {
+            develop.startMaskTool(.radial)
+            return true
+        }
+        guard develop.isMasking else { return false }
+        switch event.keyCode {
+        case 33, 30:  // [ and ]
+            let larger = event.keyCode == 30
+            if shift {
+                develop.brushFeather = min(100, max(0, develop.brushFeather + (larger ? 10 : -10)))
+            } else {
+                develop.brushSize = min(max(develop.brushSize * (larger ? 1.2 : 1 / 1.2), 0.005), 0.4)
+            }
+            return true
+        case 51, 117:  // delete, forward delete
+            develop.deleteSelectedMaskPart()
+            return true
+        case 53:  // escape
+            if develop.maskTool != nil { develop.maskTool = nil } else { develop.isMasking = false }
+            return true
+        default:
+            return false
+        }
     }
 }

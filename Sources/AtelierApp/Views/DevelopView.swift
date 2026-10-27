@@ -17,6 +17,8 @@ struct DevelopImageView: View {
                         CropEditorView(develop: develop, image: image)
                     } else if develop.isAIOpen {
                         AIBrushView(ai: model.ai, image: image, assetID: develop.assetID)
+                    } else if develop.isMasking {
+                        MaskEditorView(develop: develop, image: image)
                     } else if develop.showingBefore || develop.compareMode == .off {
                         ZoomableImageView(image: develop.displayImage ?? image,
                                           pixelSize: pixelSize,
@@ -81,13 +83,13 @@ struct DevelopImageView: View {
                 Text("Before and After").foregroundStyle(.secondary).fixedSize()
             }
             comparePicker(iconsOnly: compact)
-                .disabled(develop.isCropping || develop.isAIOpen)
+                .disabled(develop.isCropping || develop.isAIOpen || develop.isMasking)
             if !compact, develop.compareMode == .slider {
                 Text("Drag across the photo to move the divider").foregroundStyle(.secondary).fixedSize()
             }
             Spacer(minLength: 8)
             ZoomControls(zoom: $model.zoom, report: model.zoomReport, compact: compact)
-                .disabled(develop.compareMode != .off || develop.isCropping || develop.isAIOpen)
+                .disabled(develop.compareMode != .off || develop.isCropping || develop.isAIOpen || develop.isMasking)
         }
     }
 
@@ -262,6 +264,13 @@ struct DevelopPanel: View {
                                      isModified: develop.settings.crop != nil, reset: { develop.setCrop(Crop()) },
                                      expandAll: expandAll, collapseAll: collapseAll) {
                             CropPanel(develop: develop)
+                        }
+                    }
+                    if develop.isMasking {
+                        PanelSection(title: "Masking", isExpanded: .constant(true), soloMode: $soloMode,
+                                     isModified: !develop.masks.isEmpty, reset: { develop.deleteAllMasks() },
+                                     expandAll: expandAll, collapseAll: collapseAll) {
+                            MasksPanel(develop: develop)
                         }
                     }
                     if develop.isAIOpen {
@@ -936,6 +945,10 @@ private struct ToolStrip: View {
             tool("crop", title: "Crop & Straighten (R)", active: develop.isCropping,
                  modified: develop.settings.crop != nil) {
                 develop.isCropping.toggle()
+            }
+            tool("circle.dashed", title: "Masking: Linear Gradient, Radial Gradient, Brush, Luminance Range, Select Subject (⇧W)",
+                 active: develop.isMasking, modified: !develop.masks.isEmpty) {
+                develop.isMasking.toggle()
             }
             tool("wand.and.stars", title: "AI: Remove Object, Replace Background, Upscale", active: develop.isAIOpen,
                  modified: false) {

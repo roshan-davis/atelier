@@ -26,7 +26,7 @@ final class ColorTests: XCTestCase {
         settings[.hsl(.saturation, .blue)] = 0
         XCTAssertEqual(settings, .neutral)
         XCTAssertTrue(settings.isNeutral)
-        XCTAssertEqual(try settings.encoded(), #"{"schemaVersion":2}"#)
+        XCTAssertEqual(try settings.encoded(), #"{"schemaVersion":3}"#)
 
         settings[.gradeShadowsHue] = 220
         settings[.hsl(.luminance, .orange)] = -30

@@ -9,6 +9,7 @@ enum KeyAction: String, CaseIterable, Identifiable {
     case pick, reject, unflag
     case grid, loupe, develop
     case beforeAfter, compareMode, zoom, crop
+    case linearGradient, brush, maskOverlay
 
     var id: String { rawValue }
 
@@ -32,6 +33,9 @@ enum KeyAction: String, CaseIterable, Identifiable {
         case .compareMode: return "Before and after: off, side by side, slider"
         case .zoom: return "Zoom: fit and 100%"
         case .crop: return "Crop & Straighten"
+        case .linearGradient: return "Masking: Linear Gradient (Shift for Radial Gradient)"
+        case .brush: return "Masking: Brush"
+        case .maskOverlay: return "Masking: show overlay (toggle)"
         }
     }
 
@@ -41,7 +45,7 @@ enum KeyAction: String, CaseIterable, Identifiable {
         case .labelRed, .labelYellow, .labelGreen, .labelBlue: return "Color labels"
         case .pick, .reject, .unflag: return "Flags"
         case .grid, .loupe, .develop, .zoom: return "Views"
-        case .beforeAfter, .compareMode, .crop: return "Develop"
+        case .beforeAfter, .compareMode, .crop, .linearGradient, .brush, .maskOverlay: return "Develop"
         }
     }
 
@@ -68,6 +72,9 @@ enum KeyAction: String, CaseIterable, Identifiable {
         case .compareMode: return "y"
         case .zoom: return "z"
         case .crop: return "r"
+        case .linearGradient: return "m"
+        case .brush: return "k"
+        case .maskOverlay: return "o"
         }
     }
 }

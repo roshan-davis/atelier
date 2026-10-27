@@ -1,0 +1,284 @@
+import CoreGraphics
+import CoreImage
+import CoreImage.CIFilterBuiltins
+import Foundation
+
+/// Gives the renderer a mask component as a grayscale image (white is full effect) in the
+/// cropped photo's space, or nil to have the renderer work it out (luminance ranges).
+public typealias MaskProvider = (DevelopSettings.MaskComponent) -> CIImage?
+
+/// Pipeline step 6: each mask's own adjustments, blended in through the mask.
+extension DevelopRenderer {
+    static let maskRed = CIColor(red: 0.95, green: 0.15, blue: 0.1)
+
+    /// Applies every visible mask in order. `masks` supplies the drawn parts; without it they
+    /// are drawn straight onto `input`'s frame (no crop).
+    static func applyMasks(_ settings: DevelopSettings, to input: CIImage, scale: Double,
+                           masks provider: MaskProvider?) -> CIImage {
+        var image = input
+        for mask in settings.masks where !mask.isHidden && mask.hasAdjustments {
+            guard let alpha = maskImage(mask, base: input, provider: provider) else { continue }
+            let adjusted = applyLocal(mask, to: image, scale: scale)
+            let blend = CIFilter.blendWithMask()
+            blend.inputImage = adjusted
+            blend.backgroundImage = image
+            blend.maskImage = alpha
+            image = blend.outputImage?.cropped(to: input.extent) ?? image
+        }
+        return image
+    }
+
+    /// Tints the mask red over the photo, like Lightroom's Show Overlay.
+    static func overlay(_ mask: DevelopSettings.Mask, on image: CIImage, base: CIImage, provider: MaskProvider?) -> CIImage {
+        guard let alpha = maskImage(mask, base: base, provider: provider) else { return image }
+        let red = CIImage(color: maskRed).cropped(to: image.extent)
+        let tinted = mix(image, red, amount: 0.5)
+        let blend = CIFilter.blendWithMask()
+        blend.inputImage = tinted
+        blend.backgroundImage = image
+        blend.maskImage = alpha
+        return blend.outputImage?.cropped(to: image.extent) ?? image
+    }
+
+    /// The mask's parts combined: Add keeps the brighter, Subtract cuts out, Intersect keeps
+    /// only the overlap. `base` is the photo before local adjustments, for luminance ranges.
+    public static func maskImage(_ mask: DevelopSettings.Mask, base: CIImage, provider: MaskProvider?) -> CIImage? {
+        let extent = base.extent
+        var result: CIImage?
+        for component in mask.components {
+            guard var part = provider?(component) ?? componentImage(component, base: base) else { continue }
+            part = part.cropped(to: extent)
+            if component.inverted { part = invert(part) }
+            switch component.mode {
+            case .add:
+                result = result.map { maximum($0, part) } ?? part
+            case .subtract:
+                result = result.map { multiply($0, invert(part)) }
+            case .intersect:
+                result = result.map { multiply($0, part) }
+            }
+        }
+        guard var combined = result else { return mask.inverted ? CIImage(color: .white).cropped(to: extent) : nil }
+        if mask.inverted { combined = invert(combined) }
+        return combined.cropped(to: extent)
+    }
+
+    /// A part drawn straight onto `base`'s frame, or a luminance range taken from it.
+    static func componentImage(_ component: DevelopSettings.MaskComponent, base: CIImage) -> CIImage? {
+        if case .luminance(let range) = component.shape { return luminanceMask(range, from: base) }
+        return sourceMask(component, extent: base.extent, subject: nil, brushCache: nil)
+    }
+
+    /// A drawn part on the upright, uncropped photo whose frame is `extent`. Brush strokes are
+    /// drawn once and kept in `brushCache` when given; `subject` supplies Select Subject.
+    static func sourceMask(_ component: DevelopSettings.MaskComponent, extent: CGRect,
+                           subject: (() -> CIImage?)?, brushCache: BrushCache?) -> CIImage? {
+        let width = extent.width, height = extent.height
+        let longEdge = max(width, height)
+        // Mask points are top-left fractions; Core Image's y axis points up.
+        func point(_ p: DevelopSettings.MaskPoint) -> CGPoint {
+            CGPoint(x: extent.minX + CGFloat(p.x) * width, y: extent.minY + (1 - CGFloat(p.y)) * height)
+        }
+        switch component.shape {
+        case .linear(let gradient):
+            let filter = CIFilter.linearGradient()
+            filter.point0 = point(gradient.start)
+            filter.point1 = point(gradient.end)
+            filter.color0 = .white
+            filter.color1 = .black
+            return filter.outputImage?.cropped(to: extent)
+        case .radial(let gradient):
+            // A circle of radius 1000 stretched to the ellipse, turned and moved into place.
+            let unit: CGFloat = 1000
+            let filter = CIFilter.radialGradient()
+            filter.center = .zero
+            filter.radius0 = Float(unit * CGFloat(max(0.001, 1 - gradient.feather / 100)))
+            filter.radius1 = Float(unit)
+            filter.color0 = .white
+            filter.color1 = .black
+            let rx = max(1, CGFloat(gradient.radiusX) * longEdge), ry = max(1, CGFloat(gradient.radiusY) * longEdge)
+            let transform = CGAffineTransform(scaleX: rx / unit, y: ry / unit)
+                .concatenating(CGAffineTransform(rotationAngle: -CGFloat(gradient.angle) * .pi / 180))
+                .concatenating(CGAffineTransform(translationX: point(gradient.center).x, y: point(gradient.center).y))
+            return filter.outputImage?.transformed(by: transform).cropped(to: extent)
+        case .brush(let strokes):
+            let key = BrushCache.Key(strokes: strokes, width: Int(width.rounded()), height: Int(height.rounded()))
+            if let cached = brushCache?.image(for: key) {
+                return cached.transformed(by: CGAffineTransform(translationX: extent.minX, y: extent.minY))
+            }
+            guard let cgImage = brushMask(strokes, width: key.width, height: key.height) else { return nil }
+            let image = CIImage(cgImage: cgImage)
+            brushCache?.store(image, for: key)
+            return image.transformed(by: CGAffineTransform(translationX: extent.minX, y: extent.minY))
+        case .subject:
+            return subject?()?.cropped(to: extent)
+        case .luminance:
+            return nil
+        }
+    }
+
+    /// Paints the strokes as soft round dabs, white on black; erasing strokes paint black.
+    /// Flow sets how much each dab adds, so going over an area builds it up as in Lightroom.
+    public static func brushMask(_ strokes: [DevelopSettings.MaskStroke], width: Int, height: Int) -> CGImage? {
+        let gray = CGColorSpaceCreateDeviceGray()
+        guard width > 0, height > 0,
+              let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: gray, bitmapInfo: CGImageAlphaInfo.none.rawValue) else { return nil }
+        context.setFillColor(gray: 0, alpha: 1)
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        // Flip so points read top-down.
+        context.translateBy(x: 0, y: CGFloat(height))
+        context.scaleBy(x: 1, y: -1)
+        let longEdge = CGFloat(max(width, height))
+        for stroke in strokes where !stroke.points.isEmpty {
+            let radius = max(0.5, CGFloat(stroke.size) * longEdge / 2)
+            let hard = radius * CGFloat(max(0, 1 - stroke.feather / 100))
+            let shade: CGFloat = stroke.erases ? 0 : 1
+            let flow = CGFloat(max(0.01, min(1, stroke.flow / 100)))
+            guard let gradient = CGGradient(colorSpace: gray, colorComponents: [shade, flow, shade, flow, shade, 0],
+                                            locations: [0, hard / radius, 1], count: 3) else { continue }
+            let points = stroke.points.map { CGPoint(x: CGFloat($0.x) * CGFloat(width), y: CGFloat($0.y) * CGFloat(height)) }
+            // Dabs every fifth of the radius along the stroke, so it reads as a smooth line.
+            let spacing = max(1, radius / 5)
+            var dabs = [points[0]]
+            for (a, b) in zip(points, points.dropFirst()) {
+                let distance = hypot(b.x - a.x, b.y - a.y)
+                let steps = Int(distance / spacing)
+                if steps > 0 {
+                    for i in 1...steps {
+                        let t = CGFloat(i) * spacing / distance
+                        dabs.append(CGPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t))
+                    }
+                }
+            }
+            for dab in dabs {
+                context.drawRadialGradient(gradient, startCenter: dab, startRadius: 0, endCenter: dab, endRadius: radius,
+                                           options: [])
+            }
+        }
+        return context.makeImage()
+    }
+
+    /// White where the photo's brightness is in the range, from the photo before local
+    /// adjustments. Brightness is judged in sRGB-encoded values, as Lightroom shows it.
+    static func luminanceMask(_ range: DevelopSettings.LuminanceRange, from base: CIImage) -> CIImage? {
+        let matrix = CIFilter.colorMatrix()
+        matrix.inputImage = base
+        // Rec. 2020 luma, the working space's primaries.
+        let luma = CIVector(x: 0.2627, y: 0.6780, z: 0.0593, w: 0)
+        matrix.rVector = luma
+        matrix.gVector = luma
+        matrix.bVector = luma
+        matrix.aVector = CIVector(x: 0, y: 0, z: 0, w: 1)
+        let samples = 256
+        var lut = [Float]()
+        lut.reserveCapacity(samples * 3)
+        for i in 0..<samples {
+            // The curve's output is decoded back to linear, so store the weight encoded.
+            let value = Float(srgbEncode(range.weight(at: Double(i) / Double(samples - 1))))
+            lut.append(contentsOf: [value, value, value])
+        }
+        let curves = CIFilter.colorCurves()
+        curves.inputImage = matrix.outputImage
+        curves.curvesData = lut.withUnsafeBufferPointer { Data(buffer: $0) }
+        curves.curvesDomain = CIVector(x: 0, y: 1)
+        curves.colorSpace = sRGB
+        return curves.outputImage?.cropped(to: base.extent)
+    }
+
+    static func srgbEncode(_ x: Double) -> Double {
+        x <= 0.0031308 ? 12.92 * x : 1.055 * pow(x, 1 / 2.4) - 0.055
+    }
+
+    /// The mask's sliders on the whole photo; the mask decides where they show.
+    static func applyLocal(_ mask: DevelopSettings.Mask, to input: CIImage, scale: Double) -> CIImage {
+        var image = input
+        let extent = input.extent
+        let temperature = mask.effective(.temperature), tint = mask.effective(.tint)
+        if temperature != 0 || tint != 0 {
+            // A warmer target than the neutral warms the photo, as on the Basic panel.
+            let filter = CIFilter.temperatureAndTint()
+            filter.inputImage = image
+            filter.neutral = CIVector(x: 6500, y: 0)
+            filter.targetNeutral = CIVector(x: 6500 * pow(2, temperature / 100 * 0.8), y: tint)
+            image = filter.outputImage ?? image
+        }
+        let exposure = mask.effective(.exposure)
+        if exposure != 0 {
+            let filter = CIFilter.exposureAdjust()
+            filter.inputImage = image
+            filter.ev = Float(exposure)
+            image = filter.outputImage ?? image
+        }
+        // The rest are the global steps with the mask's values.
+        var local = DevelopSettings()
+        local.contrast = mask.effective(.contrast)
+        local.highlights = mask.effective(.highlights)
+        local.shadows = mask.effective(.shadows)
+        local.whites = mask.effective(.whites)
+        local.blacks = mask.effective(.blacks)
+        local.texture = mask.effective(.texture)
+        local.clarity = mask.effective(.clarity)
+        local.dehaze = mask.effective(.dehaze)
+        local.saturation = mask.effective(.saturation)
+        local.luminanceNoise = mask.effective(.noise)
+        let sharpness = mask.effective(.sharpness)
+        if sharpness > 0 {
+            local.sharpening = sharpness * 1.2
+            local.sharpenRadius = 1
+        }
+        image = applyAdjustments(local, to: image, scale: scale)
+        if sharpness < 0 {
+            // Negative sharpness softens, as in Lightroom.
+            let blurred = image.clampedToExtent().applyingGaussianBlur(sigma: max(0.5, 3 * scale)).cropped(to: extent)
+            image = mix(image, blurred, amount: min(1, -sharpness / 100))
+        }
+        return image.cropped(to: extent)
+    }
+
+    static func invert(_ image: CIImage) -> CIImage {
+        let filter = CIFilter.colorInvert()
+        filter.inputImage = image
+        return filter.outputImage ?? image
+    }
+
+    static func maximum(_ a: CIImage, _ b: CIImage) -> CIImage {
+        let filter = CIFilter.maximumCompositing()
+        filter.inputImage = a
+        filter.backgroundImage = b
+        return filter.outputImage ?? a
+    }
+
+    static func multiply(_ a: CIImage, _ b: CIImage) -> CIImage {
+        let filter = CIFilter.multiplyCompositing()
+        filter.inputImage = a
+        filter.backgroundImage = b
+        return filter.outputImage ?? a
+    }
+}
+
+/// Drawn brush masks, kept per open photo so a slider change doesn't redraw every stroke.
+final class BrushCache: @unchecked Sendable {
+    struct Key: Hashable {
+        let strokes: [DevelopSettings.MaskStroke]
+        let width: Int
+        let height: Int
+    }
+
+    private var images: [Key: CIImage] = [:]
+    private let lock = NSLock()
+
+    func image(for key: Key) -> CIImage? {
+        lock.lock()
+        defer { lock.unlock() }
+        return images[key]
+    }
+
+    func store(_ image: CIImage, for key: Key) {
+        lock.lock()
+        defer { lock.unlock() }
+        // Painting makes a new key per stroke; keep the cache small.
+        if images.count >= 12 { images.removeAll() }
+        images[key] = image
+    }
+}

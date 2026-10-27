@@ -59,6 +59,7 @@ final class DevelopController: ObservableObject {
             if isCropping {
                 showingBefore = false
                 isAIOpen = false
+                isMasking = false
             }
             scheduleRender()
         }
@@ -68,10 +69,53 @@ final class DevelopController: ObservableObject {
         didSet {
             guard isAIOpen != oldValue, isAIOpen else { return }
             isCropping = false
+            isMasking = false
             showingBefore = false
             compareMode = .off
         }
     }
+
+    /// The Masking tool is open: the photo shows under the mask pins and the Masks panel.
+    @Published var isMasking = false {
+        didSet {
+            guard isMasking != oldValue else { return }
+            if isMasking {
+                isCropping = false
+                isAIOpen = false
+                showingBefore = false
+                compareMode = .off
+                if selectedMaskID == nil { selectedMaskID = settings.masks.last?.id }
+            } else {
+                maskTool = nil
+            }
+            scheduleRender()
+        }
+    }
+    /// The selected mask and part in the Masks panel.
+    @Published var selectedMaskID: UUID? {
+        didSet { if selectedMaskID != oldValue, showMaskOverlay { scheduleRender() } }
+    }
+    @Published var selectedComponentID: UUID?
+    /// What the next drag on the photo draws, if anything.
+    @Published var maskTool: MaskTool?
+    /// Tints the selected mask red on the photo (O).
+    @Published var showMaskOverlay = UserDefaults.standard.bool(forKey: "masks.showOverlay") {
+        didSet {
+            UserDefaults.standard.set(showMaskOverlay, forKey: "masks.showOverlay")
+            scheduleRender()
+        }
+    }
+    /// Brush settings, remembered like Lightroom's. Size is a fraction of the photo's long edge.
+    @Published var brushSize = UserDefaults.standard.object(forKey: "masks.brushSize") as? Double ?? 0.06 {
+        didSet { UserDefaults.standard.set(brushSize, forKey: "masks.brushSize") }
+    }
+    @Published var brushFeather = UserDefaults.standard.object(forKey: "masks.brushFeather") as? Double ?? 50 {
+        didSet { UserDefaults.standard.set(brushFeather, forKey: "masks.brushFeather") }
+    }
+    @Published var brushFlow = UserDefaults.standard.object(forKey: "masks.brushFlow") as? Double ?? 100 {
+        didSet { UserDefaults.standard.set(brushFlow, forKey: "masks.brushFlow") }
+    }
+    @Published var brushErasing = false
     /// The decoded photo's size (upright, uncropped) at proxy scale; its aspect drives the crop tool.
     @Published private(set) var sourceSize: CGSize?
 
@@ -98,7 +142,7 @@ final class DevelopController: ObservableObject {
 
     /// The sharpest image that matches the current settings.
     var displayImage: NSImage? {
-        if isCropping { return image }
+        if isCropping || isMasking { return image }
         if !showingBefore, let fullImage, fullImageSettings == settings { return fullImage }
         return image
     }
@@ -157,9 +201,13 @@ final class DevelopController: ObservableObject {
         showingBefore = false
         isCropping = false
         sourceSize = nil
+        selectedMaskID = nil
+        selectedComponentID = nil
+        maskTool = nil
         guard let assetID else { return }
 
         settings = (try? catalog.developSettings(for: assetID)) ?? .neutral
+        if isMasking { selectedMaskID = settings.masks.last?.id }
         history = (try? catalog.developHistory(for: assetID)) ?? DevelopHistory()
         committed = settings
         pendingStep = nil
@@ -282,6 +330,7 @@ final class DevelopController: ObservableObject {
     func resetAll() {
         guard assetID != nil else { return }
         settings = .neutral
+        validateMaskSelection()
         changed(step: "Reset All")
     }
 
@@ -312,6 +361,7 @@ final class DevelopController: ObservableObject {
         }
         if let assetID, targets.contains(assetID) {
             settings = newSettings
+            validateMaskSelection()
             changed(step: step)
         }
     }
@@ -340,6 +390,7 @@ final class DevelopController: ObservableObject {
         }
         if let assetID, targets.contains(assetID) {
             settings = preset.applied(to: settings)
+            validateMaskSelection()
             beforeImage = nil
             changed(step: step)
         }
@@ -400,6 +451,7 @@ final class DevelopController: ObservableObject {
         settings = history.steps[position].settings
         committed = settings
         beforeImage = nil
+        validateMaskSelection()
         changed(step: nil)
         if compareMode != .off { renderBeforeIfNeeded() }
     }
@@ -421,6 +473,7 @@ final class DevelopController: ObservableObject {
     func applySnapshot(_ snapshot: DevelopHistory.Snapshot) {
         guard assetID != nil else { return }
         settings = snapshot.settings
+        validateMaskSelection()
         beforeImage = nil
         changed(step: "Snapshot: \(snapshot.name)")
     }
@@ -497,15 +550,17 @@ final class DevelopController: ObservableObject {
         let settings = showingBefore ? beforeSettings : self.settings
         let cropping = !isCropping
         let assetID = self.assetID
+        let overlay = isMasking && showMaskOverlay ? selectedMaskID : nil
         queue.async {
-            let cgImage = session.render(settings, cropping: cropping)
-            let histogram = cgImage.flatMap { Histogram(image: $0) }
+            let cgImage = session.render(settings, cropping: cropping, overlay: overlay)
+            // The red overlay would skew the histogram; keep the last one while it shows.
+            let histogram = overlay == nil ? cgImage.flatMap { Histogram(image: $0) } : nil
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     self.rendering = false
                     if self.assetID == assetID, let cgImage {
                         self.image = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
-                        self.histogram = histogram
+                        if let histogram { self.histogram = histogram }
                     }
                     if self.needsRender {
                         self.needsRender = false
@@ -616,5 +671,245 @@ final class DevelopController: ObservableObject {
                 MainActor.assumeIsolated { self.onPreviewsUpdated?(assetID) }
             }
         }
+    }
+}
+
+// MARK: Masks
+
+/// What a drag on the photo draws next: a new mask, or a part added to the selected one.
+struct MaskTool: Equatable {
+    var kind: DevelopSettings.MaskComponent.Kind
+    var mode: DevelopSettings.MaskComponent.Mode = .add
+    var newMask = true
+
+    var hint: String {
+        switch kind {
+        case .linear: return "Drag on the photo from where the effect is full to where it fades out."
+        case .radial: return "Drag on the photo from the center outward to draw the ellipse."
+        case .brush: return "Paint on the photo. Hold ⌥ to erase; [ and ] change the size."
+        case .luminance, .subject: return ""
+        }
+    }
+}
+
+extension DevelopController {
+    typealias Mask = DevelopSettings.Mask
+    typealias MaskComponent = DevelopSettings.MaskComponent
+
+    var masks: [Mask] { settings.masks }
+
+    var selectedMask: Mask? { settings.masks.first { $0.id == selectedMaskID } }
+
+    var selectedComponent: MaskComponent? {
+        selectedMask?.components.first { $0.id == selectedComponentID }
+    }
+
+    private func maskIndex(_ id: UUID?) -> Int? {
+        settings.masks.firstIndex { $0.id == id }
+    }
+
+    /// Keeps the selection pointing at masks that exist after undo, presets or paste.
+    fileprivate func validateMaskSelection() {
+        guard let mask = selectedMask else {
+            selectedMaskID = isMasking ? settings.masks.last?.id : nil
+            selectedComponentID = nil
+            return
+        }
+        if !mask.components.contains(where: { $0.id == selectedComponentID }) { selectedComponentID = nil }
+    }
+
+    /// Opens Masking with a tool ready, from the keyboard or the tool strip.
+    func startMaskTool(_ kind: MaskComponent.Kind) {
+        if !isMasking { isMasking = true }
+        createMask(kind)
+    }
+
+    /// Create New Mask: drawn kinds wait for a drag on the photo; the others are made now.
+    func createMask(_ kind: MaskComponent.Kind) {
+        guard assetID != nil else { return }
+        if kind.isDrawn {
+            maskTool = MaskTool(kind: kind)
+        } else {
+            insert(MaskComponent(Self.defaultShape(kind)), tool: MaskTool(kind: kind))
+        }
+    }
+
+    /// Add, Subtract or Intersect a part into the selected mask.
+    func addComponent(_ kind: MaskComponent.Kind, mode: MaskComponent.Mode) {
+        guard selectedMask != nil else { return createMask(kind) }
+        let tool = MaskTool(kind: kind, mode: mode, newMask: false)
+        if kind.isDrawn {
+            maskTool = tool
+        } else {
+            insert(MaskComponent(Self.defaultShape(kind), mode: mode), tool: tool)
+        }
+    }
+
+    private static func defaultShape(_ kind: MaskComponent.Kind) -> MaskComponent.Shape {
+        switch kind {
+        case .luminance: return .luminance(DevelopSettings.LuminanceRange(low: 50, high: 100))
+        case .subject: return .subject
+        case .brush: return .brush([])
+        case .linear: return .linear(.init(start: .init(x: 0.5, y: 0.2), end: .init(x: 0.5, y: 0.5)))
+        case .radial: return .radial(.init(center: .init(x: 0.5, y: 0.5), radiusX: 0.2, radiusY: 0.15))
+        }
+    }
+
+    /// Finishes drawing a part with the current tool.
+    func finishDrawing(_ shape: MaskComponent.Shape) {
+        guard let tool = maskTool, assetID != nil else { return }
+        maskTool = nil
+        insert(MaskComponent(shape, mode: tool.mode), tool: tool)
+    }
+
+    private func insert(_ component: MaskComponent, tool: MaskTool) {
+        var component = component
+        if tool.newMask || selectedMask == nil {
+            component.mode = .add
+            let mask = Mask(name: settings.nextMaskName(), components: [component])
+            settings.masks.append(mask)
+            selectedMaskID = mask.id
+            selectedComponentID = component.id
+            changed(step: "New Mask: \(component.kind.title)")
+        } else if let index = maskIndex(selectedMaskID) {
+            settings.masks[index].components.append(component)
+            selectedComponentID = component.id
+            let verb = component.mode == .add ? "Add" : component.mode == .subtract ? "Subtract" : "Intersect"
+            changed(step: "\(verb) \(component.kind.title): \(settings.masks[index].name)")
+        }
+    }
+
+    /// Changes a part of the selected mask, while dragging its handles or from the panel.
+    func updateComponent(_ component: MaskComponent) {
+        guard let index = maskIndex(selectedMaskID),
+              let part = settings.masks[index].components.firstIndex(where: { $0.id == component.id }),
+              settings.masks[index].components[part] != component else { return }
+        settings.masks[index].components[part] = component
+        changed(step: "Edit \(settings.masks[index].name)")
+    }
+
+    /// Adds a brush stroke to the selected brush part.
+    func addStroke(_ stroke: DevelopSettings.MaskStroke) {
+        guard var component = selectedComponent, case .brush(var strokes) = component.shape else { return }
+        strokes.append(stroke)
+        component.shape = .brush(strokes)
+        updateComponent(component)
+    }
+
+    func select(mask id: UUID, component: UUID? = nil) {
+        selectedMaskID = id
+        selectedComponentID = component
+        maskTool = nil
+    }
+
+    func setMaskValue(_ parameter: DevelopSettings.LocalParameter, to value: Double) {
+        guard let index = maskIndex(selectedMaskID) else { return }
+        settings.masks[index][parameter] = value
+        let mask = settings.masks[index]
+        let formatted = parameter == .exposure ? String(format: "%+.2f", mask[parameter])
+            : String(format: "%+.0f", mask[parameter])
+        changed(step: "\(mask.name) \(parameter.label == "Temp" ? "Temperature" : parameter.label) \(formatted)")
+    }
+
+    func setMaskAmount(_ amount: Double) {
+        guard let index = maskIndex(selectedMaskID) else { return }
+        settings.masks[index].amount = min(200, max(0, amount))
+        changed(step: "\(settings.masks[index].name) Amount \(Int(settings.masks[index].amount.rounded()))%")
+    }
+
+    func resetMaskSliders() {
+        guard let index = maskIndex(selectedMaskID) else { return }
+        settings.masks[index].resetAdjustments()
+        changed(step: "Reset \(settings.masks[index].name) Sliders")
+    }
+
+    func toggleHidden(_ id: UUID) {
+        guard let index = maskIndex(id) else { return }
+        settings.masks[index].isHidden.toggle()
+        changed(step: "\(settings.masks[index].isHidden ? "Hide" : "Show") \(settings.masks[index].name)")
+    }
+
+    func invertMask(_ id: UUID) {
+        guard let index = maskIndex(id) else { return }
+        settings.masks[index].inverted.toggle()
+        changed(step: "Invert \(settings.masks[index].name)")
+    }
+
+    func renameMask(_ id: UUID, to name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let index = maskIndex(id), !trimmed.isEmpty, trimmed != settings.masks[index].name else { return }
+        settings.masks[index].name = trimmed
+        changed(step: "Rename Mask: \(trimmed)")
+    }
+
+    func duplicateMask(_ id: UUID) {
+        guard let index = maskIndex(id) else { return }
+        var copy = settings.masks[index]
+        copy.id = UUID()
+        copy.name = "\(copy.name) Copy"
+        copy.components = copy.components.map { component in
+            var fresh = component
+            fresh.id = UUID()
+            return fresh
+        }
+        settings.masks.insert(copy, at: index + 1)
+        selectedMaskID = copy.id
+        selectedComponentID = nil
+        changed(step: "Duplicate \(settings.masks[index].name)")
+    }
+
+    func deleteMask(_ id: UUID) {
+        guard let index = maskIndex(id) else { return }
+        let name = settings.masks[index].name
+        settings.masks.remove(at: index)
+        if selectedMaskID == id {
+            selectedMaskID = settings.masks.last?.id
+            selectedComponentID = nil
+        }
+        changed(step: "Delete \(name)")
+    }
+
+    func deleteAllMasks() {
+        guard !settings.masks.isEmpty else { return }
+        settings.masks = []
+        selectedMaskID = nil
+        selectedComponentID = nil
+        maskTool = nil
+        changed(step: "Delete All Masks")
+    }
+
+    /// Removes a part; the whole mask goes with its last part.
+    func deleteComponent(_ id: UUID, in maskID: UUID) {
+        guard let index = maskIndex(maskID) else { return }
+        if settings.masks[index].components.count <= 1 { return deleteMask(maskID) }
+        settings.masks[index].components.removeAll { $0.id == id }
+        // The first part always adds.
+        settings.masks[index].components[0].mode = .add
+        if selectedComponentID == id { selectedComponentID = nil }
+        changed(step: "Delete Part of \(settings.masks[index].name)")
+    }
+
+    /// Delete key in Masking: the selected part, or the selected mask.
+    func deleteSelectedMaskPart() {
+        guard let mask = selectedMask else { return }
+        if let component = selectedComponentID {
+            deleteComponent(component, in: mask.id)
+        } else {
+            deleteMask(mask.id)
+        }
+    }
+
+    func setMode(_ mode: MaskComponent.Mode, of id: UUID, in maskID: UUID) {
+        guard let index = maskIndex(maskID),
+              let part = settings.masks[index].components.firstIndex(where: { $0.id == id }), part > 0 else { return }
+        settings.masks[index].components[part].mode = mode
+        changed(step: "Edit \(settings.masks[index].name)")
+    }
+
+    func invertComponent(_ id: UUID, in maskID: UUID) {
+        guard let index = maskIndex(maskID),
+              let part = settings.masks[index].components.firstIndex(where: { $0.id == id }) else { return }
+        settings.masks[index].components[part].inverted.toggle()
+        changed(step: "Invert Part of \(settings.masks[index].name)")
     }
 }

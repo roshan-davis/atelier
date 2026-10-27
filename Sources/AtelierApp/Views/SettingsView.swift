@@ -641,6 +641,9 @@ struct ShortcutsSheet: View {
         ("Develop", [("⇧⌘C", "Copy settings"), ("⇧⌘V", "Paste settings"), ("⇧⌘R", "Reset all settings"),
                      ("⌘Z", "Undo"), ("⇧⌘Z", "Redo"), ("⌘[", "Rotate left"), ("⌘]", "Rotate right"),
                      ("Double-click name", "Reset a slider")]),
+        ("Masking", [("⇧W", "Open or close Masking"), ("⇧M", "Radial Gradient"), ("[ ]", "Brush size"),
+                     ("⇧[ ⇧]", "Brush feather"), ("⌥ drag", "Erase while brushing"), ("Delete", "Delete the selected part"),
+                     ("Esc", "Cancel the tool, or close Masking")]),
         ("App", [("⌘,", "Settings"), ("⌘/", "This list")]),
     ]
 

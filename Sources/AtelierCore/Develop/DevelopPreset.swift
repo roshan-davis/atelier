@@ -5,7 +5,7 @@ import Foundation
 public struct DevelopPreset: Codable, Hashable, Sendable, Identifiable {
     /// The pieces a preset can include, as in Lightroom's New Preset dialog.
     public enum Part: String, Codable, CaseIterable, Sendable {
-        case whiteBalance, tone, presence, toneCurve, hsl, colorGrading, detail, effects, crop
+        case whiteBalance, tone, presence, toneCurve, hsl, colorGrading, detail, effects, crop, masks
 
         public var title: String {
             switch self {
@@ -18,12 +18,13 @@ public struct DevelopPreset: Codable, Hashable, Sendable, Identifiable {
             case .detail: return "Detail"
             case .effects: return "Effects"
             case .crop: return "Crop & Straighten"
+            case .masks: return "Masks"
             }
         }
 
-        /// Most presets are a look; white balance and crop depend on the photo, so they are
+        /// Most presets are a look; white balance, crop and masks depend on the photo, so they are
         /// left out unless chosen.
-        public static let defaults: Set<Part> = Set(allCases).subtracting([.whiteBalance, .crop])
+        public static let defaults: Set<Part> = Set(allCases).subtracting([.whiteBalance, .crop, .masks])
 
         var parameters: [DevelopSettings.Parameter] {
             switch self {
@@ -35,7 +36,7 @@ public struct DevelopPreset: Codable, Hashable, Sendable, Identifiable {
             case .colorGrading: return DevelopSettings.Panel.colorGrading.parameters
             case .detail: return DevelopSettings.Panel.detail.parameters
             case .effects: return DevelopSettings.Panel.effects.parameters
-            case .crop: return []
+            case .crop, .masks: return []
             }
         }
     }
@@ -69,6 +70,8 @@ public struct DevelopPreset: Codable, Hashable, Sendable, Identifiable {
                 result[.tint] = settings[.tint]
             case .crop:
                 result.crop = settings.crop
+            case .masks:
+                result.masks = settings.masks
             case .toneCurve:
                 for channel in DevelopSettings.CurveChannel.allCases {
                     result.setPoints(settings.points(for: channel), for: channel)
