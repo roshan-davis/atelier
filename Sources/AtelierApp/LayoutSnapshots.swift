@@ -193,6 +193,13 @@ enum LayoutSnapshots {
         if let entry = model.sidebar.imports.first(where: { $0.name == "RAW+JPEG Test" }) {
             model.sidebarSelection = .importGroup(entry.id)
             try? await Task.sleep(for: .seconds(2))
+            do {
+                let direct = try model.catalog.assetRows(filter: model.filter)
+                print("SNAPSHOT: pair direct rows \(direct.map { "\($0.filename) paired=\($0.pairedFormats ?? "-")" }) filter \(model.filter)")
+            } catch {
+                print("SNAPSHOT: pair rows error \(error)")
+            }
+            print("SNAPSHOT: pair status \(model.status ?? "-")")
             print("SNAPSHOT: pair entry count \(entry.photoCount), rows \(model.rows.map { "\($0.filename) paired=\($0.pairedFormats ?? "-")" })")
             await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1000, height: 584),
                           to: folder.appendingPathComponent("raw-pair-grid.png"))

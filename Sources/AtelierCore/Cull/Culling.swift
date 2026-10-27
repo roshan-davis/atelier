@@ -124,7 +124,13 @@ public enum Culling {
     public static func link(_ comparison: CullComparison, looseness: Double, slack: Bool = false) -> CullLink {
         let widen: Float = slack ? 1.5 : 1
         let loose = Float(looseness)
-        if let change = comparison.frameChange, change <= (0.08 + 0.22 * loose) * widen { return .sameFrame }
+        // The same frame also has to line up as a whole and, where Vision can tell, look alike:
+        // two flat, different scenes can differ in few places.
+        let lookAlike = comparison.featureDistance.map { $0 <= featureThreshold(looseness: looseness) * widen } ?? true
+        let linesUp = comparison.aligned.map { $0 <= (0.10 + 0.25 * loose) * widen } ?? true
+        if let change = comparison.frameChange, change <= (0.06 + 0.16 * loose) * widen, lookAlike, linesUp {
+            return .sameFrame
+        }
         if let aligned = comparison.aligned, aligned <= (0.10 + 0.25 * loose) * widen { return .similarShot }
         if let distance = comparison.featureDistance, distance <= featureThreshold(looseness: looseness) * widen {
             return .similarShot
