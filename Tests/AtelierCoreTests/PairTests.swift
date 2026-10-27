@@ -42,8 +42,10 @@ final class PairTests: XCTestCase {
         let catalog = try Catalog()
         let result = await Importer(catalog: catalog, previews: nil)
             .run(sources: [workDir], options: ImportOptions(buildPreviews: false))
-        let id = { (name: String) in result.assetIDsBySource[self.workDir.appendingPathComponent(name)]! }
-        let (raw, jpeg, single) = (id("DSC_1.NEF"), id("DSC_1.JPG"), id("DSC_2.JPG"))
+        XCTAssertEqual(result.failures, [])
+        let byName = Dictionary(uniqueKeysWithValues: result.assetIDsBySource.map { ($0.key.lastPathComponent, $0.value) })
+        let raw = try XCTUnwrap(byName["DSC_1.NEF"], "imported: \(byName.keys.sorted())")
+        let jpeg = try XCTUnwrap(byName["DSC_1.JPG"]), single = try XCTUnwrap(byName["DSC_2.JPG"])
         let group = try XCTUnwrap(result.importGroupId)
 
         let grouped = try catalog.assetRows(filter: LibraryFilter(scope: .importGroup(group)))
