@@ -95,6 +95,10 @@ final class LibraryModel: ObservableObject {
     /// Photos the open export dialog will export, in grid order.
     @Published private(set) var exportIDs: [Int64] = []
     @Published var exportProgress: ImportStatus?
+    /// The Match Look dialog, while open, and Match each photo's progress in the status bar.
+    @Published var matchLook: MatchLookModel?
+    @Published var matchProgress: ImportStatus?
+    var matchTask: Task<Void, Never>?
     private var exportTask: Task<Void, Never>?
     private var importTask: Task<Void, Never>?
     private var importWasCancelled = false

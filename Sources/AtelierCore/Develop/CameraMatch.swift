@@ -40,10 +40,30 @@ public struct CameraMatch: Sendable, Equatable {
     /// cropped or sized a little differently from the RAW.
     public static func fit(source: [UInt8], target: [UInt8]) -> CameraMatch {
         let bins = 256
-        let sourceHistogram = histogram(source, bins: bins)
-        let targetHistogram = histogram(target, bins: bins)
+        guard let curve = matchingCurve(source: histogram(source, bins: bins), target: histogram(target, bins: bins),
+                                        maxShift: maxShift) else { return .identity }
+
+        // Saturation: the camera's mean chroma against the source's once the curve is applied.
+        let match = CameraMatch(curve: curve, saturation: 1)
+        let sourceChroma = meanChroma(source) { match.value(at: $0) }
+        let targetChroma = meanChroma(target) { $0 }
+        var saturation = 1.0
+        if sourceChroma > 0.02, targetChroma > 0.02 {
+            saturation = min(1.35, max(0.85, targetChroma / sourceChroma))
+        }
+        return CameraMatch(curve: curve, saturation: saturation)
+    }
+
+    /// The rising curve, sampled at each bin, that gives tones distributed like `sourceHistogram`
+    /// the distribution of `targetHistogram` (histogram matching), smoothed and never moving a tone
+    /// by more than `maxShift`. Black stays at or below `blackCeiling` and white at or above
+    /// `whiteFloor`, so a faded or matte target can lift them only that far. Nil when either
+    /// histogram is empty.
+    static func matchingCurve(source sourceHistogram: [Double], target targetHistogram: [Double], maxShift: Double,
+                              blackCeiling: Double = 0.02, whiteFloor: Double = 1) -> [Float]? {
+        let bins = sourceHistogram.count
         let sourceTotal = sourceHistogram.reduce(0, +), targetTotal = targetHistogram.reduce(0, +)
-        guard sourceTotal > 0, targetTotal > 0 else { return .identity }
+        guard sourceTotal > 0, targetTotal > 0, targetHistogram.count == bins else { return nil }
 
         // Cumulative share of the target at or below each bin's upper edge.
         var targetCDF = [Double](repeating: 0, count: bins)
@@ -66,8 +86,8 @@ public struct CameraMatch: Sendable, Equatable {
             map[i] = (Double(k) + t) / Double(bins)
         }
         // Pin black and white, fill empty bins linearly, then smooth and keep it rising.
-        map[0] = map[0].map { min($0, 0.02) } ?? 0
-        map[bins - 1] = 1
+        map[0] = map[0].map { min($0, blackCeiling) } ?? 0
+        map[bins - 1] = max(whiteFloor, map[bins - 1] ?? 1)
         var filled = [Double](repeating: 0, count: bins)
         var last = 0
         filled[0] = map[0]!
@@ -85,22 +105,13 @@ public struct CameraMatch: Sendable, Equatable {
             var y = filled[lower...upper].reduce(0, +) / Double(upper - lower + 1)
             let x = Double(i) / Double(bins - 1)
             y = min(x + maxShift, max(x - maxShift, y))
-            if i == 0 { y = min(y, 0.02) }
-            if i == bins - 1 { y = 1 }
+            if i == 0 { y = min(y, blackCeiling) }
+            if i == bins - 1 { y = max(whiteFloor, min(1, y)) }
             y = max(previous, y)
             curve[i] = Float(y)
             previous = y
         }
-
-        // Saturation: the camera's mean chroma against the source's once the curve is applied.
-        let match = CameraMatch(curve: curve, saturation: 1)
-        let sourceChroma = meanChroma(source) { match.value(at: $0) }
-        let targetChroma = meanChroma(target) { $0 }
-        var saturation = 1.0
-        if sourceChroma > 0.02, targetChroma > 0.02 {
-            saturation = min(1.35, max(0.85, targetChroma / sourceChroma))
-        }
-        return CameraMatch(curve: curve, saturation: saturation)
+        return curve
     }
 
     private static func histogram(_ pixels: [UInt8], bins: Int) -> [Double] {

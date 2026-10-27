@@ -58,6 +58,7 @@ enum LayoutSnapshots {
         await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
                       to: folder.appendingPathComponent("develop-ai-1280x800.png"))
         model.develop.isAIOpen = false
+        await snapshotMatchLook(model: model, into: folder)
         await snapshotMasking(model: model, into: folder)
         await snapshotTransform(model: model, into: folder)
         // Each theme in Develop at the size in Rosh's screenshot, and the theme picker itself.
@@ -92,6 +93,51 @@ enum LayoutSnapshots {
         Theme.system.apply()
         fflush(stdout)
         exit(0)
+    }
+
+    /// The Match Look dialog with a warm, teal-shadowed reference, then with Match Areas on.
+    private static func snapshotMatchLook(model: LibraryModel, into folder: URL) async {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("atelier-reference.jpg")
+        let width = 1200, height = 800
+        let space = CGColorSpace(name: CGColorSpace.sRGB)!
+        if let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                                   space: space, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) {
+            let colors = [CGColor(srgbRed: 0.05, green: 0.18, blue: 0.2, alpha: 1),
+                          CGColor(srgbRed: 0.55, green: 0.45, blue: 0.35, alpha: 1),
+                          CGColor(srgbRed: 1, green: 0.78, blue: 0.5, alpha: 1)] as CFArray
+            if let gradient = CGGradient(colorsSpace: space, colors: colors, locations: [0, 0.5, 1]) {
+                context.drawLinearGradient(gradient, start: .zero, end: CGPoint(x: width, y: height), options: [])
+            }
+            context.setFillColor(CGColor(srgbRed: 0.85, green: 0.55, blue: 0.4, alpha: 1))
+            context.fillEllipse(in: CGRect(x: 450, y: 250, width: 300, height: 300))
+            if let image = context.makeImage(),
+               let destination = CGImageDestinationCreateWithURL(url as CFURL, "public.jpeg" as CFString, 1, nil) {
+                CGImageDestinationAddImage(destination, image, nil)
+                CGImageDestinationFinalize(destination)
+            }
+        }
+        model.beginMatchLook()
+        guard let match = model.matchLook else {
+            print("SNAPSHOT: Match Look did not open: \(model.status ?? "-")")
+            return
+        }
+        try? await Task.sleep(for: .seconds(1))
+        match.useFile(url)
+        func waitForMatch() async {
+            try? await Task.sleep(for: .milliseconds(500))
+            for _ in 0..<60 where match.match == nil || match.isMatching { try? await Task.sleep(for: .milliseconds(250)) }
+            try? await Task.sleep(for: .seconds(1))
+        }
+        await waitForMatch()
+        print("SNAPSHOT: match look \(match.match.flatMap { try? $0.matched.encoded() } ?? "none"), message \(match.message ?? "-")")
+        await capture(AnyView(MatchLookSheet(match: match).environmentObject(model)), size: CGSize(width: 900, height: 660),
+                      to: folder.appendingPathComponent("match-look.png"))
+        match.usesAreas = true
+        match.photoArea = CGRect(x: 0.1, y: 0.15, width: 0.35, height: 0.3)
+        await waitForMatch()
+        await capture(AnyView(MatchLookSheet(match: match).environmentObject(model)), size: CGSize(width: 900, height: 660),
+                      to: folder.appendingPathComponent("match-look-areas.png"))
+        model.matchLook = nil
     }
 
     /// Masking: a darker sky from a linear gradient, a brighter radial spot, and the overlay.

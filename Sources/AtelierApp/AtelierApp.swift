@@ -95,6 +95,10 @@ struct AtelierApp: App {
                 }
                 .disabled(model.focusedID == nil)
                 Divider()
+                Button("Match Look to Reference…") { model.beginMatchLook() }
+                    .keyboardShortcut("m", modifiers: [.command, .shift])
+                    .disabled(model.mode != .develop || model.focusedID == nil)
+                Divider()
                 ForEach(AIRecipe.allCases, id: \.self) { recipe in
                     Button("\(recipe.title)…") { model.openAI(recipe) }
                         .disabled(model.focusedID == nil)
