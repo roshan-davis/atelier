@@ -192,7 +192,13 @@ enum LayoutSnapshots {
         for _ in 0..<40 where model.importProgress != nil { try? await Task.sleep(for: .milliseconds(250)) }
         if let entry = model.sidebar.imports.first(where: { $0.name == "RAW+JPEG Test" }) {
             model.sidebarSelection = .importGroup(entry.id)
-            try? await Task.sleep(for: .seconds(2))
+            var waited = 0
+            while waited < 40, !model.rows.contains(where: { $0.filename == "DSC_0101.NEF" }) {
+                try? await Task.sleep(for: .milliseconds(250))
+                waited += 1
+            }
+            print("SNAPSHOT: pair rows arrived after \(waited * 250) ms, selection \(String(describing: model.sidebarSelection)), status \(model.status ?? "-")")
+            try? await Task.sleep(for: .seconds(1))
             do {
                 let direct = try model.catalog.assetRows(filter: model.filter)
                 print("SNAPSHOT: pair direct rows \(direct.map { "\($0.filename) paired=\($0.pairedFormats ?? "-")" }) filter \(model.filter)")
