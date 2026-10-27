@@ -66,6 +66,10 @@ public struct Asset: Codable, Identifiable, Hashable, Sendable, FetchableRecord,
     public var importedAt: Date
     /// Set on a virtual copy: the master photo whose file it shares.
     public var virtualCopyOf: Int64? = nil
+    /// The filename without its extension, lowercased: how a RAW finds the JPEG shot with it.
+    public var stem: String? = nil
+    /// A camera RAW file (NEF, CR3, ARW, DNG…).
+    public var isRaw: Bool = false
 
     public mutating func didInsert(_ inserted: InsertionSuccess) {
         id = inserted.rowID
@@ -214,6 +218,9 @@ public struct AssetRow: Codable, Hashable, Identifiable, Sendable, FetchableReco
     public var stackCount: Int?
     /// How many photos were culled together with this one; nil when it was never in a cull group.
     public var cullGroupSize: Int?
+    /// On a RAW shown for a RAW+JPEG pair: the other files' extensions, such as "JPG" or
+    /// "JPG,HEIC". Nil when the photo has no hidden siblings.
+    public var pairedFormats: String? = nil
 }
 
 /// Everything the inspector and loupe need for one photo.

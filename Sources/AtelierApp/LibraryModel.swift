@@ -61,8 +61,12 @@ final class LibraryModel: ObservableObject {
     @Published var sidebarSelection: SidebarItem? = .all {
         didSet { filter.scope = sidebarSelection?.scope ?? .all }
     }
-    @Published var filter = LibraryFilter() {
-        didSet { if filter != oldValue { observeRows() } }
+    @Published var filter = LibraryFilter(groupsRawPairs: FilePairs.isGrouping) {
+        didSet {
+            guard filter != oldValue else { return }
+            observeRows()
+            if filter.groupsRawPairs != oldValue.groupsRawPairs { observeSidebar() }
+        }
     }
     @Published var selection: Set<Int64> = []
     @Published var focusedID: Int64? {
@@ -126,6 +130,14 @@ final class LibraryModel: ObservableObject {
         observeSidebar()
         installKeyMonitor()
         observeMounts()
+        // Settings > Import > "Show RAW+JPEG pairs as one photo".
+        NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil,
+                                               queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.filter.groupsRawPairs != FilePairs.isGrouping else { return }
+                self.filter.groupsRawPairs = FilePairs.isGrouping
+            }
+        }
         previewScheduler.onFinish { [weak self] _, _ in
             Task { @MainActor in self?.previewsChanged() }
         }
@@ -170,13 +182,15 @@ final class LibraryModel: ObservableObject {
     }
 
     private func observeSidebar() {
+        sidebarTask?.cancel()
+        let pairs = filter.groupsRawPairs
         let observation = ValueObservation.tracking { db in
             SidebarData(
                 volumes: try Volume.order(Column("name")).fetchAll(db),
                 folders: try Folder.order(Column("relativePath")).fetchAll(db),
                 collections: try PhotoCollection.order(Column("name")).fetchAll(db),
-                imports: try Catalog.fetchImportGroupSummaries(db),
-                totalCount: try Asset.fetchCount(db))
+                imports: try Catalog.fetchImportGroupSummaries(db, groupingRawPairs: pairs),
+                totalCount: try Catalog.fetchPhotoCount(db, groupingRawPairs: pairs))
         }
         let writer = catalog.writer
         sidebarTask = Task { [weak self] in
@@ -321,13 +335,20 @@ final class LibraryModel: ObservableObject {
 
     // MARK: Edits
 
-    func setRating(_ rating: Int) { perform { try $0.setRating(rating, for: self.targetIDs) } }
-    func setFlag(_ flag: Flag) { perform { try $0.setFlag(flag, for: self.targetIDs) } }
-    func toggleLabel(_ label: ColorLabel) { perform { try $0.toggleColorLabel(label, for: self.targetIDs) } }
+    /// `targetIDs` plus the JPEGs hidden behind those RAWs, which follow their RAW's rating,
+    /// flag, label, keywords, collections and import entries.
+    var pairTargetIDs: [Int64] {
+        guard filter.groupsRawPairs else { return targetIDs }
+        return (try? catalog.withPairSiblings(targetIDs)) ?? targetIDs
+    }
+
+    func setRating(_ rating: Int) { perform { try $0.setRating(rating, for: self.pairTargetIDs) } }
+    func setFlag(_ flag: Flag) { perform { try $0.setFlag(flag, for: self.pairTargetIDs) } }
+    func toggleLabel(_ label: ColorLabel) { perform { try $0.toggleColorLabel(label, for: self.pairTargetIDs) } }
 
     func setKeywords(_ text: String) {
         let names = text.split(separator: ",").map(String.init)
-        perform { try $0.setKeywords(names, for: self.targetIDs) }
+        perform { try $0.setKeywords(names, for: self.pairTargetIDs) }
     }
 
     func setTitle(_ title: String, caption: String) {
@@ -341,18 +362,18 @@ final class LibraryModel: ObservableObject {
         perform { catalog in
             let collection = try catalog.createCollection(named: trimmed)
             if addingSelection, let id = collection.id {
-                try catalog.addAssets(self.targetIDs, toCollection: id)
+                try catalog.addAssets(self.pairTargetIDs, toCollection: id)
             }
         }
     }
 
     func addSelection(toCollection id: Int64) {
-        perform { try $0.addAssets(self.targetIDs, toCollection: id) }
+        perform { try $0.addAssets(self.pairTargetIDs, toCollection: id) }
     }
 
     func removeSelectionFromCurrentCollection() {
         guard case .collection(let id) = sidebarSelection else { return }
-        perform { try $0.removeAssets(self.targetIDs, fromCollection: id) }
+        perform { try $0.removeAssets(self.pairTargetIDs, fromCollection: id) }
     }
 
     func renameCollection(_ id: Int64, to name: String) {
@@ -362,12 +383,12 @@ final class LibraryModel: ObservableObject {
     // MARK: Import entries
 
     func addSelection(toImportGroup id: Int64) {
-        perform { try $0.addAssets(self.targetIDs, toImportGroup: id) }
+        perform { try $0.addAssets(self.pairTargetIDs, toImportGroup: id) }
     }
 
     func removeSelectionFromCurrentImport() {
         guard case .importGroup(let id) = sidebarSelection else { return }
-        perform { try $0.removeAssets(self.targetIDs, fromImportGroup: id) }
+        perform { try $0.removeAssets(self.pairTargetIDs, fromImportGroup: id) }
     }
 
     func renameImportGroup(_ id: Int64, to name: String) {
@@ -389,7 +410,7 @@ final class LibraryModel: ObservableObject {
         do {
             try edit(catalog)
             reloadDetail()
-            if UserDefaults.standard.bool(forKey: "xmp.autoWrite") { autoWriteXMP(targetIDs) }
+            if UserDefaults.standard.bool(forKey: "xmp.autoWrite") { autoWriteXMP(pairTargetIDs) }
         } catch {
             status = error.localizedDescription
         }

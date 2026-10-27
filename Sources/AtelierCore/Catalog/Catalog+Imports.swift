@@ -46,13 +46,22 @@ extension Catalog {
         }
     }
 
-    /// Newest first.
-    public static func fetchImportGroupSummaries(_ db: Database) throws -> [ImportGroupSummary] {
+    /// Photos in the catalog; with `groupingRawPairs`, a RAW+JPEG pair counts once.
+    public static func fetchPhotoCount(_ db: Database, groupingRawPairs: Bool) throws -> Int {
+        try Int.fetchOne(db, sql: """
+            SELECT COUNT(*) FROM asset\(groupingRawPairs ? " WHERE NOT " + FilePairs.hiddenCondition() : "")
+            """) ?? 0
+    }
+
+    /// Newest first. With `groupingRawPairs`, a RAW+JPEG pair counts as one photo.
+    public static func fetchImportGroupSummaries(_ db: Database, groupingRawPairs: Bool = false) throws -> [ImportGroupSummary] {
         try ImportGroupSummary.fetchAll(db, sql: """
             SELECT importGroup.id, importGroup.name, importGroup.createdAt,
-                   COUNT(importGroupAsset.assetId) AS photoCount
+                   COUNT(asset.id) AS photoCount
             FROM importGroup
             LEFT JOIN importGroupAsset ON importGroupAsset.importGroupId = importGroup.id
+            LEFT JOIN asset ON asset.id = importGroupAsset.assetId
+                AND \(groupingRawPairs ? "NOT " + FilePairs.hiddenCondition() : "1")
             GROUP BY importGroup.id
             ORDER BY importGroup.createdAt DESC, importGroup.id DESC
             """)

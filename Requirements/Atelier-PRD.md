@@ -76,12 +76,27 @@ Culling picks the keepers from groups of similar shots (bursts, the same scene t
 
 - **Before importing:** the Import dialog has "Cull before importing". With it on, the button reads "Continue to Culling…" and the Cull view opens on the chosen photos. Only kept photos go into the import entry, with the options chosen in the dialog. The shots not kept are still cataloged (flagged Rejected, outside the entry, under All Photographs and their folder) so they can be re-reviewed; in copy mode they are copied too.
 - **On an import entry:** right-click the entry in the sidebar > Cull…, or Library > Cull Import…. When done, kept photos are flagged Picked and the others Rejected (nothing is removed; the Rejected filter hides them and culling again changes it).
-- **Grouping:** photos are ordered by capture time; a photo joins the group before it when it was taken close in time and looks alike (Vision image feature prints). A Grouping slider goes from Tight to Loose and regroups instantly. Single shots are listed last and kept.
+- **Grouping:** photos are ordered by capture time; a photo joins the group before it when it was taken close in time (within a minute) and matches it, and also matches the group's first shot a little more loosely, so a slow pan doesn't chain a whole shoot. A Grouping slider goes from Tight to Loose and regroups instantly. Single shots are listed last and kept.
+- **Match (updated Oct 27, 2026):** Rosh asked for more than one way of telling similar shots apart. A Match control at the top picks one, and is remembered:
+  - **Same Frame:** only shots framed alike from the same spot, where people moved slightly, blinked or changed expression. Measured pixel by pixel: the share of the frame that changed, ignoring exposure differences and a tiny camera shake.
+  - **Similar Shots** (default): also the same scene reframed: slightly zoomed or recomposed, people in the background or far away moving, focus on a different subject. Measured by lining the shots up (zooms up to about a quarter, small shifts) and by Vision feature prints. Shots under a second apart (a burst) always join.
+  - Each group is labelled Same frame or Similar shots, so a Similar Shots cull still shows which groups are near-identical.
+- **RAW+JPEG:** a RAW and the JPEG (or HEIC, TIFF) shot with it are one frame in culling, whatever the RAW+JPEG setting: the RAW is analyzed and shown, marked RAW+JPG, and keeping or dropping it applies to both.
 - **Suggested keeper:** in each group Atelier suggests the best photo: the sharpest, and where there are faces, the best face capture quality (eyes open, in focus). It is marked Suggested and starts as the keeper; any photo can be kept or dropped, and a group can keep several.
 - **Layout:** groups as rows of thumbnails on the left (kept photos with a check, the rest dimmed), the focused photo large on the right with its sharpness and face quality, counts and the Grouping slider on top, Cancel and Import N Photos (or Done) at the bottom.
 - **Keys:** arrows move between photos and groups, P keeps, X drops, Space toggles, Return finishes, Esc cancels.
 - **Groups are remembered.** Every photo culled with others shows "◫ n" (the group's size) in the grid. Photo > Show Cull Group (⇧⌘G), or right-click > Show Cull Group (n Shots), opens the Cull view on that one group: the keeper next to every shot it beat, rejected ones included, with the same large preview to re-review and change the keeper. A shot kept on re-review is flagged Picked and joins the group's import entry.
 - Analysis runs in the background with progress; for photos already cataloged it reads the files where they are.
+
+### RAW+JPEG pairs (decided Oct 27, 2026)
+
+Cameras set to RAW+JPEG write DSC_0001.NEF and DSC_0001.JPG for one picture. Rosh wants these grouped, with only the RAW shown, and kept separate from culling (which groups different frames).
+
+- **What pairs:** files in the same folder with the same name apart from the extension, where exactly one is a RAW (NEF, CR2, CR3, ARW, RAF, ORF, RW2, DNG and the other RAW formats). The others (JPEG, HEIC, TIFF, PNG) are its siblings.
+- **Setting:** Settings > Import > "Show RAW+JPEG pairs as one photo", on by default. On: the grid, filmstrip and counts show only the RAW, with a "RAW+JPG" badge; the inspector lists the sibling files under "Shot with". Off: every file is its own photo. Changing it takes effect at once; nothing is re-imported.
+- **Cataloging:** every file is still imported and cataloged (with its own hash and metadata), so turning the setting off loses nothing.
+- **Edits follow the RAW:** while grouped, ratings, flags, color labels, keywords, collections and import entries set on the RAW are set on its siblings too. Develop settings, Edit In, AI and export use the RAW only, as in Lightroom.
+- **Not hidden:** Edit In and AI results and virtual copies, even when their name matches a RAW.
 
 ### Virtual copies (decided Oct 26, 2026)
 
@@ -191,7 +206,7 @@ Edits are a versioned list of parameters stored in the catalog, rendered live on
 Atelier > Settings… (⌘,) has these tabs:
 - **General:** catalog location (Show in Finder), photo count, backups kept on quit (default 10), Back Up Now, preview cache size.
 - **Appearance:** theme, picked from small previews: System (follows macOS), Light, Dark, Graphite (charcoal panels and a dark surround, like Lightroom), Darkroom (near black, so only the photo stands out) and Neutral Gray (a mid-gray surround for judging color and brightness). The theme changes every window at once, Settings included.
-- **Import:** default for new imports (leave files or copy into the library folder) and the library folder. The Import dialog starts from these.
+- **Import:** default for new imports (leave files or copy into the library folder) and the library folder. The Import dialog starts from these. "Show RAW+JPEG pairs as one photo" (on by default; see RAW+JPEG pairs).
 - **Develop:** what a click or Z zooms to (50%, 100%, 200%, 400%), solo mode, and the histogram clipping warnings.
 - **Export:** default export folder and whether to show exports in Finder.
 - **Edit In:** the external editors and what each is sent (see External editor integration).

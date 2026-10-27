@@ -17,14 +17,17 @@ public struct LibraryFilter: Hashable, Sendable {
     public var colorLabel: ColorLabel?
     /// Matches filename, title, caption or keyword.
     public var text: String = ""
+    /// Shows a RAW+JPEG pair as its RAW alone (see `FilePairs`).
+    public var groupsRawPairs: Bool = true
 
     public init(scope: LibraryScope = .all, minRating: Int = 0, flag: Flag? = nil,
-                colorLabel: ColorLabel? = nil, text: String = "") {
+                colorLabel: ColorLabel? = nil, text: String = "", groupsRawPairs: Bool = true) {
         self.scope = scope
         self.minRating = minRating
         self.flag = flag
         self.colorLabel = colorLabel
         self.text = text
+        self.groupsRawPairs = groupsRawPairs
     }
 }
 
@@ -39,13 +42,14 @@ extension Catalog {
                     WHERE derived.assetId = asset.id AND derived.derivedAssetId IS NOT NULL) AS stackCount,
                    (SELECT COUNT(*) FROM cullGroupAsset member
                     WHERE member.cullGroupId = (SELECT cullGroupId FROM cullGroupAsset WHERE assetId = asset.id))
-                    AS cullGroupSize
+                    AS cullGroupSize,
+                   \(filter.groupsRawPairs ? pairedFormats : "NULL") AS pairedFormats
             FROM asset
             JOIN metadata ON metadata.assetId = asset.id
             LEFT JOIN version stackVersion ON stackVersion.derivedAssetId = asset.id
             LEFT JOIN asset stackParent ON stackParent.id = stackVersion.assetId
             """
-        var conditions: [String] = []
+        var conditions: [String] = filter.groupsRawPairs ? ["NOT " + FilePairs.hiddenCondition()] : []
         var arguments: [(any DatabaseValueConvertible)?] = []
 
         switch filter.scope {
@@ -97,6 +101,14 @@ extension Catalog {
             """
         return try AssetRow.fetchAll(db, sql: sql, arguments: StatementArguments(arguments))
     }
+
+    /// The extensions of the files hidden behind a pair's RAW, such as "JPG,HEIC".
+    private static let pairedFormats = """
+        (SELECT group_concat(upper(substr(sibling.filename, length(sibling.stem) + 2)), ',')
+         FROM asset sibling
+         WHERE asset.isRaw = 1 AND asset.virtualCopyOf IS NULL AND sibling.folderId = asset.folderId
+           AND sibling.stem = asset.stem AND sibling.id != asset.id AND \(FilePairs.hiddenCondition("sibling")))
+        """
 
     public func assetRows(filter: LibraryFilter) throws -> [AssetRow] {
         try writer.read { db in try Self.fetchAssetRows(db, filter: filter) }

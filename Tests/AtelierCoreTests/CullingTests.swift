@@ -26,6 +26,63 @@ final class CullingTests: XCTestCase {
         XCTAssertEqual(loose, [[0, 1, 2]])
     }
 
+    func testSameFrameModeOnlyFollowsSameFrameLinks() {
+        let start = Date(timeIntervalSince1970: 0)
+        // 0-1-2 the same frame (a blink), 3 zoomed in on it, 4 another scene; all in a burst.
+        let links: [Int: CullLink] = [0: .sameFrame, 1: .sameFrame, 2: .similarShot, 3: .different]
+        let link = { (a: Int, b: Int, _: Bool) -> CullLink in
+            b == a + 1 ? links[a]! : (b <= 2 ? .sameFrame : .similarShot)
+        }
+        let times = { (index: Int) -> Date? in start + Double(index) * 2 }
+        XCTAssertEqual(Culling.groups(count: 5, times: times, mode: .sameFrame, link: link), [[0, 1, 2], [3], [4]])
+        XCTAssertEqual(Culling.groups(count: 5, times: times, mode: .similarShots, link: link), [[0, 1, 2, 3], [4]])
+    }
+
+    func testTellsABlinkFromAZoomFromAnotherScene() {
+        let scene = pattern(seed: 1)
+        // A blink or a turned head: a small patch changes.
+        var blink = scene
+        for y in 30..<35 { for x in 20..<26 { blink[y * 64 + x] = 1 - blink[y * 64 + x] } }
+        // The same scene from a step closer, a little brighter.
+        let zoomed = Culling.sample(scene, side: 64, crop: (0.52, 0.5, 0.84)).map { min(1, $0 * 1.1) }
+        let other = pattern(seed: 7)
+
+        XCTAssertLessThan(Culling.frameChange(scene, blink), 0.05)
+        XCTAssertGreaterThan(Culling.frameChange(scene, zoomed), 0.3)
+        XCTAssertLessThan(Culling.alignedDifference(scene, zoomed), 0.1)
+        XCTAssertGreaterThan(Culling.alignedDifference(scene, other), 0.4)
+
+        let signals = { (layout: [Float]) in CullSignals(layout: layout) }
+        let compare = { (a: [Float], b: [Float]) in
+            Culling.link(Culling.compare(signals(a), signals(b)), looseness: 0.5)
+        }
+        XCTAssertEqual(compare(scene, blink), .sameFrame)
+        XCTAssertEqual(compare(scene, zoomed), .similarShot)
+        XCTAssertEqual(compare(scene, other), .different)
+        // Portrait and landscape shots are never the same frame.
+        var portrait = signals(blink)
+        portrait.aspect = 0.66
+        XCTAssertEqual(Culling.link(Culling.compare(signals(scene), portrait), looseness: 0.5), .different)
+        XCTAssertEqual(Culling.link(Culling.compare(CullSignals(), CullSignals()), looseness: 0.5), .unknown)
+    }
+
+    /// A 64 × 64 brightness grid with blobs and waves, different for each seed.
+    private func pattern(seed: Int) -> [Float] {
+        var values = [Float](repeating: 0, count: 64 * 64)
+        let s = Float(seed)
+        for y in 0..<64 {
+            for x in 0..<64 {
+                let fx = Float(x) / 64, fy = Float(y) / 64
+                let wave: Float = 0.2 * sin(fx * (14 + s) + s) * cos(fy * (11 + s * 0.5))
+                let diagonal: Float = 0.15 * sin((fx + fy) * (19 + s * 2) + s * 3)
+                let ripple: Float = 0.1 * cos(fx * fy * (25 + s))
+                let v: Float = 0.5 + wave + diagonal + ripple
+                values[y * 64 + x] = min(max(v, 0), 1)
+            }
+        }
+        return values
+    }
+
     func testSuggestsTheSharpestAndBestFace() {
         let blurry = CullSignals(sharpness: 40), sharp = CullSignals(sharpness: 400)
         XCTAssertEqual(Culling.suggestedKeeper([blurry, sharp, blurry]), 1)

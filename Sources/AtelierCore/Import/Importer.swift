@@ -231,7 +231,8 @@ public final class Importer: Sendable {
                 perceptualHash: nil, captureTime: metadata.captureTime,
                 cameraMake: metadata.cameraMake, cameraModel: metadata.cameraModel, lens: metadata.lens,
                 width: metadata.width, height: metadata.height, orientation: metadata.orientation,
-                uti: metadata.uti, importedAt: Date())
+                uti: metadata.uti, importedAt: Date(),
+                stem: FilePairs.stem(of: filename), isRaw: FilePairs.isRaw(filename))
             try asset.insert(db)
             let assetID = asset.id!
 

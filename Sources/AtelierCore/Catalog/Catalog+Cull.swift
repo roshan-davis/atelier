@@ -20,7 +20,8 @@ extension Catalog {
     /// Records the outcome of a cull. Groups of two or more are saved (a photo belongs to one
     /// group; culling again replaces its old group). Keepers in those groups are flagged Picked
     /// and the rest Rejected; single shots keep their flags. A keeper that isn't in any import
-    /// entry joins the entries its group's other photos are in.
+    /// entry joins the entries its group's other photos are in. A RAW's paired JPEG (see
+    /// `FilePairs`) gets the same flag and entries without joining the group itself.
     public func applyCull(groups: [[Int64]], keepers: Set<Int64>) throws {
         try writer.write { db in
             let now = Date()
@@ -34,8 +35,10 @@ extension Catalog {
                     try db.execute(sql: "INSERT INTO cullGroupAsset (cullGroupId, assetId) VALUES (?, ?)",
                                    arguments: [groupID, id])
                     let flag: Flag = keepers.contains(id) ? .picked : .rejected
-                    try db.execute(sql: "UPDATE metadata SET flag = ?, xmpDirty = 1 WHERE assetId = ?",
-                                   arguments: [flag.rawValue, id])
+                    for member in [id] + (try Self.pairSiblings(db, of: [id])) {
+                        try db.execute(sql: "UPDATE metadata SET flag = ?, xmpDirty = 1 WHERE assetId = ?",
+                                       arguments: [flag.rawValue, member])
+                    }
                 }
                 let list = group.map(String.init).joined(separator: ",")
                 for id in group where keepers.contains(id) {
@@ -45,6 +48,12 @@ extension Catalog {
                         WHERE assetId IN (\(list))
                           AND NOT EXISTS (SELECT 1 FROM importGroupAsset WHERE assetId = ?)
                         """, arguments: [id, id])
+                    for sibling in try Self.pairSiblings(db, of: [id]) {
+                        try db.execute(sql: """
+                            INSERT OR IGNORE INTO importGroupAsset (importGroupId, assetId)
+                            SELECT importGroupId, ? FROM importGroupAsset WHERE assetId = ?
+                            """, arguments: [sibling, id])
+                    }
                 }
             }
             try db.execute(sql: "DELETE FROM cullGroup WHERE id NOT IN (SELECT cullGroupId FROM cullGroupAsset)")
