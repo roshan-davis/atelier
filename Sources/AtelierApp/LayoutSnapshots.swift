@@ -132,6 +132,8 @@ enum LayoutSnapshots {
         print("SNAPSHOT: match look \(match.match.flatMap { try? $0.matched.encoded() } ?? "none"), message \(match.message ?? "-")")
         await capture(AnyView(MatchLookSheet(match: match).environmentObject(model)), size: CGSize(width: 900, height: 660),
                       to: folder.appendingPathComponent("match-look.png"))
+        await capture(AnyView(MatchDifferencesView(lines: match.differences)), size: CGSize(width: 300, height: 420),
+                      to: folder.appendingPathComponent("match-look-differences.png"))
         match.usesAreas = true
         match.photoArea = CGRect(x: 0.1, y: 0.15, width: 0.35, height: 0.3)
         await waitForMatch()

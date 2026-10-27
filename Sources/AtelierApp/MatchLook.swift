@@ -30,6 +30,57 @@ struct RecentReference: Codable, Hashable, Identifiable {
     }
 }
 
+/// One line of Show Differences.
+struct MatchDifference: Identifiable, Hashable {
+    var name: String
+    var change: String
+    var id: String { name }
+
+    /// The sliders that differ between `old` and `new`, in panel order.
+    static func list(from old: DevelopSettings, to new: DevelopSettings, asShot: Double) -> [MatchDifference] {
+        var lines: [MatchDifference] = []
+        if old.temperature != new.temperature {
+            let from = Int((old.temperature ?? asShot).rounded()), to = Int((new.temperature ?? asShot).rounded())
+            if from != to { lines.append(MatchDifference(name: "Temp", change: "\(from) → \(to) K")) }
+        }
+        let changed = DevelopSettings.Parameter.allCases.filter { $0 != .temperature && abs(old[$0] - new[$0]) > 1e-6 }
+        for parameter in changed where parameter.panel == .basic {
+            lines.append(line(parameter, old[parameter], new[parameter]))
+        }
+        if old.points(for: .rgb) != new.points(for: .rgb) {
+            lines.append(MatchDifference(name: "Tone Curve (RGB)", change: "reshaped"))
+        }
+        for parameter in changed where parameter.panel != .basic {
+            lines.append(line(parameter, old[parameter], new[parameter]))
+        }
+        return lines
+    }
+
+    private static let hueParameters: Set<DevelopSettings.Parameter> = [
+        .gradeShadowsHue, .gradeMidtonesHue, .gradeHighlightsHue, .gradeGlobalHue,
+    ]
+
+    private static func line(_ parameter: DevelopSettings.Parameter, _ from: Double, _ to: Double) -> MatchDifference {
+        let change: String
+        if hueParameters.contains(parameter) {
+            change = "\(Int(from.rounded()))° → \(Int(to.rounded()))°"
+        } else if parameter == .exposure {
+            change = String(format: "%+.2f → %+.2f", from, to)
+        } else if parameter.range.lowerBound >= 0 {
+            change = String(format: "%.0f → %.0f", from, to)
+        } else {
+            change = String(format: "%+.0f → %+.0f", from, to)
+        }
+        return MatchDifference(name: name(parameter), change: change)
+    }
+
+    private static func name(_ parameter: DevelopSettings.Parameter) -> String {
+        if let pair = parameter.hslBand { return "\(pair.0.rawValue) \(pair.1.rawValue)" }
+        if parameter.panel == .colorGrading { return "Grading \(parameter.group) \(parameter.label)" }
+        return parameter.label
+    }
+}
+
 /// With several photos selected: one fit synced to all, or a fit per photo.
 enum MatchApplyMode: String, CaseIterable {
     case same, each
@@ -127,6 +178,13 @@ final class MatchLookModel: ObservableObject, Identifiable {
     }
 
     var otherCount: Int { targets.count - 1 }
+
+    /// Show Differences at the current strength.
+    var differences: [MatchDifference] {
+        guard let match else { return [] }
+        return MatchDifference.list(from: base, to: match.settings(strength: strength / 100),
+                                    asShot: match.asShotTemperature)
+    }
     var canApply: Bool { match != nil && !isMatching }
 
     // MARK: Reference
