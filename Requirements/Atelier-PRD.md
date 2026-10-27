@@ -94,6 +94,17 @@ Rosh wants several treatments of one photo (colour and black and white, two crop
 - **Remove:** right-click > Remove Virtual Copy…, or Photo > Remove Virtual Copy…, after a confirmation. Only catalog data goes; the original and its file are never touched.
 - **Files:** a copy shares the original's file. Export names it `name-Copy1.jpg`. XMP sidecars are written for the original only. Re-importing the folder never mistakes a copy for the file. Culling an import entry skips copies.
 
+### Filmstrip (decided Oct 27, 2026)
+
+Rosh asked for Lightroom's Filmstrip: a bottom drawer with the thumbnails of the current list.
+
+- **What it shows:** the photos of the current source (All Photographs, a volume, folder, collection or import entry) with the filter bar applied, in the same order as the grid. A thin header names the source and shows the photo count, how many are selected, "n of N" for the current photo and its filename (plus "Copy n" for a virtual copy).
+- **Where:** across the full width of the window, under the left panel, the photo area and the right panel, as in Lightroom Classic. It is shown in Grid, Loupe and Develop.
+- **Selection:** the photo being worked on has a bright border, and other selected photos have a softer one. Click selects, ⌘-click adds or removes, ⇧-click selects a run, and double-click opens the photo in Loupe from the grid. The strip scrolls to keep the current photo in view, including when arrow keys move through photos. Rejected photos are dimmed, and flag, stars, stack and cull badges match the grid.
+- **Collapse and open:** a small arrow tab centered on the bottom edge (▾ to hide, ▴ to show), View > Show Filmstrip, or F6.
+- **Size:** drag the Filmstrip's top edge to make thumbnails bigger or smaller (56 to 220 pt).
+- **Remembered:** open or collapsed, and the height, are kept between launches.
+
 ## Scope by release
 
 The MVP proves the catalog, a usable develop module and one AI backend. Full develop parity and the plugin system come in v1.

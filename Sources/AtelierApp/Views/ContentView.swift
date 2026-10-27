@@ -9,51 +9,56 @@ struct ContentView: View {
     @AppStorage(Theme.defaultsKey) private var theme: Theme = .system
 
     var body: some View {
-        NavigationSplitView {
-            Group {
-                if model.mode == .develop {
-                    DevelopSidebar(develop: model.develop)
-                } else {
-                    SidebarView()
-                }
-            }
-            .navigationSplitViewColumnWidth(min: 200, ideal: 240)
-        } detail: {
-            // The right panel sits beside the content, below the toolbar, like Lightroom's,
-            // rather than as a full-height inspector the toolbar floats over.
-            HStack(spacing: 0) {
-                VStack(spacing: 0) {
-                    FilterBar()
-                    Divider()
-                    ZStack {
-                        switch model.mode {
-                        case .grid:
-                            GridView(model: model, background: theme.gridBackground)
-                        case .loupe:
-                            LoupeView()
-                        case .develop:
-                            DevelopImageView(develop: model.develop)
-                        }
-                        if model.rows.isEmpty {
-                            EmptyLibraryView()
-                        }
+        // Like Lightroom Classic, the Filmstrip runs the full width of the window, under
+        // both side panels.
+        VStack(spacing: 0) {
+            NavigationSplitView {
+                Group {
+                    if model.mode == .develop {
+                        DevelopSidebar(develop: model.develop)
+                    } else {
+                        SidebarView()
                     }
-                    Divider()
-                    StatusBar()
                 }
-                // Let the photo column shrink to whatever is left and never draw past it.
-                .frame(minWidth: 0, maxWidth: .infinity)
-                .background(Color(nsColor: theme.chrome))
-                .clipped()
-                if showInspector {
-                    PanelResizeHandle(width: $panelWidth)
-                    InspectorView()
-                        .frame(width: panelWidth)
-                        .clipped()
-                        .layoutPriority(1)
-                        .background(Color(nsColor: theme.panel))
+                .navigationSplitViewColumnWidth(min: 200, ideal: 240)
+            } detail: {
+                // The right panel sits beside the content, below the toolbar, like Lightroom's,
+                // rather than as a full-height inspector the toolbar floats over.
+                HStack(spacing: 0) {
+                    VStack(spacing: 0) {
+                        FilterBar()
+                        Divider()
+                        ZStack {
+                            switch model.mode {
+                            case .grid:
+                                GridView(model: model, background: theme.gridBackground)
+                            case .loupe:
+                                LoupeView()
+                            case .develop:
+                                DevelopImageView(develop: model.develop)
+                            }
+                            if model.rows.isEmpty {
+                                EmptyLibraryView()
+                            }
+                        }
+                        Divider()
+                        StatusBar()
+                    }
+                    // Let the photo column shrink to whatever is left and never draw past it.
+                    .frame(minWidth: 0, maxWidth: .infinity)
+                    .background(Color(nsColor: theme.chrome))
+                    .clipped()
+                    if showInspector {
+                        PanelResizeHandle(width: $panelWidth)
+                        InspectorView()
+                            .frame(width: panelWidth)
+                            .clipped()
+                            .layoutPriority(1)
+                            .background(Color(nsColor: theme.panel))
+                    }
                 }
             }
+            FilmstripView()
         }
         // Dropping folders or photos anywhere on the window starts an import with them.
         .dropDestination(for: URL.self) { urls, _ in
