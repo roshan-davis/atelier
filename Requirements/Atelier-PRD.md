@@ -138,6 +138,16 @@ Rosh asked for Lightroom's graduated, radial and brush adjustments, edited throu
 - **History and storage:** every change is a history step (New Mask: Linear Gradient, Mask 1 Exposure +0.50, Edit Mask 1). Masks are saved in the develop settings JSON with the photo, copied by Copy and Paste Settings and by virtual copies, and optional in presets (the Masks part, off by default, as Lightroom's Masking checkbox). They render in previews, exports, Edit In and AI.
 - **Later:** zooming while masking, Select Sky and Background, color range, and Lightroom's Auto Mask for the brush.
 
+### Camera-matched RAW look (decided Oct 27, 2026)
+
+Rosh saw a selected photo appear with one look, then turn darker a moment later. The first image was the JPEG preview the camera embeds in the RAW (Nikon Zf and Z6: Picture Control and Active D-Lighting); the second was Apple's RAW engine at default settings, which has none of that processing.
+
+- **Default look:** every RAW starts from the camera's look, like Lightroom's Camera Matching profiles. Atelier compares the embedded preview with its neutral render and fits a tone curve (histogram matching on brightness, smoothed, never moving a tone by more than 30%) and a saturation factor (0.85 to 1.35). It is applied right after decode (pipeline step 1), before any of the user's adjustments, so sliders at zero show the camera's look.
+- **Everywhere:** Develop, Before/After, the histogram, masks, the loupe preview, thumbnails of edited photos and exports all use it, so the grid's embedded thumbnail, the loupe and Develop agree and nothing visibly swaps.
+- **No usable preview:** files without an embedded preview (or with one of a different shape) keep Apple's render. JPEG, HEIC and other non-RAW files are unchanged.
+- **Previews:** previews from before this change are rebuilt once on first launch.
+- **Later:** a profile choice in the Basic panel (Camera Matching, Apple Neutral, custom camera profiles), as Lightroom's Profile menu.
+
 ## Scope by release
 
 The MVP proves the catalog, a usable develop module and one AI backend. Full develop parity and the plugin system come in v1.
@@ -185,7 +195,7 @@ Edits are a versioned list of parameters stored in the catalog, rendered live on
 
 ### Pipeline order
 
-1. RAW decode and demosaic (CIRAWFilter): white balance, exposure baseline, noise reduction, lens correction.
+1. RAW decode and demosaic (CIRAWFilter): white balance, exposure baseline, noise reduction, lens correction, then the camera-matched base look.
 2. Linear-light global adjustments: exposure, highlights, shadows, whites, blacks.
 3. Tone: contrast, tone curve (parametric and point, per channel).
 4. Color: vibrance, saturation, HSL (8 hues), color grading (shadows, midtones, highlights).
