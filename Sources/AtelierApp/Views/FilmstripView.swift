@@ -92,6 +92,7 @@ struct FilmstripView: View {
                                     if model.mode == .grid { model.openLoupe() }
                                 }
                                 .onTapGesture { select(row.id) }
+                                .overlay(RightClickMenu { model.filmstripMenu(for: row.id) })
                         }
                     }
                     .padding(.horizontal, 6)
@@ -247,6 +248,43 @@ private struct FilmstripCell: View {
             ThumbnailLoader.shared.load(id, from: url) { loaded in
                 if row.id == id { image = loaded }
             }
+        }
+    }
+}
+
+/// Shows an AppKit menu on right-click or Control-click and lets every other click through
+/// to the SwiftUI view underneath.
+private struct RightClickMenu: NSViewRepresentable {
+    let menu: () -> NSMenu
+
+    func makeNSView(context: Context) -> MenuView {
+        let view = MenuView()
+        view.provider = menu
+        return view
+    }
+
+    func updateNSView(_ nsView: MenuView, context: Context) {
+        nsView.provider = menu
+    }
+
+    final class MenuView: NSView {
+        var provider: (() -> NSMenu)?
+
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            guard let event = NSApp.currentEvent else { return nil }
+            let isMenuClick = event.type == .rightMouseDown
+                || (event.type == .leftMouseDown && event.modifierFlags.contains(.control))
+            return isMenuClick ? super.hitTest(point) : nil
+        }
+
+        override func menu(for event: NSEvent) -> NSMenu? {
+            provider?()
+        }
+
+        override func mouseDown(with event: NSEvent) {
+            // Control-click: AppKit asks menu(for:) itself only for right clicks.
+            guard let menu = provider?() else { return }
+            NSMenu.popUpContextMenu(menu, with: event, for: self)
         }
     }
 }

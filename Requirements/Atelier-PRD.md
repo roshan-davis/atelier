@@ -119,6 +119,7 @@ Rosh asked for Lightroom's Filmstrip: a bottom drawer with the thumbnails of the
 - **Collapse and open:** a small arrow tab centered on the bottom edge (▾ to hide, ▴ to show), View > Show Filmstrip, or F6.
 - **Size:** drag the Filmstrip's top edge to make thumbnails bigger or smaller (56 to 220 pt).
 - **Remembered:** open or collapsed, and the height, are kept between launches.
+- **Right-click menu (Oct 27, 2026):** right-click or Control-click a thumbnail for the same photo menu as the grid, loupe and Develop (Open in Loupe, Edit in Develop, Create Virtual Copy, Edit In, AI, Show in Finder, Set Rating, Set Flag, Set Color Label, Develop Settings, Apply Develop Preset, Match Look, collections and import entries, Write XMP Metadata, Export). As in Lightroom, it acts on the Filmstrip selection in every view, Loupe and Develop included; a right-clicked photo outside the selection becomes the selection first.
 
 ### Masking (decided Oct 27, 2026)
 

@@ -126,6 +126,17 @@ extension LibraryModel {
         return menu
     }
 
+    /// The Filmstrip's right-click menu: the same photo menu, acting on the Filmstrip
+    /// selection in every mode (as in Lightroom), with the right-clicked photo joining it.
+    func filmstripMenu(for id: Int64) -> NSMenu {
+        prepareContextMenu(for: id)
+        menuTargets = rows.map(\.id).filter { selection.contains($0) }
+        let menu = photoMenu(includeZoom: false)
+        menu.delegate = FilmstripMenuCloser.shared
+        FilmstripMenuCloser.shared.model = self
+        return menu
+    }
+
     /// The installed editors, then Other Application… and the Edit In settings.
     func editInMenu() -> NSMenu {
         let menu = NSMenu()
@@ -146,5 +157,19 @@ extension LibraryModel {
         let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
         item.submenu = menu
         return item
+    }
+}
+
+/// Clears the Filmstrip menu's targets once its item (if any) has run.
+@MainActor
+final class FilmstripMenuCloser: NSObject, NSMenuDelegate {
+    static let shared = FilmstripMenuCloser()
+    weak var model: LibraryModel?
+
+    func menuDidClose(_ menu: NSMenu) {
+        // The chosen item's action runs after the menu closes, in this same event.
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated { self?.model?.menuTargets = nil }
+        }
     }
 }

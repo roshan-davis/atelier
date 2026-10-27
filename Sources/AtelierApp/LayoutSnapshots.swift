@@ -256,6 +256,17 @@ enum LayoutSnapshots {
         await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1000, height: 584),
                       to: folder.appendingPathComponent("filmstrip-collapsed.png"))
         UserDefaults.standard.set(true, forKey: Filmstrip.visibleKey)
+        // The Filmstrip's right-click menu with two photos selected, from Develop.
+        if model.rows.count > 1 {
+            model.mode = .develop
+            model.selection = [model.rows[0].id]
+            let menu = model.filmstripMenu(for: model.rows[1].id)
+            model.selection.insert(model.rows[0].id)
+            model.menuTargets = model.rows.prefix(2).map(\.id)
+            print("SNAPSHOT: filmstrip menu targets \(model.targetIDs.count): \(menu.items.map { $0.isSeparatorItem ? "—" : $0.title + ($0.submenu.map { " (\($0.items.count))" } ?? "") })")
+            model.menuTargets = nil
+            model.mode = .grid
+        }
     }
 
     /// Culling before an import: three takes of one scene (one soft), two of another, and a
