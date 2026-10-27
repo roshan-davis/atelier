@@ -363,6 +363,16 @@ extension LibraryModel {
         matchLook = MatchLookModel(library: self, assetID: assetID, targets: targets, url: url, settings: develop.settings)
     }
 
+    /// The right-click menu's Match Look to Reference…: opens the clicked photos in Develop first,
+    /// keeping a multiple selection so the dialog offers Same settings or Match each photo.
+    func beginMatchLook(for ids: [Int64]) {
+        guard let first = ids.first else { return }
+        if focusedID.map({ !ids.contains($0) }) ?? true { focusedID = first }
+        if ids.count > 1 { selection = Set(ids) }
+        if mode != .develop { mode = .develop }
+        beginMatchLook()
+    }
+
     /// Match each photo: fits every photo to the reference on its own, in the background.
     func matchEach(_ ids: [Int64], reference: LookSample, options: LookMatchOptions, photoArea: CGRect?,
                    strength: Double, step: String) {
