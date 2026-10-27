@@ -35,17 +35,19 @@ public struct LookMatch: Sendable, Equatable {
     public func applied(to other: DevelopSettings, strength: Double) -> DevelopSettings {
         let s = min(1, max(0, strength))
         var out = other
+        guard s > 0 else { return out }
+        let full = s == 1
         if matched.temperature != base.temperature {
             let from = 1e6 / (base.temperature ?? asShotTemperature)
             let to = 1e6 / (matched.temperature ?? asShotTemperature)
-            out.temperature = 1e6 / (from + (to - from) * s)
+            out.temperature = full ? matched.temperature : 1e6 / (from + (to - from) * s)
         }
         for parameter in Self.linearParameters where matched[parameter] != base[parameter] {
-            out[parameter] = base[parameter] + (matched[parameter] - base[parameter]) * s
+            out[parameter] = full ? matched[parameter] : base[parameter] + (matched[parameter] - base[parameter]) * s
         }
         let fromCurve = base.points(for: .rgb), toCurve = matched.points(for: .rgb)
         if fromCurve != toCurve {
-            out.setPoints(toCurve.map { point in
+            out.setPoints(full ? toCurve : toCurve.map { point in
                 let y0 = DevelopRenderer.pointCurveValue(fromCurve, at: point.x)
                 return DevelopSettings.CurvePoint(x: point.x, y: y0 + (point.y - y0) * s)
             }, for: .rgb)
@@ -54,9 +56,14 @@ public struct LookMatch: Sendable, Equatable {
         where matched[region.hue] != base[region.hue] || matched[region.saturation] != base[region.saturation] {
             let from = GradeVector(hue: base[region.hue], saturation: base[region.saturation])
             let to = GradeVector(hue: matched[region.hue], saturation: matched[region.saturation])
+            guard !full else {
+                out[region.hue] = matched[region.hue]
+                out[region.saturation] = matched[region.saturation]
+                continue
+            }
             let mixed = from + (to - from) * s
-            if mixed.saturation > 0.05 { out[region.hue] = mixed.hue }
-            out[region.saturation] = mixed.saturation
+            if mixed.saturation > 0.05 { out[region.hue] = (mixed.hue * 10).rounded() / 10 }
+            out[region.saturation] = (mixed.saturation * 10).rounded() / 10
         }
         return out
     }
