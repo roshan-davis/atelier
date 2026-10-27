@@ -392,15 +392,31 @@ public final class DevelopSession: @unchecked Sendable {
     public let renderScale: Double
     /// The decoded photo's size at `renderScale`, upright, before any crop or turn.
     public let sourceSize: CGSize
+    /// The lens, from the file's metadata, for the Lens Corrections panel.
+    public let lensName: String?
+    /// 35 mm equivalent focal length (0 when unknown), for the Transform's perspective.
+    public let focalLength35: Double
+    /// Whether Apple's RAW engine has lens corrections for this file.
+    public let lensCorrectionSupported: Bool
     private let lock = NSLock()
     private let brushCache = BrushCache()
-    /// Select Subject's mask on the upright photo, found once per session; .some(nil) when
-    /// Vision found nothing.
-    private var subjectMask: CIImage??
+    /// Select Subject's mask on the corrected photo, found once per lens geometry; a nil mask
+    /// when Vision found nothing.
+    private var subjectMask: (key: DevelopSettings, mask: CIImage?)?
 
     init?(url: URL, maxPixelSize: Int?, renderer: DevelopRenderer) {
         self.url = url
         self.renderer = renderer
+        var lensName: String?
+        var focal = 0.0
+        if let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+           let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+           let exif = properties[kCGImagePropertyExifDictionary] as? [CFString: Any] {
+            lensName = exif[kCGImagePropertyExifLensModel] as? String
+            focal = (exif[kCGImagePropertyExifFocalLenIn35mmFilm] as? NSNumber)?.doubleValue ?? 0
+        }
+        self.lensName = lensName?.trimmingCharacters(in: .whitespaces)
+        focalLength35 = focal
         let type = UTType(filenameExtension: url.pathExtension)
         if type?.conforms(to: .rawImage) == true, let raw = CIRAWFilter(imageURL: url) {
             isRAW = true
@@ -415,6 +431,7 @@ public final class DevelopSession: @unchecked Sendable {
             asShotTemperature = Double(raw.neutralTemperature)
             asShotTint = Double(raw.neutralTint)
             cameraMatch = renderer.cameraMatch(for: url)
+            lensCorrectionSupported = raw.isLensCorrectionSupported
         } else {
             guard var image = CIImage(contentsOf: url, options: [.applyOrientationProperty: true]) else { return nil }
             var scale = 1.0
@@ -433,6 +450,7 @@ public final class DevelopSession: @unchecked Sendable {
             asShotTemperature = 6500
             asShotTint = 0
             cameraMatch = .identity
+            lensCorrectionSupported = false
         }
     }
 
@@ -442,13 +460,38 @@ public final class DevelopSession: @unchecked Sendable {
     public func image(with settings: DevelopSettings, cropping: Bool = true, overlay: UUID? = nil) -> CIImage? {
         lock.lock()
         defer { lock.unlock() }
+        guard var image = corrected(settings) else { return nil }
+        let sourceExtent = image.extent
+        let source = image
+        let crop = settings.crop
+        if let crop {
+            image = DevelopRenderer.applyGeometry(crop, to: image, cropping: cropping)
+        }
+        let key = settings.lensGeometryKey
+        let provider: MaskProvider = { [self] component in
+            if case .luminance = component.shape { return nil }
+            guard let mask = DevelopRenderer.sourceMask(component, extent: sourceExtent,
+                                                        subject: { self.subject(of: source, key: key) },
+                                                        brushCache: brushCache) else { return nil }
+            guard let crop else { return mask }
+            return DevelopRenderer.applyGeometry(crop, to: mask, cropping: cropping)
+        }
+        return DevelopRenderer.applyAdjustments(settings, to: image, scale: renderScale, masks: provider, overlay: overlay)
+    }
+
+    /// Pipeline step 1: decode with white balance and exposure, the profile, then the lens
+    /// corrections and the Transform. The result starts at the origin. Call with the lock held.
+    private func corrected(_ settings: DevelopSettings) -> CIImage? {
         var image: CIImage
         if let raw = rawFilter {
             raw.neutralTemperature = Float(settings.temperature ?? asShotTemperature)
             raw.neutralTint = Float(asShotTint + settings.tint)
             raw.exposure = Float(settings.exposure)
+            if lensCorrectionSupported, raw.isLensCorrectionEnabled != settings.lensProfileCorrections {
+                raw.isLensCorrectionEnabled = settings.lensProfileCorrections
+            }
             guard let output = raw.outputImage else { return nil }
-            image = cameraMatch.apply(to: output)
+            image = settings.profile == .appleNeutral ? output : cameraMatch.apply(to: output)
         } else {
             guard let base = baseImage else { return nil }
             image = base
@@ -476,26 +519,56 @@ public final class DevelopSession: @unchecked Sendable {
         if image.extent.origin != .zero {
             image = image.transformed(by: CGAffineTransform(translationX: -image.extent.minX, y: -image.extent.minY))
         }
-        let sourceExtent = image.extent
-        let source = image
-        let crop = settings.crop
-        if let crop {
-            image = DevelopRenderer.applyGeometry(crop, to: image, cropping: cropping)
+        let extent = image.extent
+        // Lens vignetting, around the uncropped photo's center, before the warp moves it.
+        if settings[.lensVignette] != 0 {
+            let filter = CIFilter.vignetteEffect()
+            filter.inputImage = image
+            filter.center = CGPoint(x: extent.midX, y: extent.midY)
+            let diagonal = (extent.width * extent.width + extent.height * extent.height).squareRoot() / 2
+            filter.radius = Float(diagonal * (0.35 + settings[.lensVignetteMidpoint] / 100 * 0.6))
+            filter.falloff = 0.6
+            filter.intensity = Float(-settings[.lensVignette] / 100)
+            image = filter.outputImage?.cropped(to: extent) ?? image
         }
-        let provider: MaskProvider = { [self] component in
-            if case .luminance = component.shape { return nil }
-            guard let mask = DevelopRenderer.sourceMask(component, extent: sourceExtent,
-                                                        subject: { self.subject(of: source) },
-                                                        brushCache: brushCache) else { return nil }
-            guard let crop else { return mask }
-            return DevelopRenderer.applyGeometry(crop, to: mask, cropping: cropping)
+        if settings.hasLensGeometry {
+            image = LensGeometry(settings: settings, size: extent.size, focalLength35: focalLength35).apply(to: image)
         }
-        return DevelopRenderer.applyAdjustments(settings, to: image, scale: renderScale, masks: provider, overlay: overlay)
+        return image
     }
 
-    /// Finds the subject with Vision on a small copy of the photo, once.
-    private func subject(of source: CIImage) -> CIImage? {
-        if let found = subjectMask { return found }
+    /// Straight edges in the photo after its lens corrections and before the Transform, for
+    /// Upright.
+    public func lines(for settings: DevelopSettings) -> [LineSegment] {
+        var plain = settings
+        plain.upright = nil
+        plain.constrainCrop = false
+        for parameter in DevelopSettings.Panel.transform.parameters { plain[parameter] = parameter.defaultValue }
+        lock.lock()
+        let image = corrected(plain)
+        lock.unlock()
+        guard let image else { return [] }
+        let extent = image.extent
+        let factor = min(1, 800 / max(extent.width, extent.height))
+        let small = image.transformed(by: CGAffineTransform(scaleX: factor, y: factor))
+        guard let cgImage = renderer.context.createCGImage(small, from: small.extent.integral, format: .RGBA8,
+                                                           colorSpace: DevelopRenderer.sRGB) else { return [] }
+        let width = cgImage.width, height = cgImage.height
+        var gray = [UInt8](repeating: 0, count: width * height)
+        let drawn = gray.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8,
+                                          bytesPerRow: width, space: CGColorSpaceCreateDeviceGray(),
+                                          bitmapInfo: CGImageAlphaInfo.none.rawValue) else { return false }
+            context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        guard drawn else { return [] }
+        return LineDetector.detect(gray.map { Float($0) / 255 }, width: width, height: height)
+    }
+
+    /// Finds the subject with Vision on a small copy of the photo, once per lens geometry.
+    private func subject(of source: CIImage, key: DevelopSettings) -> CIImage? {
+        if let cached = subjectMask, cached.key == key { return cached.mask }
         var found: CIImage?
         let extent = source.extent
         let factor = min(1, 1024 / max(extent.width, extent.height))
@@ -507,7 +580,7 @@ public final class DevelopSession: @unchecked Sendable {
             found = image.transformed(by: CGAffineTransform(scaleX: extent.width / image.extent.width,
                                                             y: extent.height / image.extent.height))
         }
-        subjectMask = .some(found)
+        subjectMask = (key, found)
         return found
     }
 

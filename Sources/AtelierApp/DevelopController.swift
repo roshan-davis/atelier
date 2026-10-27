@@ -60,6 +60,7 @@ final class DevelopController: ObservableObject {
                 showingBefore = false
                 isAIOpen = false
                 isMasking = false
+                isGuiding = false
             }
             scheduleRender()
         }
@@ -70,6 +71,7 @@ final class DevelopController: ObservableObject {
             guard isAIOpen != oldValue, isAIOpen else { return }
             isCropping = false
             isMasking = false
+            isGuiding = false
             showingBefore = false
             compareMode = .off
         }
@@ -82,6 +84,7 @@ final class DevelopController: ObservableObject {
             if isMasking {
                 isCropping = false
                 isAIOpen = false
+                isGuiding = false
                 showingBefore = false
                 compareMode = .off
                 if selectedMaskID == nil { selectedMaskID = settings.masks.last?.id }
@@ -91,6 +94,33 @@ final class DevelopController: ObservableObject {
             scheduleRender()
         }
     }
+    /// Guided Upright is open: the whole corrected photo shows, uncropped, under the guides.
+    @Published var isGuiding = false {
+        didSet {
+            guard isGuiding != oldValue else { return }
+            if isGuiding {
+                isCropping = false
+                isAIOpen = false
+                isMasking = false
+                showingBefore = false
+                compareMode = .off
+            }
+            selectedGuide = nil
+            scheduleRender()
+        }
+    }
+    /// The guide selected with a click, for Delete.
+    @Published var selectedGuide: Int?
+    /// Upright is looking for lines.
+    @Published private(set) var isFindingLines = false
+    /// Why the last Upright button changed nothing.
+    @Published var uprightMessage: String?
+    /// From the open photo's file, for Lens Corrections and Transform.
+    @Published private(set) var lensName: String?
+    @Published private(set) var lensCorrectionSupported = false
+    @Published private(set) var isRAW = false
+    private(set) var focalLength35 = 0.0
+
     /// The selected mask and part in the Masks panel.
     @Published var selectedMaskID: UUID? {
         didSet { if selectedMaskID != oldValue, showMaskOverlay { scheduleRender() } }
@@ -200,6 +230,8 @@ final class DevelopController: ObservableObject {
         errorMessage = nil
         showingBefore = false
         isCropping = false
+        isGuiding = false
+        uprightMessage = nil
         sourceSize = nil
         selectedMaskID = nil
         selectedComponentID = nil
@@ -234,6 +266,10 @@ final class DevelopController: ObservableObject {
                     self.session = session
                     self.sourceSize = session.sourceSize
                     self.asShotTemperature = session.asShotTemperature
+                    self.lensName = session.lensName
+                    self.lensCorrectionSupported = session.lensCorrectionSupported
+                    self.isRAW = session.isRAW
+                    self.focalLength35 = session.focalLength35
                     self.scheduleRender()
                     if self.compareMode != .off { self.renderBeforeIfNeeded() }
                 }
@@ -261,7 +297,9 @@ final class DevelopController: ObservableObject {
     func set(_ parameter: DevelopSettings.Parameter, to value: Double) {
         guard assetID != nil else { return }
         settings[parameter] = value
+        if parameter.panel == .lensCorrections || parameter.panel == .transform { beforeImage = nil }
         changed(step: Self.stepName(parameter, value: settings[parameter]))
+        if beforeImage == nil, compareMode != .off { renderBeforeIfNeeded() }
     }
 
     func reset(_ parameter: DevelopSettings.Parameter) {
@@ -281,9 +319,21 @@ final class DevelopController: ObservableObject {
 
     func reset(_ panel: DevelopSettings.Panel) {
         guard assetID != nil else { return }
-        if panel == .toneCurve {
+        switch panel {
+        case .basic:
+            settings.profile = .cameraMatching
+        case .toneCurve:
             for channel in DevelopSettings.CurveChannel.allCases { settings.setPoints([], for: channel) }
+        case .lensCorrections:
+            settings.lensProfileCorrections = true
+        case .transform:
+            settings.upright = nil
+            settings.constrainCrop = false
+            isGuiding = false
+        default:
+            break
         }
+        if panel == .lensCorrections || panel == .transform { beforeImage = nil }
         for parameter in panel.parameters {
             if parameter == .temperature {
                 settings.temperature = nil
@@ -295,7 +345,13 @@ final class DevelopController: ObservableObject {
     }
 
     func isModified(_ panel: DevelopSettings.Panel) -> Bool {
-        if panel == .toneCurve, settings.hasPointCurve { return true }
+        switch panel {
+        case .basic where settings.profile != .cameraMatching: return true
+        case .toneCurve where settings.hasPointCurve: return true
+        case .lensCorrections where !settings.lensProfileCorrections: return true
+        case .transform where settings.upright != nil || settings.constrainCrop: return true
+        default: break
+        }
         return panel.parameters.contains { parameter in
             parameter == .temperature ? settings.temperature != nil
                 : settings[parameter] != DevelopSettings.neutral[parameter]
@@ -311,11 +367,107 @@ final class DevelopController: ObservableObject {
         if compareMode != .off { renderBeforeIfNeeded() }
     }
 
-    /// The photo without edits but with the same crop, so before and after line up.
+    /// The photo without edits but with the same shape (lens corrections, Transform and crop),
+    /// so before and after line up.
     private var beforeSettings: DevelopSettings {
-        var before = DevelopSettings.neutral
+        var before = settings.lensGeometryKey
         before.crop = settings.crop
         return before
+    }
+
+    // MARK: Profile, Lens Corrections and Transform
+
+    func setProfile(_ profile: DevelopSettings.Profile) {
+        guard assetID != nil, profile != settings.profile else { return }
+        settings.profile = profile
+        changed(step: "Profile: \(profile.title)")
+    }
+
+    func setLensProfileCorrections(_ on: Bool) {
+        guard assetID != nil, on != settings.lensProfileCorrections else { return }
+        settings.lensProfileCorrections = on
+        shapeChanged(step: on ? "Enable Profile Corrections" : "Disable Profile Corrections")
+    }
+
+    func setConstrainCrop(_ on: Bool) {
+        guard assetID != nil, on != settings.constrainCrop else { return }
+        settings.constrainCrop = on
+        shapeChanged(step: on ? "Constrain Crop" : "Unconstrain Crop")
+    }
+
+    /// An Upright button: nil is Off; Guided opens the guides tool; the others find the photo's
+    /// lines and solve for them.
+    func setUpright(_ mode: DevelopSettings.Upright.Mode?) {
+        guard assetID != nil else { return }
+        uprightMessage = nil
+        guard let mode else {
+            isGuiding = false
+            guard settings.upright != nil else { return }
+            settings.upright = nil
+            shapeChanged(step: "Upright: Off")
+            return
+        }
+        if mode == .guided {
+            isGuiding = true
+            if settings.upright?.mode != .guided { setGuides(settings.upright?.guides ?? []) }
+            return
+        }
+        isGuiding = false
+        guard let session, let sourceSize else { return }
+        let settings = self.settings
+        let assetID = self.assetID
+        let focal = focalLength35
+        isFindingLines = true
+        queue.async {
+            let lines = session.lines(for: settings)
+            let upright = UprightSolver.solve(mode, lines: lines, size: sourceSize, focalLength35: focal)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    self.isFindingLines = false
+                    guard self.assetID == assetID else { return }
+                    guard let upright else {
+                        self.uprightMessage = "Not enough straight lines found for \(mode.title)."
+                        return
+                    }
+                    self.settings.upright = upright
+                    self.shapeChanged(step: "Upright: \(mode.title)")
+                }
+            }
+        }
+    }
+
+    /// Guided Upright's lines changed: solve again from them.
+    func setGuides(_ guides: [DevelopSettings.Guide]) {
+        guard assetID != nil, let sourceSize else { return }
+        let guides = Array(guides.prefix(DevelopSettings.Upright.maxGuides))
+        let lines = guides.map { LineSegment(start: CGPoint(x: $0.start.x, y: $0.start.y), end: CGPoint(x: $0.end.x, y: $0.end.y)) }
+        var upright = UprightSolver.solve(.guided, lines: lines, size: sourceSize, focalLength35: focalLength35)
+            ?? DevelopSettings.Upright(mode: .guided)
+        upright.guides = guides
+        let added = guides.count > (settings.upright?.guides.count ?? 0)
+        settings.upright = upright
+        if let selected = selectedGuide, selected >= guides.count { selectedGuide = nil }
+        shapeChanged(step: added ? "Add Guide" : "Upright: Guided")
+    }
+
+    func deleteSelectedGuide() {
+        guard let index = selectedGuide, var guides = settings.upright?.guides, guides.indices.contains(index) else { return }
+        guides.remove(at: index)
+        selectedGuide = nil
+        setGuides(guides)
+    }
+
+    /// The Transform's mapping between the corrected photo and the output, for the guides tool.
+    var lensGeometry: LensGeometry? {
+        guard let sourceSize else { return nil }
+        return LensGeometry(settings: settings, size: sourceSize, focalLength35: focalLength35)
+    }
+
+    /// An edit that changes the photo's shape, so the Before view has to follow.
+    private func shapeChanged(step: String) {
+        beforeImage = nil
+        changed(step: step)
+        if compareMode != .off { renderBeforeIfNeeded() }
     }
 
     /// The full-size photo's size after the crop, for 100% zoom. `assetSize` is the original's
@@ -511,7 +663,7 @@ final class DevelopController: ObservableObject {
     private static func parameterName(_ parameter: DevelopSettings.Parameter) -> String {
         if let pair = parameter.hslBand { return "\(pair.0.rawValue) \(pair.1.rawValue)" }
         switch parameter.panel {
-        case .colorGrading, .detail, .effects, .toneCurve:
+        case .colorGrading, .detail, .effects, .toneCurve, .lensCorrections:
             return "\(parameter.group) \(parameter.label)"
         default:
             return parameter.label == "Temp" ? "Temperature" : parameter.label
@@ -524,6 +676,7 @@ final class DevelopController: ObservableObject {
         case .temperature: formatted = "\(Int(value.rounded())) K"
         case .exposure: formatted = String(format: "%+.2f", value)
         case .sharpenRadius: formatted = String(format: "%.1f", value)
+        case .transformRotate: formatted = String(format: "%+.1f°", value)
         default:
             formatted = parameter.range.lowerBound >= 0 ? "\(Int(value.rounded()))" : String(format: "%+.0f", value)
         }
@@ -547,7 +700,8 @@ final class DevelopController: ObservableObject {
             return
         }
         rendering = true
-        let settings = showingBefore ? beforeSettings : self.settings
+        var settings = showingBefore ? beforeSettings : self.settings
+        if isGuiding { settings.crop = nil }
         let cropping = !isCropping
         let assetID = self.assetID
         let overlay = isMasking && showMaskOverlay ? selectedMaskID : nil
@@ -575,7 +729,7 @@ final class DevelopController: ObservableObject {
 
     /// Full-resolution render for zoomed views, after the proxy settles. Latest wins.
     private func scheduleFullRender() {
-        guard wantsFullResolution, !showingBefore, !isCropping, let url = sourceURL, fullImageSettings != settings else { return }
+        guard wantsFullResolution, !showingBefore, !isCropping, !isGuiding, let url = sourceURL, fullImageSettings != settings else { return }
         if fullRendering {
             fullNeedsRender = true
             return
