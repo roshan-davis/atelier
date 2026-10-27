@@ -23,6 +23,7 @@ public struct LookMatch: Sendable, Equatable {
     /// Plain sliders the match may move; temperature, the RGB curve and the grading wheels are
     /// blended separately.
     static let linearParameters: [DevelopSettings.Parameter] = [.tint, .exposure, .saturation]
+        + DevelopSettings.Parameter.allCases.filter { $0.hslBand != nil }
     static let gradeRegions: [DevelopSettings.GradeRegion] = [.shadows, .highlights]
 
     /// The settings at `strength` (0 to 1) between `base` and `matched`.
@@ -75,7 +76,7 @@ public struct LookMatchOptions: Sendable, Equatable {
     public var whiteBalance = true
     /// Exposure and the RGB Tone Curve.
     public var tone = true
-    /// Saturation and the Shadows and Highlights grading wheels.
+    /// Saturation, the HSL bands and the Shadows and Highlights grading wheels.
     public var color = true
 
     public init(whiteBalance: Bool = true, tone: Bool = true, color: Bool = true) {
@@ -99,6 +100,10 @@ public struct LookSample: Sendable {
     var b: [Float] = []
     /// sRGB-encoded luma, as the tone curve sees it.
     var luma: [Float] = []
+    /// Hue (degrees), saturation and lightness of the sRGB-encoded color, as the HSL panel sees it.
+    var hue: [Float] = []
+    var hslSaturation: [Float] = []
+    var hslLightness: [Float] = []
     var weight: [Double] = []
 
     public init?(image: CGImage, area: CGRect? = nil) {
@@ -125,6 +130,9 @@ public struct LookSample: Sendable {
         a.reserveCapacity(count)
         b.reserveCapacity(count)
         luma.reserveCapacity(count)
+        hue.reserveCapacity(count)
+        hslSaturation.reserveCapacity(count)
+        hslLightness.reserveCapacity(count)
         var inside = [Bool](repeating: false, count: count)
         let linear = Self.linearTable
         for i in 0..<count {
@@ -134,6 +142,10 @@ public struct LookSample: Sendable {
             a.append(Float(lab.1))
             b.append(Float(lab.2))
             luma.append(Float((0.2126 * Double(r8) + 0.7152 * Double(g8) + 0.0722 * Double(b8)) / 255))
+            let hsl = rgbToHSL((Double(r8) / 255, Double(g8) / 255, Double(b8) / 255))
+            hue.append(Float(hsl.h))
+            hslSaturation.append(Float(hsl.s))
+            hslLightness.append(Float(hsl.l))
             if let area {
                 let x = (Double(i % width) + 0.5) / Double(width), y = (Double(i / width) + 0.5) / Double(height)
                 inside[i] = area.contains(CGPoint(x: x, y: y))
@@ -223,6 +235,91 @@ public struct LookSample: Sendable {
         return sum / Double(count)
     }
 
+    /// One HSL band's share of the image and the average color of the pixels it covers.
+    struct BandStats {
+        var share = 0.0
+        var hue = 0.0
+        var saturation = 0.0
+        var lightness = 0.0
+    }
+
+    /// Per HSL band, weighted the way the HSL panel weights a pixel's hue between two band centers.
+    /// Grays and near-black or near-white pixels are left out, as the panel barely moves them.
+    func bandStats() -> [BandStats] {
+        let centers = DevelopSettings.ColorBand.allCases.map(\.hue)
+        let bands = centers.count
+        var weightSum = [Double](repeating: 0, count: bands), cosSum = weightSum, sinSum = weightSum,
+            satSum = weightSum, lightSum = weightSum
+        let total = weight.reduce(0, +)
+        for i in 0..<count {
+            let s = Double(hslSaturation[i]), l = Double(hslLightness[i])
+            guard s > 0.12, l > 0.08, l < 0.92 else { continue }
+            let h = Double(hue[i])
+            var lower = bands - 1
+            for k in 0..<bands where h >= centers[k] { lower = k }
+            let start = centers[lower], end = lower + 1 < bands ? centers[lower + 1] : 360
+            let t = h >= start ? (h - start) / (end - start) : 0
+            for (band, share) in [(lower, 1 - t), ((lower + 1) % bands, t)] where share > 0 {
+                let w = weight[i] * share
+                weightSum[band] += w
+                cosSum[band] += cos(h * .pi / 180) * w
+                sinSum[band] += sin(h * .pi / 180) * w
+                satSum[band] += s * w
+                lightSum[band] += l * w
+            }
+        }
+        return (0..<bands).map { band in
+            let w = weightSum[band]
+            guard w > 0, total > 0 else { return BandStats() }
+            var degrees = atan2(sinSum[band], cosSum[band]) * 180 / .pi
+            if degrees < 0 { degrees += 360 }
+            return BandStats(share: w / total, hue: degrees, saturation: satSum[band] / w, lightness: lightSum[band] / w)
+        }
+    }
+
+    // MARK: Sliced Wasserstein distance
+
+    /// Fixed directions in Oklab, spread over the sphere, along which colors are compared.
+    static let directions: [SIMD3<Double>] = (0..<24).map { i in
+        let y = 1 - (Double(i) + 0.5) / 12, radius = (1 - y * y).squareRoot()
+        let angle = Double(i) * 2.399963
+        return SIMD3(y, cos(angle) * radius, sin(angle) * radius)
+    }
+    static let quantileCount = 32
+
+    /// The image's colors seen along each direction, as weighted quantiles.
+    func projectedQuantiles() -> [[Double]] {
+        let stride = max(1, count / 6000)
+        let picked = Swift.stride(from: 0, to: count, by: stride).map { $0 }
+        let total = picked.reduce(0.0) { $0 + weight[$1] }
+        return Self.directions.map { d in
+            let values = picked.map { i in
+                (Double(lightness[i]) * d.x + Double(a[i]) * d.y + Double(b[i]) * d.z, weight[i])
+            }.sorted { $0.0 < $1.0 }
+            var quantiles = [Double](), running = 0.0, k = 0
+            for j in 0..<Self.quantileCount {
+                let level = (Double(j) + 0.5) / Double(Self.quantileCount) * total
+                while k < values.count - 1, running + values[k].1 < level {
+                    running += values[k].1
+                    k += 1
+                }
+                quantiles.append(values.isEmpty ? 0 : values[k].0)
+            }
+            return quantiles
+        }
+    }
+
+    /// How far apart two images' color distributions are, whatever their content's layout: the
+    /// sliced Wasserstein distance (Rabin, Peyré, Delon and Bernot, 2011) over `directions`.
+    static func slicedDistance(_ p: [[Double]], _ q: [[Double]]) -> Double {
+        guard p.count == q.count, !p.isEmpty else { return .infinity }
+        var sum = 0.0
+        for (x, y) in zip(p, q) {
+            for (u, v) in zip(x, y) { sum += abs(u - v) }
+        }
+        return sum / Double(p.count * quantileCount)
+    }
+
     // MARK: Oklab
 
     static let linearTable: [Double] = (0..<256).map { i in
@@ -296,7 +393,12 @@ public enum LookMatcher {
         }
         if options.color, !isCancelled() {
             fitSaturation(&current, reference: reference, measure: measure)
+            fitHSL(&current, reference: reference, measure: measure)
             fitGrade(&current, reference: reference, measure: measure)
+        }
+        if !isCancelled() {
+            refine(&current, asShot: asShot, options: options, reference: reference, measure: measure,
+                   isCancelled: isCancelled)
         }
         guard !isCancelled() else { return nil }
         return LookMatch(base: base, matched: current, asShotTemperature: asShot)
@@ -386,6 +488,102 @@ public enum LookMatcher {
             settings.saturation = min(saturationRange.upperBound, max(saturationRange.lowerBound, (factor - 1) * 100)).rounded()
         }
     }
+
+    /// HSL: per band, moves hue, saturation and luminance toward the reference's average for that
+    /// band. Bands covering less than about 1% of either image are left alone. Two damped rounds, each
+    /// measured on a fresh render, since neighboring bands overlap.
+    static func fitHSL(_ settings: inout DevelopSettings, reference: LookSample,
+                       measure: (DevelopSettings) -> LookSample?) {
+        let target = reference.bandStats()
+        for _ in 0..<2 {
+            guard let photo = measure(settings) else { return }
+            let current = photo.bandStats()
+            for (i, band) in DevelopSettings.ColorBand.allCases.enumerated() {
+                let t = target[i], p = current[i]
+                guard t.share > 0.008, p.share > 0.008 else { continue }
+                let hue = DevelopSettings.Parameter.hsl(.hue, band)
+                let saturation = DevelopSettings.Parameter.hsl(.saturation, band)
+                let luminance = DevelopSettings.Parameter.hsl(.luminance, band)
+                var dh = (t.hue - p.hue).truncatingRemainder(dividingBy: 360)
+                if dh > 180 { dh -= 360 } else if dh < -180 { dh += 360 }
+                // A band's Hue slider at 100 turns its colors 30°.
+                if abs(dh) > 2 {
+                    settings[hue] = min(maxHSLHue, max(-maxHSLHue, settings[hue] + dh / 30 * 100 * damping)).rounded()
+                }
+                if p.saturation > 0.03 {
+                    let ratio = 1 + (t.saturation / p.saturation - 1) * damping
+                    let value = ((1 + settings[saturation] / 100) * ratio - 1) * 100
+                    settings[saturation] = min(maxHSLSaturation, max(-maxHSLSaturation, value)).rounded()
+                }
+                // Luminance moves a color by about amount × 0.5 × saturation × its room to move.
+                let dl = t.lightness - p.lightness
+                let room = 0.5 * p.saturation * (dl > 0 ? 1 - p.lightness : p.lightness)
+                if abs(dl) > 0.01, room > 0.01 {
+                    let value = settings[luminance] + dl / room * 100 * damping
+                    settings[luminance] = min(maxHSLLuminance, max(-maxHSLLuminance, value)).rounded()
+                }
+            }
+        }
+    }
+
+    /// The last step: small moves of the main sliders, kept only when they bring the photo's whole
+    /// color distribution closer to the reference's (sliced Wasserstein distance), so the sliders
+    /// fitted one at a time settle together.
+    static func refine(_ settings: inout DevelopSettings, asShot: Double, options: LookMatchOptions,
+                       reference: LookSample, measure: (DevelopSettings) -> LookSample?, isCancelled: () -> Bool) {
+        let target = reference.projectedQuantiles()
+        func score(_ candidate: DevelopSettings) -> Double? {
+            measure(candidate).map { LookSample.slicedDistance($0.projectedQuantiles(), target) }
+        }
+        guard var best = score(settings) else { return }
+        var knobs: [(DevelopSettings, Double) -> DevelopSettings] = []
+        if options.whiteBalance {
+            knobs.append { s, step in
+                var out = s
+                let mired = 1e6 / (s.temperature ?? asShot) + 8 * step
+                out.temperature = (1e6 / min(1e6 / 2000, max(1e6 / 50000, mired))).rounded()
+                return out
+            }
+            knobs.append { s, step in
+                var out = s
+                out.tint = (s.tint + 4 * step).rounded()
+                return out
+            }
+        }
+        if options.tone {
+            knobs.append { s, step in
+                var out = s
+                out.exposure = ((s.exposure + 0.1 * step) * 100).rounded() / 100
+                return out
+            }
+        }
+        if options.color {
+            knobs.append { s, step in
+                var out = s
+                out.saturation = min(saturationRange.upperBound, max(saturationRange.lowerBound, s.saturation + 5 * step)).rounded()
+                return out
+            }
+        }
+        for scale in [1.0, 0.5] {
+            for knob in knobs {
+                guard !isCancelled() else { return }
+                for sign in [1.0, -1.0] {
+                    let candidate = knob(settings, sign * scale)
+                    guard candidate != settings, let value = score(candidate) else { continue }
+                    if value < best - 1e-5 {
+                        best = value
+                        settings = candidate
+                        break
+                    }
+                }
+            }
+        }
+    }
+
+    static let damping = 0.8
+    static let maxHSLHue = 50.0
+    static let maxHSLSaturation = 60.0
+    static let maxHSLLuminance = 50.0
 
     /// Color Grading's Shadows and Highlights wheels take the color difference left between dark
     /// and bright tones once the midtones match (split toning).

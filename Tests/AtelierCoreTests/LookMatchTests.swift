@@ -88,6 +88,43 @@ final class LookMatchTests: XCTestCase {
         XCTAssertLessThan(gap(match.matched[.gradeHighlightsHue], 40), 45)
     }
 
+    func testHSLBandsFollowTheReference() throws {
+        let session = try XCTUnwrap(DevelopRenderer.shared.session(for: try samplePhoto(), maxPixelSize: LookSample.size))
+        var look = DevelopSettings()
+        look[.hsl(.saturation, .green)] = 60
+        look[.hsl(.luminance, .blue)] = -40
+        look[.hsl(.hue, .red)] = 30
+        let reference = try sample(session, look)
+        let plain = try sample(session, .neutral)
+        let match = try XCTUnwrap(LookMatcher.match(session: session, settings: .neutral, reference: reference,
+                                                    options: LookMatchOptions(whiteBalance: false, tone: false)))
+        let result = try sample(session, match.matched)
+        let before = plain.distance(to: reference), after = result.distance(to: reference)
+        print("LOOK MATCH HSL: distance \(before) -> \(after); \(try match.matched.encoded())")
+        XCTAssertLessThan(after, before * 0.6)
+        XCTAssertGreaterThan(match.matched[.hsl(.saturation, .green)], 10)
+        XCTAssertLessThan(match.matched[.hsl(.luminance, .blue)], -5)
+        XCTAssertGreaterThan(match.matched[.hsl(.hue, .red)], 5)
+    }
+
+    func testSlicedDistanceSeesColorNotLayout() {
+        let width = 32, height = 16
+        var left = [UInt8](), right = [UInt8](), warm = [UInt8]()
+        for _ in 0..<height {
+            for x in 0..<width {
+                left += x < width / 2 ? [200, 60, 40, 255] : [40, 80, 200, 255]
+                right += x < width / 2 ? [40, 80, 200, 255] : [200, 60, 40, 255]
+                warm += x < width / 2 ? [230, 90, 30, 255] : [70, 90, 170, 255]
+            }
+        }
+        let a = LookSample(pixels: left, width: width, height: height).projectedQuantiles()
+        let b = LookSample(pixels: right, width: width, height: height).projectedQuantiles()
+        let c = LookSample(pixels: warm, width: width, height: height).projectedQuantiles()
+        // The same colors in other places are the same distribution.
+        XCTAssertEqual(LookSample.slicedDistance(a, b), 0, accuracy: 1e-9)
+        XCTAssertGreaterThan(LookSample.slicedDistance(a, c), 0.01)
+    }
+
     func testStrengthBlends() {
         var matched = DevelopSettings()
         matched.temperature = 4000
@@ -107,6 +144,10 @@ final class LookMatchTests: XCTestCase {
         XCTAssertEqual(half.points(for: .rgb)[1].y, 0.55, accuracy: 1e-9)
         XCTAssertEqual(half[.gradeShadowsSat], 20, accuracy: 0.01)
         XCTAssertEqual(half[.gradeShadowsHue], 200, accuracy: 0.01)
+        var withHSL = matched
+        withHSL[.hsl(.saturation, .green)] = 40
+        XCTAssertEqual(LookMatch(base: .neutral, matched: withHSL, asShotTemperature: 6000)
+            .settings(strength: 0.25)[.hsl(.saturation, .green)], 10, accuracy: 1e-9)
     }
 
     func testAreaCarriesMostOfTheWeight() {

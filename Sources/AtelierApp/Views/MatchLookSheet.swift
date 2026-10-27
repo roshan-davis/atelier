@@ -12,6 +12,7 @@ struct MatchLookSheet: View {
     @State private var showingBefore = false
     @State private var choosingCatalogPhoto = false
     @State private var dropTargeted = false
+    @State private var showingDifferences = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -180,6 +181,12 @@ struct MatchLookSheet: View {
                 Text("\(Int(match.strength.rounded()))")
                     .monospacedDigit()
                     .frame(width: 32, alignment: .trailing)
+                Button("Show Differences") { showingDifferences = true }
+                    .disabled(match.match == nil)
+                    .help("Which sliders Apply will move, and by how much")
+                    .popover(isPresented: $showingDifferences, arrowEdge: .top) {
+                        MatchDifferencesView(lines: match.differences)
+                    }
                 Spacer()
                 if match.otherCount > 0 {
                     Picker("Apply to \(match.targets.count) photos:", selection: $match.applyMode) {
@@ -373,5 +380,33 @@ private struct PickerThumbnail: View {
                 ThumbnailLoader.shared.load(id, from: url) { loaded in image = loaded }
             }
         }
+    }
+}
+
+/// Show Differences: each slider the match moves, from its current value to the matched one.
+struct MatchDifferencesView: View {
+    let lines: [MatchDifference]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Apply will change").font(.headline)
+            if lines.isEmpty {
+                Text("Nothing: the photo already matches.").foregroundStyle(.secondary)
+            } else {
+                ScrollView {
+                    Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 4) {
+                        ForEach(lines) { line in
+                            GridRow {
+                                Text(line.name)
+                                Text(line.change).monospacedDigit().foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+                .frame(maxHeight: 320)
+            }
+        }
+        .padding(14)
+        .frame(width: 300)
     }
 }
