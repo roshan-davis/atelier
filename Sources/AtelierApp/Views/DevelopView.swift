@@ -18,7 +18,14 @@ struct DevelopImageView: View {
                     } else if develop.isAIOpen {
                         AIBrushView(ai: model.ai, image: image, assetID: develop.assetID)
                     } else if develop.isMasking {
-                        MaskEditorView(develop: develop, image: image)
+                        MaskEditorView(develop: develop, image: image, display: develop.displayImage ?? image,
+                                       pixelSize: pixelSize, zoom: $model.zoom,
+                                       onReport: { report in
+                                           if model.zoomReport != report { model.zoomReport = report }
+                                           if develop.wantsFullResolution != report.isZoomedPastFit {
+                                               develop.wantsFullResolution = report.isZoomedPastFit
+                                           }
+                                       })
                     } else if develop.isGuiding {
                         GuidedUprightView(develop: develop, image: image)
                     } else if develop.showingBefore || develop.compareMode == .off {
@@ -91,7 +98,7 @@ struct DevelopImageView: View {
             }
             Spacer(minLength: 8)
             ZoomControls(zoom: $model.zoom, report: model.zoomReport, compact: compact)
-                .disabled(develop.compareMode != .off || develop.isCropping || develop.isAIOpen || develop.isMasking || develop.isGuiding)
+                .disabled(develop.compareMode != .off || develop.isCropping || develop.isAIOpen || develop.isGuiding)
         }
     }
 

@@ -3,10 +3,18 @@ import AtelierCore
 import SwiftUI
 
 /// The photo under the Masking tool: draw gradients and paint brush strokes, drag pins and
-/// handles to change them, click another mask's pin to select it.
+/// handles to change them, click another mask's pin to select it. Zooms like Develop: the zoom
+/// bar, Z, pinch or ⌘-scroll; scroll, Space-drag, or a drag on empty photo moves around.
 struct MaskEditorView: View {
     @ObservedObject var develop: DevelopController
+    /// The live proxy; mask positions are measured against it.
     let image: NSImage
+    /// The sharpest image for the current settings, drawn in the same place.
+    let display: NSImage
+    /// The full-size photo's cropped size, so 100% is one photo pixel per point as elsewhere.
+    let pixelSize: CGSize?
+    @Binding var zoom: ZoomLevel
+    var onReport: (ZoomReport) -> Void
 
     private typealias Point = DevelopSettings.MaskPoint
     private typealias Component = DevelopSettings.MaskComponent
@@ -15,30 +23,36 @@ struct MaskEditorView: View {
     private enum DragAction {
         case drawLinear(start: CGPoint)
         case drawRadial(center: CGPoint)
+        case drawBox(start: CGPoint)
         case paint(erasing: Bool)
         case movePin(original: Component, start: Point)
         case linearEnd(original: DevelopSettings.LinearGradient, isStart: Bool)
         case radialAxis(original: DevelopSettings.RadialGradient, isX: Bool)
         case radialRotate(original: DevelopSettings.RadialGradient)
         case selectPin(mask: UUID, component: UUID)
+        case pan(last: CGPoint)
         case none
     }
 
     @State private var action: DragAction?
     @State private var draftLinear: DevelopSettings.LinearGradient?
     @State private var draftRadial: DevelopSettings.RadialGradient?
+    @State private var draftBox: (CGPoint, CGPoint)?
     @State private var stroke: DevelopSettings.MaskStroke?
     @State private var hover: CGPoint?
+    @State private var pinchStart: CGFloat?
+    @StateObject private var navigator = MaskNavigator()
 
     private let accent = Color(red: 0.95, green: 0.25, blue: 0.2)
 
     var body: some View {
         GeometryReader { geometry in
-            let rect = AIBrushView.fit(image.size, in: geometry.size)
+            let layout = navigator.layout(size: geometry.size, document: pixelSize ?? image.size, zoom: zoom)
+            let rect = layout.rect
             let space = MaskSpace(sourceSize: develop.sourceSize ?? image.size, crop: develop.crop, rect: rect,
                                   outputSize: image.size)
             ZStack(alignment: .topLeading) {
-                Image(nsImage: image)
+                Image(nsImage: display)
                     .resizable()
                     .interpolation(.high)
                     .frame(width: rect.width, height: rect.height)
@@ -62,20 +76,36 @@ struct MaskEditorView: View {
                         .allowsHitTesting(false)
                 }
             }
+            .clipped()
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .local)
                 .onChanged { drag in dragChanged(drag, space: space) }
                 .onEnded { drag in dragEnded(drag, space: space) })
+            .simultaneousGesture(MagnifyGesture()
+                .onChanged { value in
+                    if pinchStart == nil { pinchStart = navigator.magnification }
+                    navigator.zoom(to: (pinchStart ?? 1) * value.magnification, anchor: value.startLocation)
+                }
+                .onEnded { _ in pinchStart = nil })
             .onContinuousHover { phase in
                 if case .active(let point) = phase {
                     hover = point
-                    if isPainting || develop.maskTool != nil { NSCursor.crosshair.set() } else { NSCursor.arrow.set() }
+                    if navigator.spaceDown { NSCursor.openHand.set() }
+                    else if isPainting || develop.maskTool != nil { NSCursor.crosshair.set() }
+                    else { NSCursor.arrow.set() }
                 } else {
                     hover = nil
                     NSCursor.arrow.set()
                 }
             }
+            .onChange(of: layout.report, initial: true) { _, report in onReport(report) }
+            .onChange(of: geometry.frame(in: .global), initial: true) { _, frame in navigator.frame = frame }
         }
+        .onAppear {
+            navigator.setZoom = { level in if zoom != level { zoom = level } }
+            navigator.install()
+        }
+        .onDisappear { navigator.remove() }
         .onChange(of: develop.assetID) { _, _ in
             action = nil
             stroke = nil
@@ -139,13 +169,27 @@ struct MaskEditorView: View {
         case .radial(let gradient): drawRadial(gradient, in: &context, space: space, withHandles: true)
         case .brush:
             if let pin = component.pin { pinShape(in: &context, at: space.viewPoint(pin), filled: true) }
-        case .luminance, .subject: break
+        case .subject(let selection):
+            guard let box = selection.box, let pin = component.pin else { break }
+            var outline = Path()
+            outline.addLines(box.corners.map { space.viewPoint($0) })
+            outline.closeSubpath()
+            context.stroke(outline, with: .color(.black.opacity(0.5)), lineWidth: 3)
+            context.stroke(outline, with: .color(.white), style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
+            pinShape(in: &context, at: space.viewPoint(pin), filled: true)
+        case .luminance: break
         }
     }
 
     private func drawDrafts(in context: inout GraphicsContext, space: MaskSpace) {
         if let draftLinear { drawLinear(draftLinear, in: &context, space: space, withHandles: false) }
         if let draftRadial { drawRadial(draftRadial, in: &context, space: space, withHandles: false) }
+        if let draftBox {
+            let (a, b) = draftBox
+            let box = Path(CGRect(x: min(a.x, b.x), y: min(a.y, b.y), width: abs(b.x - a.x), height: abs(b.y - a.y)))
+            context.stroke(box, with: .color(.black.opacity(0.5)), lineWidth: 3)
+            context.stroke(box, with: .color(.white), style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
+        }
     }
 
     private func drawLinear(_ gradient: DevelopSettings.LinearGradient, in context: inout GraphicsContext,
@@ -238,6 +282,11 @@ struct MaskEditorView: View {
         case .drawRadial(let center):
             draftRadial = space.radial(center: center, width: abs(drag.location.x - center.x),
                                        height: abs(drag.location.y - center.y), feather: 50)
+        case .drawBox(let start):
+            draftBox = (start, clamped(drag.location, to: space.rect))
+        case .pan(let last):
+            navigator.pan(by: CGSize(width: drag.location.x - last.x, height: drag.location.y - last.y))
+            self.action = .pan(last: drag.location)
         case .paint:
             stroke?.points.append(space.maskPoint(clamped(drag.location, to: space.rect)))
         case .movePin(let original, let start):
@@ -252,6 +301,12 @@ struct MaskEditorView: View {
             case .radial(var gradient):
                 gradient.center = Point(x: gradient.center.x + dx, y: gradient.center.y + dy)
                 moved.shape = .radial(gradient)
+            case .subject(var selection):
+                guard var box = selection.box else { return }
+                box.x = min(max(box.x + dx, 0), 1 - box.width)
+                box.y = min(max(box.y + dy, 0), 1 - box.height)
+                selection.box = box
+                moved.shape = .subject(selection)
             default: return
             }
             develop.updateComponent(moved)
@@ -287,6 +342,7 @@ struct MaskEditorView: View {
             action = nil
             draftLinear = nil
             draftRadial = nil
+            draftBox = nil
         }
         guard let action else { return }
         let moved = hypot(drag.location.x - drag.startLocation.x, drag.location.y - drag.startLocation.y)
@@ -295,7 +351,15 @@ struct MaskEditorView: View {
             if moved > 4, let draftLinear { develop.finishDrawing(.linear(draftLinear)) }
         case .drawRadial:
             if moved > 4, let draftRadial { develop.finishDrawing(.radial(draftRadial)) }
+        case .drawBox(let start):
+            let end = clamped(drag.location, to: space.rect)
+            if abs(end.x - start.x) > 6, abs(end.y - start.y) > 6 {
+                let box = DevelopSettings.MaskRect(space.maskPoint(start), space.maskPoint(end))
+                develop.finishDrawing(.subject(DevelopSettings.Selection(box: box)))
+            }
         case .paint:
+            // The release point is part of the stroke too.
+            stroke?.points.append(space.maskPoint(clamped(drag.location, to: space.rect)))
             guard let stroke else { return }
             self.stroke = nil
             if develop.maskTool?.kind == .brush {
@@ -315,11 +379,13 @@ struct MaskEditorView: View {
     /// Decides what a drag starting at `point` does: drawing with the current tool, a handle
     /// of the selected part, a pin, or painting into the selected brush part.
     private func beginAction(at point: CGPoint, space: MaskSpace) -> DragAction {
+        if navigator.spaceDown { return .pan(last: point) }
         if let tool = develop.maskTool {
             guard space.rect.contains(point) else { return .none }
             switch tool.kind {
             case .linear: return .drawLinear(start: point)
             case .radial: return .drawRadial(center: point)
+            case .object: return .drawBox(start: point)
             case .brush: return startPainting(at: point, space: space)
             case .luminance, .subject: return .none
             }
@@ -341,6 +407,10 @@ struct MaskEditorView: View {
                     return .radialAxis(original: gradient, isX: index < 2)
                 }
                 if distance(point, center) < 10 { return .movePin(original: component, start: space.maskPoint(point)) }
+            case .subject:
+                if let pin = component.pin, distance(point, space.viewPoint(pin)) < 10 {
+                    return .movePin(original: component, start: space.maskPoint(point))
+                }
             default:
                 break
             }
@@ -354,7 +424,8 @@ struct MaskEditorView: View {
             }
         }
         if isPainting, space.rect.contains(point) { return startPainting(at: point, space: space) }
-        return .none
+        // Zoomed in, a drag on empty photo moves around it.
+        return navigator.canPan ? .pan(last: point) : .none
     }
 
     private func startPainting(at point: CGPoint, space: MaskSpace) -> DragAction {
@@ -414,6 +485,12 @@ struct MasksPanel: View {
                     Button("Cancel") { develop.maskTool = nil }.controlSize(.small)
                 }
             }
+            if let message = develop.maskMessage {
+                Label(message, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if develop.maskTool?.kind == .brush || isBrushSelected {
                 brushSettings
             }
@@ -423,7 +500,8 @@ struct MasksPanel: View {
             if let mask = develop.selectedMask {
                 Divider()
                 adjustments(mask)
-            } else if develop.masks.isEmpty, develop.maskTool == nil {
+            }
+            if develop.selectedMask == nil, develop.masks.isEmpty, develop.maskTool == nil {
                 Text("Masks limit an adjustment to part of the photo: a graduated sky, a lighter face, a darker corner. Create a mask, then move its sliders.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -633,10 +711,17 @@ struct MasksPanel: View {
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 invertToggle(component)
             }
-        case .subject:
+        case .subject(let selection):
             VStack(alignment: .leading, spacing: 6) {
-                GroupHeading(title: "Select Subject")
-                Text("Found on this Mac with Apple's Vision. Invert it to adjust the background.")
+                GroupHeading(title: selection.box == nil ? "Select Subject" : "Select Object")
+                SliderRow(label: "Feather", value: Binding(get: { selection.feather }, set: { value in
+                    var changed = selection
+                    changed.feather = value
+                    update(component, .subject(changed))
+                }), range: 0...100, step: 1, origin: 20)
+                Text(selection.box == nil
+                     ? "Found on this Mac with Apple's Vision. Invert it to adjust the background."
+                     : "Found by Vision inside the box. Drag the pin to move the box, or draw a new one.")
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 invertToggle(component)
             }
@@ -744,5 +829,109 @@ private struct LuminanceStrip: View {
             }
             .clipShape(RoundedRectangle(cornerRadius: 2))
         }
+    }
+}
+
+/// Zoom and scroll position for the Masking view, plus the scroll-wheel and Space-key handling
+/// that SwiftUI gestures don't cover.
+@MainActor
+final class MaskNavigator: ObservableObject {
+    struct Layout {
+        var rect: CGRect
+        var report: ZoomReport
+    }
+
+    /// The fraction of the photo at the middle of the view.
+    @Published var center = CGPoint(x: 0.5, y: 0.5)
+    /// Space is held: drags pan, as in Lightroom.
+    @Published var spaceDown = false
+    /// The view's frame in the window, top-left origin, for scroll events.
+    var frame = CGRect.zero
+    var setZoom: ((ZoomLevel) -> Void)?
+    private(set) var magnification: CGFloat = 1
+    private var fit: CGFloat = 1
+    private var document = CGSize(width: 1, height: 1)
+    private var size = CGSize.zero
+    private var rect = CGRect.zero
+    private var monitor: Any?
+    private let padding: CGFloat = 16
+
+    var canPan: Bool { rect.width > size.width + 1 || rect.height > size.height + 1 }
+
+    /// Where the photo goes for a view of `size`; `document` is the full-size photo's pixel size.
+    func layout(size: CGSize, document: CGSize, zoom: ZoomLevel) -> Layout {
+        let document = CGSize(width: max(1, document.width), height: max(1, document.height))
+        let fit = min(max(1, size.width - padding * 2) / document.width, max(1, size.height - padding * 2) / document.height)
+        var magnification: CGFloat
+        switch zoom {
+        case .fit: magnification = fit
+        case .fill: magnification = max(size.width / document.width, size.height / document.height)
+        case .percent(let value): magnification = CGFloat(value / 100)
+        }
+        magnification = min(16, max(fit, magnification))
+        let width = document.width * magnification, height = document.height * magnification
+        var x = (size.width - width) / 2, y = (size.height - height) / 2
+        if width > size.width { x = min(0, max(size.width - width, size.width / 2 - center.x * width)) }
+        if height > size.height { y = min(0, max(size.height - height, size.height / 2 - center.y * height)) }
+        let rect = CGRect(x: x, y: y, width: width, height: height)
+        // Remembered for the event handlers; layout runs on the main thread.
+        self.fit = fit
+        self.magnification = magnification
+        self.document = document
+        self.size = size
+        self.rect = rect
+        return Layout(rect: rect, report: ZoomReport(percent: Double(magnification * 100), fitPercent: Double(fit * 100)))
+    }
+
+    /// Zooms keeping the photo under `anchor` (view coordinates) in place.
+    func zoom(to target: CGFloat, anchor: CGPoint) {
+        guard rect.width > 0, rect.height > 0 else { return }
+        let next = min(16, max(fit, target))
+        let fraction = CGPoint(x: (anchor.x - rect.minX) / rect.width, y: (anchor.y - rect.minY) / rect.height)
+        let width = document.width * next, height = document.height * next
+        center = CGPoint(x: (size.width / 2 - anchor.x) / width + fraction.x,
+                         y: (size.height / 2 - anchor.y) / height + fraction.y)
+        setZoom?(next <= fit * 1.001 ? .fit : .percent(Double(next * 100)))
+    }
+
+    func pan(by delta: CGSize) {
+        guard rect.width > 0, rect.height > 0 else { return }
+        center = CGPoint(x: min(1, max(0, center.x - delta.width / rect.width)),
+                         y: min(1, max(0, center.y - delta.height / rect.height)))
+    }
+
+    func install() {
+        guard monitor == nil else { return }
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .keyDown, .keyUp]) { [weak self] event in
+            guard let self else { return event }
+            return MainActor.assumeIsolated { self.handle(event) }
+        }
+    }
+
+    func remove() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+        spaceDown = false
+    }
+
+    private func handle(_ event: NSEvent) -> NSEvent? {
+        if event.type == .keyDown || event.type == .keyUp {
+            guard event.keyCode == 49, !(event.window?.firstResponder is NSText),
+                  event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { return event }
+            spaceDown = event.type == .keyDown
+            return nil
+        }
+        guard let content = event.window?.contentView else { return event }
+        let point = CGPoint(x: event.locationInWindow.x, y: content.bounds.height - event.locationInWindow.y)
+        guard frame.contains(point) else { return event }
+        let local = CGPoint(x: point.x - frame.minX, y: point.y - frame.minY)
+        let precise = event.hasPreciseScrollingDeltas
+        if !event.modifierFlags.intersection([.command, .option]).isEmpty {
+            zoom(to: magnification * exp(event.scrollingDeltaY * (precise ? 0.01 : 0.1)), anchor: local)
+        } else {
+            let scale: CGFloat = precise ? 1 : 10
+            pan(by: CGSize(width: event.scrollingDeltaX * scale, height: event.scrollingDeltaY * scale))
+        }
+        return nil
     }
 }

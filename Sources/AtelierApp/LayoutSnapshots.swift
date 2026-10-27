@@ -131,6 +131,19 @@ enum LayoutSnapshots {
         try? await Task.sleep(for: .seconds(1))
         await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
                       to: folder.appendingPathComponent("develop-masking-brush-1280x800.png"))
+        // Zoomed to 100% while masking, with the brush part's pin in view.
+        model.zoom = .percent(100)
+        try? await Task.sleep(for: .seconds(2))
+        await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
+                      to: folder.appendingPathComponent("develop-masking-zoom-1280x800.png"))
+        model.zoom = .fit
+        // Select Object with a box; the sample photo has no subject, so the panel says so.
+        develop.createMask(.object)
+        develop.finishDrawing(.subject(.init(box: .init(x: 0.45, y: 0.4, width: 0.3, height: 0.35))))
+        try? await Task.sleep(for: .seconds(2))
+        print("SNAPSHOT: select object message \(develop.maskMessage ?? "-")")
+        await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
+                      to: folder.appendingPathComponent("develop-masking-object-1280x800.png"))
         develop.deleteAllMasks()
         develop.isMasking = false
         develop.flushSave()

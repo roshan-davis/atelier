@@ -400,9 +400,10 @@ public final class DevelopSession: @unchecked Sendable {
     public let lensCorrectionSupported: Bool
     private let lock = NSLock()
     private let brushCache = BrushCache()
-    /// Select Subject's mask on the corrected photo, found once per lens geometry; a nil mask
-    /// when Vision found nothing.
-    private var subjectMask: (key: DevelopSettings, mask: CIImage?)?
+    /// Select Subject's and Select Object's masks on the corrected photo, by box, found once per
+    /// lens geometry; a nil mask when Vision found nothing.
+    private var subjectMasks: [DevelopSettings.MaskRect?: CIImage?] = [:]
+    private var subjectKey: DevelopSettings?
 
     init?(url: URL, maxPixelSize: Int?, renderer: DevelopRenderer) {
         self.url = url
@@ -471,7 +472,7 @@ public final class DevelopSession: @unchecked Sendable {
         let provider: MaskProvider = { [self] component in
             if case .luminance = component.shape { return nil }
             guard let mask = DevelopRenderer.sourceMask(component, extent: sourceExtent,
-                                                        subject: { self.subject(of: source, key: key) },
+                                                        subject: { self.subject(of: source, key: key, box: $0) },
                                                         brushCache: brushCache) else { return nil }
             guard let crop else { return mask }
             return DevelopRenderer.applyGeometry(crop, to: mask, cropping: cropping)
@@ -566,22 +567,53 @@ public final class DevelopSession: @unchecked Sendable {
         return LineDetector.detect(gray.map { Float($0) / 255 }, width: width, height: height)
     }
 
-    /// Finds the subject with Vision on a small copy of the photo, once per lens geometry.
-    private func subject(of source: CIImage, key: DevelopSettings) -> CIImage? {
-        if let cached = subjectMask, cached.key == key { return cached.mask }
-        var found: CIImage?
-        let extent = source.extent
-        let factor = min(1, 1024 / max(extent.width, extent.height))
-        let small = source.transformed(by: CGAffineTransform(scaleX: factor, y: factor))
-        if let cgImage = renderer.context.createCGImage(small, from: small.extent.integral, format: .RGBA8,
-                                                        colorSpace: DevelopRenderer.sRGB),
-           let mask = try? AIImaging.subjectMask(for: cgImage) {
-            let image = CIImage(cgImage: mask)
-            found = image.transformed(by: CGAffineTransform(scaleX: extent.width / image.extent.width,
-                                                            y: extent.height / image.extent.height))
+    /// Finds the subject with Vision, on the whole photo or just inside `box`, once per lens
+    /// geometry. Inside a box a small subject fills Vision's view, so it is found.
+    private func subject(of source: CIImage, key: DevelopSettings, box: DevelopSettings.MaskRect?) -> CIImage? {
+        if subjectKey != key {
+            subjectMasks = [:]
+            subjectKey = key
         }
-        subjectMask = (key, found)
+        if let cached = subjectMasks[box] { return cached }
+        let extent = source.extent
+        var region = extent
+        if let box {
+            region = CGRect(x: extent.minX + box.x * extent.width, y: extent.minY + (1 - box.y - box.height) * extent.height,
+                            width: box.width * extent.width, height: box.height * extent.height)
+                .integral.intersection(extent)
+        }
+        var found: CIImage?
+        if region.width >= 8, region.height >= 8 {
+            // Vision works on about 1024 pixels; small boxes are enlarged up to 4×.
+            let factor = min(4, 1024 / max(region.width, region.height))
+            let piece = source.cropped(to: region)
+                .transformed(by: CGAffineTransform(translationX: -region.minX, y: -region.minY))
+                .transformed(by: CGAffineTransform(scaleX: factor, y: factor))
+            if let cgImage = renderer.context.createCGImage(piece, from: piece.extent.integral, format: .RGBA8,
+                                                            colorSpace: DevelopRenderer.sRGB),
+               let mask = try? AIImaging.subjectMask(for: cgImage) {
+                let image = DevelopRenderer.rawMask(mask)
+                var placed = image
+                    .transformed(by: CGAffineTransform(scaleX: region.width / image.extent.width,
+                                                       y: region.height / image.extent.height))
+                    .transformed(by: CGAffineTransform(translationX: region.minX, y: region.minY))
+                if box != nil {
+                    placed = placed.composited(over: CIImage(color: .black).cropped(to: extent))
+                }
+                found = placed.cropped(to: extent)
+            }
+        }
+        subjectMasks.updateValue(found, forKey: box)
         return found
+    }
+
+    /// Whether Vision finds anything for a Select Subject or Select Object part, so the Masks
+    /// panel can say so instead of leaving an empty mask.
+    public func findsSubject(_ selection: DevelopSettings.Selection, settings: DevelopSettings) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let source = corrected(settings) else { return false }
+        return subject(of: source, key: settings.lensGeometryKey, box: selection.box) != nil
     }
 
     /// Rendered for display in Display P3.
