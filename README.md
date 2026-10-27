@@ -1,50 +1,43 @@
 # Atelier
 
-A personal Lightroom-style photo catalog and editor for macOS (Apple Silicon, macOS 15+).
+A personal Lightroom-style photo catalog and editor for macOS (Swift, SwiftUI + AppKit, Apple Silicon, macOS 15+).
 Scope and architecture follow [Requirements/Atelier-PRD.md](Requirements/Atelier-PRD.md), the source of truth; update it in the same PR as any change it covers.
 
-## Status: Phase 1, Catalog MVP
+## Features
 
-- Catalog: SQLite through GRDB, WAL mode, in `~/Pictures/Atelier/Atelier Catalog.atelier`.
-  Volumes are matched by volume UUID (or remount URL for NAS shares), so remounting a drive or
-  the NAS under another path keeps links working. Volumes show online or offline in the sidebar.
-- Import: reference files in place, or copy to `YYYY/YYYY-MM-DD Event/` with SHA-256 verification.
-  EXIF, GPS, embedded XMP and existing XMP sidecars are read on import. Keywords can be applied to
-  the whole import.
-- Previews: 256 px thumbnails and 2560 px previews built in the background, so offline photos stay browsable.
-- Imports: every import becomes a named entry in the sidebar. Import more photos into an existing
-  entry, rename it, remove photos from it, or delete it. Photos always stay in the catalog.
-- Library: grid (NSCollectionView) and loupe, folders, collections (rename, delete), filter bar
-  (rating, flag, label, text over filename, title, caption and keywords).
-- XMP sidecars written on demand (Library > Write XMP, ⌘S), merged into existing sidecars.
-- Catalog snapshot on quit, last 10 kept in `Backups/`.
+**Library**
+- One catalog (SQLite through GRDB) in `~/Pictures/Atelier/Atelier Catalog.atelier`, snapshotted on quit (last 10 kept in `Backups/`).
+- Import dialog: reference files in place or copy to `YYYY/YYYY-MM-DD Event/` with SHA-256 verification, from local drives or the megham NAS. Volumes are matched by UUID, so remounted drives keep their links and show online or offline.
+- Every import is a named entry in the sidebar: import more into it, rename it, remove photos, or delete it.
+- RAW+JPEG pairs shown as one photo, virtual copies, stacks for Edit In versions.
+- Grid, loupe and a full-width filmstrip (F6); folders, collections and a filter bar (rating, flag, label, text).
+- Culling view with keyboard rating, flags and labels, and match modes for pairs. Keys are rebindable in Settings > Keyboard; ⌘/ shows them all.
+- EXIF, GPS and XMP read on import; XMP sidecars written on demand (Library > Write XMP for Selection, ⌘S, or automatically via Settings > Metadata).
 
-### Culling keys
+**Develop** (non-destructive)
+- RAW default look matched to the camera's embedded preview, plus a Profile menu.
+- Basic, Tone Curve, HSL/Color, Color Grading, Detail and Effects panels, with histogram and before/after.
+- Masking (brush, linear, radial, subject and luminance range), Lens Corrections, Transform with Upright and Guided guides, crop and straighten.
+- History and snapshots, presets, zoom up to 200% at full resolution.
 
-| Key | Action |
-| --- | --- |
-| 0–5 | Star rating |
-| P / X / U | Pick / reject / unflag |
-| 6 / 7 / 8 / 9 | Red / yellow / green / blue label (press again to clear) |
-| E or Return, double-click | Loupe |
-| G or Esc | Grid |
-| ← → | Previous / next photo in loupe |
+**Output and integrations**
+- Export to JPEG, HEIC, TIFF or PNG.
+- Edit In external apps through the Processor contract; edited files come back stacked with the original.
+- Experimental AI tools through a headless ComfyUI server (Remove Object, Replace Background, Upscale), set up in Settings > AI. Nothing is bundled.
+- Themes: System, Light, Dark, Graphite, Darkroom, Neutral Gray (Settings > Appearance).
 
-## Build and run
+## Run in Xcode
 
-Requires Xcode 16 or later.
+1. Xcode > File > Open…, pick `Package.swift` in the project folder.
+2. Choose the **AtelierApp** scheme and **My Mac** as the destination in the toolbar.
+3. Product > Run (⌘R).
 
-```sh
-cd ~/RoshProjects/Atelier/App
-swift build            # compile
-swift test             # run the core tests
-swift run AtelierApp   # launch the app
-```
+From a terminal: `swift build`, `swift test`, `swift run AtelierApp`.
 
-Or `open Package.swift` to work in Xcode and run the `AtelierApp` scheme.
+## CI
 
-## Not in Phase 1 yet
+Every pull request and push to `main` runs [.github/workflows/build.yml](.github/workflows/build.yml) on a macOS runner: build, the `AtelierCoreTests` suite (including a camera-match check against sample Nikon Z RAWs), and layout snapshots of the main screens, uploaded as an artifact and published to the `layout-snapshots` branch.
 
-Smart collections, stacks, duplicate detection by perceptual hash, watch folders, video poster
-frames, second backup destination on copy import, metadata presets beyond keywords, App Sandbox
-with security-scoped bookmarks (the Phase 1 build runs unsandboxed), full-text search index.
+## Not built yet
+
+Smart collections, perceptual-hash duplicates, watch folders, App Sandbox, model registry and license gate for AI outputs, PSD round-trip, Core ML and MLX backends. See the PRD for the phase plan.
