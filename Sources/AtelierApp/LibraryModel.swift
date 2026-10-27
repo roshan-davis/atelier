@@ -69,6 +69,8 @@ final class LibraryModel: ObservableObject {
         }
     }
     @Published var selection: Set<Int64> = []
+    /// Set while a Filmstrip right-click menu is open; see `targetIDs`.
+    var menuTargets: [Int64]?
     @Published var focusedID: Int64? {
         didSet {
             guard focusedID != oldValue else { return }
@@ -231,8 +233,10 @@ final class LibraryModel: ObservableObject {
 
     // MARK: Selection
 
-    /// Photos that an edit applies to: the loupe photo, or the grid selection.
+    /// Photos that an edit applies to: the loupe photo, or the grid selection. While a
+    /// Filmstrip right-click menu is open, its selection, in every mode.
     var targetIDs: [Int64] {
+        if let menuTargets { return menuTargets }
         if mode != .grid || selection.isEmpty {
             return focusedID.map { [$0] } ?? []
         }
