@@ -55,7 +55,8 @@ struct SplashView: View {
     let image: SplashImage?
     var onDismiss: () -> Void = {}
     var onHover: (Bool) -> Void = { _ in }
-    @AppStorage(Splash.showKey) private var showAtLaunch = true
+    // Not private, so the memberwise init stays usable from LayoutSnapshots.
+    @AppStorage(Splash.showKey) var showAtLaunch = true
 
     var body: some View {
         ZStack {
