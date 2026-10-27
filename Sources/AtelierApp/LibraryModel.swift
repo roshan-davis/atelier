@@ -166,8 +166,9 @@ final class LibraryModel: ObservableObject {
         rowsTask = Task { [weak self] in
             do {
                 for try await rows in observation.values(in: writer) {
-                    guard let self else { return }
-                    if LayoutSnapshots.outputFolder != nil { print("SNAPSHOT: rows for \(filter.scope): \(rows.count)") }
+                    // A replaced observation can still deliver once or twice after it is cancelled;
+                    // its rows belong to the old scope.
+                    guard let self, !Task.isCancelled, self.filter == filter else { return }
                     self.rows = rows
                     let visible = Set(rows.map(\.id))
                     self.selection.formIntersection(visible)
@@ -177,7 +178,6 @@ final class LibraryModel: ObservableObject {
                     self.reloadDetail()
                 }
             } catch {
-                if LayoutSnapshots.outputFolder != nil { print("SNAPSHOT: rows error for \(filter.scope): \(error)") }
                 self?.status = "Catalog error: \(error.localizedDescription)"
             }
         }
