@@ -167,6 +167,7 @@ final class LibraryModel: ObservableObject {
             do {
                 for try await rows in observation.values(in: writer) {
                     guard let self else { return }
+                    if LayoutSnapshots.outputFolder != nil { print("SNAPSHOT: rows for \(filter.scope): \(rows.count)") }
                     self.rows = rows
                     let visible = Set(rows.map(\.id))
                     self.selection.formIntersection(visible)
@@ -176,6 +177,7 @@ final class LibraryModel: ObservableObject {
                     self.reloadDetail()
                 }
             } catch {
+                if LayoutSnapshots.outputFolder != nil { print("SNAPSHOT: rows error for \(filter.scope): \(error)") }
                 self?.status = "Catalog error: \(error.localizedDescription)"
             }
         }
