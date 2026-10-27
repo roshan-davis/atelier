@@ -189,22 +189,25 @@ public struct LensGeometry: Sendable {
 
     /// The warp: output pixel to corrected-photo pixel (the inverse Transform), then through
     /// the lens distortion to the source pixel. Compiled from Metal at run time.
-    private static let compiled: (kernel: CIWarpKernel?, error: String?) = {
+    /// Points that fall off the photo come out clear, so the gray fill shows there.
+    private static let compiled: (kernel: CIKernel?, error: String?) = {
         let source = """
             #include <CoreImage/CoreImage.h>
             using namespace metal;
-            [[stitchable]] float2 atelierLensWarp(float3 r0, float3 r1, float3 r2, float4 lens,
-                                                  coreimage::destination dest) {
+            [[stitchable]] float4 atelierLensWarp(coreimage::sampler image, float3 r0, float3 r1, float3 r2,
+                                                  float4 lens, float2 size, coreimage::destination dest) {
                 float3 p = float3(dest.coord(), 1.0);
                 float2 s = float2(dot(r0, p), dot(r1, p)) / dot(r2, p);
                 float2 v = s - lens.xy;
-                return lens.xy + v * (1.0 + lens.w * dot(v, v) * lens.z);
+                s = lens.xy + v * (1.0 + lens.w * dot(v, v) * lens.z);
+                if (s.x < 0.0 || s.y < 0.0 || s.x > size.x || s.y > size.y) { return float4(0.0); }
+                return image.sample(image.transform(s));
             }
             """
         do {
             let kernels = try CIKernel.kernels(withMetalString: source)
-            if let warp = kernels.compactMap({ $0 as? CIWarpKernel }).first { return (warp, nil) }
-            return (nil, "no warp kernel in \(kernels)")
+            if let kernel = kernels.first { return (kernel, nil) }
+            return (nil, "no kernel built")
         } catch {
             return (nil, String(describing: error))
         }
@@ -230,8 +233,9 @@ public struct LensGeometry: Sendable {
         if let kernel = Self.compiled.kernel {
             let m = toPixels * inverse * toCentered
             let lens = CIVector(x: width / 2, y: height / 2, z: 4 / (width * width + height * height), w: distortion)
-            warped = kernel.apply(extent: extent, roiCallback: { _, _ in extent }, image: image,
-                                  arguments: [m.ciRow(0), m.ciRow(1), m.ciRow(2), lens])
+            warped = kernel.apply(extent: extent, roiCallback: { _, _ in extent },
+                                  arguments: [image, m.ciRow(0), m.ciRow(1), m.ciRow(2), lens,
+                                              CIVector(x: width, y: height)])
         }
         if warped == nil {
             // Without the kernel: the perspective alone, by moving the corners.
