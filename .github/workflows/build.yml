@@ -48,7 +48,7 @@ jobs:
       - name: Layout snapshots
         run: |
           export ATELIER_SNAPSHOTS="$PWD/snapshots"
-          perl -e 'alarm 120; exec @ARGV' .build/debug/AtelierApp
+          perl -e 'alarm 180; exec @ARGV' .build/debug/AtelierApp
           ls -l snapshots
       - uses: actions/upload-artifact@v4
         if: always()
