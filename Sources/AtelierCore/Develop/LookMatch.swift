@@ -490,7 +490,7 @@ public enum LookMatcher {
     }
 
     /// HSL: per band, moves hue, saturation and luminance toward the reference's average for that
-    /// band. Bands with too few pixels in either image are left alone. Two damped rounds, each
+    /// band. Bands covering less than about 1% of either image are left alone. Two damped rounds, each
     /// measured on a fresh render, since neighboring bands overlap.
     static func fitHSL(_ settings: inout DevelopSettings, reference: LookSample,
                        measure: (DevelopSettings) -> LookSample?) {
@@ -500,7 +500,7 @@ public enum LookMatcher {
             let current = photo.bandStats()
             for (i, band) in DevelopSettings.ColorBand.allCases.enumerated() {
                 let t = target[i], p = current[i]
-                guard t.share > 0.02, p.share > 0.02 else { continue }
+                guard t.share > 0.008, p.share > 0.008 else { continue }
                 let hue = DevelopSettings.Parameter.hsl(.hue, band)
                 let saturation = DevelopSettings.Parameter.hsl(.saturation, band)
                 let luminance = DevelopSettings.Parameter.hsl(.luminance, band)
