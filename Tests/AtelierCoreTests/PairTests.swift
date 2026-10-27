@@ -57,7 +57,7 @@ final class PairTests: XCTestCase {
 
         XCTAssertEqual(try catalog.pairSiblings(of: [raw, single]), [jpeg])
         XCTAssertEqual(try catalog.withPairSiblings([raw]), [raw, jpeg])
-        try catalog.writer.read { db in
+        try await catalog.writer.read { db in
             XCTAssertEqual(try Catalog.fetchPhotoCount(db, groupingRawPairs: true), 2)
             XCTAssertEqual(try Catalog.fetchPhotoCount(db, groupingRawPairs: false), 3)
             XCTAssertEqual(try Catalog.fetchImportGroupSummaries(db, groupingRawPairs: true).first?.photoCount, 2)
