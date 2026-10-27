@@ -113,6 +113,12 @@ enum LayoutSnapshots {
         print("SNAPSHOT: after virtual copy, rows \(model.rows.map { "\($0.filename) kind=\($0.stackKind?.rawValue ?? "-") name=\($0.stackName ?? "-")" }), original saturation \((try? model.catalog.developSettings(for: original))?.saturation ?? .nan), copy \((try? model.catalog.developSettings(for: copy))?.saturation ?? .nan)")
         await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1000, height: 584),
                       to: folder.appendingPathComponent("virtual-copy-grid.png"))
+        // The Filmstrip collapsed to its arrow tab.
+        UserDefaults.standard.set(false, forKey: Filmstrip.visibleKey)
+        try? await Task.sleep(for: .milliseconds(300))
+        await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1000, height: 584),
+                      to: folder.appendingPathComponent("filmstrip-collapsed.png"))
+        UserDefaults.standard.set(true, forKey: Filmstrip.visibleKey)
     }
 
     /// Culling before an import: three takes of one scene (one soft), two of another, and a

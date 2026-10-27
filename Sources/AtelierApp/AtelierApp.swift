@@ -46,6 +46,8 @@ struct AtelierApp: App {
                 // Z itself is handled by the culling key monitor.
                 Button("Toggle Zoom (Z)") { model.toggleZoom() }
                 Divider()
+                FilmstripMenuItem()
+                Divider()
             }
             CommandMenu("Library") {
                 Button("Grid") { model.mode = .grid }
