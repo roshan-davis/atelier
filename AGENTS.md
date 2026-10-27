@@ -30,7 +30,16 @@ Several agents open PRs on this repo at the same time.
 4. Push the branch and open a PR against `main`.
 5. GitHub Actions CI (`.github/workflows/build.yml`) builds, runs `AtelierCoreTests` and renders layout snapshots on every PR. Check it passes and fix failures yourself; don't ask Rosh to paste build errors.
 
-Work in the existing clone; don't clone the repo again. Don't copy files onto Rosh's Mac by other means: Rosh gets changes by pulling.
+### Where you work
+
+Agents run in one of two places. Know which one you are.
+
+- **On Rosh's Mac** (e.g. Antigravity): work in the existing clone at `~/RoshProjects/Atelier/App`; don't clone again. This is also the folder Rosh runs in Xcode, so:
+  - Before switching branches, check `git status`. Never discard uncommitted changes you didn't make; stash them and tell Rosh.
+  - When your PR is open, run `git checkout main` so Rosh's Xcode isn't left on your branch.
+- **In the cloud** (e.g. Claude project threads): work in your own clone and push from there. Never write files into Rosh's App folder, even if you have folder access: Rosh gets cloud changes only by pulling.
+
+Either way, GitHub is the only hand-off: Rosh sees a change after it's pushed and they pull or check out the branch in Xcode.
 
 ## UI changes
 
