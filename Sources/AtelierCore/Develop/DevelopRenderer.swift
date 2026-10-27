@@ -616,6 +616,12 @@ public final class DevelopSession: @unchecked Sendable {
         return subject(of: source, key: settings.lensGeometryKey, box: selection.box) != nil
     }
 
+    /// Rendered in sRGB, for measuring colors (Match Look).
+    public func renderSRGB(_ settings: DevelopSettings) -> CGImage? {
+        guard let image = image(with: settings) else { return nil }
+        return renderer.cgImage(image, colorSpace: DevelopRenderer.sRGB)
+    }
+
     /// Rendered for display in Display P3.
     public func render(_ settings: DevelopSettings, cropping: Bool = true, overlay: UUID? = nil) -> CGImage? {
         guard let image = image(with: settings, cropping: cropping, overlay: overlay) else { return nil }

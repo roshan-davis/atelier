@@ -99,6 +99,10 @@ struct ContentView: View {
         .sheet(isPresented: $model.showingExportSheet) {
             ExportSheet()
         }
+        .sheet(item: $model.matchLook) { match in
+            MatchLookSheet(match: match)
+                .environmentObject(model)
+        }
         .sheet(isPresented: $model.showingShortcuts) {
             ShortcutsSheet()
         }
@@ -150,7 +154,11 @@ private struct StatusBar: View {
             if let progress = model.exportProgress {
                 ProgressItem(progress: progress) { model.cancelExport() }
             }
-            if model.importProgress == nil, model.exportProgress == nil, let status = model.status {
+            if let progress = model.matchProgress {
+                ProgressItem(progress: progress) { model.cancelMatchEach() }
+            }
+            if model.importProgress == nil, model.exportProgress == nil, model.matchProgress == nil,
+               let status = model.status {
                 Text(status).lineLimit(1)
                 if !model.problems.isEmpty {
                     Button("Show Problems") { showingFailures = true }
