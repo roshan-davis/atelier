@@ -1,5 +1,6 @@
 import CoreGraphics
 import CoreImage
+import CoreImage.CIFilterBuiltins
 import Foundation
 
 // Lightroom's Profile menu, Lens Corrections and Transform panels. All of it happens at the
@@ -186,18 +187,35 @@ public struct LensGeometry: Sendable {
     /// Light gray where the correction leaves the frame empty, as in Lightroom.
     static let fill = CIImage(color: CIColor(red: 0.6, green: 0.6, blue: 0.6))
 
-    private static let kernel: CIWarpKernel? = CIWarpKernel(source: """
-        kernel vec2 atelierLensWarp(vec3 r0, vec3 r1, vec3 r2, vec4 lens) {
-            vec3 p = vec3(destCoord(), 1.0);
-            vec2 s = vec2(dot(r0, p), dot(r1, p)) / dot(r2, p);
-            vec2 v = s - lens.xy;
-            return lens.xy + v * (1.0 + lens.w * dot(v, v) * lens.z);
+    /// The warp: output pixel to corrected-photo pixel (the inverse Transform), then through
+    /// the lens distortion to the source pixel. Compiled from Metal at run time.
+    private static let compiled: (kernel: CIWarpKernel?, error: String?) = {
+        let source = """
+            #include <CoreImage/CoreImage.h>
+            using namespace metal;
+            [[stitchable]] float2 atelierLensWarp(float3 r0, float3 r1, float3 r2, float4 lens,
+                                                  coreimage::destination dest) {
+                float3 p = float3(dest.coord(), 1.0);
+                float2 s = float2(dot(r0, p), dot(r1, p)) / dot(r2, p);
+                float2 v = s - lens.xy;
+                return lens.xy + v * (1.0 + lens.w * dot(v, v) * lens.z);
+            }
+            """
+        do {
+            let kernels = try CIKernel.kernels(withMetalString: source)
+            if let warp = kernels.compactMap({ $0 as? CIWarpKernel }).first { return (warp, nil) }
+            return (nil, "no warp kernel in \(kernels)")
+        } catch {
+            return (nil, String(describing: error))
         }
-        """)
+    }()
+
+    /// Why the warp kernel could not be built, if it could not; the plain perspective is used then.
+    public static var kernelError: String? { compiled.error }
 
     /// Warps `image` (its extent at the origin) into a frame of the same size.
     public func apply(to image: CIImage) -> CIImage {
-        guard !isIdentity, let kernel = Self.kernel else { return image }
+        guard !isIdentity else { return image }
         let extent = image.extent
         let width = Double(extent.width), height = Double(extent.height)
         let long = max(width, height)
@@ -208,11 +226,29 @@ public struct LensGeometry: Sendable {
         let toPixels = Matrix3(rows: [SIMD3(long, 0, width / 2),
                                       SIMD3(0, -long, height / 2),
                                       SIMD3(0, 0, 1)])
-        let m = toPixels * inverse * toCentered
-        let lens = CIVector(x: width / 2, y: height / 2, z: 4 / (width * width + height * height), w: distortion)
-        let warped = kernel.apply(extent: extent, roiCallback: { _, _ in extent }, image: image,
-                                  arguments: [m.ciRow(0), m.ciRow(1), m.ciRow(2), lens]) ?? image
-        return warped.composited(over: Self.fill.cropped(to: extent))
+        var warped: CIImage?
+        if let kernel = Self.compiled.kernel {
+            let m = toPixels * inverse * toCentered
+            let lens = CIVector(x: width / 2, y: height / 2, z: 4 / (width * width + height * height), w: distortion)
+            warped = kernel.apply(extent: extent, roiCallback: { _, _ in extent }, image: image,
+                                  arguments: [m.ciRow(0), m.ciRow(1), m.ciRow(2), lens])
+        }
+        if warped == nil {
+            // Without the kernel: the perspective alone, by moving the corners.
+            let forward = toPixels * matrix * toCentered
+            func corner(_ x: Double, _ y: Double) -> CGPoint {
+                let p = forward.apply(SIMD2(x, y))
+                return CGPoint(x: p.x, y: p.y)
+            }
+            let filter = CIFilter.perspectiveTransform()
+            filter.inputImage = image
+            filter.topLeft = corner(0, height)
+            filter.topRight = corner(width, height)
+            filter.bottomRight = corner(width, 0)
+            filter.bottomLeft = corner(0, 0)
+            warped = filter.outputImage?.cropped(to: extent)
+        }
+        return (warped ?? image).composited(over: Self.fill.cropped(to: extent))
     }
 }
 

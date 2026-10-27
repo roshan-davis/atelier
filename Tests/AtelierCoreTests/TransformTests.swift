@@ -172,6 +172,7 @@ final class TransformTests: XCTestCase {
     }
 
     func testWarpFillsEmptyEdgesAndConstrainCropRemovesThem() throws {
+        XCTAssertNil(LensGeometry.kernelError)
         let renderer = DevelopRenderer()
         let red = CIImage(color: CIColor(red: 1, green: 0, blue: 0)).cropped(to: CGRect(x: 0, y: 0, width: 300, height: 200))
         var settings = DevelopSettings()
