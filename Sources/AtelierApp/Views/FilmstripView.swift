@@ -109,22 +109,22 @@ struct FilmstripView: View {
 
     /// A tab centered on the bottom edge with an arrow: down hides, up shows.
     private var handle: some View {
-        HStack {
-            Spacer()
-            Button {
-                withAnimation(.easeInOut(duration: 0.2)) { isVisible.toggle() }
-            } label: {
-                Image(systemName: isVisible ? "chevron.compact.down" : "chevron.compact.up")
-                    .font(.system(size: 15, weight: .semibold))
-                    .frame(width: 64, height: 10)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .help(isVisible ? "Hide the Filmstrip (F6)" : "Show the Filmstrip (F6)")
-            Spacer()
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) { isVisible.toggle() }
+        } label: {
+            Image(systemName: isVisible ? "chevron.down" : "chevron.up")
+                .font(.system(size: 9, weight: .bold))
+                .frame(width: 56, height: 14)
+                .background(Color(nsColor: .quaternaryLabelColor).opacity(0.5),
+                            in: UnevenRoundedRectangle(topLeadingRadius: isVisible ? 0 : 5, bottomLeadingRadius: isVisible ? 5 : 0,
+                                                       bottomTrailingRadius: isVisible ? 5 : 0, topTrailingRadius: isVisible ? 0 : 5))
+                .contentShape(Rectangle())
         }
-        .frame(height: 12)
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+        .help(isVisible ? "Hide the Filmstrip (F6)" : "Show the Filmstrip (F6)")
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: isVisible ? .top : .bottom)
+        .frame(height: 16)
         .overlay(alignment: .top) { if !isVisible { Divider() } }
     }
 
@@ -197,7 +197,7 @@ private struct FilmstripCell: View {
     @State private var image: NSImage?
 
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
+        ZStack {
             RoundedRectangle(cornerRadius: 3)
                 .fill(Color(nsColor: .quaternaryLabelColor).opacity(isSelected ? 0.9 : 0.35))
             if let image {
@@ -208,6 +208,8 @@ private struct FilmstripCell: View {
                     .padding(4)
                     .opacity(row.flag == .rejected ? 0.35 : 1)
             }
+        }
+        .overlay(alignment: .bottomLeading) {
             let badge = ThumbnailItem.badge(for: row).trimmingCharacters(in: .whitespaces)
             if !badge.isEmpty, size >= 64 {
                 Text(badge)
@@ -215,8 +217,8 @@ private struct FilmstripCell: View {
                     .foregroundStyle(.white)
                     .shadow(color: .black.opacity(0.8), radius: 1)
                     .lineLimit(1)
-                    .padding(.horizontal, 4)
-                    .padding(.bottom, 2)
+                    .padding(.horizontal, 5)
+                    .padding(.bottom, 3)
             }
         }
         .frame(width: size, height: size)
