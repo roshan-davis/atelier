@@ -59,6 +59,7 @@ enum LayoutSnapshots {
                       to: folder.appendingPathComponent("develop-ai-1280x800.png"))
         model.develop.isAIOpen = false
         await snapshotMasking(model: model, into: folder)
+        await snapshotTransform(model: model, into: folder)
         // Each theme in Develop at the size in Rosh's screenshot, and the theme picker itself.
         for theme in Theme.allCases where theme != .system {
             UserDefaults.standard.set(theme.rawValue, forKey: Theme.defaultsKey)
@@ -133,6 +134,35 @@ enum LayoutSnapshots {
         develop.deleteAllMasks()
         develop.isMasking = false
         develop.flushSave()
+    }
+
+    /// Guided Upright with two converging guides, Constrain Crop on, and the Lens Corrections and
+    /// Transform panels.
+    private static func snapshotTransform(model: LibraryModel, into folder: URL) async {
+        let develop = model.develop
+        let expanded = UserDefaults.standard.string(forKey: "develop.expandedPanels")
+        UserDefaults.standard.set("histogram,basic,lensCorrections,transform", forKey: "develop.expandedPanels")
+        develop.setUpright(.guided)
+        develop.setGuides([
+            .init(start: .init(x: 0.3, y: 0.85), end: .init(x: 0.36, y: 0.2)),
+            .init(start: .init(x: 0.72, y: 0.85), end: .init(x: 0.66, y: 0.2)),
+        ])
+        develop.setConstrainCrop(true)
+        develop.set(.lensDistortion, to: 15)
+        try? await Task.sleep(for: .seconds(2))
+        print("SNAPSHOT: upright \(String(describing: develop.settings.upright))")
+        await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
+                      to: folder.appendingPathComponent("develop-guided-1280x800.png"))
+        develop.isGuiding = false
+        try? await Task.sleep(for: .seconds(1))
+        await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
+                      to: folder.appendingPathComponent("develop-transform-1280x800.png"))
+        await capture(AnyView(DevelopPanel(develop: develop).environmentObject(model)), size: CGSize(width: 320, height: 1700),
+                      to: folder.appendingPathComponent("panel-transform-320x1700.png"))
+        develop.reset(.transform)
+        develop.reset(.lensCorrections)
+        develop.flushSave()
+        UserDefaults.standard.set(expanded, forKey: "develop.expandedPanels")
     }
 
     /// A virtual copy of the sample photo turned black and white, next to the colour original.

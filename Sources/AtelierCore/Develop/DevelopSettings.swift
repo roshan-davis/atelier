@@ -31,6 +31,15 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
     /// Local adjustments, applied in order after the global ones (see Masks.swift).
     public var masks: [Mask] = []
 
+    /// Basic > Profile: the base look under every slider (RAW files).
+    public var profile = Profile.cameraMatching
+    /// Lens Corrections > Enable Profile Corrections: the RAW engine's corrections for the lens.
+    public var lensProfileCorrections = true
+    /// Transform > Upright; nil is Off.
+    public var upright: Upright?
+    /// Transform > Constrain Crop: enlarge the corrected photo so no empty edges show.
+    public var constrainCrop = false
+
     public init() {}
 
     public func points(for channel: CurveChannel) -> [CurvePoint] {
@@ -175,6 +184,10 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         crop = try c.decodeIfPresent(Crop.self, forKey: Key("crop"))
         // A mask this version can't read never costs the photo its other settings.
         masks = (try? c.decodeIfPresent([Mask].self, forKey: Key("masks"))) ?? []
+        profile = (try? c.decodeIfPresent(Profile.self, forKey: Key("profile"))) ?? .cameraMatching
+        lensProfileCorrections = try c.decodeIfPresent(Bool.self, forKey: Key("lensProfileCorrections")) ?? true
+        upright = try? c.decodeIfPresent(Upright.self, forKey: Key("upright"))
+        constrainCrop = try c.decodeIfPresent(Bool.self, forKey: Key("constrainCrop")) ?? false
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -187,12 +200,17 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         if !pointCurves.isEmpty { try c.encode(pointCurves, forKey: Key("pointCurves")) }
         try c.encodeIfPresent(storedCrop, forKey: Key("crop"))
         if !masks.isEmpty { try c.encode(masks, forKey: Key("masks")) }
+        if profile != .cameraMatching { try c.encode(profile, forKey: Key("profile")) }
+        if !lensProfileCorrections { try c.encode(false, forKey: Key("lensProfileCorrections")) }
+        try c.encodeIfPresent(upright, forKey: Key("upright"))
+        if constrainCrop { try c.encode(true, forKey: Key("constrainCrop")) }
     }
 
     public static let neutral = DevelopSettings()
 
     public var isNeutral: Bool {
         temperature == nil && values.isEmpty && pointCurves.isEmpty && storedCrop == nil && masks.isEmpty
+            && profile == .cameraMatching && lensProfileCorrections && upright == nil && !constrainCrop
     }
 
     public func encoded() throws -> String {
@@ -227,7 +245,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
 
     /// The Develop panels, in Lightroom's order.
     public enum Panel: String, CaseIterable, Sendable {
-        case basic, toneCurve, hsl, colorGrading, detail, effects
+        case basic, toneCurve, hsl, colorGrading, detail, lensCorrections, transform, effects
 
         public var title: String {
             switch self {
@@ -236,6 +254,8 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             case .hsl: return "HSL / Color"
             case .colorGrading: return "Color Grading"
             case .detail: return "Detail"
+            case .lensCorrections: return "Lens Corrections"
+            case .transform: return "Transform"
             case .effects: return "Effects"
             }
         }
@@ -319,6 +339,9 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         case gradeGlobalHue, gradeGlobalSat, gradeGlobalLum
         case gradeBlending, gradeBalance
         case sharpening, sharpenRadius, luminanceNoise, colorNoise
+        case lensDistortion, lensVignette, lensVignetteMidpoint
+        case transformVertical, transformHorizontal, transformRotate, transformAspect, transformScale
+        case transformOffsetX, transformOffsetY
         case vignette, vignetteMidpoint, grain, grainSize
 
         public static func hsl(_ channel: HSLChannel, _ band: ColorBand) -> Parameter {
@@ -337,7 +360,8 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             switch self {
             case .temperature: return 5500
             case .sharpenRadius: return 1
-            case .vignetteMidpoint, .gradeBlending: return 50
+            case .vignetteMidpoint, .gradeBlending, .lensVignetteMidpoint: return 50
+            case .transformScale: return 100
             case .grainSize: return 25
             default: return 0
             }
@@ -350,7 +374,10 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             case .exposure: return -5...5
             case .sharpening: return 0...150
             case .sharpenRadius: return 0.5...3
-            case .luminanceNoise, .colorNoise, .vignetteMidpoint, .grain, .grainSize, .gradeBlending: return 0...100
+            case .luminanceNoise, .colorNoise, .vignetteMidpoint, .grain, .grainSize, .gradeBlending,
+                 .lensVignetteMidpoint: return 0...100
+            case .transformRotate: return -10...10
+            case .transformScale: return 50...150
             case .gradeShadowsHue, .gradeMidtonesHue, .gradeHighlightsHue, .gradeGlobalHue: return 0...360
             case .gradeShadowsSat, .gradeMidtonesSat, .gradeHighlightsSat, .gradeGlobalSat: return 0...100
             default: return -100...100
@@ -361,7 +388,15 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             if let band = hslBand?.1 { return band.rawValue }
             switch self {
             case .temperature: return "Temp"
-            case .sharpening, .vignette, .grain: return "Amount"
+            case .sharpening, .vignette, .grain, .lensDistortion, .lensVignette: return "Amount"
+            case .lensVignetteMidpoint: return "Midpoint"
+            case .transformVertical: return "Vertical"
+            case .transformHorizontal: return "Horizontal"
+            case .transformRotate: return "Rotate"
+            case .transformAspect: return "Aspect"
+            case .transformScale: return "Scale"
+            case .transformOffsetX: return "X Offset"
+            case .transformOffsetY: return "Y Offset"
             case .sharpenRadius: return "Radius"
             case .luminanceNoise: return "Luminance"
             case .colorNoise: return "Color"
@@ -387,6 +422,8 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             if hslBand != nil { return .hsl }
             if rawValue.hasPrefix("grade") { return .colorGrading }
             if rawValue.hasPrefix("curve") { return .toneCurve }
+            if rawValue.hasPrefix("lens") { return .lensCorrections }
+            if rawValue.hasPrefix("transform") { return .transform }
             switch self {
             case .sharpening, .sharpenRadius, .luminanceNoise, .colorNoise: return .detail
             case .vignette, .vignetteMidpoint, .grain, .grainSize: return .effects
@@ -406,6 +443,10 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             case .luminanceNoise, .colorNoise: return "Noise Reduction"
             case .vignette, .vignetteMidpoint: return "Post-Crop Vignetting"
             case .grain, .grainSize: return "Grain"
+            case .lensDistortion: return "Distortion"
+            case .lensVignette, .lensVignetteMidpoint: return "Vignetting"
+            case .transformVertical, .transformHorizontal, .transformRotate, .transformAspect, .transformScale,
+                 .transformOffsetX, .transformOffsetY: return "Transform"
             case .gradeBlending, .gradeBalance: return "Blend"
             default:
                 return GradeRegion.allCases.first { rawValue.hasPrefix("grade\($0.rawValue)") }?.rawValue ?? ""

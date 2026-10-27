@@ -615,6 +615,7 @@ final class LibraryModel: ObservableObject {
         guard let window = NSApp.keyWindow, window === mainWindow, window.attachedSheet == nil else { return false }
         if window.firstResponder is NSText { return false }
 
+        if mode == .develop, handleTransformKey(event) { return true }
         if mode == .develop, handleMaskingKey(event) { return true }
 
         // [ and ] size the AI brush, as in Lightroom.
@@ -685,6 +686,25 @@ final class LibraryModel: ObservableObject {
             develop.showMaskOverlay.toggle()
         }
         return true
+    }
+
+    /// Guided Upright, as in Lightroom: ⇧T opens it, Delete removes the selected guide, Esc closes it.
+    private func handleTransformKey(_ event: NSEvent) -> Bool {
+        if event.modifierFlags.contains(.shift), event.charactersIgnoringModifiers?.lowercased() == "t" {
+            if develop.isGuiding { develop.isGuiding = false } else { develop.setUpright(.guided) }
+            return true
+        }
+        guard develop.isGuiding else { return false }
+        switch event.keyCode {
+        case 51, 117:  // delete, forward delete
+            develop.deleteSelectedGuide()
+            return true
+        case 53:  // escape
+            develop.isGuiding = false
+            return true
+        default:
+            return false
+        }
     }
 
     /// Lightroom's Masking keys: ⇧W opens it, ⇧M draws a radial gradient, [ and ] size the brush

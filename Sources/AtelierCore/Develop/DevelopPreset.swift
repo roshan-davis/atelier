@@ -5,10 +5,12 @@ import Foundation
 public struct DevelopPreset: Codable, Hashable, Sendable, Identifiable {
     /// The pieces a preset can include, as in Lightroom's New Preset dialog.
     public enum Part: String, Codable, CaseIterable, Sendable {
-        case whiteBalance, tone, presence, toneCurve, hsl, colorGrading, detail, effects, crop, masks
+        case profile, whiteBalance, tone, presence, toneCurve, hsl, colorGrading, detail, lensCorrections, transform
+        case effects, crop, masks
 
         public var title: String {
             switch self {
+            case .profile: return "Profile"
             case .whiteBalance: return "White Balance"
             case .tone: return "Tone"
             case .presence: return "Presence"
@@ -16,15 +18,18 @@ public struct DevelopPreset: Codable, Hashable, Sendable, Identifiable {
             case .hsl: return "HSL / Color"
             case .colorGrading: return "Color Grading"
             case .detail: return "Detail"
+            case .lensCorrections: return "Lens Corrections"
+            case .transform: return "Transform"
             case .effects: return "Effects"
             case .crop: return "Crop & Straighten"
             case .masks: return "Masks"
             }
         }
 
-        /// Most presets are a look; white balance, crop and masks depend on the photo, so they are
-        /// left out unless chosen.
-        public static let defaults: Set<Part> = Set(allCases).subtracting([.whiteBalance, .crop, .masks])
+        /// Most presets are a look; the profile, white balance, lens corrections, transform, crop
+        /// and masks depend on the photo, so they are left out unless chosen.
+        public static let defaults: Set<Part> = Set(allCases)
+            .subtracting([.profile, .whiteBalance, .lensCorrections, .transform, .crop, .masks])
 
         var parameters: [DevelopSettings.Parameter] {
             switch self {
@@ -36,7 +41,9 @@ public struct DevelopPreset: Codable, Hashable, Sendable, Identifiable {
             case .colorGrading: return DevelopSettings.Panel.colorGrading.parameters
             case .detail: return DevelopSettings.Panel.detail.parameters
             case .effects: return DevelopSettings.Panel.effects.parameters
-            case .crop, .masks: return []
+            case .lensCorrections: return DevelopSettings.Panel.lensCorrections.parameters
+            case .transform: return DevelopSettings.Panel.transform.parameters
+            case .profile, .crop, .masks: return []
             }
         }
     }
@@ -72,6 +79,15 @@ public struct DevelopPreset: Codable, Hashable, Sendable, Identifiable {
                 result.crop = settings.crop
             case .masks:
                 result.masks = settings.masks
+            case .profile:
+                result.profile = settings.profile
+            case .lensCorrections:
+                result.lensProfileCorrections = settings.lensProfileCorrections
+                for parameter in part.parameters { result[parameter] = settings[parameter] }
+            case .transform:
+                result.upright = settings.upright
+                result.constrainCrop = settings.constrainCrop
+                for parameter in part.parameters { result[parameter] = settings[parameter] }
             case .toneCurve:
                 for channel in DevelopSettings.CurveChannel.allCases {
                     result.setPoints(settings.points(for: channel), for: channel)

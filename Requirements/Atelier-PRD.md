@@ -146,7 +146,24 @@ Rosh saw a selected photo appear with one look, then turn darker a moment later.
 - **Everywhere:** Develop, Before/After, the histogram, masks, the loupe preview, thumbnails of edited photos and exports all use it, so the grid's embedded thumbnail, the loupe and Develop agree and nothing visibly swaps.
 - **No usable preview:** files without an embedded preview (or with one of a different shape) keep Apple's render. JPEG, HEIC and other non-RAW files are unchanged.
 - **Previews:** previews from before this change are rebuilt once on first launch.
-- **Later:** a profile choice in the Basic panel (Camera Matching, Apple Neutral, custom camera profiles), as Lightroom's Profile menu.
+- **Profile choice:** built Oct 27, 2026 as the Profile menu in Basic (see Profile, Lens Corrections and Transform).
+
+### Profile, Lens Corrections and Transform (decided Oct 27, 2026)
+
+Rosh asked whether a camera profile is worth having, and for Lightroom's perspective tools: corrections from the lens profile, Upright, and guides drawn on the photo.
+
+- **Profile (top of Basic):** a Profile menu like Lightroom's. Camera Matching (the default; the camera-matched look above, fitted per photo so it follows the Picture Control and Active D-Lighting each shot was taken with) and Apple Neutral (Apple's RAW render with no camera look: flatter, with more highlight room, a starting point for heavy edits). Non-RAW files show the menu dimmed. The profile is applied at decode, under all the sliders, and is a history step ("Profile: Apple Neutral"). Fixed per-camera profiles (one look for every Zf or Z6 file, or a ColorChecker profile for artwork) come later; the per-photo match already follows each shot's camera settings, so they are not needed now.
+- **Lens Corrections panel** (after Detail, as in Lightroom Classic):
+  - **Profile:** Enable Profile Corrections (on by default for RAW files) applies the distortion and vignetting corrections Apple's RAW engine has for the camera and lens, which for Nikon Z files come from the correction data the camera writes into the NEF. The panel shows the lens name from the file. When the RAW engine has no corrections for the file (or it is not a RAW), the checkbox is dimmed with "No lens corrections for this photo".
+  - **Manual:** Distortion (-100 to 100; positive removes barrel distortion, negative removes pincushion) and Lens Vignetting Amount (-100 to 100; positive brightens the corners) with Midpoint. These act on the whole uncropped photo around its center, unlike Effects > Post-Crop Vignetting.
+  - **Later:** Remove Chromatic Aberration, Defringe, and choosing a lens profile by hand.
+- **Transform panel** (after Lens Corrections):
+  - **Upright:** buttons Off, Auto, Level, Vertical, Full and Guided. Atelier finds straight lines in the photo (after lens corrections) and solves for the tilt that makes them straight: Level makes horizontal lines level (rotation only); Vertical also makes vertical lines parallel (vertical perspective and rotation); Full also corrects horizontal perspective; Auto does the same as Full but holds back when the lines are weak, so it never warps a photo hard on thin evidence. If too few lines are found, the button reports "Not enough straight lines found" and nothing changes. Upright's correction is stored with the photo, so it never changes on its own; clicking the mode again recomputes it.
+  - **Guided:** the Guided button (or Shift+T) shows the photo with the guides tool, like Lightroom: drag along an edge that should be vertical or horizontal to draw a guide (up to four). Each guide is treated as vertical or horizontal by which it is closer to, and the correction updates as each guide is drawn. Drag a guide's ends to move them; select a guide and press Delete to remove it. Two vertical guides fix converging verticals (the main use for buildings and artwork); add horizontal guides to also fix the horizontal perspective. Esc or Done closes the tool.
+  - **Manual sliders**, added on top of Upright: Vertical (-100 to 100; negative widens the top, for buildings shot from below), Horizontal (-100 to 100), Rotate (-10° to 10°), Aspect (-100 to 100; positive stretches width), Scale (50 to 150%), X Offset and Y Offset (-100 to 100).
+  - **Constrain Crop:** off by default. When on, the corrected photo is enlarged just enough that no empty edges show. With it off, the areas the correction leaves empty show as light gray, as in Lightroom.
+- **Pipeline:** profile corrections at decode, then manual lens vignetting and distortion, then the Transform, all in step 1, before every adjustment, the masks and the crop. Masks, the crop and Select Subject work on the corrected photo, so changing the Transform after drawing a mask keeps the mask on the same spot of the frame.
+- **Storage and sharing:** all of it is part of the develop settings (history steps, Copy/Paste Settings, virtual copies). Presets get Profile, Lens Corrections and Transform parts, off by default, as in Lightroom's preset dialog. Before/After keeps the lens corrections and Transform, like the crop, so the two line up.
 
 ## Scope by release
 
@@ -195,13 +212,13 @@ Edits are a versioned list of parameters stored in the catalog, rendered live on
 
 ### Pipeline order
 
-1. RAW decode and demosaic (CIRAWFilter): white balance, exposure baseline, noise reduction, lens correction, then the camera-matched base look.
+1. RAW decode and demosaic (CIRAWFilter): white balance, exposure baseline, noise reduction, profile lens corrections, then the profile (camera-matched base look or Apple Neutral), manual lens corrections and the Transform (Upright and the perspective sliders).
 2. Linear-light global adjustments: exposure, highlights, shadows, whites, blacks.
 3. Tone: contrast, tone curve (parametric and point, per channel).
 4. Color: vibrance, saturation, HSL (8 hues), color grading (shadows, midtones, highlights).
 5. Detail: sharpening with masking, texture, clarity, dehaze.
 6. Local adjustments: each mask carries its own subset of steps 2 to 5.
-7. Geometry: crop, straighten, perspective (upright), vignette.
+7. Geometry: crop, straighten, post-crop vignette.
 8. Output transform: working space (linear Rec. 2020 or ProPhoto) to display or export space.
 
 ### Tools and requirements
@@ -210,13 +227,14 @@ Edits are a versioned list of parameters stored in the catalog, rendered live on
 - The right column sits beside the photo and below the toolbar (never under it), like Lightroom's panel strip. Drag its left edge to resize it (280 to 560 points); its content always fits the column.
 - Panels follow Lightroom's layout and order in the right column, each collapsible, remembered between sessions, with a dot and a reset button when it has edits. Right-click a panel header for Solo Mode (one panel open at a time), Expand All and Collapse All.
   - Histogram: RGB, from the current render, with shadow and highlight clipping warnings.
-  - Basic: White Balance (Temp, Tint), Tone (Exposure, Contrast, Highlights, Shadows, Whites, Blacks), Presence (Texture, Clarity, Dehaze, Vibrance, Saturation).
+  - Basic: Profile (Camera Matching, Apple Neutral), White Balance (Temp, Tint), Tone (Exposure, Contrast, Highlights, Shadows, Whites, Blacks), Presence (Texture, Clarity, Dehaze, Vibrance, Saturation).
   - Tone Curve: an editable point curve for RGB, Red, Green and Blue, drawn over that channel's histogram: click the curve to add a point and drag it, double-click a point to remove it, reset per channel. The overall result of Basic tone and the region sliders (Highlights, Lights, Darks, Shadows) shows as a faint line under the RGB curve.
   - HSL / Color: eight bands (Red, Orange, Yellow, Green, Aqua, Blue, Purple, Magenta) with Hue, Saturation and Luminance, shown one channel at a time or All, on colored slider tracks. Grays are never affected.
   - Color Grading: Shadows, Midtones, Highlights and Global wheels (drag for hue and saturation, slider for luminance), plus Blending and Balance.
   - Detail: Sharpening (Amount, Radius), Noise Reduction (Luminance, Color).
   - Effects: Post-Crop Vignetting (Amount, Midpoint), Grain (Amount, Size).
-  - Next, in Lightroom's order: Lens Corrections, Transform, Calibration.
+  - Lens Corrections and Transform (between Detail and Effects; see Profile, Lens Corrections and Transform under User experience principles).
+  - Next: Calibration.
   - Sliders are compact Lightroom-style rows: name, slim track with a mark at the default and the change filled in, then the value (bold when changed). Double-click the name to reset, click the value to type one. Temp, Tint, Vibrance, Saturation and the HSL sliders have colored tracks; Temp moves in perceptual (logarithmic) steps.
 - Zoom in loupe and develop: Fit, Fill, 100% (one photo pixel per screen pixel) and 200% in the bar under the photo; Z or a click toggles Fit and 100% at the clicked point; pinch, or ⌥/⌘ and scroll, zooms freely; drag to pan; View > Zoom In (⌘=), Zoom Out (⌘-), Zoom to Fit (⌘0). Zoom is kept when moving between photos.
 - Right-click a photo in the grid, loupe or develop for: Open in Loupe, Edit in Develop, zoom levels, Show in Finder, Set Rating, Set Flag, Set Color Label, Develop Settings (Copy, Paste, Reset), Add to Collection, Remove from this collection or import, Write XMP Metadata, Export. Right-clicking an unselected grid photo selects it first.

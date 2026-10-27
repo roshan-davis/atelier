@@ -19,6 +19,8 @@ struct DevelopImageView: View {
                         AIBrushView(ai: model.ai, image: image, assetID: develop.assetID)
                     } else if develop.isMasking {
                         MaskEditorView(develop: develop, image: image)
+                    } else if develop.isGuiding {
+                        GuidedUprightView(develop: develop, image: image)
                     } else if develop.showingBefore || develop.compareMode == .off {
                         ZoomableImageView(image: develop.displayImage ?? image,
                                           pixelSize: pixelSize,
@@ -83,13 +85,13 @@ struct DevelopImageView: View {
                 Text("Before and After").foregroundStyle(.secondary).fixedSize()
             }
             comparePicker(iconsOnly: compact)
-                .disabled(develop.isCropping || develop.isAIOpen || develop.isMasking)
+                .disabled(develop.isCropping || develop.isAIOpen || develop.isMasking || develop.isGuiding)
             if !compact, develop.compareMode == .slider {
                 Text("Drag across the photo to move the divider").foregroundStyle(.secondary).fixedSize()
             }
             Spacer(minLength: 8)
             ZoomControls(zoom: $model.zoom, report: model.zoomReport, compact: compact)
-                .disabled(develop.compareMode != .off || develop.isCropping || develop.isAIOpen || develop.isMasking)
+                .disabled(develop.compareMode != .off || develop.isCropping || develop.isAIOpen || develop.isMasking || develop.isGuiding)
         }
     }
 
@@ -284,6 +286,15 @@ struct DevelopPanel: View {
                                      isModified: develop.isModified(panel), reset: { develop.reset(panel) },
                                      expandAll: expandAll, collapseAll: collapseAll) {
                             switch panel {
+                            case .basic:
+                                VStack(alignment: .leading, spacing: 7) {
+                                    ProfileRow(develop: develop)
+                                    ParameterGroups(panel: panel, develop: develop)
+                                }
+                            case .lensCorrections:
+                                LensCorrectionsPanel(develop: develop)
+                            case .transform:
+                                TransformPanel(develop: develop)
                             case .toneCurve:
                                 ToneCurvePanel(develop: develop)
                             case .hsl:
@@ -756,7 +767,7 @@ private struct HistogramView: View {
     }
 }
 
-private struct ParameterSlider: View {
+struct ParameterSlider: View {
     let parameter: DevelopSettings.Parameter
     @ObservedObject var develop: DevelopController
     @State private var editing = false
@@ -773,6 +784,7 @@ private struct ParameterSlider: View {
         case .temperature: return "\(Int(value.rounded())) K"
         case .exposure: return String(format: "%+.2f", value)
         case .sharpenRadius: return String(format: "%.1f", value)
+        case .transformRotate: return value == 0 ? "0.0" : String(format: "%+.1f", value)
         default:
             if parameter.range.lowerBound >= 0 { return "\(Int(value.rounded()))" }
             return value == 0 ? "0" : String(format: "%+.0f", value)
@@ -856,7 +868,7 @@ private struct ParameterSlider: View {
         switch parameter {
         case .temperature: return 50
         case .exposure: return 0.05
-        case .sharpenRadius: return 0.1
+        case .sharpenRadius, .transformRotate: return 0.1
         default: return 1
         }
     }

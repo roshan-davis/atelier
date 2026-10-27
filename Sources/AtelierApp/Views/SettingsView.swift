@@ -654,6 +654,8 @@ struct ShortcutsSheet: View {
         ("Masking", [("⇧W", "Open or close Masking"), ("⇧M", "Radial Gradient"), ("[ ]", "Brush size"),
                      ("⇧[ ⇧]", "Brush feather"), ("⌥ drag", "Erase while brushing"), ("Delete", "Delete the selected part"),
                      ("Esc", "Cancel the tool, or close Masking")]),
+        ("Transform", [("⇧T", "Guided Upright: draw guides"), ("Delete", "Delete the selected guide"),
+                       ("Esc", "Close Guided Upright")]),
         ("App", [("⌘,", "Settings"), ("⌘/", "This list")]),
     ]
 
