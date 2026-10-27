@@ -94,7 +94,7 @@ final class MaskTests: XCTestCase {
 
     func testPresetsLeaveMasksOutUnlessChosen() {
         var source = DevelopSettings()
-        source.masks = [Mask(name: "Mask 1", components: [Component(.subject)])]
+        source.masks = [Mask(name: "Mask 1", components: [Component(.subject(.init()))])]
         source.exposure = 1
         let look = DevelopPreset(name: "Look", settings: source)
         XCTAssertTrue(look.applied(to: .neutral).masks.isEmpty)
@@ -173,6 +173,42 @@ final class MaskTests: XCTestCase {
         let overlay = try XCTUnwrap(session.render(settings, overlay: mask.id))
         let pixel = try rgb(overlay, x: 32, y: 16)
         XCTAssertGreaterThan(pixel.r, pixel.g + 0.1)
+    }
+
+    func testBrushReachesTheEndOfTheStroke() {
+        // Mouse samples closer together than the dab spacing used to leave the end unpainted.
+        let points = (0...40).map { CGPoint(x: Double($0) * 0.7, y: 0) }
+        let dabs = DevelopRenderer.dabPositions(along: points, spacing: 2)
+        XCTAssertEqual(dabs.last, points.last)
+        XCTAssertGreaterThan(dabs.count, 12)
+        for (a, b) in zip(dabs, dabs.dropFirst()) { XCTAssertLessThanOrEqual(b.x - a.x, 2.0001) }
+    }
+
+    func testMasksKeepTheirInBetweenValues() throws {
+        // A 50% gray mask must stay 50% in linear light, or every feather looks hard.
+        let gray = CGColorSpaceCreateDeviceGray()
+        let context = try XCTUnwrap(CGContext(data: nil, width: 4, height: 4, bitsPerComponent: 8, bytesPerRow: 0,
+                                              space: gray, bitmapInfo: CGImageAlphaInfo.none.rawValue))
+        context.setFillColor(gray: 0.5, alpha: 1)
+        context.fill(CGRect(x: 0, y: 0, width: 4, height: 4))
+        let mask = DevelopRenderer.rawMask(try XCTUnwrap(context.makeImage()))
+        var pixel = [Float](repeating: 0, count: 4)
+        DevelopRenderer.shared.context.render(mask, toBitmap: &pixel, rowBytes: 16, bounds: CGRect(x: 0, y: 0, width: 1, height: 1),
+                                              format: .RGBAf, colorSpace: DevelopRenderer.workingSpace)
+        XCTAssertEqual(Double(pixel[0]), 0.5, accuracy: 0.02)
+    }
+
+    func testSelectObjectKeepsItsBoxAndOldSubjectsStayHard() throws {
+        let box = DevelopSettings.MaskRect(Point(x: 0.6, y: 0.7), Point(x: 0.2, y: 0.3))
+        XCTAssertEqual(box.x, 0.2, accuracy: 0.0001)
+        XCTAssertEqual(box.height, 0.4, accuracy: 0.0001)
+        var settings = DevelopSettings()
+        settings.masks = [Mask(name: "Mask 1", components: [Component(.subject(.init(box: box, feather: 35)))])]
+        let decoded = try DevelopSettings.decoded(from: settings.encoded())
+        XCTAssertEqual(decoded, settings)
+        XCTAssertEqual(decoded.masks.first?.components.first?.kind, .object)
+        let old = try DevelopSettings.decoded(from: #"{"masks":[{"name":"Mask 1","components":[{"kind":"subject"}]}]}"#)
+        XCTAssertEqual(old.masks.first?.components.first?.shape, .subject(.init(feather: 0)))
     }
 
     // MARK: Helpers

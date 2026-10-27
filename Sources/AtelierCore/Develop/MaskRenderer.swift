@@ -70,9 +70,10 @@ extension DevelopRenderer {
     }
 
     /// A drawn part on the upright, uncropped photo whose frame is `extent`. Brush strokes are
-    /// drawn once and kept in `brushCache` when given; `subject` supplies Select Subject.
+    /// drawn once and kept in `brushCache` when given; `subject` finds Select Subject's mask
+    /// (no box) or Select Object's (inside the box) on the photo's frame.
     static func sourceMask(_ component: DevelopSettings.MaskComponent, extent: CGRect,
-                           subject: (() -> CIImage?)?, brushCache: BrushCache?) -> CIImage? {
+                           subject: ((DevelopSettings.MaskRect?) -> CIImage?)?, brushCache: BrushCache?) -> CIImage? {
         let width = extent.width, height = extent.height
         let longEdge = max(width, height)
         // Mask points are top-left fractions; Core Image's y axis points up.
@@ -107,11 +108,14 @@ extension DevelopRenderer {
                 return cached.transformed(by: CGAffineTransform(translationX: extent.minX, y: extent.minY))
             }
             guard let cgImage = brushMask(strokes, width: key.width, height: key.height) else { return nil }
-            let image = CIImage(cgImage: cgImage)
+            let image = rawMask(cgImage)
             brushCache?.store(image, for: key)
             return image.transformed(by: CGAffineTransform(translationX: extent.minX, y: extent.minY))
-        case .subject:
-            return subject?()?.cropped(to: extent)
+        case .subject(let selection):
+            guard let mask = subject?(selection.box) else { return nil }
+            guard selection.feather > 0 else { return mask.cropped(to: extent) }
+            let sigma = selection.feather / 100 * 0.012 * Double(longEdge)
+            return mask.clampedToExtent().applyingGaussianBlur(sigma: sigma).cropped(to: extent)
         case .luminance:
             return nil
         }
@@ -138,25 +142,40 @@ extension DevelopRenderer {
             guard let gradient = CGGradient(colorSpace: gray, colorComponents: [shade, flow, shade, flow, shade, 0],
                                             locations: [0, hard / radius, 1], count: 3) else { continue }
             let points = stroke.points.map { CGPoint(x: CGFloat($0.x) * CGFloat(width), y: CGFloat($0.y) * CGFloat(height)) }
-            // Dabs every fifth of the radius along the stroke, so it reads as a smooth line.
-            let spacing = max(1, radius / 5)
-            var dabs = [points[0]]
-            for (a, b) in zip(points, points.dropFirst()) {
-                let distance = hypot(b.x - a.x, b.y - a.y)
-                let steps = Int(distance / spacing)
-                if steps > 0 {
-                    for i in 1...steps {
-                        let t = CGFloat(i) * spacing / distance
-                        dabs.append(CGPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t))
-                    }
-                }
-            }
+            let dabs = dabPositions(along: points, spacing: max(1, radius / 5))
             for dab in dabs {
                 context.drawRadialGradient(gradient, startCenter: dab, startRadius: 0, endCenter: dab, endRadius: radius,
                                            options: [])
             }
         }
         return context.makeImage()
+    }
+
+    /// Dabs every `spacing` along the stroke, carrying the leftover distance from one mouse
+    /// sample to the next so short segments still add up, and always ending on the last point.
+    static func dabPositions(along points: [CGPoint], spacing: CGFloat) -> [CGPoint] {
+        guard let first = points.first else { return [] }
+        var dabs = [first]
+        var travelled: CGFloat = 0
+        for (a, b) in zip(points, points.dropFirst()) {
+            let distance = hypot(b.x - a.x, b.y - a.y)
+            guard distance > 0 else { continue }
+            var along = spacing - travelled
+            while along <= distance {
+                let t = along / distance
+                dabs.append(CGPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t))
+                along += spacing
+            }
+            travelled = distance - (along - spacing)
+        }
+        if let last = points.last, last != dabs.last { dabs.append(last) }
+        return dabs
+    }
+
+    /// A grayscale mask as stored values: without this Core Image reads the gray as
+    /// gamma-encoded and darkens every soft edge on the way to linear light.
+    static func rawMask(_ cgImage: CGImage) -> CIImage {
+        CIImage(cgImage: cgImage, options: [.colorSpace: NSNull()])
     }
 
     /// White where the photo's brightness is in the range, from the photo before local

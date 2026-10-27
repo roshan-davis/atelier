@@ -147,7 +147,7 @@ extension DevelopSettings {
         }
 
         public enum Kind: String, Codable, CaseIterable, Sendable {
-            case brush, linear, radial, luminance, subject
+            case brush, linear, radial, luminance, subject, object
 
             public var title: String {
                 switch self {
@@ -156,6 +156,7 @@ extension DevelopSettings {
                 case .radial: return "Radial Gradient"
                 case .luminance: return "Luminance Range"
                 case .subject: return "Select Subject"
+                case .object: return "Select Object"
                 }
             }
 
@@ -166,11 +167,12 @@ extension DevelopSettings {
                 case .radial: return "circle.dashed.inset.filled"
                 case .luminance: return "sun.max"
                 case .subject: return "person.crop.rectangle"
+                case .object: return "viewfinder"
                 }
             }
 
             /// Drawn on the photo; the others are made straight from the menu.
-            public var isDrawn: Bool { self == .brush || self == .linear || self == .radial }
+            public var isDrawn: Bool { self == .brush || self == .linear || self == .radial || self == .object }
         }
 
         public enum Shape: Hashable, Sendable {
@@ -178,7 +180,8 @@ extension DevelopSettings {
             case linear(LinearGradient)
             case radial(RadialGradient)
             case luminance(LuminanceRange)
-            case subject
+            /// Select Subject (no box) or Select Object (inside a box), found by Vision.
+            case subject(Selection)
 
             public var kind: Kind {
                 switch self {
@@ -186,7 +189,7 @@ extension DevelopSettings {
                 case .linear: return .linear
                 case .radial: return .radial
                 case .luminance: return .luminance
-                case .subject: return .subject
+                case .subject(let selection): return selection.box == nil ? .subject : .object
                 }
             }
         }
@@ -210,12 +213,14 @@ extension DevelopSettings {
                 return MaskPoint(x: (gradient.start.x + gradient.end.x) / 2, y: (gradient.start.y + gradient.end.y) / 2)
             case .radial(let gradient): return gradient.center
             case .brush(let strokes): return strokes.first?.points.first
-            case .luminance, .subject: return nil
+            case .subject(let selection):
+                return selection.box.map { MaskPoint(x: $0.x + $0.width / 2, y: $0.y + $0.height / 2) }
+            case .luminance: return nil
             }
         }
 
         private enum CodingKeys: String, CodingKey {
-            case id, mode, inverted, kind, strokes, linear, radial, luminance
+            case id, mode, inverted, kind, strokes, linear, radial, luminance, selection
         }
 
         public init(from decoder: Decoder) throws {
@@ -228,7 +233,8 @@ extension DevelopSettings {
             case .linear: shape = .linear(try c.decode(LinearGradient.self, forKey: .linear))
             case .radial: shape = .radial(try c.decode(RadialGradient.self, forKey: .radial))
             case .luminance: shape = .luminance(try c.decodeIfPresent(LuminanceRange.self, forKey: .luminance) ?? LuminanceRange())
-            case .subject: shape = .subject
+            case .subject: shape = .subject(try c.decodeIfPresent(Selection.self, forKey: .selection) ?? Selection(feather: 0))
+            case .object: shape = .subject(try c.decode(Selection.self, forKey: .selection))
             }
         }
 
@@ -243,8 +249,56 @@ extension DevelopSettings {
             case .linear(let gradient): try c.encode(gradient, forKey: .linear)
             case .radial(let gradient): try c.encode(gradient, forKey: .radial)
             case .luminance(let range): try c.encode(range, forKey: .luminance)
-            case .subject: break
+            case .subject(let selection): try c.encode(selection, forKey: .selection)
             }
+        }
+    }
+
+    /// A rectangle on the upright, uncropped photo, in fractions of its width and height.
+    public struct MaskRect: Codable, Hashable, Sendable {
+        public var x: Double
+        public var y: Double
+        public var width: Double
+        public var height: Double
+
+        public init(x: Double, y: Double, width: Double, height: Double) {
+            self.x = x
+            self.y = y
+            self.width = width
+            self.height = height
+        }
+
+        /// The rectangle with these two corners, kept on the photo.
+        public init(_ a: MaskPoint, _ b: MaskPoint) {
+            let x0 = min(max(min(a.x, b.x), 0), 1), x1 = min(max(max(a.x, b.x), 0), 1)
+            let y0 = min(max(min(a.y, b.y), 0), 1), y1 = min(max(max(a.y, b.y), 0), 1)
+            self.init(x: x0, y: y0, width: x1 - x0, height: y1 - y0)
+        }
+
+        public var corners: [MaskPoint] {
+            [MaskPoint(x: x, y: y), MaskPoint(x: x + width, y: y), MaskPoint(x: x + width, y: y + height),
+             MaskPoint(x: x, y: y + height)]
+        }
+    }
+
+    /// What Vision selects: the main subject of the whole photo, or the object inside `box`.
+    public struct Selection: Codable, Hashable, Sendable {
+        public var box: MaskRect?
+        /// 0...100; softens Vision's hard edge.
+        public var feather = 20.0
+
+        public init(box: MaskRect? = nil, feather: Double = 20) {
+            self.box = box
+            self.feather = feather
+        }
+
+        private enum CodingKeys: String, CodingKey { case box, feather }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            box = try c.decodeIfPresent(MaskRect.self, forKey: .box)
+            // Masks made before the slider existed keep their hard edge.
+            feather = try c.decodeIfPresent(Double.self, forKey: .feather) ?? 0
         }
     }
 

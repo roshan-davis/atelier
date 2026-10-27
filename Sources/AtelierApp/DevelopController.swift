@@ -146,6 +146,8 @@ final class DevelopController: ObservableObject {
         didSet { UserDefaults.standard.set(brushFlow, forKey: "masks.brushFlow") }
     }
     @Published var brushErasing = false
+    /// A note under the Masks list, e.g. when Select Subject finds nothing.
+    @Published var maskMessage: String?
     /// The decoded photo's size (upright, uncropped) at proxy scale; its aspect drives the crop tool.
     @Published private(set) var sourceSize: CGSize?
 
@@ -172,7 +174,7 @@ final class DevelopController: ObservableObject {
 
     /// The sharpest image that matches the current settings.
     var displayImage: NSImage? {
-        if isCropping || isMasking { return image }
+        if isCropping || (isMasking && showMaskOverlay) { return image }
         if !showingBefore, let fullImage, fullImageSettings == settings { return fullImage }
         return image
     }
@@ -236,6 +238,7 @@ final class DevelopController: ObservableObject {
         selectedMaskID = nil
         selectedComponentID = nil
         maskTool = nil
+        maskMessage = nil
         guard let assetID else { return }
 
         settings = (try? catalog.developSettings(for: assetID)) ?? .neutral
@@ -841,6 +844,7 @@ struct MaskTool: Equatable {
         case .linear: return "Drag on the photo from where the effect is full to where it fades out."
         case .radial: return "Drag on the photo from the center outward to draw the ellipse."
         case .brush: return "Paint on the photo. Hold ⌥ to erase; [ and ] change the size."
+        case .object: return "Drag a box around the object to select it."
         case .luminance, .subject: return ""
         }
     }
@@ -902,7 +906,8 @@ extension DevelopController {
     private static func defaultShape(_ kind: MaskComponent.Kind) -> MaskComponent.Shape {
         switch kind {
         case .luminance: return .luminance(DevelopSettings.LuminanceRange(low: 50, high: 100))
-        case .subject: return .subject
+        case .subject: return .subject(DevelopSettings.Selection())
+        case .object: return .subject(DevelopSettings.Selection(box: .init(x: 0.3, y: 0.3, width: 0.4, height: 0.4)))
         case .brush: return .brush([])
         case .linear: return .linear(.init(start: .init(x: 0.5, y: 0.2), end: .init(x: 0.5, y: 0.5)))
         case .radial: return .radial(.init(center: .init(x: 0.5, y: 0.5), radiusX: 0.2, radiusY: 0.15))
@@ -918,6 +923,8 @@ extension DevelopController {
 
     private func insert(_ component: MaskComponent, tool: MaskTool) {
         var component = component
+        maskMessage = nil
+        if case .subject(let selection) = component.shape { checkSubject(selection) }
         if tool.newMask || selectedMask == nil {
             component.mode = .add
             let mask = Mask(name: settings.nextMaskName(), components: [component])
@@ -940,6 +947,24 @@ extension DevelopController {
               settings.masks[index].components[part] != component else { return }
         settings.masks[index].components[part] = component
         changed(step: "Edit \(settings.masks[index].name)")
+    }
+
+    /// Runs Vision in the background and says so in the panel when it finds nothing.
+    func checkSubject(_ selection: DevelopSettings.Selection) {
+        guard let session else { return }
+        let settings = self.settings
+        let assetID = self.assetID
+        queue.async {
+            let found = session.findsSubject(selection, settings: settings)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard self.assetID == assetID, !found else { return }
+                    self.maskMessage = selection.box == nil
+                        ? "No subject stands out in this photo. Try Select Object and drag a box around what you want."
+                        : "Nothing found in that box. Try a box that fits closer around the object."
+                }
+            }
+        }
     }
 
     /// Adds a brush stroke to the selected brush part.
