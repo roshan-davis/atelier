@@ -89,6 +89,17 @@ enum LayoutSnapshots {
                       to: folder.appendingPathComponent("settings-editin.png"))
         await capture(AnyView(AISettingsTab().frame(width: 640)), size: CGSize(width: 640, height: 600),
                       to: folder.appendingPathComponent("settings-ai.png"))
+        await capture(AnyView(GeneralSettings().environmentObject(model).frame(width: 640)), size: CGSize(width: 640, height: 640),
+                      to: folder.appendingPathComponent("settings-general.png"))
+        // The splash with each built-in image, and with none.
+        for url in SplashController.builtInImages {
+            let image = await SplashImage.load(url)
+            print("SNAPSHOT: splash \(url.lastPathComponent) \(String(describing: image?.layout))")
+            await capture(AnyView(SplashView(image: image)), size: Splash.size,
+                          to: folder.appendingPathComponent(url.deletingPathExtension().lastPathComponent + ".png"))
+        }
+        await capture(AnyView(SplashView(image: nil)), size: Splash.size,
+                      to: folder.appendingPathComponent("splash-empty.png"))
         UserDefaults.standard.removeObject(forKey: Theme.defaultsKey)
         Theme.system.apply()
         fflush(stdout)
