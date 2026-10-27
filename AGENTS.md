@@ -51,12 +51,17 @@ Nobody but Rosh can see the running app, so don't guess at layout.
 
 ## Handing off to Rosh
 
-Rosh tests manually by pulling the branch in Xcode (scheme **AtelierApp**, destination **My Mac**) and does not want to run terminal commands.
+Rosh tests manually: they get the branch with git in Terminal, then run the app in Xcode (scheme **AtelierApp**, destination **My Mac**).
 
-- Give the branch name and exact click paths, e.g. Xcode > Integrate > Pull…, Product > Run (⌘R), Atelier > Settings… > Appearance.
+- Give the branch name and the git commands to get it, ready to paste. Always start with `git status` so Rosh sees uncommitted changes (possibly another agent's) before switching:
+  ```
+  cd ~/RoshProjects/Atelier/App
+  git status
+  git fetch origin
+  git checkout <branch>      # test a PR branch
+  git pull                   # update it after new pushes
+  ```
+  Back to latest main: `git checkout main && git pull`. If `git status` shows changes, say what to do with them (usually `git stash`); never tell Rosh to discard them.
+- For everything in the app and Xcode, give exact click paths, e.g. Product > Run (⌘R), Atelier > Settings… > Appearance.
 - Say what to check and where, step by step. Never "open the panel and try it".
-- Use Rosh's Xcode version's real names (Xcode 26). Known paths:
-  - Get latest main: Integrate > Pull…, pick origin/main, Pull.
-  - Test a PR branch: View > Navigators > Source Control (⌘2) > Repositories > Atelier > Branches (or Remotes > origin), right-click the branch > Checkout….
-  - GitHub account and git author: Xcode > Settings… > Source Control (Accounts, Git settings). There is no separate Accounts tab.
-- If you're not sure what a dialog or menu is called, ask Rosh for a screenshot instead of guessing.
+- Use Xcode 26's real names. If you're not sure what a dialog or menu is called, ask Rosh for a screenshot instead of guessing.
