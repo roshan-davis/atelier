@@ -20,8 +20,31 @@ jobs:
           swift --version
       - name: Build
         run: swift build
+      - uses: actions/cache@v4
+        with:
+          path: samples
+          key: sample-raws-v1
+      - name: Sample RAW files
+        # Real Nikon Z files from raw.pixls.us (CC0) for the camera match test; skipped if unreachable.
+        continue-on-error: true
+        run: |
+          mkdir -p samples
+          for model in "Z 6" "Z f"; do
+            name="Nikon-${model// /}.NEF"
+            [ -s "samples/$name" ] && continue
+            base="https://raw.pixls.us/data/Nikon/${model// /%20}/"
+            page=$(curl -fsSL "$base") || { echo "no listing for $model"; continue; }
+            file=$(echo "$page" | grep -oiE 'href="[^"?/]+\.nef"' | head -1 | sed -E 's/^href="//; s/"$//')
+            if [ -z "$file" ]; then echo "$page" | head -40; continue; fi
+            curl -fsSL -o "samples/$name" "$base$file" || rm -f "samples/$name"
+          done
+          ls -l samples
       - name: Test
-        run: swift test
+        run: |
+          set -o pipefail
+          export ATELIER_SAMPLE_RAWS="$PWD/samples" ATELIER_SAMPLE_OUT="$PWD/snapshots"
+          swift test 2>&1 | tee test.log
+          grep "CAMERA MATCH" test.log || true
       - name: Layout snapshots
         run: |
           export ATELIER_SNAPSHOTS="$PWD/snapshots"

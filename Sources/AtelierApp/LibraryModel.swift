@@ -123,6 +123,7 @@ final class LibraryModel: ObservableObject {
             fatalError("Could not open the catalog at \(packageURL.path): \(error)")
         }
         previews = PreviewCache(rootURL: catalog.previewsURL!)
+        previews.discardIfOutdated()
         previewScheduler = PreviewScheduler(cache: previews)
         develop = DevelopController(catalog: catalog, previews: previews)
         try? catalog.refreshVolumes()
@@ -573,7 +574,10 @@ final class LibraryModel: ObservableObject {
     func thumbnailURL(for id: Int64, size: PreviewCache.Size = .thumbnail) -> URL? {
         if previews.has(size, for: id) { return previews.url(for: id, size: size) }
         if let source = try? catalog.fileURL(for: id) {
-            previewScheduler.request(size, for: id, source: source, urgent: size == .preview || mode == .grid)
+            // Edited photos are rebuilt with their settings, for example after the cache is cleared.
+            let settings = try? catalog.developSettings(for: id)
+            previewScheduler.request(size, for: id, source: source, urgent: size == .preview || mode == .grid,
+                                     settings: settings)
         }
         return nil
     }

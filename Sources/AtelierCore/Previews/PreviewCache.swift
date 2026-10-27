@@ -17,6 +17,28 @@ public final class PreviewCache: Sendable {
         self.rootURL = rootURL
     }
 
+    /// Bumped when the way previews are rendered changes, so old ones are rebuilt.
+    /// 2: RAW previews are camera matched (`CameraMatch`).
+    public static let version = 2
+
+    /// Clears previews written by an older version. The old folder is moved aside at once and
+    /// deleted in the background, so a large cache doesn't hold up launch.
+    public func discardIfOutdated() {
+        let marker = rootURL.appendingPathComponent("version.txt")
+        let stored = (try? String(contentsOf: marker, encoding: .utf8)).flatMap { Int($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+        guard stored != Self.version else { return }
+        let manager = FileManager.default
+        if manager.fileExists(atPath: rootURL.path) {
+            let old = rootURL.deletingLastPathComponent()
+                .appendingPathComponent("\(rootURL.lastPathComponent)-old-\(UUID().uuidString)", isDirectory: true)
+            if (try? manager.moveItem(at: rootURL, to: old)) != nil {
+                DispatchQueue.global(qos: .background).async { try? FileManager.default.removeItem(at: old) }
+            }
+        }
+        try? manager.createDirectory(at: rootURL, withIntermediateDirectories: true)
+        try? String(Self.version).write(to: marker, atomically: true, encoding: .utf8)
+    }
+
     public func url(for assetID: Int64, size: Size) -> URL {
         rootURL
             .appendingPathComponent(String(format: "%02x", assetID & 0xff), isDirectory: true)
@@ -59,8 +81,15 @@ public final class PreviewCache: Sendable {
         try write(image, assetID: assetID, size: .thumbnail)
     }
 
-    /// The 2560 px loupe preview, rendered from the full image.
+    /// The 2560 px loupe preview, rendered from the full image. RAW files go through the develop
+    /// renderer, so the loupe shows the same camera-matched look as Develop and exports.
     public func generatePreview(for assetID: Int64, from original: URL) throws {
+        if UTType(filenameExtension: original.pathExtension)?.conforms(to: .rawImage) == true,
+           let session = DevelopRenderer.shared.session(for: original, maxPixelSize: Size.preview.rawValue),
+           let image = session.render(.neutral) {
+            try store(image, for: assetID, size: .preview)
+            return
+        }
         let source = try Self.imageSource(original)
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,

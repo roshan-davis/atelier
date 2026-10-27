@@ -15,6 +15,8 @@ public final class DevelopRenderer: @unchecked Sendable {
     public static let workingSpace = CGColorSpace(name: CGColorSpace.extendedLinearITUR_2020)!
     public static let displaySpace = CGColorSpace(name: CGColorSpace.displayP3)!
     public static let sRGB = CGColorSpace(name: CGColorSpace.sRGB)!
+    /// Camera matches by file and modification date; see `CameraMatch`.
+    let cameraMatches = NSCache<NSString, CameraMatchBox>()
 
     public init() {
         context = CIContext(options: [
@@ -384,6 +386,8 @@ public final class DevelopSession: @unchecked Sendable {
     /// As-shot white balance, shown on the temperature slider until the user changes it.
     public let asShotTemperature: Double
     public let asShotTint: Double
+    /// The base look matched to the camera's embedded preview, applied right after decode.
+    public let cameraMatch: CameraMatch
     /// Rendered size relative to the full-size photo.
     public let renderScale: Double
     /// The decoded photo's size at `renderScale`, upright, before any crop or turn.
@@ -410,6 +414,7 @@ public final class DevelopSession: @unchecked Sendable {
             sourceSize = raw.outputImage?.extent.size ?? raw.nativeSize
             asShotTemperature = Double(raw.neutralTemperature)
             asShotTint = Double(raw.neutralTint)
+            cameraMatch = renderer.cameraMatch(for: url)
         } else {
             guard var image = CIImage(contentsOf: url, options: [.applyOrientationProperty: true]) else { return nil }
             var scale = 1.0
@@ -427,6 +432,7 @@ public final class DevelopSession: @unchecked Sendable {
             baseImage = image
             asShotTemperature = 6500
             asShotTint = 0
+            cameraMatch = .identity
         }
     }
 
@@ -442,7 +448,7 @@ public final class DevelopSession: @unchecked Sendable {
             raw.neutralTint = Float(asShotTint + settings.tint)
             raw.exposure = Float(settings.exposure)
             guard let output = raw.outputImage else { return nil }
-            image = output
+            image = cameraMatch.apply(to: output)
         } else {
             guard let base = baseImage else { return nil }
             image = base
