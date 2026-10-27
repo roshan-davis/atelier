@@ -2,7 +2,8 @@ import AppKit
 import AtelierCore
 import SwiftUI
 
-/// Lightroom's Filmstrip: the photos of the current source in a strip along the bottom, with
+/// Lightroom's Filmstrip: the photos of the current source in a strip across the bottom of the
+/// whole window, with
 /// the photo being worked on highlighted. The arrow tab on the bottom edge (or View > Show
 /// Filmstrip, F6) collapses and opens it; the top edge drags to resize. Both are remembered.
 struct FilmstripView: View {
@@ -105,6 +106,8 @@ struct FilmstripView: View {
             }
         }
         .background(Color(nsColor: theme.gridBackground))
+        // Thumbnails scrolled out of view must not draw outside the strip.
+        .clipped()
     }
 
     /// A tab centered on the bottom edge with an arrow: down hides, up shows.

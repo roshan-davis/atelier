@@ -9,20 +9,21 @@ struct ContentView: View {
     @AppStorage(Theme.defaultsKey) private var theme: Theme = .system
 
     var body: some View {
-        NavigationSplitView {
-            Group {
-                if model.mode == .develop {
-                    DevelopSidebar(develop: model.develop)
-                } else {
-                    SidebarView()
+        // Like Lightroom Classic, the Filmstrip runs the full width of the window, under
+        // both side panels.
+        VStack(spacing: 0) {
+            NavigationSplitView {
+                Group {
+                    if model.mode == .develop {
+                        DevelopSidebar(develop: model.develop)
+                    } else {
+                        SidebarView()
+                    }
                 }
-            }
-            .navigationSplitViewColumnWidth(min: 200, ideal: 240)
-        } detail: {
-            // The right panel sits beside the content, below the toolbar, like Lightroom's,
-            // rather than as a full-height inspector the toolbar floats over. The Filmstrip
-            // runs under both.
-            VStack(spacing: 0) {
+                .navigationSplitViewColumnWidth(min: 200, ideal: 240)
+            } detail: {
+                // The right panel sits beside the content, below the toolbar, like Lightroom's,
+                // rather than as a full-height inspector the toolbar floats over.
                 HStack(spacing: 0) {
                     VStack(spacing: 0) {
                         FilterBar()
@@ -56,8 +57,8 @@ struct ContentView: View {
                             .background(Color(nsColor: theme.panel))
                     }
                 }
-                FilmstripView()
             }
+            FilmstripView()
         }
         // Dropping folders or photos anywhere on the window starts an import with them.
         .dropDestination(for: URL.self) { urls, _ in

@@ -99,7 +99,7 @@ Rosh wants several treatments of one photo (colour and black and white, two crop
 Rosh asked for Lightroom's Filmstrip: a bottom drawer with the thumbnails of the current list.
 
 - **What it shows:** the photos of the current source (All Photographs, a volume, folder, collection or import entry) with the filter bar applied, in the same order as the grid. A thin header names the source and shows the photo count, how many are selected, "n of N" for the current photo and its filename (plus "Copy n" for a virtual copy).
-- **Where:** along the bottom of the window, under the photo area and the right panel. It is shown in Grid, Loupe and Develop.
+- **Where:** across the full width of the window, under the left panel, the photo area and the right panel, as in Lightroom Classic. It is shown in Grid, Loupe and Develop.
 - **Selection:** the photo being worked on has a bright border, and other selected photos have a softer one. Click selects, ⌘-click adds or removes, ⇧-click selects a run, and double-click opens the photo in Loupe from the grid. The strip scrolls to keep the current photo in view, including when arrow keys move through photos. Rejected photos are dimmed, and flag, stars, stack and cull badges match the grid.
 - **Collapse and open:** a small arrow tab centered on the bottom edge (▾ to hide, ▴ to show), View > Show Filmstrip, or F6.
 - **Size:** drag the Filmstrip's top edge to make thumbnails bigger or smaller (56 to 220 pt).
