@@ -58,6 +58,7 @@ enum LayoutSnapshots {
         await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
                       to: folder.appendingPathComponent("develop-ai-1280x800.png"))
         model.develop.isAIOpen = false
+        await snapshotMasking(model: model, into: folder)
         // Each theme in Develop at the size in Rosh's screenshot, and the theme picker itself.
         for theme in Theme.allCases where theme != .system {
             UserDefaults.standard.set(theme.rawValue, forKey: Theme.defaultsKey)
@@ -87,6 +88,48 @@ enum LayoutSnapshots {
         Theme.system.apply()
         fflush(stdout)
         exit(0)
+    }
+
+    /// Masking: a darker sky from a linear gradient, a brighter radial spot, and the overlay.
+    private static func snapshotMasking(model: LibraryModel, into folder: URL) async {
+        let develop = model.develop
+        develop.isMasking = true
+        develop.createMask(.linear)
+        develop.finishDrawing(.linear(.init(start: .init(x: 0.5, y: 0.05), end: .init(x: 0.5, y: 0.45))))
+        develop.setMaskValue(.exposure, to: -1.2)
+        develop.setMaskValue(.dehaze, to: 25)
+        develop.createMask(.radial)
+        develop.finishDrawing(.radial(.init(center: .init(x: 0.62, y: 0.6), radiusX: 0.18, radiusY: 0.12, angle: 20)))
+        develop.setMaskValue(.exposure, to: 0.8)
+        develop.setMaskValue(.temperature, to: 30)
+        develop.addComponent(.luminance, mode: .intersect)
+        if let mask = develop.selectedMask, let radial = mask.components.first {
+            develop.select(mask: mask.id, component: radial.id)
+        }
+        try? await Task.sleep(for: .seconds(2))
+        print("SNAPSHOT: masks \(develop.masks.map { "\($0.name) parts=\($0.components.map(\.kind.rawValue))" })")
+        await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
+                      to: folder.appendingPathComponent("develop-masking-1280x800.png"))
+        await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1000, height: 584),
+                      to: folder.appendingPathComponent("develop-masking-1000x584.png"))
+        await capture(AnyView(DevelopPanel(develop: develop).environmentObject(model)), size: CGSize(width: 320, height: 1500),
+                      to: folder.appendingPathComponent("panel-masking-320x1500.png"))
+        develop.showMaskOverlay = true
+        try? await Task.sleep(for: .seconds(1))
+        await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
+                      to: folder.appendingPathComponent("develop-masking-overlay-1280x800.png"))
+        develop.showMaskOverlay = false
+        // A brush part being painted into, with the brush settings showing.
+        develop.createMask(.brush)
+        develop.finishDrawing(.brush([.init(points: [.init(x: 0.2, y: 0.7), .init(x: 0.3, y: 0.75), .init(x: 0.4, y: 0.72)],
+                                            size: 0.08)]))
+        develop.setMaskValue(.saturation, to: -60)
+        try? await Task.sleep(for: .seconds(1))
+        await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
+                      to: folder.appendingPathComponent("develop-masking-brush-1280x800.png"))
+        develop.deleteAllMasks()
+        develop.isMasking = false
+        develop.flushSave()
     }
 
     /// A virtual copy of the sample photo turned black and white, next to the colour original.

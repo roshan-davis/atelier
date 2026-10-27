@@ -8,7 +8,7 @@ import CoreGraphics
 /// Values are stored sparsely; anything left at its default is omitted, so two settings that
 /// look the same compare equal.
 public struct DevelopSettings: Codable, Hashable, Sendable {
-    public static let currentSchemaVersion = 2
+    public static let currentSchemaVersion = 3
 
     public var schemaVersion = DevelopSettings.currentSchemaVersion
 
@@ -27,6 +27,9 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         set { storedCrop = newValue?.isIdentity == true ? nil : newValue }
     }
     private var storedCrop: Crop?
+
+    /// Local adjustments, applied in order after the global ones (see Masks.swift).
+    public var masks: [Mask] = []
 
     public init() {}
 
@@ -170,6 +173,8 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             if let points = curves[channel.rawValue] { setPoints(points, for: channel) }
         }
         crop = try c.decodeIfPresent(Crop.self, forKey: Key("crop"))
+        // A mask this version can't read never costs the photo its other settings.
+        masks = (try? c.decodeIfPresent([Mask].self, forKey: Key("masks"))) ?? []
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -181,11 +186,14 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         }
         if !pointCurves.isEmpty { try c.encode(pointCurves, forKey: Key("pointCurves")) }
         try c.encodeIfPresent(storedCrop, forKey: Key("crop"))
+        if !masks.isEmpty { try c.encode(masks, forKey: Key("masks")) }
     }
 
     public static let neutral = DevelopSettings()
 
-    public var isNeutral: Bool { temperature == nil && values.isEmpty && pointCurves.isEmpty && storedCrop == nil }
+    public var isNeutral: Bool {
+        temperature == nil && values.isEmpty && pointCurves.isEmpty && storedCrop == nil && masks.isEmpty
+    }
 
     public func encoded() throws -> String {
         let encoder = JSONEncoder()

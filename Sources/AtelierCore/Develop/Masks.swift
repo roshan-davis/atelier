@@ -1,0 +1,459 @@
+import CoreGraphics
+import Foundation
+
+extension DevelopSettings {
+    /// A local adjustment, like a Lightroom mask: where it applies (its components, combined in
+    /// order) and what it does there (its own sliders).
+    ///
+    /// Positions are fractions of the upright, uncropped photo (0...1, top-left origin) and
+    /// lengths are fractions of its long edge, so masks stay on the same spot when the crop,
+    /// straighten, turns or flips change, and look the same at any render size.
+    public struct Mask: Codable, Hashable, Sendable, Identifiable {
+        public var id = UUID()
+        public var name: String
+        public var components: [MaskComponent]
+        /// Hidden masks keep their settings but have no effect (the eye in the Masks panel).
+        public var isHidden = false
+        public var inverted = false
+        /// Scales every slider of the mask, 0...200 percent.
+        public var amount = 100.0
+        private var values: [String: Double] = [:]
+
+        public init(name: String, components: [MaskComponent] = []) {
+            self.name = name
+            self.components = components
+        }
+
+        public subscript(parameter: LocalParameter) -> Double {
+            get { values[parameter.rawValue] ?? 0 }
+            set {
+                let value = min(max(newValue, parameter.range.lowerBound), parameter.range.upperBound)
+                values[parameter.rawValue] = value == 0 ? nil : value
+            }
+        }
+
+        public var hasAdjustments: Bool { !values.isEmpty }
+
+        public mutating func resetAdjustments() {
+            values = [:]
+            amount = 100
+        }
+
+        /// A slider's value with Amount applied, as the renderer uses it.
+        public func effective(_ parameter: LocalParameter) -> Double {
+            let value = self[parameter] * amount / 100
+            return min(max(value, parameter.range.lowerBound * 2), parameter.range.upperBound * 2)
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case id, name, components, isHidden, inverted, amount, values
+        }
+
+        /// Missing keys take their defaults, so masks keep loading as fields are added.
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+            name = try c.decodeIfPresent(String.self, forKey: .name) ?? "Mask"
+            components = try c.decodeIfPresent([MaskComponent].self, forKey: .components) ?? []
+            isHidden = try c.decodeIfPresent(Bool.self, forKey: .isHidden) ?? false
+            inverted = try c.decodeIfPresent(Bool.self, forKey: .inverted) ?? false
+            amount = try c.decodeIfPresent(Double.self, forKey: .amount) ?? 100
+            let stored = try c.decodeIfPresent([String: Double].self, forKey: .values) ?? [:]
+            for (key, value) in stored {
+                if let parameter = LocalParameter(rawValue: key) { self[parameter] = value }
+            }
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encode(id, forKey: .id)
+            try c.encode(name, forKey: .name)
+            try c.encode(components, forKey: .components)
+            if isHidden { try c.encode(isHidden, forKey: .isHidden) }
+            if inverted { try c.encode(inverted, forKey: .inverted) }
+            if amount != 100 { try c.encode(amount, forKey: .amount) }
+            if !values.isEmpty { try c.encode(values, forKey: .values) }
+        }
+    }
+
+    /// The sliders a mask has, in Lightroom's order.
+    public enum LocalParameter: String, CaseIterable, Sendable {
+        case temperature, tint
+        case exposure, contrast, highlights, shadows, whites, blacks
+        case texture, clarity, dehaze
+        case saturation
+        case sharpness, noise
+
+        public var label: String {
+            switch self {
+            case .temperature: return "Temp"
+            default: return rawValue.prefix(1).uppercased() + rawValue.dropFirst()
+            }
+        }
+
+        public var range: ClosedRange<Double> {
+            switch self {
+            case .exposure: return -4...4
+            case .noise: return 0...100
+            default: return -100...100
+            }
+        }
+
+        /// Sliders are shown in these groups, separated by a little space.
+        public var group: Int {
+            switch self {
+            case .temperature, .tint: return 0
+            case .exposure, .contrast, .highlights, .shadows, .whites, .blacks: return 1
+            case .texture, .clarity, .dehaze: return 2
+            case .saturation: return 3
+            case .sharpness, .noise: return 4
+            }
+        }
+    }
+
+    /// A point on the upright, uncropped photo: fractions of its width and height from the top left.
+    public struct MaskPoint: Codable, Hashable, Sendable {
+        public var x: Double
+        public var y: Double
+
+        public init(x: Double, y: Double) {
+            self.x = x
+            self.y = y
+        }
+
+        public init(_ point: CGPoint) {
+            self.init(x: Double(point.x), y: Double(point.y))
+        }
+
+        public var cgPoint: CGPoint { CGPoint(x: x, y: y) }
+    }
+
+    /// One part of a mask.
+    public struct MaskComponent: Codable, Hashable, Sendable, Identifiable {
+        /// How the part combines with the parts before it.
+        public enum Mode: String, Codable, CaseIterable, Sendable {
+            case add, subtract, intersect
+
+            public var title: String { rawValue.capitalized }
+
+            /// The badge in the Masks panel.
+            public var symbol: String {
+                switch self {
+                case .add: return "plus.circle.fill"
+                case .subtract: return "minus.circle.fill"
+                case .intersect: return "circle.circle"
+                }
+            }
+        }
+
+        public enum Kind: String, Codable, CaseIterable, Sendable {
+            case brush, linear, radial, luminance, subject
+
+            public var title: String {
+                switch self {
+                case .brush: return "Brush"
+                case .linear: return "Linear Gradient"
+                case .radial: return "Radial Gradient"
+                case .luminance: return "Luminance Range"
+                case .subject: return "Select Subject"
+                }
+            }
+
+            public var symbol: String {
+                switch self {
+                case .brush: return "paintbrush.pointed"
+                case .linear: return "square.bottomhalf.filled"
+                case .radial: return "circle.dashed.inset.filled"
+                case .luminance: return "sun.max"
+                case .subject: return "person.crop.rectangle"
+                }
+            }
+
+            /// Drawn on the photo; the others are made straight from the menu.
+            public var isDrawn: Bool { self == .brush || self == .linear || self == .radial }
+        }
+
+        public enum Shape: Hashable, Sendable {
+            case brush([MaskStroke])
+            case linear(LinearGradient)
+            case radial(RadialGradient)
+            case luminance(LuminanceRange)
+            case subject
+
+            public var kind: Kind {
+                switch self {
+                case .brush: return .brush
+                case .linear: return .linear
+                case .radial: return .radial
+                case .luminance: return .luminance
+                case .subject: return .subject
+                }
+            }
+        }
+
+        public var id = UUID()
+        public var mode: Mode
+        public var inverted = false
+        public var shape: Shape
+
+        public init(_ shape: Shape, mode: Mode = .add) {
+            self.shape = shape
+            self.mode = mode
+        }
+
+        public var kind: Kind { shape.kind }
+
+        /// Where the part's pin sits on the photo, if it has one.
+        public var pin: MaskPoint? {
+            switch shape {
+            case .linear(let gradient):
+                return MaskPoint(x: (gradient.start.x + gradient.end.x) / 2, y: (gradient.start.y + gradient.end.y) / 2)
+            case .radial(let gradient): return gradient.center
+            case .brush(let strokes): return strokes.first?.points.first
+            case .luminance, .subject: return nil
+            }
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case id, mode, inverted, kind, strokes, linear, radial, luminance
+        }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+            mode = try c.decodeIfPresent(Mode.self, forKey: .mode) ?? .add
+            inverted = try c.decodeIfPresent(Bool.self, forKey: .inverted) ?? false
+            switch try c.decode(Kind.self, forKey: .kind) {
+            case .brush: shape = .brush(try c.decodeIfPresent([MaskStroke].self, forKey: .strokes) ?? [])
+            case .linear: shape = .linear(try c.decode(LinearGradient.self, forKey: .linear))
+            case .radial: shape = .radial(try c.decode(RadialGradient.self, forKey: .radial))
+            case .luminance: shape = .luminance(try c.decodeIfPresent(LuminanceRange.self, forKey: .luminance) ?? LuminanceRange())
+            case .subject: shape = .subject
+            }
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encode(id, forKey: .id)
+            try c.encode(mode, forKey: .mode)
+            if inverted { try c.encode(inverted, forKey: .inverted) }
+            try c.encode(kind, forKey: .kind)
+            switch shape {
+            case .brush(let strokes): try c.encode(strokes, forKey: .strokes)
+            case .linear(let gradient): try c.encode(gradient, forKey: .linear)
+            case .radial(let gradient): try c.encode(gradient, forKey: .radial)
+            case .luminance(let range): try c.encode(range, forKey: .luminance)
+            case .subject: break
+            }
+        }
+    }
+
+    /// Full effect at `start`, fading to none at `end`.
+    public struct LinearGradient: Codable, Hashable, Sendable {
+        public var start: MaskPoint
+        public var end: MaskPoint
+
+        public init(start: MaskPoint, end: MaskPoint) {
+            self.start = start
+            self.end = end
+        }
+    }
+
+    /// An ellipse with a soft edge: full effect inside the feathered part, none outside.
+    public struct RadialGradient: Codable, Hashable, Sendable {
+        public var center: MaskPoint
+        /// Half-axes as fractions of the photo's long edge.
+        public var radiusX: Double
+        public var radiusY: Double
+        /// Clockwise turn of the ellipse in degrees.
+        public var angle = 0.0
+        /// 0...100; how much of the radius fades out.
+        public var feather = 50.0
+
+        public init(center: MaskPoint, radiusX: Double, radiusY: Double, angle: Double = 0, feather: Double = 50) {
+            self.center = center
+            self.radiusX = radiusX
+            self.radiusY = radiusY
+            self.angle = angle
+            self.feather = feather
+        }
+    }
+
+    /// One brush stroke.
+    public struct MaskStroke: Codable, Hashable, Sendable {
+        public var points: [MaskPoint]
+        /// Brush diameter as a fraction of the photo's long edge.
+        public var size: Double
+        /// 0...100; how much of the brush's radius fades out.
+        public var feather: Double
+        /// 0...100; how much each pass of the brush adds.
+        public var flow: Double
+        /// Erasing strokes take the mask away.
+        public var erases: Bool
+
+        public init(points: [MaskPoint], size: Double, feather: Double = 50, flow: Double = 100, erases: Bool = false) {
+            self.points = points
+            self.size = size
+            self.feather = feather
+            self.flow = flow
+            self.erases = erases
+        }
+    }
+
+    /// Brightness from `low` to `high` (0...100, perceptual), with a soft edge of `smoothness`.
+    public struct LuminanceRange: Codable, Hashable, Sendable {
+        public var low = 0.0
+        public var high = 100.0
+        public var smoothness = 50.0
+
+        public init(low: Double = 0, high: Double = 100, smoothness: Double = 50) {
+            self.low = low
+            self.high = high
+            self.smoothness = smoothness
+        }
+
+        /// How much of the mask is kept at brightness `x` (0...1).
+        public func weight(at x: Double) -> Double {
+            let lo = min(low, high) / 100, hi = max(low, high) / 100
+            let soft = max(0.002, smoothness / 100 * 0.3)
+            let distance = x < lo ? lo - x : x > hi ? x - hi : 0
+            let t = max(0, 1 - distance / soft)
+            return t * t * (3 - 2 * t)
+        }
+    }
+
+    /// The next free "Mask n" name.
+    public func nextMaskName() -> String {
+        let used = masks.compactMap { mask -> Int? in
+            guard mask.name.hasPrefix("Mask ") else { return nil }
+            return Int(mask.name.dropFirst(5))
+        }
+        return "Mask \((used.max() ?? 0) + 1)"
+    }
+}
+
+extension DevelopSettings.Crop {
+    /// Where a point of the upright, uncropped photo (pixels, top-left origin) lands on the
+    /// cropped photo, for a photo of `sourceSize` pixels. Follows `DevelopRenderer.applyGeometry`.
+    public func outputPoint(fromSource point: CGPoint, sourceSize: CGSize) -> CGPoint {
+        var p = point
+        var size = sourceSize
+        for _ in 0..<(((quarterTurns % 4) + 4) % 4) {
+            // A clockwise quarter turn.
+            p = CGPoint(x: size.height - p.y, y: p.x)
+            size = CGSize(width: size.height, height: size.width)
+        }
+        if flipHorizontal { p.x = size.width - p.x }
+        if flipVertical { p.y = size.height - p.y }
+        if angle != 0 {
+            let radians = angle * .pi / 180
+            let c = CGFloat(cos(radians)), s = CGFloat(sin(radians))
+            let dx = p.x - size.width / 2, dy = p.y - size.height / 2
+            p = CGPoint(x: size.width / 2 + dx * c - dy * s, y: size.height / 2 + dx * s + dy * c)
+        }
+        return CGPoint(x: p.x - CGFloat(x) * size.width, y: p.y - CGFloat(y) * size.height)
+    }
+
+    /// The inverse of `outputPoint(fromSource:sourceSize:)`.
+    public func sourcePoint(fromOutput point: CGPoint, sourceSize: CGSize) -> CGPoint {
+        var size = orientedSize(sourceSize)
+        var p = CGPoint(x: point.x + CGFloat(x) * size.width, y: point.y + CGFloat(y) * size.height)
+        if angle != 0 {
+            let radians = angle * .pi / 180
+            let c = CGFloat(cos(radians)), s = CGFloat(sin(radians))
+            let dx = p.x - size.width / 2, dy = p.y - size.height / 2
+            p = CGPoint(x: size.width / 2 + dx * c + dy * s, y: size.height / 2 - dx * s + dy * c)
+        }
+        if flipVertical { p.y = size.height - p.y }
+        if flipHorizontal { p.x = size.width - p.x }
+        for _ in 0..<(((quarterTurns % 4) + 4) % 4) {
+            p = CGPoint(x: p.y, y: size.width - p.x)
+            size = CGSize(width: size.height, height: size.width)
+        }
+        return p
+    }
+}
+
+/// Maps between a mask's coordinates (fractions of the upright, uncropped photo) and a view
+/// showing the cropped photo fitted in `rect`.
+public struct MaskSpace: Sendable {
+    /// The decoded photo's size, upright and uncropped, in pixels.
+    public let sourceSize: CGSize
+    public let crop: DevelopSettings.Crop
+    /// Where the cropped photo is drawn.
+    public let rect: CGRect
+    /// The cropped photo's size in pixels, as rendered.
+    public let outputSize: CGSize
+
+    public init(sourceSize: CGSize, crop: DevelopSettings.Crop, rect: CGRect, outputSize: CGSize) {
+        self.sourceSize = sourceSize
+        self.crop = crop
+        self.rect = rect
+        self.outputSize = outputSize
+    }
+
+    public var longEdge: CGFloat { max(sourceSize.width, sourceSize.height) }
+
+    /// View points per photo pixel.
+    public var viewScale: CGFloat { outputSize.width > 0 ? rect.width / outputSize.width : 1 }
+
+    public func viewPoint(_ point: DevelopSettings.MaskPoint) -> CGPoint {
+        let source = CGPoint(x: CGFloat(point.x) * sourceSize.width, y: CGFloat(point.y) * sourceSize.height)
+        let output = crop.outputPoint(fromSource: source, sourceSize: sourceSize)
+        return CGPoint(x: rect.minX + output.x * viewScale, y: rect.minY + output.y * viewScale)
+    }
+
+    public func maskPoint(_ view: CGPoint) -> DevelopSettings.MaskPoint {
+        let output = CGPoint(x: (view.x - rect.minX) / viewScale, y: (view.y - rect.minY) / viewScale)
+        let source = crop.sourcePoint(fromOutput: output, sourceSize: sourceSize)
+        return DevelopSettings.MaskPoint(x: Double(source.x / max(1, sourceSize.width)),
+                                         y: Double(source.y / max(1, sourceSize.height)))
+    }
+
+    /// A mask length (fraction of the long edge) in view points.
+    public func viewLength(_ length: Double) -> CGFloat { CGFloat(length) * longEdge * viewScale }
+
+    /// A view length as a mask length.
+    public func maskLength(_ length: CGFloat) -> Double { Double(length / max(0.0001, longEdge * viewScale)) }
+
+    /// A mask point as source pixels, top-left origin; directions measured here are the ones
+    /// the gradients store.
+    public func sourcePixels(_ point: DevelopSettings.MaskPoint) -> CGPoint {
+        CGPoint(x: CGFloat(point.x) * sourceSize.width, y: CGFloat(point.y) * sourceSize.height)
+    }
+
+    /// The ellipse of a radial gradient in the view: its center and the ends of its two
+    /// half-axes (along its angle, then a quarter turn clockwise).
+    public func ellipse(_ gradient: DevelopSettings.RadialGradient) -> (center: CGPoint, u: CGPoint, v: CGPoint) {
+        let center = viewPoint(gradient.center)
+        let radians = gradient.angle * .pi / 180
+        let c = sourcePixels(gradient.center)
+        let rx = CGFloat(gradient.radiusX) * longEdge, ry = CGFloat(gradient.radiusY) * longEdge
+        let uSource = CGPoint(x: c.x + rx * CGFloat(cos(radians)), y: c.y + rx * CGFloat(sin(radians)))
+        let vSource = CGPoint(x: c.x - ry * CGFloat(sin(radians)), y: c.y + ry * CGFloat(cos(radians)))
+        return (center, viewPoint(fromSourcePixels: uSource), viewPoint(fromSourcePixels: vSource))
+    }
+
+    public func viewPoint(fromSourcePixels source: CGPoint) -> CGPoint {
+        let output = crop.outputPoint(fromSource: source, sourceSize: sourceSize)
+        return CGPoint(x: rect.minX + output.x * viewScale, y: rect.minY + output.y * viewScale)
+    }
+
+    public func sourcePixels(fromView view: CGPoint) -> CGPoint {
+        let output = CGPoint(x: (view.x - rect.minX) / viewScale, y: (view.y - rect.minY) / viewScale)
+        return crop.sourcePoint(fromOutput: output, sourceSize: sourceSize)
+    }
+
+    /// A radial gradient whose ellipse, in the view, is centered at `center` with half-axes
+    /// `width` and `height` along the view's axes.
+    public func radial(center: CGPoint, width: CGFloat, height: CGFloat, feather: Double) -> DevelopSettings.RadialGradient {
+        let c = sourcePixels(fromView: center)
+        let u = sourcePixels(fromView: CGPoint(x: center.x + max(width, 1), y: center.y))
+        let v = sourcePixels(fromView: CGPoint(x: center.x, y: center.y + max(height, 1)))
+        let angle = atan2(Double(u.y - c.y), Double(u.x - c.x)) * 180 / .pi
+        return DevelopSettings.RadialGradient(center: maskPoint(center),
+                                              radiusX: Double(hypot(u.x - c.x, u.y - c.y) / longEdge),
+                                              radiusY: Double(hypot(v.x - c.x, v.y - c.y) / longEdge),
+                                              angle: angle, feather: feather)
+    }
+}
