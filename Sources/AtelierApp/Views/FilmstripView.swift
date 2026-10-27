@@ -224,7 +224,7 @@ private struct FilmstripCell: View {
         .frame(width: size, height: size)
         .overlay(
             RoundedRectangle(cornerRadius: 3)
-                .strokeBorder(isFocused ? Color.white : (isSelected ? Color.white.opacity(0.45) : .clear),
+                .strokeBorder(isFocused ? Color.primary : (isSelected ? Color.primary.opacity(0.4) : .clear),
                               lineWidth: isFocused ? 2 : 1)
         )
         .contentShape(Rectangle())
