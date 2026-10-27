@@ -3,8 +3,7 @@ import AtelierCore
 import SwiftUI
 
 /// Lightroom's Filmstrip: the photos of the current source in a strip across the bottom of the
-/// whole window, with
-/// the photo being worked on highlighted. The arrow tab on the bottom edge (or View > Show
+/// whole window, with the photo being worked on highlighted. The arrow tab on the bottom edge (or View > Show
 /// Filmstrip, F6) collapses and opens it; the top edge drags to resize. Both are remembered.
 struct FilmstripView: View {
     @EnvironmentObject private var model: LibraryModel
