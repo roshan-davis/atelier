@@ -101,6 +101,9 @@ extension LibraryModel {
             presets.addItem(ClosureMenuItem(preset.name) { self.develop.applyPreset(preset, onto: ids) })
         }
         menu.addItem(submenu("Apply Develop Preset\(count)", presets))
+        menu.addItem(ClosureMenuItem("Match Look to Reference…", enabled: matchProgress == nil) {
+            self.beginMatchLook(for: ids)
+        })
 
         if !sidebar.collections.isEmpty {
             let collections = NSMenu()
