@@ -210,11 +210,12 @@ private struct GeneralSettings: View {
 
 // MARK: - Import
 
-private struct ImportSettings: View {
+struct ImportSettings: View {
     @AppStorage("import.copy") private var copyFiles = false
     @AppStorage("import.destination") private var destinationPath = FileManager.default
         .urls(for: .picturesDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("Atelier Library").path
+    @AppStorage(FilePairs.groupKey) private var groupPairs = true
 
     var body: some View {
         Form {
@@ -238,6 +239,15 @@ private struct ImportSettings: View {
                 Text("Default for new imports")
             } footer: {
                 Text("The Import dialog starts with these choices. Copies go to YYYY/YYYY-MM-DD Name/ and are checked against the original.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section {
+                Toggle("Show RAW+JPEG pairs as one photo", isOn: $groupPairs)
+            } header: {
+                Text("RAW+JPEG")
+            } footer: {
+                Text("When a folder has DSC_0001.NEF and DSC_0001.JPG (or HEIC, TIFF), only the RAW is shown, marked RAW+JPG. Ratings, flags, labels, keywords, collections and import entries apply to both; editing and export use the RAW. Turn this off to see every file as its own photo. Culling always treats a pair as one shot.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

@@ -78,6 +78,9 @@ enum LayoutSnapshots {
                       to: folder.appendingPathComponent("theme-neutralGray-grid.png"))
         await snapshotVirtualCopy(model: model, into: folder)
         await snapshotCulling(model: model, into: folder)
+        await snapshotRawPair(model: model, into: folder)
+        await capture(AnyView(ImportSettings().frame(width: 560)), size: CGSize(width: 560, height: 420),
+                      to: folder.appendingPathComponent("settings-import.png"))
         await capture(AnyView(AppearanceSettings().frame(width: 560)), size: CGSize(width: 560, height: 330),
                       to: folder.appendingPathComponent("settings-appearance.png"))
         await capture(AnyView(EditInSettings().frame(width: 640)), size: CGSize(width: 640, height: 360),
@@ -190,6 +193,12 @@ enum LayoutSnapshots {
             print("SNAPSHOT: distance \(names[a]) \(row.joined(separator: " "))")
         }
         print("SNAPSHOT: sharpness \(cull.photos.map { "\($0.name)=\(Int($0.signals?.sharpness ?? 0))" })")
+        for index in cull.photos.indices.dropLast() {
+            guard let a = cull.photos[index].signals, let b = cull.photos[index + 1].signals else { continue }
+            let c = Culling.compare(a, b)
+            print("SNAPSHOT: \(names[index]) → \(names[index + 1]) frameChange=\(c.frameChange.map { String(format: "%.3f", $0) } ?? "-") aligned=\(c.aligned.map { String(format: "%.3f", $0) } ?? "-") feature=\(c.featureDistance.map { String(format: "%.3f", $0) } ?? "-") link=\(cull.link(index, index + 1))")
+        }
+        print("SNAPSHOT: cull mode \(cull.mode.rawValue) kinds \(cull.multiGroups.map { cull.isSameFrame($0) ? "same frame" : "similar" })")
         print("SNAPSHOT: cull groups \(cull.groups.map { $0.map { cull.photos[$0].name } }) kept \(cull.kept.map { cull.photos[$0].name }.sorted())")
         try? await Task.sleep(for: .seconds(1))
         await capture(AnyView(CullView(cull: cull)), size: CGSize(width: 1280, height: 800),
@@ -211,6 +220,41 @@ enum LayoutSnapshots {
                               to: folder.appendingPathComponent("cull-group-review.png"))
                 review.cancel()
             }
+        }
+    }
+
+    /// A RAW+JPEG pair (the "RAW" is a JPEG renamed; the catalog goes by name) next to a lone
+    /// JPEG: the grid shows two photos, the RAW marked RAW+JPG.
+    private static func snapshotRawPair(model: LibraryModel, into folder: URL) async {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("atelier-pair-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        writeScene(0, shift: 0, soft: false, second: 400, to: dir.appendingPathComponent("DSC_0101.NEF"))
+        writeScene(0, shift: 0, soft: false, second: 400, to: dir.appendingPathComponent("DSC_0101.JPG"))
+        writeScene(1, shift: 0, soft: false, second: 410, to: dir.appendingPathComponent("DSC_0102.JPG"))
+        model.runImport(sources: [dir], options: ImportOptions(target: .newGroup(name: "RAW+JPEG Test")))
+        for _ in 0..<40 where model.importProgress != nil { try? await Task.sleep(for: .milliseconds(250)) }
+        if let entry = model.sidebar.imports.first(where: { $0.name == "RAW+JPEG Test" }) {
+            model.sidebarSelection = .importGroup(entry.id)
+            var waited = 0
+            while waited < 40, !model.rows.contains(where: { $0.filename == "DSC_0101.NEF" }) {
+                try? await Task.sleep(for: .milliseconds(250))
+                waited += 1
+            }
+            print("SNAPSHOT: pair rows arrived after \(waited * 250) ms, selection \(String(describing: model.sidebarSelection)), status \(model.status ?? "-")")
+            try? await Task.sleep(for: .seconds(1))
+            do {
+                let direct = try model.catalog.assetRows(filter: model.filter)
+                print("SNAPSHOT: pair direct rows \(direct.map { "\($0.filename) paired=\($0.pairedFormats ?? "-")" }) filter \(model.filter)")
+            } catch {
+                print("SNAPSHOT: pair rows error \(error)")
+            }
+            print("SNAPSHOT: pair status \(model.status ?? "-")")
+            print("SNAPSHOT: pair entry count \(entry.photoCount), rows \(model.rows.map { "\($0.filename) paired=\($0.pairedFormats ?? "-")" })")
+            await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1000, height: 584),
+                          to: folder.appendingPathComponent("raw-pair-grid.png"))
+            model.sidebarSelection = .all
+        } else {
+            print("SNAPSHOT: pair import entry missing")
         }
     }
 

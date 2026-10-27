@@ -35,6 +35,12 @@ private struct DetailForm: View {
         Form {
             Section("Photo") {
                 LabeledContent("File", value: detail.asset.filename)
+                if let formats = model.rows.first(where: { $0.id == detail.asset.id })?.pairedFormats {
+                    LabeledContent("Shot with", value: formats.split(separator: ",").map {
+                        (detail.asset.filename as NSString).deletingPathExtension + "." + $0
+                    }.joined(separator: ", "))
+                    .help("Shown as one photo with its RAW. Settings > Import changes this.")
+                }
                 if let copy = model.virtualCopyName(detail.asset.id) {
                     LabeledContent("Version", value: "Virtual copy (\(copy))")
                 }

@@ -259,6 +259,8 @@ final class ThumbnailItem: NSCollectionViewItem {
         default:
             if let count = row.stackCount, count > 0 { stack = "  ▤ \(count + 1)" }
         }
+        // A RAW+JPEG pair shown as its RAW.
+        if let formats = row.pairedFormats { stack += "  RAW+" + formats.replacingOccurrences(of: ",", with: "+") }
         // Culled with other shots: how many were in the group.
         if let size = row.cullGroupSize, size > 1 { stack += "  ◫ \(size)" }
         return flag + stars + stack

@@ -41,6 +41,16 @@ struct CullView: View {
             }
             Spacer()
             if !cull.isReview {
+                Picker("Match", selection: $cull.mode) {
+                    Text("Same Frame").tag(CullMode.sameFrame)
+                    Text("Similar Shots").tag(CullMode.similarShots)
+                }
+                .pickerStyle(.segmented)
+                .fixedSize()
+                .disabled(cull.isAnalyzing)
+                .help(cull.mode == .sameFrame
+                      ? "Same Frame: only shots framed alike, where people moved a little or blinked"
+                      : "Similar Shots: also slight zooms and recomposing, people moving in the background, a change of focus")
                 HStack(spacing: 8) {
                     Text("Grouping").foregroundStyle(.secondary)
                     Text("Tight").font(.caption).foregroundStyle(.secondary)
@@ -62,7 +72,8 @@ struct CullView: View {
             return "\(cull.photos.count) shots culled together · \(cull.keptCount) kept"
         }
         let groups = cull.multiGroups.count
-        return "\(cull.photos.count) photos · \(groups) group\(groups == 1 ? "" : "s") of similar shots · \(cull.singles.count) single · \(cull.keptCount) kept"
+        let kind = cull.mode == .sameFrame ? "same-frame shots" : "similar shots"
+        return "\(cull.photos.count) photos · \(groups) group\(groups == 1 ? "" : "s") of \(kind) · \(cull.singles.count) single · \(cull.keptCount) kept"
     }
 
     private var footer: some View {
@@ -101,7 +112,8 @@ struct CullView: View {
                         tiles(cull.photos.map(\.id), title: "Photos")
                     } else {
                         ForEach(Array(cull.multiGroups.enumerated()), id: \.offset) { index, group in
-                            groupCard(group, title: cull.isReview ? "Culled together" : "Group \(index + 1)")
+                            groupCard(group, title: cull.isReview ? "Culled together" : "Group \(index + 1)",
+                                      kind: cull.isReview ? nil : (cull.isSameFrame(group) ? "Same frame" : "Similar shots"))
                         }
                         if !cull.singles.isEmpty {
                             groupCard(cull.singles, title: "Single shots", isSingles: true)
@@ -117,13 +129,22 @@ struct CullView: View {
         }
     }
 
-    private func groupCard(_ group: [Int], title: String, isSingles: Bool = false) -> some View {
+    private func groupCard(_ group: [Int], title: String, kind: String? = nil, isSingles: Bool = false) -> some View {
         let kept = group.filter { cull.kept.contains($0) }.count
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Image(systemName: isSingles ? "photo" : "square.stack.3d.down.right")
                     .foregroundStyle(.secondary)
                 Text(title).font(.headline)
+                if let kind {
+                    Text(kind)
+                        .font(.caption.weight(.medium))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1)
+                        .background(Color.secondary.opacity(0.18), in: Capsule())
+                        .help(kind == "Same frame" ? "Framed alike: people moved a little, blinked or changed expression"
+                              : "The same scene, zoomed, recomposed or refocused")
+                }
                 Text("\(group.count) photo\(group.count == 1 ? "" : "s")")
                     .foregroundStyle(.secondary)
                 if !isSingles, let time = cull.photos[group[0]].captureTime {
@@ -192,6 +213,9 @@ struct CullView: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(photo.name).font(.headline).lineLimit(1).truncationMode(.middle)
+                    if let badge = photo.pairBadge {
+                        PairBadge(text: badge)
+                    }
                     if cull.suggested.contains(id) {
                         Label("Suggested", systemImage: "star.fill")
                             .font(.caption.weight(.semibold))
@@ -270,6 +294,11 @@ private struct CullTile: View {
                         .shadow(radius: 2)
                         .padding(5)
                 }
+                if let badge = photo.pairBadge {
+                    PairBadge(text: badge)
+                        .padding(5)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                }
                 if isSuggested {
                     Image(systemName: "star.fill")
                         .font(.system(size: 11))
@@ -294,5 +323,20 @@ private struct CullTile: View {
         }
         .contentShape(Rectangle())
         .help(isSuggested ? "Suggested keeper: sharpest, best faces" : photo.name)
+    }
+}
+
+/// "RAW+JPG": the RAW stands for the files shot with it.
+struct PairBadge: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 9, weight: .bold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 1)
+            .background(Color.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 3))
+            .help("Culled with the files shot alongside it; keeping or dropping applies to all of them")
     }
 }

@@ -143,6 +143,7 @@ public final class Catalog: Sendable {
         registerStackMigration(&migrator)
         registerCullMigration(&migrator)
         registerVirtualCopyMigration(&migrator)
+        registerPairMigration(&migrator)
         return migrator
     }
 }
