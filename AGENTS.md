@@ -55,3 +55,8 @@ Rosh tests manually by pulling the branch in Xcode (scheme **AtelierApp**, desti
 
 - Give the branch name and exact click paths, e.g. Xcode > Integrate > Pull…, Product > Run (⌘R), Atelier > Settings… > Appearance.
 - Say what to check and where, step by step. Never "open the panel and try it".
+- Use Rosh's Xcode version's real names (Xcode 26). Known paths:
+  - Get latest main: Integrate > Pull…, pick origin/main, Pull.
+  - Test a PR branch: View > Navigators > Source Control (⌘2) > Repositories > Atelier > Branches (or Remotes > origin), right-click the branch > Checkout….
+  - GitHub account and git author: Xcode > Settings… > Source Control (Accounts, Git settings). There is no separate Accounts tab.
+- If you're not sure what a dialog or menu is called, ask Rosh for a screenshot instead of guessing.
