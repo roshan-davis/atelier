@@ -96,7 +96,7 @@ final class RemoveTests: XCTestCase {
         let files = try catalog.removalPlan(for: [single]).files
 
         let result = try catalog.deletePhotos(files) { _ in throw NoTrash() }
-        XCTAssertEqual(result.notTrashed.map(\.file.assetID), [single])
+        XCTAssertEqual(result.notTrashed.map { $0.file.assetID }, [single])
         XCTAssertEqual(result.notTrashed.first?.reason, "The volume has no Trash.")
         XCTAssertNotNil(try catalog.detail(for: single))
         XCTAssertTrue(exists("DSC_2.JPG"))
