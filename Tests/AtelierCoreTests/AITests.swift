@@ -105,9 +105,8 @@ final class AITests: XCTestCase {
                 .flatMap { $0.values.compactMap { $0 as? String } }
             for model in recipe.builtInModels { XCTAssertTrue(files.contains(model.file), "\(model.file) is in the workflow") }
         }
-        XCTAssertEqual(AIRecipe.removeObject.instruction(for: "trash can"),
-                       "Remove the trash can and fill the area with the surrounding background so it looks natural")
-        XCTAssertEqual(AIRecipe.removeObject.instruction(for: "Remove the sign"), "Remove the sign")
+        XCTAssertTrue(AIRecipe.removeObject.instruction(for: "").hasPrefix("Remove the red area and fill it"))
+        XCTAssertTrue(AIRecipe.removeObject.instruction(for: "a tree").hasPrefix("Remove the red area, which covered a tree, and fill it"))
         XCTAssertEqual(AIRecipe.replaceBackground.instruction(for: "a beach at dusk"),
                        "Replace the background with a beach at dusk. Keep the subject exactly as it is.")
     }
@@ -146,7 +145,10 @@ final class AITests: XCTestCase {
         let inputs = { (node: String) in (workflow[node] as? [String: Any])?["inputs"] as? [String: Any] }
         XCTAssertEqual(inputs("1")?["unet_name"] as? String, "my-edit.gguf")
         XCTAssertEqual(inputs("15")?["seed"] as? Int, 42)
-        XCTAssertEqual(inputs("9")?["prompt"] as? String, AIRecipe.removeObject.defaultPrompt)
+        XCTAssertEqual(inputs("9")?["prompt"] as? String, AIRecipe.removeObject.instruction(for: ""))
+        // The model's reference is the photo with the painted area filled, not the photo itself.
+        XCTAssertEqual((inputs("9")?["image1"] as? [Any])?.first as? String, "20")
+        XCTAssertEqual((inputs("20")?["mask"] as? [Any])?.first as? String, "8")
 
         let image = try XCTUnwrap(AIImaging.image(at: result.url))
         XCTAssertEqual(image.width, 400)
