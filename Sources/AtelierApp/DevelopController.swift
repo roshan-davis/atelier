@@ -592,6 +592,8 @@ final class DevelopController: ObservableObject {
             validateMaskSelection()
             beforeImage = nil
             changed(step: step)
+            // Saved and in the history at once, so leaving the photo right away can't lose it.
+            flushSave()
             if targets.count == 1 { presetAmount = PresetAmount(preset: preset, assetID: assetID, base: base, amount: 100) }
         }
     }
