@@ -174,7 +174,7 @@ final class DevelopController: ObservableObject {
 
     /// The sharpest image that matches the current settings.
     var displayImage: NSImage? {
-        if isCropping || (isMasking && showMaskOverlay) || previewingPreset != nil { return image }
+        if isCropping || (isMasking && showMaskOverlay) { return image }
         if !showingBefore, let fullImage, fullImageSettings == settings { return fullImage }
         return image
     }
@@ -205,8 +205,17 @@ final class DevelopController: ObservableObject {
     /// The preset last clicked on the open photo, for the Amount slider; cleared by any other edit.
     @Published private(set) var presetAmount: PresetAmount?
     private var settingPresetAmount = false
-    /// The preset under the pointer, shown on the photo until the pointer leaves it.
+    /// The preset under the pointer, shown in the Navigator (not on the photo) until the pointer
+    /// leaves it, as in Lightroom Classic.
     @Published private(set) var previewingPreset: DevelopPreset?
+    /// The open photo with `previewingPreset` applied, rendered small for the Navigator.
+    @Published private(set) var navigatorPreview: NSImage?
+    /// Long edge of the Navigator's preset previews: small, so hovering feels instant.
+    nonisolated static let navigatorSize = 560
+    private var navigatorSession: DevelopSession?
+    private var navigatorRendering = false
+    private var navigatorNeedsRender = false
+    private let navigatorQueue = DispatchQueue(label: "atelier.develop.navigator", qos: .userInitiated)
     /// Develop > New Preset… and Manage Presets… open these sheets in the Presets panel.
     @Published var showingNewPreset = false
     @Published var showingManagePresets = false
@@ -272,6 +281,8 @@ final class DevelopController: ObservableObject {
         maskMessage = nil
         presetAmount = nil
         previewingPreset = nil
+        navigatorPreview = nil
+        navigatorSession = nil
         guard let assetID else { return }
 
         settings = (try? catalog.developSettings(for: assetID)) ?? .neutral
@@ -578,6 +589,7 @@ final class DevelopController: ObservableObject {
     /// settings. On the open photo alone, the Amount slider then scales it.
     func applyPreset(_ preset: DevelopPreset, onto assetIDs: [Int64]? = nil) {
         previewingPreset = nil
+        navigatorPreview = nil
         let step = "Preset: \(preset.name)"
         let targets = assetIDs ?? assetID.map { [$0] } ?? []
         for id in targets where id != assetID {
@@ -592,6 +604,8 @@ final class DevelopController: ObservableObject {
             validateMaskSelection()
             beforeImage = nil
             changed(step: step)
+            // Saved and in the history at once, so leaving the photo right away can't lose it.
+            flushSave()
             if targets.count == 1 { presetAmount = PresetAmount(preset: preset, assetID: assetID, base: base, amount: 100) }
         }
     }
@@ -621,7 +635,39 @@ final class DevelopController: ObservableObject {
     func previewPreset(_ preset: DevelopPreset?) {
         guard preset != previewingPreset, assetID != nil else { return }
         previewingPreset = preset
-        scheduleRender()
+        if preset == nil { navigatorPreview = nil } else { renderNavigatorPreview() }
+    }
+
+    /// Renders the hovered preset small, on its own queue so it never waits behind the photo.
+    /// Latest wins: hovers during a render collapse into one follow-up.
+    private func renderNavigatorPreview() {
+        guard let preset = previewingPreset, let url = sourceURL else { return }
+        if navigatorRendering {
+            navigatorNeedsRender = true
+            return
+        }
+        navigatorRendering = true
+        let settings = preset.applied(to: self.settings)
+        let assetID = self.assetID
+        let existing = navigatorSession
+        navigatorQueue.async {
+            let session = existing ?? DevelopRenderer.shared.session(for: url, maxPixelSize: Self.navigatorSize)
+            let cgImage = session?.render(settings)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    self.navigatorRendering = false
+                    guard self.assetID == assetID else { return }
+                    self.navigatorSession = session
+                    if self.previewingPreset == preset, let cgImage {
+                        self.navigatorPreview = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+                    }
+                    if self.navigatorNeedsRender {
+                        self.navigatorNeedsRender = false
+                        self.renderNavigatorPreview()
+                    }
+                }
+            }
+        }
     }
 
     /// Saves the open photo's settings as a preset with the chosen parts. `replacing` keeps an
@@ -827,7 +873,6 @@ final class DevelopController: ObservableObject {
         }
         rendering = true
         var settings = showingBefore ? beforeSettings : self.settings
-        if !showingBefore, let previewingPreset { settings = previewingPreset.applied(to: settings) }
         if isGuiding { settings.crop = nil }
         let cropping = !isCropping
         let assetID = self.assetID

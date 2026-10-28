@@ -13,7 +13,7 @@ private struct PresetGroup: Identifiable {
 }
 
 /// The Presets list in the Develop sidebar, grouped like Lightroom's: the user's groups first,
-/// then the built-in packs. Click to apply, rest the pointer on one to preview it.
+/// then the built-in packs. Click to apply, rest the pointer on one to preview it in the Navigator.
 struct PresetsSection: View {
     @ObservedObject var develop: DevelopController
     @Binding var isExpanded: Bool
@@ -190,26 +190,35 @@ struct PresetsSection: View {
     // MARK: Rows
 
     private func row(_ preset: DevelopPreset) -> some View {
-        SidebarRow(isCurrent: develop.presetAmount?.preset.id == preset.id, onHover: { hover(preset, $0) }) {
-            Label(preset.name, systemImage: preset.isBuiltIn ? "wand.and.stars" : "slider.horizontal.3")
-                .lineLimit(1)
-            Spacer(minLength: 4)
-            if preset.isBuiltIn {
-                Image(systemName: "lock.fill")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                    .help("Built-in presets can't be changed; duplicate one to edit it")
+        // A button rather than a tap gesture: a click on the row always applies the preset.
+        Button {
+            apply(preset)
+        } label: {
+            SidebarRow(isCurrent: develop.presetAmount?.preset.id == preset.id, onHover: { hover(preset, $0) }) {
+                Label(preset.name, systemImage: preset.isBuiltIn ? "wand.and.stars" : "slider.horizontal.3")
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                if preset.isBuiltIn {
+                    Image(systemName: "lock.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
             }
         }
-        .onTapGesture { develop.applyPreset(preset) }
+        .buttonStyle(.plain)
+        .disabled(develop.assetID == nil)
         .help("Click to apply. Includes \(DevelopPreset.Part.allCases.filter { preset.parts.contains($0) }.map(\.title).joined(separator: ", ")).")
         .contextMenu { presetMenu(preset) }
-        .draggable(preset.id.uuidString)
+    }
+
+    private func apply(_ preset: DevelopPreset) {
+        hoverTask?.cancel()
+        develop.applyPreset(preset)
     }
 
     @ViewBuilder
     private func presetMenu(_ preset: DevelopPreset) -> some View {
-        Button("Apply") { develop.applyPreset(preset) }
+        Button("Apply") { apply(preset) }
             .disabled(develop.assetID == nil)
         if preset.isBuiltIn {
             Button("Duplicate to User Presets") { develop.duplicatePreset(preset) }
@@ -256,15 +265,6 @@ struct PresetsSection: View {
             withAnimation(.easeInOut(duration: 0.15)) { open.wrappedValue.toggle() }
         }
         .contextMenu { groupMenu(group) }
-        .dropDestination(for: String.self) { items, _ in
-            // Drag a preset of your own onto another of your groups to move it there.
-            guard !group.isBuiltIn else { return false }
-            let moved = items.compactMap { item in
-                develop.presets.first { $0.id.uuidString == item && !$0.isBuiltIn && $0.group != group.name }
-            }
-            for preset in moved { develop.movePreset(preset, to: group.name) }
-            return !moved.isEmpty
-        }
     }
 
     @ViewBuilder
@@ -296,9 +296,11 @@ struct PresetsSection: View {
         hoverTask = Task { @MainActor in
             // A short rest before previewing, so sweeping across the list doesn't render each one;
             // a short grace on leaving, so moving to the next preset doesn't flash the photo back.
-            try? await Task.sleep(for: .milliseconds(inside ? 250 : 120))
+            try? await Task.sleep(for: .milliseconds(inside ? 120 : 150))
             guard !Task.isCancelled else { return }
             if inside {
+                // The preset just applied is already on the photo.
+                guard develop.presetAmount?.preset.id != preset.id else { return }
                 develop.previewPreset(preset)
             } else if develop.previewingPreset?.id == preset.id {
                 develop.previewPreset(nil)
