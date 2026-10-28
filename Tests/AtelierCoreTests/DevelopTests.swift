@@ -92,10 +92,13 @@ final class DevelopTests: XCTestCase {
     func testNewParametersDefaultWhenMissing() throws {
         let old = try DevelopSettings.decoded(from: #"{"schemaVersion":1,"exposure":0.5}"#)
         XCTAssertEqual(old.sharpenRadius, 1)
+        XCTAssertEqual(old[.sharpenDetail], 25)
+        XCTAssertEqual(old[.sharpenMasking], 0)
         XCTAssertEqual(old.vignetteMidpoint, 50)
         XCTAssertEqual(old.grainSize, 25)
         XCTAssertEqual(old.clarity, 0)
-        XCTAssertEqual(DevelopSettings.Panel.detail.parameters, [.sharpening, .sharpenRadius, .luminanceNoise, .colorNoise])
+        XCTAssertEqual(DevelopSettings.Panel.detail.parameters, [.sharpening, .sharpenRadius, .sharpenDetail, .sharpenMasking,
+                                                                .luminanceNoise, .colorNoise])
         XCTAssertEqual(Set(DevelopSettings.Parameter.allCases.map(\.panel)).count, DevelopSettings.Panel.allCases.count)
     }
 

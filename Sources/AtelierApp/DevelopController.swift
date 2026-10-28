@@ -52,6 +52,11 @@ final class DevelopController: ObservableObject {
 
     @Published private(set) var histogram: Histogram?
 
+    /// Lightroom's Option-drag view, while Option is held on a slider that has one.
+    @Published var sliderPreview: SliderPreview? = nil {
+        didSet { if sliderPreview != oldValue { scheduleRender() } }
+    }
+
     /// The crop tool is open: the photo renders whole (turned and straightened) under the crop frame.
     @Published var isCropping = false {
         didSet {
@@ -174,7 +179,7 @@ final class DevelopController: ObservableObject {
 
     /// The sharpest image that matches the current settings.
     var displayImage: NSImage? {
-        if isCropping || (isMasking && showMaskOverlay) { return image }
+        if isCropping || (isMasking && showMaskOverlay) || sliderPreview != nil { return image }
         if !showingBefore, let fullImage, fullImageSettings == settings { return fullImage }
         return image
     }
@@ -877,10 +882,11 @@ final class DevelopController: ObservableObject {
         let cropping = !isCropping
         let assetID = self.assetID
         let overlay = isMasking && showMaskOverlay ? selectedMaskID : nil
+        let preview = showingBefore ? nil : sliderPreview
         queue.async {
-            let cgImage = session.render(settings, cropping: cropping, overlay: overlay)
-            // The red overlay would skew the histogram; keep the last one while it shows.
-            let histogram = overlay == nil ? cgImage.flatMap { Histogram(image: $0) } : nil
+            let cgImage = session.render(settings, cropping: cropping, overlay: overlay, preview: preview)
+            // The red overlay or an Option-drag view would skew the histogram; keep the last one while it shows.
+            let histogram = overlay == nil && preview == nil ? cgImage.flatMap { Histogram(image: $0) } : nil
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     self.rendering = false

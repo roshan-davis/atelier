@@ -78,9 +78,13 @@ public final class DevelopRenderer: @unchecked Sendable {
     /// Steps 2 to 7 of the pipeline; white balance and exposure happen at decode.
     /// `scale` is the rendered size relative to the full-size photo, so pixel radii such as
     /// sharpening look the same on the live proxy and in an export. `masks` supplies the masks'
-    /// drawn parts lined up with the crop; `overlay` names a mask to tint red on top.
+    /// drawn parts lined up with the crop; `overlay` names a mask to tint red on top. `preview`
+    /// replaces the result with a slider's Option-drag view.
     public static func applyAdjustments(_ settings: DevelopSettings, to input: CIImage, scale: Double = 1,
-                                        masks: MaskProvider? = nil, overlay: UUID? = nil) -> CIImage {
+                                        masks: MaskProvider? = nil, overlay: UUID? = nil,
+                                        preview: SliderPreview? = nil) -> CIImage {
+        var settings = settings
+        if case .fullSaturation(let region) = preview { settings[region.saturation] = 100 }
         var image = input
         let extent = input.extent
         let longEdge = Double(max(extent.width, extent.height))
@@ -165,12 +169,27 @@ public final class DevelopRenderer: @unchecked Sendable {
                 image = mix(image, output, amount: min(1, settings.colorNoise / 50))
             }
         }
+        switch preview {
+        case .sharpenEdges:
+            // Shown even at Amount 0, so Radius and Detail can be judged before sharpening.
+            return SliderPreview.halos(base: image, sharpened: sharpen(image, settings, amount: max(settings.sharpening, 50),
+                                                                       scale: scale, extent: extent))
+        case .sharpenMask:
+            return SliderPreview.edgeMask(image, masking: settings[.sharpenMasking], scale: scale)
+        default:
+            break
+        }
         if settings.sharpening > 0 {
-            let filter = CIFilter.sharpenLuminance()
-            filter.inputImage = image
-            filter.sharpness = Float(settings.sharpening / 150 * 1.2)
-            filter.radius = Float(max(0.3, settings.sharpenRadius * scale * 1.5))
-            image = filter.outputImage?.cropped(to: extent) ?? image
+            let sharpened = sharpen(image, settings, amount: settings.sharpening, scale: scale, extent: extent)
+            if settings[.sharpenMasking] > 0 {
+                let filter = CIFilter.blendWithMask()
+                filter.inputImage = sharpened
+                filter.backgroundImage = image
+                filter.maskImage = SliderPreview.edgeMask(image, masking: settings[.sharpenMasking], scale: scale)
+                image = filter.outputImage?.cropped(to: extent) ?? sharpened
+            } else {
+                image = sharpened
+            }
         }
 
         // Local adjustments, before vignetting and grain.
@@ -196,6 +215,12 @@ public final class DevelopRenderer: @unchecked Sendable {
         }
         if let overlay, let mask = settings.masks.first(where: { $0.id == overlay }) {
             image = self.overlay(mask, on: image, base: beforeMasks, provider: masks)
+        }
+        switch preview {
+        case .sharpenAmount: image = SliderPreview.grayscale(image)
+        case .highlightClipping: image = SliderPreview.clipping(image, highlights: true)
+        case .shadowClipping: image = SliderPreview.clipping(image, highlights: false)
+        default: break
         }
         return image
     }
@@ -240,6 +265,29 @@ public final class DevelopRenderer: @unchecked Sendable {
         }
         let blurred = source.applyingGaussianBlur(sigma: radius / 2).cropped(to: extent)
         return mix(image, blurred, amount: min(1, -amount * 1.2))
+    }
+
+    /// Sharpening on luminance at Amount (0...150) and Radius. Detail below its default of 25
+    /// sharpens less at the radius, holding back halos; above it, a finer second pass brings
+    /// out texture. At 25 this is a single pass.
+    static func sharpen(_ image: CIImage, _ settings: DevelopSettings, amount: Double, scale: Double,
+                        extent: CGRect) -> CIImage {
+        let detail = settings[.sharpenDetail]
+        let strength = amount / 150 * 1.2
+        let radius = max(0.3, settings.sharpenRadius * scale * 1.5)
+        let filter = CIFilter.sharpenLuminance()
+        filter.inputImage = image
+        filter.sharpness = Float(strength * (detail < 25 ? 0.5 + detail / 50 : 1))
+        filter.radius = Float(radius)
+        var output = filter.outputImage?.cropped(to: extent) ?? image
+        if detail > 25 {
+            let fine = CIFilter.sharpenLuminance()
+            fine.inputImage = output
+            fine.sharpness = Float(strength * (detail - 25) / 75 * 0.7)
+            fine.radius = Float(max(0.3, radius * 0.4))
+            output = fine.outputImage?.cropped(to: extent) ?? output
+        }
+        return output
     }
 
     static func mix(_ image: CIImage, _ other: CIImage, amount: Double) -> CIImage {
@@ -458,8 +506,9 @@ public final class DevelopSession: @unchecked Sendable {
 
     /// The developed image in the working space. With `cropping` false the crop is left out
     /// (the photo is still turned and straightened), for the crop tool. `overlay` names a mask
-    /// to tint red, for the Masks panel's Show Overlay.
-    public func image(with settings: DevelopSettings, cropping: Bool = true, overlay: UUID? = nil) -> CIImage? {
+    /// to tint red, for the Masks panel's Show Overlay; `preview` is a slider's Option-drag view.
+    public func image(with settings: DevelopSettings, cropping: Bool = true, overlay: UUID? = nil,
+                      preview: SliderPreview? = nil) -> CIImage? {
         lock.lock()
         defer { lock.unlock() }
         guard var image = corrected(settings) else { return nil }
@@ -478,7 +527,8 @@ public final class DevelopSession: @unchecked Sendable {
             guard let crop else { return mask }
             return DevelopRenderer.applyGeometry(crop, to: mask, cropping: cropping)
         }
-        return DevelopRenderer.applyAdjustments(settings, to: image, scale: renderScale, masks: provider, overlay: overlay)
+        return DevelopRenderer.applyAdjustments(settings, to: image, scale: renderScale, masks: provider, overlay: overlay,
+                                                preview: preview)
     }
 
     /// Pipeline step 1: decode with white balance and exposure, the profile, then the lens
@@ -624,8 +674,9 @@ public final class DevelopSession: @unchecked Sendable {
     }
 
     /// Rendered for display in Display P3.
-    public func render(_ settings: DevelopSettings, cropping: Bool = true, overlay: UUID? = nil) -> CGImage? {
-        guard let image = image(with: settings, cropping: cropping, overlay: overlay) else { return nil }
+    public func render(_ settings: DevelopSettings, cropping: Bool = true, overlay: UUID? = nil,
+                       preview: SliderPreview? = nil) -> CGImage? {
+        guard let image = image(with: settings, cropping: cropping, overlay: overlay, preview: preview) else { return nil }
         return renderer.cgImage(image)
     }
 }

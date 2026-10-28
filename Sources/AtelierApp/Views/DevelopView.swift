@@ -623,7 +623,9 @@ private struct ColorGradingPanel: View {
                         ColorWheel(hue: Binding(get: { develop.value(region.hue) },
                                                 set: { develop.set(region.hue, to: $0) }),
                                    saturation: Binding(get: { develop.value(region.saturation) },
-                                                       set: { develop.set(region.saturation, to: $0) }))
+                                                       set: { develop.set(region.saturation, to: $0) }),
+                                   onOption: { develop.sliderPreview = $0 ? .fullSaturation(region) : nil })
+                            .help(SliderPreview.fullSaturation(region).hint)
                         DevelopSlider(value: Binding(get: { develop.value(region.luminance) },
                                                      set: { develop.set(region.luminance, to: $0) }),
                                       range: region.luminance.range, step: 1, origin: 0,
@@ -644,9 +646,11 @@ private struct ColorGradingPanel: View {
 }
 
 /// Drag inside the wheel to choose a tint: angle is hue, distance from the center is saturation.
+/// With Option held only the hue changes, and the photo shows it at full saturation.
 private struct ColorWheel: View {
     @Binding var hue: Double
     @Binding var saturation: Double
+    var onOption: ((Bool) -> Void)?
 
     var body: some View {
         GeometryReader { geometry in
@@ -672,13 +676,17 @@ private struct ColorWheel: View {
             .frame(width: size, height: size)
             .position(center)
             .contentShape(Circle())
-            .gesture(DragGesture(minimumDistance: 0).onChanged { value in
-                let dx = value.location.x - center.x, dy = center.y - value.location.y
-                var degrees = atan2(dy, dx) * 180 / .pi
-                if degrees < 0 { degrees += 360 }
-                hue = degrees.rounded()
-                saturation = min(100, (dx * dx + dy * dy).squareRoot() / radius * 100).rounded()
-            })
+            .gesture(DragGesture(minimumDistance: 0)
+                .onChanged { value in
+                    let option = NSEvent.modifierFlags.contains(.option)
+                    onOption?(option)
+                    let dx = value.location.x - center.x, dy = center.y - value.location.y
+                    var degrees = atan2(dy, dx) * 180 / .pi
+                    if degrees < 0 { degrees += 360 }
+                    hue = degrees.rounded()
+                    if !option { saturation = min(100, (dx * dx + dy * dy).squareRoot() / radius * 100).rounded() }
+                }
+                .onEnded { _ in onOption?(false) })
         }
         .aspectRatio(1, contentMode: .fit)
     }
@@ -827,7 +835,11 @@ struct ParameterSlider: View {
                 .help("Double-click to reset")
             DevelopSlider(value: binding, range: parameter.range, step: step,
                           origin: develop.defaultValue(parameter), gradient: trackGradient,
-                          logarithmic: parameter == .temperature)
+                          logarithmic: parameter == .temperature,
+                          onOption: SliderPreview(parameter: parameter).map { preview in
+                              { (held: Bool) in develop.sliderPreview = held ? preview : nil }
+                          })
+                .help(SliderPreview(parameter: parameter)?.hint ?? "")
             Group {
                 if editing {
                     TextField("Value", value: $draft, format: .number.precision(.fractionLength(0...2)))
@@ -914,6 +926,9 @@ struct DevelopSlider: View {
     let gradient: [Color]?
     /// Temperature moves in equal steps of perceived warmth rather than Kelvin.
     var logarithmic = false
+    /// Told while dragging whether Option is held, and false when the drag ends, for the
+    /// slider's Option-drag view.
+    var onOption: ((Bool) -> Void)?
 
     private func fraction(_ v: Double) -> Double {
         let clamped = min(max(v, range.lowerBound), range.upperBound)
@@ -967,11 +982,14 @@ struct DevelopSlider: View {
                     .offset(x: knob - 5.5, y: midY - 5.5)
             }
             .contentShape(Rectangle())
-            .gesture(DragGesture(minimumDistance: 0).onChanged { drag in
-                guard width > 0 else { return }
-                let newValue = value(at: Double(drag.location.x / width))
-                if newValue != value { value = newValue }
-            })
+            .gesture(DragGesture(minimumDistance: 0)
+                .onChanged { drag in
+                    onOption?(NSEvent.modifierFlags.contains(.option))
+                    guard width > 0 else { return }
+                    let newValue = value(at: Double(drag.location.x / width))
+                    if newValue != value { value = newValue }
+                }
+                .onEnded { _ in onOption?(false) })
         }
         .frame(height: 16)
     }

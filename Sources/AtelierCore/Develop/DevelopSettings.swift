@@ -343,7 +343,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         case gradeHighlightsHue, gradeHighlightsSat, gradeHighlightsLum
         case gradeGlobalHue, gradeGlobalSat, gradeGlobalLum
         case gradeBlending, gradeBalance
-        case sharpening, sharpenRadius, luminanceNoise, colorNoise
+        case sharpening, sharpenRadius, sharpenDetail, sharpenMasking, luminanceNoise, colorNoise
         case lensDistortion, lensVignette, lensVignetteMidpoint
         case transformVertical, transformHorizontal, transformRotate, transformAspect, transformScale
         case transformOffsetX, transformOffsetY
@@ -375,6 +375,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             switch self {
             case .temperature: return 5500
             case .sharpenRadius: return 1
+            case .sharpenDetail: return 25
             case .vignetteMidpoint, .gradeBlending, .lensVignetteMidpoint: return 50
             case .transformScale: return 100
             case .grainSize: return 25
@@ -389,7 +390,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             case .exposure: return -5...5
             case .sharpening: return 0...150
             case .sharpenRadius: return 0.5...3
-            case .luminanceNoise, .colorNoise, .vignetteMidpoint, .grain, .grainSize, .gradeBlending,
+            case .sharpenDetail, .sharpenMasking, .luminanceNoise, .colorNoise, .vignetteMidpoint, .grain, .grainSize, .gradeBlending,
                  .lensVignetteMidpoint: return 0...100
             case .transformRotate: return -10...10
             case .transformScale: return 50...150
@@ -413,6 +414,8 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             case .transformOffsetX: return "X Offset"
             case .transformOffsetY: return "Y Offset"
             case .sharpenRadius: return "Radius"
+            case .sharpenDetail: return "Detail"
+            case .sharpenMasking: return "Masking"
             case .luminanceNoise: return "Luminance"
             case .colorNoise: return "Color"
             case .vignetteMidpoint: return "Midpoint"
@@ -440,7 +443,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             if rawValue.hasPrefix("lens") { return .lensCorrections }
             if rawValue.hasPrefix("transform") { return .transform }
             switch self {
-            case .sharpening, .sharpenRadius, .luminanceNoise, .colorNoise: return .detail
+            case .sharpening, .sharpenRadius, .sharpenDetail, .sharpenMasking, .luminanceNoise, .colorNoise: return .detail
             case .vignette, .vignetteMidpoint, .grain, .grainSize: return .effects
             default: return .basic
             }
@@ -455,7 +458,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             case .exposure, .contrast, .highlights, .shadows, .whites, .blacks: return "Tone"
             case .texture, .clarity, .dehaze, .vibrance, .saturation: return "Presence"
             case .curveHighlights, .curveLights, .curveDarks, .curveShadows: return "Region"
-            case .sharpening, .sharpenRadius: return "Sharpening"
+            case .sharpening, .sharpenRadius, .sharpenDetail, .sharpenMasking: return "Sharpening"
             case .luminanceNoise, .colorNoise: return "Noise Reduction"
             case .vignette, .vignetteMidpoint: return "Post-Crop Vignetting"
             case .grain, .grainSize: return "Grain"
