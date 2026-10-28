@@ -21,77 +21,94 @@ struct DevelopSidebar: View {
         }
     }
 
-    var body: some View {
-        List {
-            PresetsSection(develop: develop)
+    /// Sections minimized by clicking their header, remembered between launches.
+    @AppStorage("develop.sidebarCollapsed") private var collapsedList = ""
 
-            Section {
-                if develop.history.snapshots.isEmpty {
-                    Text("Save the current look to come back to it later.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-                ForEach(develop.history.snapshots) { snapshot in
-                    Label(snapshot.name, systemImage: "camera.viewfinder")
-                        .lineLimit(1)
-                        .contentShape(Rectangle())
-                        .onTapGesture { develop.applySnapshot(snapshot) }
-                        .help("Created \(snapshot.date.formatted(date: .abbreviated, time: .shortened)). Click to apply.")
-                        .contextMenu {
-                            Button("Apply") { develop.applySnapshot(snapshot) }
-                            Button("Update with Current Settings") { develop.updateSnapshot(snapshot.id) }
-                            Button("Rename…") {
-                                nameText = snapshot.name
-                                naming = .renameSnapshot(snapshot.id)
-                            }
-                            Divider()
-                            Button("Delete", role: .destructive) { develop.deleteSnapshot(snapshot.id) }
-                        }
-                }
-            } header: {
-                HStack {
-                    Text("Snapshots")
-                    Spacer()
+    private static let sections = ["presets", "snapshots", "history"]
+
+    private func isExpanded(_ section: String) -> Binding<Bool> {
+        Binding(get: { !collapsedList.split(separator: ",").contains(Substring(section)) }, set: { open in
+            var collapsed = Set(collapsedList.split(separator: ",").map(String.init))
+            if open { collapsed.remove(section) } else { collapsed.insert(section) }
+            collapsedList = collapsed.sorted().joined(separator: ",")
+        })
+    }
+
+    var body: some View {
+        // A plain stack rather than a List: List rebuilds its rows, which made the presets'
+        // sheets flash as they closed.
+        ScrollView(.vertical) {
+            VStack(spacing: 0) {
+                PresetsSection(develop: develop, isExpanded: isExpanded("presets"))
+
+                SidebarSection(title: "Snapshots", isExpanded: isExpanded("snapshots")) {
                     Button {
                         nameText = Date().formatted(date: .abbreviated, time: .shortened)
                         naming = .newSnapshot
                     } label: {
                         Image(systemName: "plus")
                     }
-                    .buttonStyle(.borderless)
                     .help("Create a snapshot of the current settings")
                     .disabled(develop.assetID == nil)
+                } content: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        if develop.history.snapshots.isEmpty {
+                            Text("Save the current look to come back to it later.")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                        }
+                        ForEach(develop.history.snapshots) { snapshot in
+                            SidebarRow {
+                                Label(snapshot.name, systemImage: "camera.viewfinder")
+                                    .lineLimit(1)
+                                Spacer(minLength: 0)
+                            }
+                            .onTapGesture { develop.applySnapshot(snapshot) }
+                            .help("Created \(snapshot.date.formatted(date: .abbreviated, time: .shortened)). Click to apply.")
+                            .contextMenu {
+                                Button("Apply") { develop.applySnapshot(snapshot) }
+                                Button("Update with Current Settings") { develop.updateSnapshot(snapshot.id) }
+                                Button("Rename…") {
+                                    nameText = snapshot.name
+                                    naming = .renameSnapshot(snapshot.id)
+                                }
+                                Divider()
+                                Button("Delete", role: .destructive) { develop.deleteSnapshot(snapshot.id) }
+                            }
+                        }
+                    }
                 }
-            }
 
-            Section {
-                if develop.history.steps.isEmpty {
-                    Text("Edits you make appear here. Click one to go back to it.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-                ForEach(Array(develop.history.steps.enumerated()).reversed(), id: \.offset) { index, step in
-                    HistoryRow(step: step, isCurrent: index == develop.history.position,
-                               isUndone: index > develop.history.position)
-                        .contentShape(Rectangle())
-                        .onTapGesture { develop.go(to: index) }
-                }
-            } header: {
-                HStack {
-                    Text("History")
-                    Spacer()
+                SidebarSection(title: "History", isExpanded: isExpanded("history")) {
                     Button {
                         develop.clearHistory()
                     } label: {
                         Image(systemName: "xmark")
                     }
-                    .buttonStyle(.borderless)
                     .help("Clear the history, keeping the current settings")
                     .disabled(develop.history.steps.count < 2)
+                } content: {
+                    LazyVStack(alignment: .leading, spacing: 2) {
+                        if develop.history.steps.isEmpty {
+                            Text("Edits you make appear here. Click one to go back to it.")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                        }
+                        ForEach(Array(develop.history.steps.enumerated()).reversed(), id: \.offset) { index, step in
+                            SidebarRow(isCurrent: index == develop.history.position) {
+                                HistoryRow(step: step, isCurrent: index == develop.history.position,
+                                           isUndone: index > develop.history.position)
+                            }
+                            .onTapGesture { develop.go(to: index) }
+                        }
+                    }
                 }
             }
         }
-        .listStyle(.sidebar)
+        .contextMenu {
+            Button("Expand All Sections") { collapsedList = "" }
+            Button("Collapse All Sections") { collapsedList = Self.sections.joined(separator: ",") }
+        }
         .alert(alertTitle, isPresented: Binding(get: { naming != nil }, set: { if !$0 { naming = nil } })) {
             TextField("Name", text: $nameText)
             Button("Cancel", role: .cancel) { naming = nil }
@@ -141,5 +158,104 @@ private struct HistoryRow: View {
             }
         }
         .help(step.date.formatted(date: .abbreviated, time: .standard))
+    }
+}
+
+/// A section of the Develop sidebar with a VS Code–style header band: click anywhere on the
+/// band to minimize or show the section; its buttons sit on the right of the band.
+struct SidebarSection<Actions: View, Content: View>: View {
+    let title: String
+    @Binding var isExpanded: Bool
+    @ViewBuilder var actions: () -> Actions
+    @ViewBuilder var content: () -> Content
+    @State private var hovering = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 2) {
+                Text(title.uppercased())
+                    .font(.system(size: 11, weight: .semibold))
+                    .tracking(0.6)
+                    .foregroundStyle(isExpanded ? .primary : .secondary)
+                    .lineLimit(1)
+                Spacer(minLength: 6)
+                if isExpanded {
+                    HStack(spacing: 0) { actions() }
+                        .buttonStyle(SidebarIconButtonStyle())
+                        .opacity(hovering ? 1 : 0.6)
+                }
+            }
+            .padding(.leading, 12)
+            .padding(.trailing, 6)
+            .frame(height: 28)
+            .background(Color.primary.opacity(hovering ? 0.09 : 0.05))
+            .contentShape(Rectangle())
+            .onTapGesture {
+                withAnimation(.easeInOut(duration: 0.18)) { isExpanded.toggle() }
+            }
+            .onHover { hovering = $0 }
+            .help(isExpanded ? "Click to minimize \(title)" : "Click to show \(title)")
+            .accessibilityAddTraits(.isHeader)
+            .accessibilityAction(named: isExpanded ? "Minimize" : "Show") { isExpanded.toggle() }
+
+            if isExpanded {
+                content()
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .transition(.opacity)
+            }
+            Divider()
+        }
+        .clipped()
+    }
+}
+
+/// A clickable sidebar row: highlighted under the pointer, and tinted when current.
+struct SidebarRow<Content: View>: View {
+    var isCurrent = false
+    var onHover: ((Bool) -> Void)?
+    @ViewBuilder var content: () -> Content
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: 6) { content() }
+            .padding(.horizontal, 6)
+            .frame(maxWidth: .infinity, minHeight: 22, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(isCurrent ? Color.accentColor.opacity(0.2) : Color.primary.opacity(hovering ? 0.07 : 0))
+            )
+            .contentShape(Rectangle())
+            .onHover { inside in
+                hovering = inside
+                onHover?(inside)
+            }
+    }
+}
+
+/// Small borderless icon buttons for a sidebar header band.
+struct SidebarIconButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        SidebarIconButton(configuration: configuration)
+    }
+
+    private struct SidebarIconButton: View {
+        let configuration: Configuration
+        @Environment(\.isEnabled) private var isEnabled
+        @State private var hovering = false
+
+        var body: some View {
+            configuration.label
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(isEnabled ? .primary : .tertiary)
+                .frame(width: 24, height: 22)
+                .background(
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.primary.opacity(configuration.isPressed ? 0.18 : (hovering && isEnabled ? 0.1 : 0)))
+                )
+                .contentShape(Rectangle())
+                .onHover { hovering = $0 }
+        }
     }
 }

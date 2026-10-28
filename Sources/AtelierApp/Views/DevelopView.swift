@@ -295,6 +295,7 @@ struct DevelopPanel: View {
                             switch panel {
                             case .basic:
                                 VStack(alignment: .leading, spacing: 7) {
+                                    TreatmentRow(develop: develop)
                                     ProfileRow(develop: develop)
                                     ParameterGroups(panel: panel, develop: develop)
                                 }
@@ -554,7 +555,8 @@ private extension DragGesture.Value {
     }
 }
 
-/// HSL / Color: eight color bands, shown one channel at a time or all at once.
+/// HSL / Color: eight color bands, shown one channel at a time or all at once; in Black & White,
+/// the B&W Mix instead.
 private struct HSLPanel: View {
     @ObservedObject var develop: DevelopController
     @AppStorage("develop.hslChannel") private var channel = "Hue"
@@ -565,6 +567,23 @@ private struct HSLPanel: View {
     }
 
     var body: some View {
+        if develop.settings.monochrome {
+            // Black & White: the B&W Mix takes HSL's place, as in Lightroom.
+            VStack(alignment: .leading, spacing: 7) {
+                GroupHeading(title: "B&W Mix")
+                ForEach(DevelopSettings.ColorBand.allCases, id: \.self) { band in
+                    ParameterSlider(parameter: .gray(band), develop: develop)
+                }
+                Text("Each slider makes that color lighter or darker in gray.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        } else {
+            colorBody
+        }
+    }
+
+    private var colorBody: some View {
         VStack(alignment: .leading, spacing: 10) {
             Picker("Channel", selection: $channel) {
                 ForEach(DevelopSettings.HSLChannel.allCases, id: \.self) { Text($0.rawValue).tag($0.rawValue) }
@@ -862,6 +881,9 @@ struct ParameterSlider: View {
             case .saturation: return [Color.gray, color]
             case .luminance: return [Color.black, color, Color.white]
             }
+        }
+        if let band = parameter.grayBand {
+            return [Color.black, Color(hue: band.hue / 360, saturation: 0.85, brightness: 0.95), Color.white]
         }
         switch parameter {
         case .temperature: return [Color(red: 0.3, green: 0.5, blue: 1), Color(red: 1, green: 0.85, blue: 0.3)]

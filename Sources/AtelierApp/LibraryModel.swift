@@ -713,6 +713,9 @@ final class LibraryModel: ObservableObject {
         case .maskOverlay:
             guard mode == .develop, develop.isMasking else { return false }
             develop.showMaskOverlay.toggle()
+        case .treatment:
+            guard mode == .develop, develop.assetID != nil else { return false }
+            develop.setMonochrome(!develop.settings.monochrome)
         }
         return true
     }

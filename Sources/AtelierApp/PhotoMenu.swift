@@ -88,17 +88,19 @@ extension LibraryModel {
         develop.addItem(ClosureMenuItem("Reset All Settings\(count)") { self.resetDevelopSettings() })
         menu.addItem(submenu("Develop Settings", develop))
 
+        // One submenu per group, the user's groups first, as in the Presets panel.
         let presets = NSMenu()
-        var lastGroup: String?
-        for preset in self.develop.presets {
-            if preset.group != lastGroup {
-                if lastGroup != nil { presets.addItem(.separator()) }
-                let header = NSMenuItem(title: preset.group, action: nil, keyEquivalent: "")
-                header.isEnabled = false
-                presets.addItem(header)
-                lastGroup = preset.group
+        var groupMenu: NSMenu?
+        var lastGroup: (String, Bool)?
+        for preset in self.develop.visiblePresets {
+            if lastGroup?.0 != preset.group || lastGroup?.1 != preset.isBuiltIn {
+                if lastGroup?.1 == false, preset.isBuiltIn { presets.addItem(.separator()) }
+                let menu = NSMenu()
+                presets.addItem(submenu(preset.group, menu))
+                groupMenu = menu
+                lastGroup = (preset.group, preset.isBuiltIn)
             }
-            presets.addItem(ClosureMenuItem(preset.name) { self.develop.applyPreset(preset, onto: ids) })
+            groupMenu?.addItem(ClosureMenuItem(preset.name) { self.develop.applyPreset(preset, onto: ids) })
         }
         menu.addItem(submenu("Apply Develop Preset\(count)", presets))
         menu.addItem(ClosureMenuItem("Match Look to Reference…", enabled: matchProgress == nil) {

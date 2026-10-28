@@ -119,13 +119,14 @@ public final class DevelopRenderer: @unchecked Sendable {
                                   extent: extent)
         }
 
-        if settings.vibrance != 0 {
+        // In Black & White the B&W Mix decides the grays, so vibrance and saturation do nothing.
+        if settings.vibrance != 0, !settings.monochrome {
             let filter = CIFilter.vibrance()
             filter.inputImage = image
             filter.amount = Float(settings.vibrance / 100)
             image = filter.outputImage ?? image
         }
-        if settings.saturation != 0 {
+        if settings.saturation != 0, !settings.monochrome {
             let filter = CIFilter.colorControls()
             filter.inputImage = image
             filter.saturation = Float(1 + settings.saturation / 100)
@@ -134,7 +135,7 @@ public final class DevelopRenderer: @unchecked Sendable {
             image = filter.outputImage ?? image
         }
 
-        // HSL and color grading share one color cube in sRGB-encoded values.
+        // HSL (or the B&W Mix) and color grading share one color cube in sRGB-encoded values.
         if let cube = ColorLUT.cube(for: settings) {
             let filter = CIFilter.colorCubeWithColorSpace()
             filter.inputImage = image

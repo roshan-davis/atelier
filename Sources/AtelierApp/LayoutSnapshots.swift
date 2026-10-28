@@ -61,6 +61,7 @@ enum LayoutSnapshots {
         await snapshotMatchLook(model: model, into: folder)
         await snapshotMasking(model: model, into: folder)
         await snapshotTransform(model: model, into: folder)
+        await snapshotPresets(model: model, into: folder)
         // Each theme in Develop at the size in Rosh's screenshot, and the theme picker itself.
         for theme in Theme.allCases where theme != .system {
             UserDefaults.standard.set(theme.rawValue, forKey: Theme.defaultsKey)
@@ -106,6 +107,36 @@ enum LayoutSnapshots {
         Theme.system.apply()
         fflush(stdout)
         exit(0)
+    }
+
+    /// The Presets panel with groups open and the Amount slider, a B&W pack preset on the photo,
+    /// and the Create Preset and Manage Presets dialogs.
+    private static func snapshotPresets(model: LibraryModel, into folder: URL) async {
+        let develop = model.develop
+        UserDefaults.standard.set("pack:Film\npack:Black & White", forKey: "presets.toggledGroups")
+        develop.createPreset(name: "Snapshot Look", group: "Weddings", parts: [.tone, .colorGrading])
+        if let portrait = develop.presets.first(where: { $0.name == "Portrait 400" }) {
+            develop.applyPreset(portrait)
+            develop.setPresetAmount(60)
+        }
+        try? await Task.sleep(for: .seconds(1))
+        await capture(AnyView(DevelopSidebar(develop: develop).environmentObject(model)), size: CGSize(width: 280, height: 1100),
+                      to: folder.appendingPathComponent("presets-panel-280x1100.png"))
+        if let highContrast = develop.presets.first(where: { $0.name == "High Contrast" }) {
+            develop.applyPreset(highContrast)
+        }
+        try? await Task.sleep(for: .seconds(2))
+        print("SNAPSHOT: presets \(develop.presets.count), monochrome \(develop.settings.monochrome)")
+        await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
+                      to: folder.appendingPathComponent("develop-bw-preset-1280x800.png"))
+        await capture(AnyView(PresetSheet(develop: develop, mode: .create(group: nil))), size: CGSize(width: 500, height: 520),
+                      to: folder.appendingPathComponent("presets-create-dialog.png"))
+        await capture(AnyView(ManagePresetsSheet(develop: develop)), size: CGSize(width: 400, height: 400),
+                      to: folder.appendingPathComponent("presets-manage-dialog.png"))
+        if let created = develop.presets.first(where: { $0.name == "Snapshot Look" }) { develop.deletePreset(created) }
+        UserDefaults.standard.removeObject(forKey: "presets.toggledGroups")
+        develop.resetAll()
+        develop.flushSave()
     }
 
     /// The Match Look dialog with a warm, teal-shadowed reference, then with Match Areas on.
