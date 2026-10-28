@@ -58,8 +58,9 @@ struct SplashImage {
 /// with the name and tagline on the left and the startup status and Don't show again on the
 /// right. A hairline between them fills as startup steps finish.
 ///
-/// Plain AppKit and Core Animation rather than SwiftUI, so it can be drawn at once while the
-/// main thread is still busy opening the catalog.
+/// The text is Core Animation text layers, not text fields: a status change only needs a
+/// CATransaction.flush() to reach the screen, without an AppKit redraw, which isn't allowed
+/// while SwiftUI is still setting up the app and the catalog is opening.
 final class SplashContentView: NSView {
     // Placeholders until Rosh picks the name and tagline.
     static let title = "Atelier"
@@ -71,7 +72,7 @@ final class SplashContentView: NSView {
     var onDismiss: () -> Void = {}
     var onHover: (Bool) -> Void = { _ in }
 
-    private let statusField = NSTextField(labelWithString: "")
+    private let statusLayer = CATextLayer()
     private let progressLayer = CALayer()
     private let checkbox = NSButton(checkboxWithTitle: "Don't show again", target: nil, action: nil)
 
@@ -99,30 +100,35 @@ final class SplashContentView: NSView {
         progressLayer.backgroundColor = NSColor(white: 1, alpha: 0.55).cgColor
         layer.addSublayer(progressLayer)
 
-        let title = NSTextField(labelWithString: Self.title)
-        title.font = .systemFont(ofSize: 22, weight: .light)
-        title.textColor = .white
-        let tagline = NSTextField(labelWithString: Self.tagline)
-        tagline.font = .systemFont(ofSize: 12)
-        tagline.textColor = NSColor(white: 1, alpha: 0.6)
-        statusField.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
-        statusField.textColor = NSColor(white: 1, alpha: 0.6)
-        statusField.alignment = .right
-        statusField.lineBreakMode = .byTruncatingMiddle
+        let scale = NSScreen.main?.backingScaleFactor ?? 2
+        let texts: [(CATextLayer, String, NSFont, NSColor, CGRect)] = [
+            (CATextLayer(), Self.title, NSFont.systemFont(ofSize: 22, weight: .light), NSColor.white,
+             CGRect(x: 24, y: 30, width: 260, height: 30)),
+            (CATextLayer(), Self.tagline, NSFont.systemFont(ofSize: 12), NSColor(white: 1, alpha: 0.6),
+             CGRect(x: 25, y: 12, width: 260, height: 17)),
+            (statusLayer, "", NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular), NSColor(white: 1, alpha: 0.6),
+             CGRect(x: 300, y: 38, width: bounds.width - 300 - 24, height: 16)),
+        ]
+        for (textLayer, string, font, color, frame) in texts {
+            textLayer.string = string
+            textLayer.font = font
+            textLayer.fontSize = font.pointSize
+            textLayer.foregroundColor = color.cgColor
+            textLayer.contentsScale = scale
+            textLayer.frame = frame
+            layer.addSublayer(textLayer)
+        }
+        statusLayer.alignmentMode = .right
+        statusLayer.truncationMode = .middle
+
         checkbox.controlSize = .small
         checkbox.font = .systemFont(ofSize: 11)
         checkbox.target = self
         checkbox.action = #selector(toggleShowAtLaunch)
         checkbox.state = Splash.showsAtLaunch ? .off : .on
-        for view: NSView in [title, tagline, statusField, checkbox] { addSubview(view) }
-
-        title.sizeToFit()
-        tagline.sizeToFit()
+        addSubview(checkbox)
         checkbox.sizeToFit()
-        title.setFrameOrigin(CGPoint(x: 24, y: 30))
-        tagline.setFrameOrigin(CGPoint(x: 25, y: 13))
         checkbox.setFrameOrigin(CGPoint(x: bounds.width - 22 - checkbox.frame.width, y: 12))
-        statusField.frame = CGRect(x: 300, y: 38, width: bounds.width - 300 - 24, height: 16)
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
@@ -178,9 +184,9 @@ final class SplashContentView: NSView {
 
     /// Shows a startup step; `progress` is 0 to 1.
     func setStatus(_ text: String, progress: Double) {
-        statusField.stringValue = text
         CATransaction.begin()
         CATransaction.setDisableActions(true)
+        statusLayer.string = text
         progressLayer.frame.size.width = bounds.width * min(max(progress, 0), 1)
         CATransaction.commit()
     }
@@ -203,8 +209,9 @@ final class SplashContentView: NSView {
     override func mouseExited(with event: NSEvent) { onHover(false) }
 }
 
-/// Shows the splash in its own borderless window. At launch it appears before the catalog
-/// opens and reports each real startup step, then fades once the library has loaded.
+/// Shows the splash in its own borderless window. At launch it goes up as the app starts
+/// (applicationWillFinishLaunching), shows each real startup step, then fades once the library
+/// has loaded.
 @MainActor
 final class SplashController {
     static let shared = SplashController()
@@ -213,6 +220,9 @@ final class SplashController {
     private var hovering = false
     private var shownAt = Date()
     private var launched = false
+    /// The latest step, kept in case it arrives before the splash is up.
+    private var status = ("Starting…", 0.05)
+    private var finished = false
 
     /// The built-in images, copied into the Splash folder the first time.
     static var builtInImages: [URL] {
@@ -230,37 +240,45 @@ final class SplashController {
         return Splash.nextImage(from: Splash.images()).flatMap(SplashImage.load)
     }
 
-    /// Called before anything else at launch. It draws straight away rather than waiting for
-    /// the run loop, which doesn't turn until the catalog has opened.
+    /// Called from applicationWillFinishLaunching, outside any SwiftUI update, so the window
+    /// can be drawn straight away.
     func showAtLaunch() {
         guard !launched, LayoutSnapshots.outputFolder == nil, Splash.showsAtLaunch else { return }
         launched = true
         // Launched from Xcode or `swift run` there is no app bundle; windows need a regular app.
         NSApplication.shared.setActivationPolicy(.regular)
         present(Self.nextImage())
-        report("Starting…", progress: 0.05)
-        // In case the library never reports in.
-        dismiss(after: 20)
+        report(status.0, progress: status.1)
+        if finished {
+            // The library loaded before the splash could go up.
+            dismiss(after: 2.5)
+        } else {
+            // In case the library never reports in.
+            dismiss(after: 20)
+        }
     }
 
     /// Settings > General > Preview Splash Screen.
     func preview() {
         present(Self.nextImage())
-        report("Preview", progress: 1)
+        content?.setStatus("Preview", progress: 1)
         dismiss(after: 3)
     }
 
-    /// Shows a startup step and draws it now, even while the main thread is busy.
+    /// Shows a startup step. It can come while SwiftUI is setting up the app with the main
+    /// thread busy, so it only commits the layer change rather than asking AppKit to redraw.
     func report(_ text: String, progress: Double) {
-        guard let content, let window else { return }
+        status = (text, progress)
+        guard let content else { return }
         content.setStatus(text, progress: progress)
-        window.display()
         CATransaction.flush()
     }
 
     /// The last step: shows it, then fades out, leaving the splash up for at least 2.5 s.
     func finishLaunch(_ text: String) {
+        finished = true
         report(text, progress: 1)
+        guard window != nil else { return }
         dismiss(after: max(0.8, 2.5 - Date().timeIntervalSince(shownAt)))
     }
 
@@ -279,6 +297,8 @@ final class SplashController {
         content.onHover = { [weak self] in self?.hovering = $0 }
         panel.center()
         panel.orderFrontRegardless()
+        // Draw now: the run loop may not turn again until the catalog has opened. Safe here, since
+        // present is only called from the app delegate and from a button, never inside a SwiftUI update.
         panel.display()
         CATransaction.flush()
         window = panel

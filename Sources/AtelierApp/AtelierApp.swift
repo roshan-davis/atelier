@@ -7,10 +7,10 @@ struct AtelierApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var model = AtelierApp.launch()
 
-    /// The splash goes up first, then the library opens and reports each step to it.
+    /// The library opens and reports each step to the splash, which the app delegate puts up
+    /// as launch begins.
     private static func launch() -> LibraryModel {
         let splash = SplashController.shared
-        splash.showAtLaunch()
         let model = LibraryModel(report: { splash.report($0, progress: $1) })
         model.onLibraryLoaded = { sidebar in
             var text = sidebar.totalCount == 0 ? "Ready" : "Ready · \(sidebar.totalCount.formatted()) photo\(sidebar.totalCount == 1 ? "" : "s")"
@@ -164,6 +164,10 @@ struct AtelierApp: App {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     weak var model: LibraryModel?
+
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        MainActor.assumeIsolated { SplashController.shared.showAtLaunch() }
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Launched from `swift run` the process has no bundle; make it a regular foreground app.

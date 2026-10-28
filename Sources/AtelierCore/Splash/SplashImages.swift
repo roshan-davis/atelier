@@ -59,15 +59,12 @@ public enum Splash {
         case framed
     }
 
-    /// Images close to the splash's shape fill it, cropped around the subject; anything else
-    /// (portraits, panoramas) is shown whole, since filling would cut too much away.
-    /// `focus` is the subject's center, normalized with the origin at the top left.
+    /// Every image fills the splash (Rosh, Oct 28, 2026: no space around portraits), cropped
+    /// around the subject. `focus` is the subject's center, normalized with the origin at the
+    /// top left. Only an image with no size falls back to framed.
     public static func layout(imageSize: CGSize, focus: CGPoint = CGPoint(x: 0.5, y: 0.5)) -> Layout {
         guard imageSize.width > 0, imageSize.height > 0 else { return .framed }
-        let imageAspect = imageSize.width / imageSize.height
-        // 3:2 and 4:3 fill (they lose at most 17% of one side); 1:1, portraits and panoramas don't.
-        guard max(imageAspect / aspect, aspect / imageAspect) <= 1.25 else { return .framed }
-        return .fill(crop: fillCrop(imageAspect: imageAspect, focus: focus))
+        return .fill(crop: fillCrop(imageAspect: imageSize.width / imageSize.height, focus: focus))
     }
 
     /// The largest crop of the splash's shape, centered on `focus` as far as the edges allow.
