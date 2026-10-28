@@ -121,18 +121,26 @@ final class LibraryModel: ObservableObject {
     private var keyMonitor: Any?
     private var revisionScheduled = false
 
-    init() {
+    /// Called once, when the library's first sidebar data has loaded.
+    var onLibraryLoaded: ((SidebarData) -> Void)?
+
+    /// `report` gets each startup step (text, then progress 0 to 1) for the splash screen.
+    init(report: (String, Double) -> Void = { _, _ in }) {
         let packageURL = Catalog.defaultPackageURL
+        report("Opening catalog “\(packageURL.deletingPathExtension().lastPathComponent)”…", 0.15)
         do {
             catalog = try Catalog(packageURL: packageURL)
         } catch {
             fatalError("Could not open the catalog at \(packageURL.path): \(error)")
         }
+        report("Checking previews…", 0.35)
         previews = PreviewCache(rootURL: catalog.previewsURL!)
         previews.discardIfOutdated()
         previewScheduler = PreviewScheduler(cache: previews)
         develop = DevelopController(catalog: catalog, previews: previews)
+        report("Checking drives and network volumes…", 0.55)
         try? catalog.refreshVolumes()
+        report("Loading library…", 0.75)
         observeRows()
         observeSidebar()
         installKeyMonitor()
@@ -206,6 +214,10 @@ final class LibraryModel: ObservableObject {
             do {
                 for try await data in observation.values(in: writer) {
                     self?.sidebar = data
+                    if let loaded = self?.onLibraryLoaded {
+                        self?.onLibraryLoaded = nil
+                        loaded(data)
+                    }
                 }
             } catch {
                 self?.status = "Catalog error: \(error.localizedDescription)"

@@ -1,36 +1,37 @@
 import AppKit
 import AtelierCore
+import CoreImage
 import ImageIO
-import SwiftUI
+import QuartzCore
 import Vision
 
-/// An image ready for the splash: loaded at splash size, with how it fills the splash.
+/// An image ready for the splash's photo area.
 struct SplashImage {
-    let image: NSImage
+    /// Already cropped to the photo area when filling; the whole image when framed.
+    let image: CGImage
+    /// A small blurred copy, behind a framed image.
+    let backdrop: CGImage?
     let layout: Splash.Layout
 
-    /// Loads at up to 2000 px (enough for 1600x1000 at 2x) and finds the subject with Vision,
-    /// so a crop keeps it in frame. Nil when the file can't be read.
-    static func load(_ url: URL) async -> SplashImage? {
-        await Task.detached(priority: .userInitiated) { () -> SplashImage? in
-            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-                  let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, [
-                      kCGImageSourceCreateThumbnailFromImageAlways: true,
-                      kCGImageSourceCreateThumbnailWithTransform: true,
-                      kCGImageSourceThumbnailMaxPixelSize: 2000,
-                  ] as CFDictionary)
-            else { return nil }
-            let size = CGSize(width: cgImage.width, height: cgImage.height)
-            switch Splash.layout(imageSize: size, focus: subjectCenter(cgImage)) {
-            case .framed:
-                return SplashImage(image: NSImage(cgImage: cgImage, size: size), layout: .framed)
-            case .fill(let crop):
-                let pixels = CGRect(x: crop.minX * size.width, y: crop.minY * size.height,
-                                    width: crop.width * size.width, height: crop.height * size.height).integral
-                let cropped = cgImage.cropping(to: pixels) ?? cgImage
-                return SplashImage(image: NSImage(cgImage: cropped, size: pixels.size), layout: .fill(crop: crop))
-            }
-        }.value
+    /// Loads at up to 1600 px and finds the subject with Vision, so a crop keeps it in frame.
+    /// Synchronous and quick (well under 0.1 s), since at launch nothing else may run first.
+    static func load(_ url: URL) -> SplashImage? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                  kCGImageSourceCreateThumbnailFromImageAlways: true,
+                  kCGImageSourceCreateThumbnailWithTransform: true,
+                  kCGImageSourceThumbnailMaxPixelSize: 1600,
+              ] as CFDictionary)
+        else { return nil }
+        let size = CGSize(width: cgImage.width, height: cgImage.height)
+        switch Splash.layout(imageSize: size, focus: subjectCenter(cgImage)) {
+        case .framed:
+            return SplashImage(image: cgImage, backdrop: blurred(cgImage), layout: .framed)
+        case .fill(let crop):
+            let pixels = CGRect(x: crop.minX * size.width, y: crop.minY * size.height,
+                                width: crop.width * size.width, height: crop.height * size.height).integral
+            return SplashImage(image: cgImage.cropping(to: pixels) ?? cgImage, backdrop: nil, layout: .fill(crop: crop))
+        }
     }
 
     /// The center of what draws the eye, origin top left; the image center if Vision finds nothing.
@@ -43,108 +44,175 @@ struct SplashImage {
         // Vision's origin is bottom left.
         return CGPoint(x: box.midX, y: 1 - box.midY)
     }
+
+    private static func blurred(_ image: CGImage) -> CGImage? {
+        let input = CIImage(cgImage: image)
+        let scale = 240 / max(input.extent.width, input.extent.height)
+        let small = input.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+        let blurred = small.clampedToExtent().applyingGaussianBlur(sigma: 10).cropped(to: small.extent)
+        return CIContext().createCGImage(blurred, from: small.extent)
+    }
 }
 
-/// The launch splash: the photo, the app's name and tagline at top left, and Don't show again.
-/// It is always 800x500 and always dark, whatever the theme, since it sits on a photo.
-struct SplashView: View {
+/// The splash: the photo on top at 16:10 with nothing drawn over it, and a dark strip below
+/// with the name and tagline on the left and the startup status and Don't show again on the
+/// right. A hairline between them fills as startup steps finish.
+///
+/// Plain AppKit and Core Animation rather than SwiftUI, so it can be drawn at once while the
+/// main thread is still busy opening the catalog.
+final class SplashContentView: NSView {
     // Placeholders until Rosh picks the name and tagline.
     static let title = "Atelier"
     static let tagline = "Develop with intent."
 
-    let image: SplashImage?
+    static let stripHeight: CGFloat = 72
+    static var windowSize: CGSize { CGSize(width: Splash.size.width, height: Splash.size.height + stripHeight) }
+
     var onDismiss: () -> Void = {}
     var onHover: (Bool) -> Void = { _ in }
-    // Not private, so the memberwise init stays usable from LayoutSnapshots.
-    @AppStorage(Splash.showKey) var showAtLaunch = true
 
-    var body: some View {
-        ZStack {
-            photo
-            // Darken the top and bottom just enough for white text on bright photos.
-            VStack(spacing: 0) {
-                LinearGradient(colors: [.black.opacity(0.55), .clear], startPoint: .top, endPoint: .bottom)
-                    .frame(height: Splash.size.height * 0.42)
-                Spacer(minLength: 0)
-                LinearGradient(colors: [.clear, .black.opacity(0.4)], startPoint: .top, endPoint: .bottom)
-                    .frame(height: Splash.size.height * 0.2)
-            }
-            .allowsHitTesting(false)
-            VStack(alignment: .leading, spacing: 0) {
-                Text(Self.title)
-                    .font(.system(size: 46, weight: .light))
-                    .tracking(1.5)
-                Text(Self.tagline)
-                    .font(.system(size: 16))
-                    .opacity(0.85)
-                    .padding(.top, 2)
-                Spacer(minLength: 0)
-                HStack {
-                    Spacer()
-                    // Bottom right: Rosh's watermark sits bottom left on their photos.
-                    Toggle("Don't show again", isOn: Binding(get: { !showAtLaunch }, set: { showAtLaunch = !$0 }))
-                        .toggleStyle(.checkbox)
-                        .font(.callout)
-                }
-            }
-            .foregroundStyle(.white)
-            .shadow(color: .black.opacity(0.45), radius: 6, y: 1)
-            .padding(EdgeInsets(top: 30, leading: 34, bottom: 18, trailing: 22))
-        }
-        .frame(width: Splash.size.width, height: Splash.size.height)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(.white.opacity(0.12)))
-        .environment(\.colorScheme, .dark)
-        .contentShape(Rectangle())
-        .onTapGesture(perform: onDismiss)
-        .onHover(perform: onHover)
+    private let statusField = NSTextField(labelWithString: "")
+    private let progressLayer = CALayer()
+    private let checkbox = NSButton(checkboxWithTitle: "Don't show again", target: nil, action: nil)
+
+    init(image: SplashImage?) {
+        super.init(frame: CGRect(origin: .zero, size: Self.windowSize))
+        wantsLayer = true
+        appearance = NSAppearance(named: .darkAqua)
+        guard let layer else { return }
+        layer.backgroundColor = NSColor(white: 0.08, alpha: 1).cgColor
+        layer.cornerRadius = 12
+        layer.cornerCurve = .continuous
+        layer.masksToBounds = true
+        layer.borderWidth = 1
+        layer.borderColor = NSColor(white: 1, alpha: 0.1).cgColor
+
+        // Origin is bottom left: the strip is at the bottom, the photo above it.
+        let photoFrame = CGRect(x: 0, y: Self.stripHeight, width: Splash.size.width, height: Splash.size.height)
+        layer.addSublayer(photoLayer(image, frame: photoFrame))
+
+        let rule = CALayer()
+        rule.frame = CGRect(x: 0, y: Self.stripHeight - 1, width: bounds.width, height: 1)
+        rule.backgroundColor = NSColor(white: 1, alpha: 0.08).cgColor
+        layer.addSublayer(rule)
+        progressLayer.frame = CGRect(x: 0, y: Self.stripHeight - 1, width: 0, height: 1)
+        progressLayer.backgroundColor = NSColor(white: 1, alpha: 0.55).cgColor
+        layer.addSublayer(progressLayer)
+
+        let title = NSTextField(labelWithString: Self.title)
+        title.font = .systemFont(ofSize: 22, weight: .light)
+        title.textColor = .white
+        let tagline = NSTextField(labelWithString: Self.tagline)
+        tagline.font = .systemFont(ofSize: 12)
+        tagline.textColor = NSColor(white: 1, alpha: 0.6)
+        statusField.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+        statusField.textColor = NSColor(white: 1, alpha: 0.6)
+        statusField.alignment = .right
+        statusField.lineBreakMode = .byTruncatingMiddle
+        checkbox.controlSize = .small
+        checkbox.font = .systemFont(ofSize: 11)
+        checkbox.target = self
+        checkbox.action = #selector(toggleShowAtLaunch)
+        checkbox.state = Splash.showsAtLaunch ? .off : .on
+        for view: NSView in [title, tagline, statusField, checkbox] { addSubview(view) }
+
+        title.sizeToFit()
+        tagline.sizeToFit()
+        checkbox.sizeToFit()
+        title.setFrameOrigin(CGPoint(x: 24, y: 30))
+        tagline.setFrameOrigin(CGPoint(x: 25, y: 13))
+        checkbox.setFrameOrigin(CGPoint(x: bounds.width - 22 - checkbox.frame.width, y: 12))
+        statusField.frame = CGRect(x: 300, y: 38, width: bounds.width - 300 - 24, height: 16)
     }
 
-    @ViewBuilder private var photo: some View {
-        switch image?.layout {
-        case .fill:
-            Image(nsImage: image!.image)
-                .resizable()
-                .scaledToFill()
-                .frame(width: Splash.size.width, height: Splash.size.height)
-                .clipped()
-        case .framed:
-            let nsImage = image!.image
-            let isTall = nsImage.size.width / max(nsImage.size.height, 1) < Splash.aspect
-            ZStack(alignment: isTall ? .trailing : .center) {
-                // The image itself, blurred and darkened, fills the space around it.
-                Image(nsImage: nsImage)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: Splash.size.width, height: Splash.size.height)
-                    .blur(radius: 40, opaque: true)
-                    .overlay(Color.black.opacity(0.5))
-                    .clipped()
-                // Tall images sit on the right, leaving the left for the name.
-                Image(nsImage: nsImage)
-                    .resizable()
-                    .scaledToFit()
-                    .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-                    .shadow(color: .black.opacity(0.5), radius: 16, y: 6)
-                    .padding(isTall ? EdgeInsets(top: 28, leading: 28, bottom: 28, trailing: 40)
-                                    : EdgeInsets(top: 96, leading: 28, bottom: 44, trailing: 28))
-            }
-            .frame(width: Splash.size.width, height: Splash.size.height)
-        case nil:
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    private func photoLayer(_ image: SplashImage?, frame: CGRect) -> CALayer {
+        let container = CALayer()
+        container.frame = frame
+        container.masksToBounds = true
+        let bounds = CGRect(origin: .zero, size: frame.size)
+        guard let image else {
             // No images in the folder.
-            LinearGradient(colors: [Color(white: 0.2), Color(red: 0.08, green: 0.1, blue: 0.13)],
-                           startPoint: .topLeading, endPoint: .bottomTrailing)
+            let gradient = CAGradientLayer()
+            gradient.frame = bounds
+            gradient.colors = [NSColor(white: 0.2, alpha: 1).cgColor,
+                               NSColor(red: 0.08, green: 0.1, blue: 0.13, alpha: 1).cgColor]
+            gradient.startPoint = CGPoint(x: 0, y: 1)
+            gradient.endPoint = CGPoint(x: 1, y: 0)
+            container.addSublayer(gradient)
+            return container
         }
+        switch image.layout {
+        case .fill:
+            container.contents = image.image
+            container.contentsGravity = .resizeAspectFill
+        case .framed:
+            // The image's own blurred colors fill the space around it, darkened so it stands out.
+            container.contents = image.backdrop
+            container.contentsGravity = .resizeAspectFill
+            let shade = CALayer()
+            shade.frame = bounds
+            shade.backgroundColor = NSColor(white: 0, alpha: 0.45).cgColor
+            container.addSublayer(shade)
+            let photo = CALayer()
+            photo.frame = Self.fitted(CGSize(width: image.image.width, height: image.image.height),
+                                      in: bounds.insetBy(dx: 28, dy: 24))
+            photo.contents = image.image
+            photo.shadowColor = .black
+            photo.shadowOpacity = 0.5
+            photo.shadowRadius = 16
+            photo.shadowOffset = CGSize(width: 0, height: -6)
+            photo.shadowPath = CGPath(rect: CGRect(origin: .zero, size: photo.frame.size), transform: nil)
+            container.addSublayer(photo)
+        }
+        return container
     }
+
+    private static func fitted(_ size: CGSize, in rect: CGRect) -> CGRect {
+        let scale = min(rect.width / size.width, rect.height / size.height)
+        let fitted = CGSize(width: (size.width * scale).rounded(), height: (size.height * scale).rounded())
+        return CGRect(x: rect.midX - fitted.width / 2, y: rect.midY - fitted.height / 2,
+                      width: fitted.width, height: fitted.height)
+    }
+
+    /// Shows a startup step; `progress` is 0 to 1.
+    func setStatus(_ text: String, progress: Double) {
+        statusField.stringValue = text
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        progressLayer.frame.size.width = bounds.width * min(max(progress, 0), 1)
+        CATransaction.commit()
+    }
+
+    @objc private func toggleShowAtLaunch() {
+        UserDefaults.standard.set(checkbox.state == .off, forKey: Splash.showKey)
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func mouseDown(with event: NSEvent) { onDismiss() }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeAlways],
+                                       owner: self, userInfo: nil))
+    }
+
+    override func mouseEntered(with event: NSEvent) { onHover(true) }
+    override func mouseExited(with event: NSEvent) { onHover(false) }
 }
 
-/// Shows the splash in its own borderless window over the library window, and fades it out
-/// after a few seconds, or at once on a click. It stays while the pointer is over it.
+/// Shows the splash in its own borderless window. At launch it appears before the catalog
+/// opens and reports each real startup step, then fades once the library has loaded.
 @MainActor
 final class SplashController {
     static let shared = SplashController()
     private var window: NSPanel?
+    private var content: SplashContentView?
     private var hovering = false
+    private var shownAt = Date()
+    private var launched = false
 
     /// The built-in images, copied into the Splash folder the first time.
     static var builtInImages: [URL] {
@@ -157,50 +225,81 @@ final class SplashController {
         try? Splash.installBuiltInImages(builtInImages)
     }
 
-    func showAtLaunch() {
-        guard UserDefaults.standard.object(forKey: Splash.showKey) as? Bool ?? true else { return }
-        show()
+    private static func nextImage() -> SplashImage? {
+        installFolder()
+        return Splash.nextImage(from: Splash.images()).flatMap(SplashImage.load)
     }
 
-    /// Shows the next image in the rotation.
-    func show() {
-        Self.installFolder()
-        let next = Splash.nextImage(from: Splash.images())
-        Task {
-            var image: SplashImage?
-            if let next { image = await SplashImage.load(next) }
-            present(image)
-        }
+    /// Called before anything else at launch. It draws straight away rather than waiting for
+    /// the run loop, which doesn't turn until the catalog has opened.
+    func showAtLaunch() {
+        guard !launched, LayoutSnapshots.outputFolder == nil, Splash.showsAtLaunch else { return }
+        launched = true
+        // Launched from Xcode or `swift run` there is no app bundle; windows need a regular app.
+        NSApplication.shared.setActivationPolicy(.regular)
+        present(Self.nextImage())
+        report("Starting…", progress: 0.05)
+        // In case the library never reports in.
+        dismiss(after: 20)
+    }
+
+    /// Settings > General > Preview Splash Screen.
+    func preview() {
+        present(Self.nextImage())
+        report("Preview", progress: 1)
+        dismiss(after: 3)
+    }
+
+    /// Shows a startup step and draws it now, even while the main thread is busy.
+    func report(_ text: String, progress: Double) {
+        guard let content, let window else { return }
+        content.setStatus(text, progress: progress)
+        window.display()
+        CATransaction.flush()
+    }
+
+    /// The last step: shows it, then fades out, leaving the splash up for at least 2.5 s.
+    func finishLaunch(_ text: String) {
+        report(text, progress: 1)
+        dismiss(after: max(0.8, 2.5 - Date().timeIntervalSince(shownAt)))
     }
 
     private func present(_ image: SplashImage?) {
         window?.close()
-        let panel = NSPanel(contentRect: CGRect(origin: .zero, size: Splash.size),
+        let content = SplashContentView(image: image)
+        let panel = NSPanel(contentRect: CGRect(origin: .zero, size: SplashContentView.windowSize),
                             styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = true
         panel.level = .floating
         panel.isReleasedWhenClosed = false
-        panel.contentView = NSHostingView(rootView: SplashView(
-            image: image,
-            onDismiss: { [weak self] in self?.dismiss() },
-            onHover: { [weak self] in self?.hovering = $0 }))
+        panel.contentView = content
+        content.onDismiss = { [weak self] in self?.dismiss() }
+        content.onHover = { [weak self] in self?.hovering = $0 }
         panel.center()
-        panel.alphaValue = 0
         panel.orderFrontRegardless()
-        NSAnimationContext.runAnimationGroup { $0.duration = 0.2; panel.animator().alphaValue = 1 }
+        panel.display()
+        CATransaction.flush()
         window = panel
-        Task { [weak self, weak panel] in
-            try? await Task.sleep(for: .seconds(3))
-            while self?.hovering == true { try? await Task.sleep(for: .milliseconds(250)) }
-            if let panel, self?.window === panel { self?.dismiss() }
+        self.content = content
+        hovering = false
+        shownAt = Date()
+    }
+
+    private func dismiss(after seconds: Double) {
+        let panel = window
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(seconds))
+            while self?.hovering == true, self?.window === panel { try? await Task.sleep(for: .milliseconds(250)) }
+            if let self, let panel, self.window === panel { self.dismiss() }
         }
     }
 
     func dismiss() {
         guard let panel = window else { return }
         window = nil
+        content = nil
         hovering = false
         NSAnimationContext.runAnimationGroup({ $0.duration = 0.35; panel.animator().alphaValue = 0 },
                                              completionHandler: { panel.close() })

@@ -11,6 +11,11 @@ public enum Splash {
     public static let showKey = "splash.show"
     public static let nextIndexKey = "splash.nextIndex"
 
+    /// Settings > General > Show splash screen at launch; on unless turned off.
+    public static var showsAtLaunch: Bool {
+        UserDefaults.standard.object(forKey: showKey) as? Bool ?? true
+    }
+
     public static let imageExtensions: Set<String> = ["jpg", "jpeg", "png", "heic", "heif", "tif", "tiff"]
 
     /// Images here are shown in turn, one per launch. It starts with the built-in images, and
