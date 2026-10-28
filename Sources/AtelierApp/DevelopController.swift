@@ -53,7 +53,7 @@ final class DevelopController: ObservableObject {
     @Published private(set) var histogram: Histogram?
 
     /// Lightroom's Option-drag view, while Option is held on a slider that has one.
-    @Published var sliderPreview: SliderPreview? {
+    @Published var sliderPreview: SliderPreview? = nil {
         didSet { if sliderPreview != oldValue { scheduleRender() } }
     }
 

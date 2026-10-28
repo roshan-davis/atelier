@@ -837,7 +837,7 @@ struct ParameterSlider: View {
                           origin: develop.defaultValue(parameter), gradient: trackGradient,
                           logarithmic: parameter == .temperature,
                           onOption: SliderPreview(parameter: parameter).map { preview in
-                              { held in develop.sliderPreview = held ? preview : nil }
+                              { (held: Bool) in develop.sliderPreview = held ? preview : nil }
                           })
                 .help(SliderPreview(parameter: parameter)?.hint ?? "")
             Group {
