@@ -93,13 +93,15 @@ enum LayoutSnapshots {
                       to: folder.appendingPathComponent("settings-general.png"))
         // The splash with each built-in image, and with none.
         for url in SplashController.builtInImages {
-            let image = await SplashImage.load(url)
+            let image = SplashImage.load(url)
             print("SNAPSHOT: splash \(url.lastPathComponent) \(String(describing: image?.layout))")
-            await capture(AnyView(SplashView(image: image)), size: Splash.size,
-                          to: folder.appendingPathComponent(url.deletingPathExtension().lastPathComponent + ".png"))
+            let view = SplashContentView(image: image)
+            view.setStatus("Ready · 1,234 photos · megham offline", progress: 1)
+            capture(view, to: folder.appendingPathComponent(url.deletingPathExtension().lastPathComponent + ".png"))
         }
-        await capture(AnyView(SplashView(image: nil)), size: Splash.size,
-                      to: folder.appendingPathComponent("splash-empty.png"))
+        let empty = SplashContentView(image: nil)
+        empty.setStatus("Checking drives and network volumes…", progress: 0.55)
+        capture(empty, to: folder.appendingPathComponent("splash-empty.png"))
         UserDefaults.standard.removeObject(forKey: Theme.defaultsKey)
         Theme.system.apply()
         fflush(stdout)
@@ -434,6 +436,24 @@ enum LayoutSnapshots {
             try? await Task.sleep(for: .milliseconds(500))
         }
         print("SNAPSHOT: catalog has \(model.rows.count) photo(s)")
+    }
+
+    /// Renders a layer-backed AppKit view, such as the splash, at 2x.
+    private static func capture(_ view: NSView, to url: URL) {
+        let window = NSWindow(contentRect: view.bounds, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentView = view
+        view.layoutSubtreeIfNeeded()
+        view.display()
+        guard let layer = view.layer,
+              let context = CGContext(data: nil, width: Int(view.bounds.width * 2), height: Int(view.bounds.height * 2),
+                                      bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return }
+        context.scaleBy(x: 2, y: 2)
+        layer.render(in: context)
+        if let image = context.makeImage() {
+            try? NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])?.write(to: url)
+        }
     }
 
     private static func capture(_ view: AnyView, size: CGSize, to url: URL) async {

@@ -5,7 +5,23 @@ import SwiftUI
 @main
 struct AtelierApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @StateObject private var model = LibraryModel()
+    @StateObject private var model = AtelierApp.launch()
+
+    /// The splash goes up first, then the library opens and reports each step to it.
+    private static func launch() -> LibraryModel {
+        let splash = SplashController.shared
+        splash.showAtLaunch()
+        let model = LibraryModel(report: { splash.report($0, progress: $1) })
+        model.onLibraryLoaded = { sidebar in
+            var text = sidebar.totalCount == 0 ? "Ready" : "Ready · \(sidebar.totalCount.formatted()) photo\(sidebar.totalCount == 1 ? "" : "s")"
+            let offline = sidebar.volumes.filter { !$0.isOnline }.map(\.name)
+            if !offline.isEmpty {
+                text += " · \(ListFormatter.localizedString(byJoining: offline)) offline"
+            }
+            splash.finishLaunch(text)
+        }
+        return model
+    }
 
     var body: some Scene {
         WindowGroup("Atelier") {
@@ -158,7 +174,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         MainActor.assumeIsolated {
             Theme.current.apply()
-            if LayoutSnapshots.outputFolder == nil { SplashController.shared.showAtLaunch() }
         }
         NSApp.activate(ignoringOtherApps: true)
     }

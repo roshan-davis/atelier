@@ -174,12 +174,12 @@ struct GeneralSettings: View {
                         SplashController.installFolder()
                         NSWorkspace.shared.activateFileViewerSelecting([Splash.folder])
                     }
-                    Button("Preview Splash Screen") { SplashController.shared.show() }
+                    Button("Preview Splash Screen") { SplashController.shared.preview() }
                 }
             } header: {
                 Text("Splash Screen")
             } footer: {
-                Text("Each launch shows the next image in the Splash folder, in name order. Add JPEG, PNG or HEIC images, ideally 1600 × 1000 px or larger; landscape images fill the splash, others are shown whole.")
+                Text("Each launch shows the next image in the Splash folder, in name order. Add JPEG, PNG or HEIC images, ideally 1600 × 1000 px or larger; landscape images fill the photo area, others are shown whole.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
