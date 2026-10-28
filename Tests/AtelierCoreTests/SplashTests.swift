@@ -2,7 +2,7 @@ import XCTest
 @testable import AtelierCore
 
 final class SplashTests: XCTestCase {
-    func testLandscapeFillsAndPortraitIsFramed() {
+    func testEveryShapeFills() {
         guard case .fill(let crop) = Splash.layout(imageSize: CGSize(width: 3000, height: 2000)) else {
             return XCTFail("3:2 should fill")
         }
@@ -10,9 +10,14 @@ final class SplashTests: XCTestCase {
         XCTAssertEqual(crop.width, 1, accuracy: 1e-9)
         XCTAssertEqual(crop.height, 1.5 / 1.6, accuracy: 1e-9)
         XCTAssertEqual(crop.midY, 0.5, accuracy: 1e-9)
-        XCTAssertEqual(Splash.layout(imageSize: CGSize(width: 2000, height: 3000)), .framed)
-        XCTAssertEqual(Splash.layout(imageSize: CGSize(width: 2000, height: 2000)), .framed)
-        XCTAssertEqual(Splash.layout(imageSize: CGSize(width: 6000, height: 2000)), .framed)
+        // A portrait keeps its full width and a 16:10 band around the face.
+        guard case .fill(let portrait) = Splash.layout(imageSize: CGSize(width: 2000, height: 3000),
+                                                        focus: CGPoint(x: 0.5, y: 0.3)) else {
+            return XCTFail("portraits fill too")
+        }
+        XCTAssertEqual(portrait.width, 1, accuracy: 1e-9)
+        XCTAssertEqual(portrait.height, (2.0 / 3.0) / 1.6, accuracy: 1e-9)
+        XCTAssertEqual(portrait.midY, 0.3, accuracy: 1e-9)
         XCTAssertEqual(Splash.layout(imageSize: .zero), .framed)
     }
 
