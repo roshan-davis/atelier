@@ -1,5 +1,6 @@
 import AppKit
 import AtelierCore
+import Combine
 import Foundation
 import GRDB
 
@@ -117,6 +118,16 @@ final class LibraryModel: ObservableObject {
     @Published var cullSession: CullModel?
     /// The library window, which receives the single-key commands.
     weak var mainWindow: NSWindow?
+    /// The photo at the top of the grid, kept while the grid is closed and between launches.
+    var gridTopID: Int64?
+    /// Last launch's session, applied when its photos first load.
+    var pendingSession: SavedSession?
+    /// Set until the restored sidebar item has been checked against the catalog.
+    var pendingSessionScope = false
+    /// The filter the current `rows` were loaded with.
+    var loadedRowsFilter: LibraryFilter?
+    var sessionSaveScheduled = false
+    var sessionObserver: AnyCancellable?
 
     private var rowsTask: Task<Void, Never>?
     private var sidebarTask: Task<Void, Never>?
@@ -143,6 +154,7 @@ final class LibraryModel: ObservableObject {
         report("Checking drives and network volumes…", 0.55)
         try? catalog.refreshVolumes()
         report("Loading library…", 0.75)
+        restoreSessionFilter()
         observeRows()
         observeSidebar()
         installKeyMonitor()
@@ -187,12 +199,14 @@ final class LibraryModel: ObservableObject {
                     // its rows belong to the old scope.
                     guard let self, !Task.isCancelled, self.filter == filter else { return }
                     self.rows = rows
+                    self.loadedRowsFilter = filter
                     let visible = Set(rows.map(\.id))
                     self.selection.formIntersection(visible)
                     if let focused = self.focusedID, !visible.contains(focused) {
                         self.focusedID = rows.first?.id
                     }
                     self.reloadDetail()
+                    if !self.pendingSessionScope { self.finishSessionRestore(visible: visible) }
                 }
             } catch {
                 self?.status = "Catalog error: \(error.localizedDescription)"
@@ -216,6 +230,7 @@ final class LibraryModel: ObservableObject {
             do {
                 for try await data in observation.values(in: writer) {
                     self?.sidebar = data
+                    self?.checkRestoredScope(data)
                     if let loaded = self?.onLibraryLoaded {
                         self?.onLibraryLoaded = nil
                         loaded(data)
