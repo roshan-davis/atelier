@@ -427,12 +427,12 @@ private struct EditorRow: View {
 /// Where ComfyUI runs and which models the AI recipes use.
 struct AISettingsTab: View {
     @AppStorage("ai.server") private var server = AISettings.defaultServer.absoluteString
-    @AppStorage("ai.checkpoint") private var checkpoint = ""
+    @AppStorage("ai.editModel") private var editModel = ""
     @AppStorage("ai.upscaleModel") private var upscaleModel = ""
     @AppStorage("ai.generationSize") private var generationSize = 1024
     @State private var status: String?
     @State private var connected = false
-    @State private var checkpoints: [String] = []
+    @State private var editModels: [String] = []
     @State private var upscalers: [String] = []
 
     var body: some View {
@@ -455,23 +455,23 @@ struct AISettingsTab: View {
             } header: {
                 Text("ComfyUI")
             } footer: {
-                Text("Atelier sends photos to a ComfyUI server you run, on this Mac or another one, and never bundles models.")
+                Text("Atelier sends photos to a ComfyUI server you run, on this Mac or another one, and never bundles models. The ComfyUI desktop app listens on http://127.0.0.1:8000; ComfyUI started from Terminal uses port 8188.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             Section {
-                modelPicker("Inpainting checkpoint", selection: $checkpoint, choices: checkpoints)
+                modelPicker("Edit model", selection: $editModel, choices: editModels)
                 Picker("Generation size", selection: $generationSize) {
-                    Text("768 px (SD 1.5)").tag(768)
-                    Text("1024 px (SDXL)").tag(1024)
-                    Text("1536 px").tag(1536)
+                    Text("768 px (faster)").tag(768)
+                    Text("1024 px").tag(1024)
+                    Text("1536 px (slower)").tag(1536)
                 }
                 modelPicker("Upscale model (4×)", selection: $upscaleModel, choices: upscalers)
             } header: {
                 Text("Models")
             } footer: {
-                Text("Remove Object and Replace Background use an inpainting checkpoint; Upscale uses a 4× upscale model. For website and shop images, use only models licensed Apache 2.0 or MIT.")
+                Text("Remove Object and Replace Background use Qwen-Image-Edit-2511 (Apache 2.0) with its 4-step Lightning LoRA; Upscale uses a 4× upscale model. For website and shop images, use only models licensed Apache 2.0 or MIT.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -518,11 +518,11 @@ struct AISettingsTab: View {
             let client = ComfyClient(baseURL: url)
             do {
                 let version = try await client.ping()
-                checkpoints = (try? await client.options(node: "CheckpointLoaderSimple", input: "ckpt_name")) ?? []
+                editModels = (try? await client.options(node: "UnetLoaderGGUF", input: "unet_name")) ?? []
                 upscalers = (try? await client.options(node: "UpscaleModelLoader", input: "model_name")) ?? []
                 connected = true
                 status = "Connected" + (version == "connected" ? "" : " to ComfyUI \(version)")
-                    + " · \(checkpoints.count) checkpoints, \(upscalers.count) upscale models"
+                    + " · \(editModels.count) edit models, \(upscalers.count) upscale models"
             } catch {
                 connected = false
                 status = error.localizedDescription

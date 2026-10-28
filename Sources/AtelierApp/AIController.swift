@@ -37,7 +37,7 @@ final class AIController: ObservableObject {
         let size = defaults.integer(forKey: "ai.generationSize")
         let factor = defaults.integer(forKey: "ai.upscaleFactor")
         return AISettings(server: server,
-                          checkpoint: defaults.string(forKey: "ai.checkpoint")?.nilIfEmpty,
+                          editModel: defaults.string(forKey: "ai.editModel")?.nilIfEmpty,
                           upscaleModel: defaults.string(forKey: "ai.upscaleModel")?.nilIfEmpty,
                           generationSize: size > 0 ? size : 1024,
                           upscaleFactor: factor > 0 ? factor : 2)
