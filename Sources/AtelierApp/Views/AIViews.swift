@@ -185,10 +185,10 @@ struct AIPanel: View {
             }
             if ai.recipe.usesPrompt {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(ai.recipe == .replaceBackground ? "New background" : "Fill with")
+                    Text(ai.recipe == .replaceBackground ? "New background" : "What it is (optional)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    TextField(ai.recipe == .replaceBackground ? "e.g. a sunlit studio wall, soft shadows" : "Describe what fills the area",
+                    TextField(ai.recipe == .replaceBackground ? "e.g. a sunlit studio wall, soft shadows" : "e.g. a pine tree",
                               text: $ai.prompt, axis: .vertical)
                         .lineLimit(2...4)
                         .textFieldStyle(.roundedBorder)

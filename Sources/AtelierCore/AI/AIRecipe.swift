@@ -26,7 +26,7 @@ public enum AIRecipe: String, CaseIterable, Codable, Sendable {
 
     public var summary: String {
         switch self {
-        case .removeObject: return "Paint over what should go, and say what it is. Only the painted area changes."
+        case .removeObject: return "Paint over what should go. Only the painted area changes."
         case .replaceBackground: return "Atelier finds the subject and keeps it; the rest is generated from your prompt."
         case .upscale: return "Enlarges the photo with an upscaling model."
         }
@@ -38,7 +38,7 @@ public enum AIRecipe: String, CaseIterable, Codable, Sendable {
 
     public var defaultPrompt: String {
         switch self {
-        case .removeObject: return "Remove the object and fill the area with the surrounding background so it looks natural"
+        case .removeObject: return ""
         case .replaceBackground: return ""
         case .upscale: return ""
         }
@@ -49,9 +49,10 @@ public enum AIRecipe: String, CaseIterable, Codable, Sendable {
         let prompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         switch self {
         case .removeObject:
-            if prompt.isEmpty { return defaultPrompt }
-            if prompt.lowercased().hasPrefix("remove") { return prompt }
-            return "Remove the \(prompt) and fill the area with the surrounding background so it looks natural"
+            // The model sees the photo with the painted area filled red, so it has nothing to copy back.
+            let fill = "fill it with the surrounding background so the scene looks natural and seamless. Keep everything else unchanged."
+            return prompt.isEmpty ? "Remove the red area and \(fill)"
+                : "Remove the red area, which covered \(prompt), and \(fill)"
         case .replaceBackground: return "Replace the background with \(prompt). Keep the subject exactly as it is."
         case .upscale: return ""
         }
@@ -97,10 +98,54 @@ public enum AIRecipe: String, CaseIterable, Codable, Sendable {
 
     var builtInWorkflow: String {
         switch self {
-        case .removeObject, .replaceBackground: return Self.inpaintWorkflow
+        case .removeObject: return Self.removeWorkflow
+        case .replaceBackground: return Self.inpaintWorkflow
         case .upscale: return Self.upscaleWorkflow
         }
     }
+
+    /// Remove Object: as the edit workflow, but the model's reference shows the painted area
+    /// filled red. With the photo as is, Qwen redraws the object it was asked to remove.
+    static let removeWorkflow = """
+        {
+          "1": {"class_type": "UnetLoaderGGUF", "_meta": {"title": "Atelier Edit Model"},
+                "inputs": {"unet_name": "qwen-image-edit-2511-Q6_K.gguf"}},
+          "2": {"class_type": "CLIPLoader", "_meta": {"title": "Atelier Text Encoder"},
+                "inputs": {"clip_name": "qwen_2.5_vl_7b.safetensors", "type": "qwen_image", "device": "default"}},
+          "3": {"class_type": "VAELoader", "inputs": {"vae_name": "qwen_image_vae.safetensors"}},
+          "4": {"class_type": "LoraLoaderModelOnly", "_meta": {"title": "Atelier Speed LoRA"},
+                "inputs": {"model": ["1", 0], "lora_name": "Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
+                           "strength_model": 1.0}},
+          "5": {"class_type": "ModelSamplingAuraFlow", "inputs": {"model": ["4", 0], "shift": 3.1}},
+          "6": {"class_type": "CFGNorm", "inputs": {"model": ["5", 0], "strength": 1.0}},
+          "7": {"class_type": "LoadImage", "_meta": {"title": "Atelier Image"}, "inputs": {"image": "input.png"}},
+          "8": {"class_type": "LoadImageMask", "_meta": {"title": "Atelier Mask"},
+                "inputs": {"image": "mask.png", "channel": "red"}},
+          "9": {"class_type": "TextEncodeQwenImageEditPlus", "_meta": {"title": "Atelier Prompt"},
+                "inputs": {"prompt": "", "clip": ["2", 0], "vae": ["3", 0], "image1": ["20", 0]}},
+          "10": {"class_type": "TextEncodeQwenImageEditPlus", "_meta": {"title": "Atelier Negative Prompt"},
+                 "inputs": {"prompt": "", "clip": ["2", 0], "vae": ["3", 0], "image1": ["20", 0]}},
+          "11": {"class_type": "FluxKontextMultiReferenceLatentMethod",
+                 "inputs": {"conditioning": ["9", 0], "reference_latents_method": "index_timestep_zero"}},
+          "12": {"class_type": "FluxKontextMultiReferenceLatentMethod",
+                 "inputs": {"conditioning": ["10", 0], "reference_latents_method": "index_timestep_zero"}},
+          "13": {"class_type": "VAEEncode", "inputs": {"pixels": ["7", 0], "vae": ["3", 0]}},
+          "14": {"class_type": "SetLatentNoiseMask", "inputs": {"samples": ["13", 0], "mask": ["8", 0]}},
+          "15": {"class_type": "KSampler", "_meta": {"title": "Atelier Sampler"},
+                 "inputs": {"seed": 0, "steps": 4, "cfg": 1.0, "sampler_name": "euler", "scheduler": "simple",
+                            "denoise": 1.0, "model": ["6", 0], "positive": ["11", 0], "negative": ["12", 0],
+                            "latent_image": ["14", 0]}},
+          "16": {"class_type": "VAEDecode", "inputs": {"samples": ["15", 0], "vae": ["3", 0]}},
+          "17": {"class_type": "SaveImage", "_meta": {"title": "Atelier Output"},
+                 "inputs": {"images": ["16", 0], "filename_prefix": "Atelier"}},
+          "18": {"class_type": "GetImageSize", "inputs": {"image": ["7", 0]}},
+          "19": {"class_type": "EmptyImage",
+                 "inputs": {"width": ["18", 0], "height": ["18", 1], "batch_size": 1, "color": 16711680}},
+          "20": {"class_type": "ImageCompositeMasked",
+                 "inputs": {"destination": ["7", 0], "source": ["19", 0], "x": 0, "y": 0, "resize_source": false,
+                            "mask": ["8", 0]}}
+        }
+        """
 
     /// Qwen-Image-Edit-2511 (GGUF, via ComfyUI-GGUF) with the 4-step Lightning LoRA. The photo is
     /// the edit reference; the mask limits which part of the latent is regenerated.
