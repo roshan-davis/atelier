@@ -123,6 +123,11 @@ extension LibraryModel {
         menu.addItem(.separator())
         menu.addItem(ClosureMenuItem("Write XMP Metadata") { self.writeXMP(selectionOnly: true) })
         menu.addItem(ClosureMenuItem("Export\(count)…") { self.beginExport() })
+
+        menu.addItem(.separator())
+        menu.addItem(ClosureMenuItem(ids.count > 1 ? "Remove \(ids.count) Photos…" : "Remove Photo…") {
+            self.beginRemovePhotos()
+        })
         return menu
     }
 

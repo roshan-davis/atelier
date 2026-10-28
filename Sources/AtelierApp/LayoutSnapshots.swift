@@ -367,10 +367,46 @@ enum LayoutSnapshots {
             print("SNAPSHOT: pair entry count \(entry.photoCount), rows \(model.rows.map { "\($0.filename) paired=\($0.pairedFormats ?? "-")" })")
             await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1000, height: 584),
                           to: folder.appendingPathComponent("raw-pair-grid.png"))
+            await snapshotRemovePhotos(model: model, into: folder)
             model.sidebarSelection = .all
         } else {
             print("SNAPSHOT: pair import entry missing")
         }
+    }
+
+    /// The Remove Photo dialog for the RAW+JPEG pair (a checkbox per kind of file) and for both
+    /// photos, then Delete from Disk on the lone JPEG.
+    private static func snapshotRemovePhotos(model: LibraryModel, into folder: URL) async {
+        guard let raw = model.rows.first(where: { $0.filename == "DSC_0101.NEF" })?.id,
+              let single = model.rows.first(where: { $0.filename == "DSC_0102.JPG" })?.id else {
+            print("SNAPSHOT: remove photos skipped, rows \(model.rows.map(\.filename))")
+            return
+        }
+        model.mode = .grid
+        model.selection = [raw]
+        model.focusedID = raw
+        model.beginRemovePhotos()
+        if let removal = model.removal {
+            print("SNAPSHOT: remove plan \(removal.plan.files.map(\.filename)) types \(removal.plan.fileTypes.map(\.label))")
+            await capture(AnyView(RemovePhotosSheet(removal: removal).environmentObject(model)), size: CGSize(width: 480, height: 250),
+                          to: folder.appendingPathComponent("remove-photo-pair.png"))
+        }
+        model.selection = [raw, single]
+        model.beginRemovePhotos()
+        if let removal = model.removal {
+            await capture(AnyView(RemovePhotosSheet(removal: removal).environmentObject(model)), size: CGSize(width: 480, height: 270),
+                          to: folder.appendingPathComponent("remove-photos-two.png"))
+        }
+        model.removal = nil
+        let url = try? model.catalog.fileURL(for: single)
+        model.selection = [single]
+        model.focusedID = single
+        model.beginRemovePhotos()
+        if let removal = model.removal {
+            model.removePhotos(removal, types: Set(removal.plan.fileTypes), fromDisk: true)
+        }
+        try? await Task.sleep(for: .seconds(1))
+        print("SNAPSHOT: after Delete from Disk, status \(model.status ?? "-"), file still there \(url.map { FileManager.default.fileExists(atPath: $0.path) } ?? false), rows \(model.rows.map(\.filename)), focused \(model.focusedID.map(String.init) ?? "-")")
     }
 
     private static func writeScene(_ scene: Int, shift: Int, soft: Bool, second: Int, to url: URL) {

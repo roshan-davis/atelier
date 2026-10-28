@@ -661,7 +661,8 @@ struct ShortcutsSheet: View {
 
     private let menuShortcuts: [(String, [(String, String)])] = [
         ("Library", [("⇧⌘I", "Import photos"), ("⇧⌘E", "Export"), ("⌘S", "Write XMP for selection"),
-                     ("⌥⌘S", "Write all unsaved XMP"), ("⌘R", "Refresh volumes")]),
+                     ("⌥⌘S", "Write all unsaved XMP"), ("⌘R", "Refresh volumes"),
+                     ("Delete", "Remove photo (or delete from disk)")]),
         ("Views", [("⌘G", "Grid"), ("⌘E", "Loupe"), ("⌘D", "Develop"), ("← →", "Previous or next photo"),
                    ("Return", "Open or close loupe"), ("Esc", "Back to grid")]),
         ("Zoom", [("⌘=", "Zoom in"), ("⌘-", "Zoom out"), ("⌘0", "Zoom to fit"), ("⌥⌘1", "Zoom to 100%"),

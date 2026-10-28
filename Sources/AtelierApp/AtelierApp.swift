@@ -92,6 +92,9 @@ struct AtelierApp: App {
                     .disabled(model.focusedID == nil)
                 Button("Remove Virtual Copy…") { model.removeVirtualCopies() }
                     .disabled(!model.targetsIncludeVirtualCopy)
+                // Delete itself is handled by the key monitor, so text fields keep their Delete key.
+                Button("Remove Photo… (Delete)") { model.beginRemovePhotos() }
+                    .disabled(model.targetIDs.isEmpty)
                 Divider()
                 Button("Show Cull Group") { model.showCullGroup() }
                     .keyboardShortcut("g", modifiers: [.command, .shift])
