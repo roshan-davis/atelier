@@ -122,13 +122,13 @@ public enum AIRecipe: String, CaseIterable, Codable, Sendable {
           "8": {"class_type": "LoadImageMask", "_meta": {"title": "Atelier Mask"},
                 "inputs": {"image": "mask.png", "channel": "red"}},
           "9": {"class_type": "TextEncodeQwenImageEditPlus", "_meta": {"title": "Atelier Prompt"},
-                "inputs": {"prompt": "", "clip": ["2", 0], "vae": ["3", 0], "image1": ["20", 0]}},
+                "inputs": {"prompt": "", "clip": ["2", 0], "image1": ["20", 0]}},
           "10": {"class_type": "TextEncodeQwenImageEditPlus", "_meta": {"title": "Atelier Negative Prompt"},
-                 "inputs": {"prompt": "", "clip": ["2", 0], "vae": ["3", 0], "image1": ["20", 0]}},
+                 "inputs": {"prompt": "", "clip": ["2", 0], "image1": ["20", 0]}},
           "11": {"class_type": "FluxKontextMultiReferenceLatentMethod",
-                 "inputs": {"conditioning": ["9", 0], "reference_latents_method": "index_timestep_zero"}},
+                 "inputs": {"conditioning": ["22", 0], "reference_latents_method": "index_timestep_zero"}},
           "12": {"class_type": "FluxKontextMultiReferenceLatentMethod",
-                 "inputs": {"conditioning": ["10", 0], "reference_latents_method": "index_timestep_zero"}},
+                 "inputs": {"conditioning": ["23", 0], "reference_latents_method": "index_timestep_zero"}},
           "13": {"class_type": "VAEEncode", "inputs": {"pixels": ["7", 0], "vae": ["3", 0]}},
           "14": {"class_type": "SetLatentNoiseMask", "inputs": {"samples": ["13", 0], "mask": ["8", 0]}},
           "15": {"class_type": "KSampler", "_meta": {"title": "Atelier Sampler"},
@@ -143,12 +143,17 @@ public enum AIRecipe: String, CaseIterable, Codable, Sendable {
                  "inputs": {"width": ["18", 0], "height": ["18", 1], "batch_size": 1, "color": 16711680}},
           "20": {"class_type": "ImageCompositeMasked",
                  "inputs": {"destination": ["7", 0], "source": ["19", 0], "x": 0, "y": 0, "resize_source": false,
-                            "mask": ["8", 0]}}
+                            "mask": ["8", 0]}},
+          "21": {"class_type": "VAEEncode", "inputs": {"pixels": ["20", 0], "vae": ["3", 0]}},
+          "22": {"class_type": "ReferenceLatent", "inputs": {"conditioning": ["9", 0], "latent": ["21", 0]}},
+          "23": {"class_type": "ReferenceLatent", "inputs": {"conditioning": ["10", 0], "latent": ["21", 0]}}
         }
         """
 
     /// Qwen-Image-Edit-2511 (GGUF, via ComfyUI-GGUF) with the 4-step Lightning LoRA. The photo is
-    /// the edit reference; the mask limits which part of the latent is regenerated.
+    /// the edit reference; the mask limits which part of the latent is regenerated. The reference
+    /// latent comes from ReferenceLatent at the generation size: Qwen's encoder would rescale it
+    /// to about 1 megapixel, which doubles the work at 768 px.
     static let inpaintWorkflow = """
         {
           "1": {"class_type": "UnetLoaderGGUF", "_meta": {"title": "Atelier Edit Model"},
@@ -165,13 +170,13 @@ public enum AIRecipe: String, CaseIterable, Codable, Sendable {
           "8": {"class_type": "LoadImageMask", "_meta": {"title": "Atelier Mask"},
                 "inputs": {"image": "mask.png", "channel": "red"}},
           "9": {"class_type": "TextEncodeQwenImageEditPlus", "_meta": {"title": "Atelier Prompt"},
-                "inputs": {"prompt": "", "clip": ["2", 0], "vae": ["3", 0], "image1": ["7", 0]}},
+                "inputs": {"prompt": "", "clip": ["2", 0], "image1": ["7", 0]}},
           "10": {"class_type": "TextEncodeQwenImageEditPlus", "_meta": {"title": "Atelier Negative Prompt"},
-                 "inputs": {"prompt": "", "clip": ["2", 0], "vae": ["3", 0], "image1": ["7", 0]}},
+                 "inputs": {"prompt": "", "clip": ["2", 0], "image1": ["7", 0]}},
           "11": {"class_type": "FluxKontextMultiReferenceLatentMethod",
-                 "inputs": {"conditioning": ["9", 0], "reference_latents_method": "index_timestep_zero"}},
+                 "inputs": {"conditioning": ["22", 0], "reference_latents_method": "index_timestep_zero"}},
           "12": {"class_type": "FluxKontextMultiReferenceLatentMethod",
-                 "inputs": {"conditioning": ["10", 0], "reference_latents_method": "index_timestep_zero"}},
+                 "inputs": {"conditioning": ["23", 0], "reference_latents_method": "index_timestep_zero"}},
           "13": {"class_type": "VAEEncode", "inputs": {"pixels": ["7", 0], "vae": ["3", 0]}},
           "14": {"class_type": "SetLatentNoiseMask", "inputs": {"samples": ["13", 0], "mask": ["8", 0]}},
           "15": {"class_type": "KSampler", "_meta": {"title": "Atelier Sampler"},
@@ -180,7 +185,9 @@ public enum AIRecipe: String, CaseIterable, Codable, Sendable {
                             "latent_image": ["14", 0]}},
           "16": {"class_type": "VAEDecode", "inputs": {"samples": ["15", 0], "vae": ["3", 0]}},
           "17": {"class_type": "SaveImage", "_meta": {"title": "Atelier Output"},
-                 "inputs": {"images": ["16", 0], "filename_prefix": "Atelier"}}
+                 "inputs": {"images": ["16", 0], "filename_prefix": "Atelier"}},
+          "22": {"class_type": "ReferenceLatent", "inputs": {"conditioning": ["9", 0], "latent": ["13", 0]}},
+          "23": {"class_type": "ReferenceLatent", "inputs": {"conditioning": ["10", 0], "latent": ["13", 0]}}
         }
         """
 
