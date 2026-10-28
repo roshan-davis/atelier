@@ -54,7 +54,7 @@ Every feature follows these rules. A feature is not done until it meets them.
 6. **Nothing destructive without a clear confirmation.** Deleting a list explains what is kept ("the photos stay in your catalog and on disk"). Originals are never modified.
 7. **Errors name the file and the reason**, and the rest of the batch continues. Problems are listed on request instead of interrupting with alerts.
 8. **Keyboard first for repeated work.** Culling, rating, flagging, labels and view switching all have single-key shortcuts; every command is in a menu.
-9. **Sensible defaults, remembered choices.** Names default to the folder or event, and the last import mode and library folder are remembered.
+9. **Sensible defaults, remembered choices.** Names default to the folder or event, the last import mode and library folder are remembered, and Atelier reopens on the view, photo and filter you left (see Restore last session).
 10. **Plain language.** Labels describe what happens to the user's photos ("Leave files where they are", "Copy into my library folder"), not internal terms.
 
 ### Import flow
@@ -233,6 +233,16 @@ Rosh asked for Lightroom-style presets: save your own edits as a preset into a g
 - **Black & White mix (needed for good B&W presets):** today B&W is Saturation −100, and HSL runs after Saturation (pipeline step 4), so a B&W photo can't brighten skies or darken skin like a colored filter. The Black & White pack therefore adds Lightroom's Black & White treatment: a Treatment switch (Color / Black & White) at the top of Basic (V toggles it); in Black & White, the HSL / Color panel shows the B&W Mix in place of HSL: eight sliders (Red to Magenta, −100 to 100) that set how bright each color becomes in gray. Converting happens in step 4, in place of HSL, so Color Grading can still tone the result (Selenium, Sepia); Vibrance and Saturation have no effect in Black & White, as in Lightroom. It is part of the develop settings and a new preset part, "Treatment & B&W Mix". The existing "Black & White" Atelier preset keeps working as before.
 - **Storage:** your presets stay in one file, `~/Library/Application Support/Atelier/Presets.json`, shared by every catalog. Each preset keeps its name, group, included parts and settings. Exposure became its own part (it used to be inside Tone); presets saved before that keep Exposure. Built-in presets live in the app and keep fixed IDs so photos and import settings that use them never break. Which groups are open and which packs are hidden are app preferences.
 - **Later:** importing Lightroom .xmp/.lrtemplate develop presets and exporting a group to share; Favorites; preset thumbnails generated from the open photo; Adaptive (AI mask) presets.
+
+### Restore last session (decided Oct 28, 2026)
+
+Rosh asked for Atelier to reopen where they left off instead of always on the grid with nothing selected, as Lightroom Classic does.
+
+- **What comes back at launch:** the view (Grid, Loupe or Develop), the sidebar item (All Photographs, an import, a collection, a folder or a volume), the filter bar (rating, flag, color label, search text), the selected photos and the focused one, the zoom, and the grid's scroll position. In Develop the same photo opens with its edits, ready to keep working.
+- **Saved as you work,** about a second after a change and again on quit, so stopping the app from Xcode or a crash loses at most the last second. It is an app preference (`session.last`), not part of the catalog.
+- **When something is gone:** a deleted import, collection, folder or volume falls back to All Photographs. A photo removed from the catalog or hidden by the restored filter is left out of the selection. If the photo Loupe or Develop had open is missing, or its drive (for example megham) is offline, Atelier opens the grid with that import and the photo still selected, and the status bar says why ("NZ6_9144.NEF is missing or its drive is offline, so the grid is shown").
+- **Grid scroll position** is also kept while switching views in one session: going from Loupe or Develop back to Grid returns to the same place, scrolling only if the focused photo is off screen.
+- **Not restored:** open dialogs (Import, Export, Cull, Match Look), which start fresh. Atelier reopens on the import being culled; an unfinished Cull's picks are not kept, so Library > Cull Import… starts it again (keeping an unfinished Cull is a possible later addition). More than 1,000 selected photos restores only the focused one.
 
 ## Scope by release
 

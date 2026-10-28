@@ -36,6 +36,11 @@ struct GridView: NSViewRepresentable {
         let scrollView = NSScrollView()
         scrollView.documentView = collectionView
         scrollView.hasVerticalScroller = true
+        // Come back to the same place: after switching views, and after a relaunch.
+        context.coordinator.pendingTopID = model.gridTopID
+        scrollView.contentView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(context.coordinator, selector: #selector(Coordinator.didScroll),
+                                               name: NSView.boundsDidChangeNotification, object: scrollView.contentView)
         context.coordinator.update(rows: model.rows, selection: model.selection, revision: model.previewRevision)
         Task { @MainActor in collectionView.window?.makeFirstResponder(collectionView) }
         return scrollView
@@ -56,6 +61,8 @@ struct GridView: NSViewRepresentable {
         private var indexByID: [Int64: Int] = [:]
         private var revision = -1
         private var applyingSelection = false
+        /// The photo to scroll to the top once it is in the grid.
+        var pendingTopID: Int64?
 
         init(model: LibraryModel) {
             self.model = model
@@ -76,6 +83,11 @@ struct GridView: NSViewRepresentable {
                 }
             }
             revision = newRevision
+            if let id = pendingTopID, let index = indexByID[id] {
+                collectionView.layoutSubtreeIfNeeded()
+                collectionView.scrollToItems(at: [IndexPath(item: index, section: 0)], scrollPosition: .top)
+                pendingTopID = nil
+            }
 
             let wanted = Set(selection.compactMap { indexByID[$0] }.map { IndexPath(item: $0, section: 0) })
             if wanted != collectionView.selectionIndexPaths {
@@ -87,6 +99,15 @@ struct GridView: NSViewRepresentable {
                                                  scrollPosition: .nearestHorizontalEdge)
                 }
             }
+        }
+
+        @objc func didScroll() {
+            guard pendingTopID == nil, let collectionView,
+                  let top = collectionView.indexPathsForVisibleItems().min(), rows.indices.contains(top.item)
+            else { return }
+            let id = rows[top.item].id
+            // Defer: scrolling can happen during a SwiftUI view update.
+            Task { @MainActor [model] in model.gridScrolled(toTop: id) }
         }
 
         func collectionView(_ collectionView: NSCollectionView, numberOfItemsInSection section: Int) -> Int {

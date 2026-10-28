@@ -1,7 +1,7 @@
 import Foundation
 import GRDB
 
-public enum LibraryScope: Hashable, Sendable {
+public enum LibraryScope: Hashable, Codable, Sendable {
     case all
     case volume(Int64)
     case folder(Int64)
