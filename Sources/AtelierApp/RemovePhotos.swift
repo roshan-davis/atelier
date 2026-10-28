@@ -67,7 +67,7 @@ extension LibraryModel {
             ThumbnailLoader.shared.invalidate(id)
         }
         guard removed.contains(where: { selection.contains($0) || $0 == focusedID }) else { return }
-        selection = next.map { [$0] } ?? []
+        selection = next.map { Set([$0]) } ?? []
         focusedID = next
         if next == nil { mode = .grid }
     }
@@ -91,7 +91,7 @@ extension LibraryModel {
 
     /// Most network shares have no Trash. As in Finder, ask before deleting those files for good.
     private func offerImmediateDeletion(_ failures: [(file: RemovalPlan.File, reason: String)]) {
-        let files = failures.map(\.file)
+        let files = failures.map { $0.file }
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = files.count == 1
