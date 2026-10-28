@@ -22,6 +22,21 @@ struct ImportSheet: View {
     @State private var keywords = ""
     /// The develop preset applied to new photos, remembered between imports.
     @AppStorage("import.developPreset") private var presetID = ""
+
+    /// The presets by group, as in the Presets panel, keeping a hidden pack's preset if it is the
+    /// one already chosen.
+    private var presetGroups: [(String, [DevelopPreset])] {
+        var result: [(String, [DevelopPreset])] = []
+        for preset in model.develop.presets
+        where model.develop.visiblePresets.contains(preset) || preset.id.uuidString == presetID {
+            if let index = result.firstIndex(where: { $0.0 == preset.group }) {
+                result[index].1.append(preset)
+            } else {
+                result.append((preset.group, [preset]))
+            }
+        }
+        return result
+    }
     @AppStorage("import.cull") private var cullFirst = false
     @State private var dropTargeted = false
 
@@ -115,9 +130,12 @@ struct ImportSheet: View {
                 Section("Apply During Import") {
                     Picker("Develop Settings", selection: $presetID) {
                         Text("None").tag("")
-                        ForEach(model.develop.presets) { preset in
-                            Text(preset.group == "Atelier" ? preset.name : "\(preset.group) › \(preset.name)")
-                                .tag(preset.id.uuidString)
+                        ForEach(presetGroups, id: \.0) { group in
+                            Section(group.0) {
+                                ForEach(group.1) { preset in
+                                    Text(preset.name).tag(preset.id.uuidString)
+                                }
+                            }
                         }
                     }
                     TextField("Keywords", text: $keywords, prompt: Text("Added to every photo, comma separated"))

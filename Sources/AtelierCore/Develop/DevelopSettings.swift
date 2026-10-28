@@ -39,6 +39,8 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
     public var upright: Upright?
     /// Transform > Constrain Crop: enlarge the corrected photo so no empty edges show.
     public var constrainCrop = false
+    /// Basic > Treatment: Black & White turns the photo gray through the B&W Mix sliders.
+    public var monochrome = false
 
     public init() {}
 
@@ -188,6 +190,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         lensProfileCorrections = try c.decodeIfPresent(Bool.self, forKey: Key("lensProfileCorrections")) ?? true
         upright = try? c.decodeIfPresent(Upright.self, forKey: Key("upright"))
         constrainCrop = try c.decodeIfPresent(Bool.self, forKey: Key("constrainCrop")) ?? false
+        monochrome = try c.decodeIfPresent(Bool.self, forKey: Key("monochrome")) ?? false
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -204,13 +207,14 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         if !lensProfileCorrections { try c.encode(false, forKey: Key("lensProfileCorrections")) }
         try c.encodeIfPresent(upright, forKey: Key("upright"))
         if constrainCrop { try c.encode(true, forKey: Key("constrainCrop")) }
+        if monochrome { try c.encode(true, forKey: Key("monochrome")) }
     }
 
     public static let neutral = DevelopSettings()
 
     public var isNeutral: Bool {
         temperature == nil && values.isEmpty && pointCurves.isEmpty && storedCrop == nil && masks.isEmpty
-            && profile == .cameraMatching && lensProfileCorrections && upright == nil && !constrainCrop
+            && profile == .cameraMatching && lensProfileCorrections && upright == nil && !constrainCrop && !monochrome
     }
 
     public func encoded() throws -> String {
@@ -333,6 +337,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         case lumBlue
         case lumPurple
         case lumMagenta
+        case grayRed, grayOrange, grayYellow, grayGreen, grayAqua, grayBlue, grayPurple, grayMagenta
         case gradeShadowsHue, gradeShadowsSat, gradeShadowsLum
         case gradeMidtonesHue, gradeMidtonesSat, gradeMidtonesLum
         case gradeHighlightsHue, gradeHighlightsSat, gradeHighlightsLum
@@ -346,6 +351,16 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
 
         public static func hsl(_ channel: HSLChannel, _ band: ColorBand) -> Parameter {
             Parameter(rawValue: channel.prefix + band.rawValue)!
+        }
+
+        /// The B&W Mix slider for a color band.
+        public static func gray(_ band: ColorBand) -> Parameter {
+            Parameter(rawValue: "gray" + band.rawValue)!
+        }
+
+        /// The band of a B&W Mix parameter.
+        public var grayBand: ColorBand? {
+            rawValue.hasPrefix("gray") ? ColorBand(rawValue: String(rawValue.dropFirst(4))) : nil
         }
 
         /// The band and channel of an HSL parameter.
@@ -385,7 +400,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         }
 
         public var label: String {
-            if let band = hslBand?.1 { return band.rawValue }
+            if let band = hslBand?.1 ?? grayBand { return band.rawValue }
             switch self {
             case .temperature: return "Temp"
             case .sharpening, .vignette, .grain, .lensDistortion, .lensVignette: return "Amount"
@@ -419,7 +434,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         }
 
         public var panel: Panel {
-            if hslBand != nil { return .hsl }
+            if hslBand != nil || grayBand != nil { return .hsl }
             if rawValue.hasPrefix("grade") { return .colorGrading }
             if rawValue.hasPrefix("curve") { return .toneCurve }
             if rawValue.hasPrefix("lens") { return .lensCorrections }
@@ -434,6 +449,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         /// Sub-heading inside the panel.
         public var group: String {
             if let channel = hslBand?.0 { return channel.rawValue }
+            if grayBand != nil { return "B&W Mix" }
             switch self {
             case .temperature, .tint: return "White Balance"
             case .exposure, .contrast, .highlights, .shadows, .whites, .blacks: return "Tone"

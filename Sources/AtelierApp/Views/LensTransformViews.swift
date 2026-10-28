@@ -26,6 +26,28 @@ struct ProfileRow: View {
     }
 }
 
+/// Basic > Treatment: Color or Black & White, as at the top of Lightroom's Basic panel.
+struct TreatmentRow: View {
+    @ObservedObject var develop: DevelopController
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text("Treatment")
+                .frame(width: 78, alignment: .leading)
+            Picker("Treatment", selection: Binding(get: { develop.settings.monochrome },
+                                                   set: { develop.setMonochrome($0) })) {
+                Text("Color").tag(false)
+                Text("Black & White").tag(true)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .controlSize(.small)
+        }
+        .font(.callout)
+        .help("Black & White uses the B&W Mix in HSL / Color to set how bright each color becomes (V)")
+    }
+}
+
 /// A panel's sliders under their group headings.
 struct ParameterGroups: View {
     let panel: DevelopSettings.Panel

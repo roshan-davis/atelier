@@ -174,7 +174,7 @@ final class DevelopController: ObservableObject {
 
     /// The sharpest image that matches the current settings.
     var displayImage: NSImage? {
-        if isCropping || (isMasking && showMaskOverlay) { return image }
+        if isCropping || (isMasking && showMaskOverlay) || previewingPreset != nil { return image }
         if !showingBefore, let fullImage, fullImageSettings == settings { return fullImage }
         return image
     }
@@ -188,6 +188,37 @@ final class DevelopController: ObservableObject {
     /// Built-in and user presets, shared across catalogs.
     @Published private(set) var presets: [DevelopPreset] = []
     private let presetStore = PresetStore(fileURL: PresetStore.defaultURL)
+    /// Built-in packs hidden with Hide Group or Develop > Manage Presets….
+    @Published var hiddenPresetGroups = Set(UserDefaults.standard.stringArray(forKey: "presets.hiddenGroups") ?? []) {
+        didSet { UserDefaults.standard.set(hiddenPresetGroups.sorted(), forKey: "presets.hiddenGroups") }
+    }
+    /// The presets to list: all but the hidden packs.
+    var visiblePresets: [DevelopPreset] {
+        presets.filter { !$0.isBuiltIn || !hiddenPresetGroups.contains($0.group) }
+    }
+    /// The user's groups, User Presets first, for the group pickers.
+    var userPresetGroups: [String] {
+        var groups = [DevelopPreset.defaultGroup]
+        for preset in presets where !preset.isBuiltIn && !groups.contains(preset.group) { groups.append(preset.group) }
+        return groups
+    }
+    /// The preset last clicked on the open photo, for the Amount slider; cleared by any other edit.
+    @Published private(set) var presetAmount: PresetAmount?
+    private var settingPresetAmount = false
+    /// The preset under the pointer, shown on the photo until the pointer leaves it.
+    @Published private(set) var previewingPreset: DevelopPreset?
+    /// Develop > New Preset… and Manage Presets… open these sheets in the Presets panel.
+    @Published var showingNewPreset = false
+    @Published var showingManagePresets = false
+
+    struct PresetAmount: Equatable {
+        let preset: DevelopPreset
+        let assetID: Int64
+        /// The photo's settings before the preset.
+        let base: DevelopSettings
+        /// Percent, 0 to 200.
+        var amount: Double
+    }
 
     /// Copy/paste settings clipboard, shared across photos.
     @Published private(set) var clipboard: DevelopSettings?
@@ -239,6 +270,8 @@ final class DevelopController: ObservableObject {
         selectedComponentID = nil
         maskTool = nil
         maskMessage = nil
+        presetAmount = nil
+        previewingPreset = nil
         guard let assetID else { return }
 
         settings = (try? catalog.developSettings(for: assetID)) ?? .neutral
@@ -325,6 +358,7 @@ final class DevelopController: ObservableObject {
         switch panel {
         case .basic:
             settings.profile = .cameraMatching
+            settings.monochrome = false
         case .toneCurve:
             for channel in DevelopSettings.CurveChannel.allCases { settings.setPoints([], for: channel) }
         case .lensCorrections:
@@ -349,7 +383,7 @@ final class DevelopController: ObservableObject {
 
     func isModified(_ panel: DevelopSettings.Panel) -> Bool {
         switch panel {
-        case .basic where settings.profile != .cameraMatching: return true
+        case .basic where settings.profile != .cameraMatching || settings.monochrome: return true
         case .toneCurve where settings.hasPointCurve: return true
         case .lensCorrections where !settings.lensProfileCorrections: return true
         case .transform where settings.upright != nil || settings.constrainCrop: return true
@@ -379,6 +413,13 @@ final class DevelopController: ObservableObject {
     }
 
     // MARK: Profile, Lens Corrections and Transform
+
+    /// Basic > Treatment: Color or Black & White (V).
+    func setMonochrome(_ on: Bool) {
+        guard assetID != nil, on != settings.monochrome else { return }
+        settings.monochrome = on
+        changed(step: on ? "Treatment: Black & White" : "Treatment: Color")
+    }
 
     func setProfile(_ profile: DevelopSettings.Profile) {
         guard assetID != nil, profile != settings.profile else { return }
@@ -524,6 +565,7 @@ final class DevelopController: ObservableObject {
     /// An edit to the open photo. `step` names it in the history; nil (undo, redo, jumping
     /// in the history) saves without adding a step.
     private func changed(step: String?) {
+        if !settingPresetAmount { presetAmount = nil }
         dirty = true
         if let step { pendingStep = step }
         scheduleRender()
@@ -533,8 +575,9 @@ final class DevelopController: ObservableObject {
     // MARK: Presets
 
     /// Applies a preset to the open photo, or to each photo in `assetIDs` on top of its own
-    /// settings.
+    /// settings. On the open photo alone, the Amount slider then scales it.
     func applyPreset(_ preset: DevelopPreset, onto assetIDs: [Int64]? = nil) {
+        previewingPreset = nil
         let step = "Preset: \(preset.name)"
         let targets = assetIDs ?? assetID.map { [$0] } ?? []
         for id in targets where id != assetID {
@@ -544,40 +587,119 @@ final class DevelopController: ObservableObject {
             refreshPreviews(for: id, settings: newSettings)
         }
         if let assetID, targets.contains(assetID) {
+            let base = settings
             settings = preset.applied(to: settings)
             validateMaskSelection()
             beforeImage = nil
             changed(step: step)
+            if targets.count == 1 { presetAmount = PresetAmount(preset: preset, assetID: assetID, base: base, amount: 100) }
         }
     }
 
-    /// Saves the open photo's settings as a new preset with the chosen parts.
-    func createPreset(name: String, group: String, parts: Set<DevelopPreset.Part>) {
-        let preset = DevelopPreset(name: name, group: group, parts: parts, settings: settings)
-        do {
-            try presetStore.save(preset)
-        } catch {
-            errorMessage = "Could not save the preset: \(error.localizedDescription)"
+    /// The Amount slider: the last clicked preset at `amount` percent, in the same history step.
+    func setPresetAmount(_ amount: Double) {
+        guard var state = presetAmount, state.assetID == assetID else { return }
+        state.amount = min(200, max(0, amount.rounded()))
+        guard state.amount != presetAmount?.amount else { return }
+        settings = state.preset.applied(to: state.base, amount: state.amount / 100)
+        validateMaskSelection()
+        let step = "Preset: \(state.preset.name)"
+        settingPresetAmount = true
+        if pendingStep == nil, history.position == history.steps.count - 1, history.steps.last?.name == step {
+            // The preset's step is already in the history: change it rather than adding one.
+            history.steps[history.position].settings = settings
+            committed = settings
+            changed(step: nil)
+        } else {
+            changed(step: step)
         }
-        presets = presetStore.all()
+        settingPresetAmount = false
+        presetAmount = state
     }
 
-    func updatePreset(_ preset: DevelopPreset) {
+    /// Hover preview: shows `preset` on the photo without changing anything; nil restores it.
+    func previewPreset(_ preset: DevelopPreset?) {
+        guard preset != previewingPreset, assetID != nil else { return }
+        previewingPreset = preset
+        scheduleRender()
+    }
+
+    /// Saves the open photo's settings as a preset with the chosen parts. `replacing` keeps an
+    /// existing preset's ID so photos and import settings that use it follow the new version.
+    func createPreset(name: String, group: String, parts: Set<DevelopPreset.Part>, replacing: DevelopPreset? = nil) {
+        let preset = DevelopPreset(id: replacing?.id ?? UUID(), name: name, group: group, parts: parts, settings: settings)
+        savePresets([preset])
+    }
+
+    /// Update with Current Settings: the open photo's settings with the chosen parts.
+    func updatePreset(_ preset: DevelopPreset, parts: Set<DevelopPreset.Part>) {
         var updated = preset
         updated.settings = settings
-        try? presetStore.save(updated)
-        presets = presetStore.all()
+        updated.parts = parts
+        savePresets([updated])
     }
 
     func renamePreset(_ preset: DevelopPreset, to name: String) {
         var updated = preset
         updated.name = name
-        try? presetStore.save(updated)
-        presets = presetStore.all()
+        savePresets([updated])
+    }
+
+    func movePreset(_ preset: DevelopPreset, to group: String) {
+        guard !preset.isBuiltIn, preset.group != group else { return }
+        var updated = preset
+        updated.group = group
+        savePresets([updated])
+    }
+
+    /// Duplicate (and, for built-in presets, Duplicate to User Presets): an editable copy.
+    func duplicatePreset(_ preset: DevelopPreset) {
+        let group = preset.isBuiltIn ? DevelopPreset.defaultGroup : preset.group
+        let names = Set(presets.filter { $0.group == group }.map { $0.name.lowercased() })
+        var name = preset.isBuiltIn ? preset.name : "\(preset.name) Copy"
+        var number = 2
+        while names.contains(name.lowercased()) {
+            name = preset.isBuiltIn ? "\(preset.name) \(number)" : "\(preset.name) Copy \(number)"
+            number += 1
+        }
+        savePresets([DevelopPreset(name: name, group: group, parts: preset.parts, settings: preset.settings)])
     }
 
     func deletePreset(_ preset: DevelopPreset) {
-        try? presetStore.delete(preset.id)
+        presetFileChange { try presetStore.delete(preset.id) }
+    }
+
+    func renamePresetGroup(_ group: String, to name: String) {
+        presetFileChange { try presetStore.renameGroup(group, to: name) }
+    }
+
+    func deletePresetGroup(_ group: String) {
+        presetFileChange { _ = try presetStore.deleteGroup(group) }
+    }
+
+    /// The user's preset in `group` named `name`, ignoring case, if there is one.
+    func userPreset(named name: String, in group: String) -> DevelopPreset? {
+        presets.first { !$0.isBuiltIn && $0.group == group && $0.name.localizedCaseInsensitiveCompare(name) == .orderedSame }
+    }
+
+    func showPresetsInFinder() {
+        if FileManager.default.fileExists(atPath: presetStore.fileURL.path) {
+            NSWorkspace.shared.activateFileViewerSelecting([presetStore.fileURL])
+        } else {
+            NSWorkspace.shared.open(presetStore.fileURL.deletingLastPathComponent())
+        }
+    }
+
+    private func savePresets(_ changed: [DevelopPreset]) {
+        presetFileChange { try presetStore.save(changed) }
+    }
+
+    private func presetFileChange(_ change: () throws -> Void) {
+        do {
+            try change()
+        } catch {
+            errorMessage = "Could not save presets: \(error.localizedDescription)"
+        }
         presets = presetStore.all()
     }
 
@@ -665,6 +787,7 @@ final class DevelopController: ObservableObject {
 
     private static func parameterName(_ parameter: DevelopSettings.Parameter) -> String {
         if let pair = parameter.hslBand { return "\(pair.0.rawValue) \(pair.1.rawValue)" }
+        if let band = parameter.grayBand { return "B&W \(band.rawValue)" }
         switch parameter.panel {
         case .colorGrading, .detail, .effects, .toneCurve, .lensCorrections:
             return "\(parameter.group) \(parameter.label)"
@@ -704,6 +827,7 @@ final class DevelopController: ObservableObject {
         }
         rendering = true
         var settings = showingBefore ? beforeSettings : self.settings
+        if !showingBefore, let previewingPreset { settings = previewingPreset.applied(to: settings) }
         if isGuiding { settings.crop = nil }
         let cropping = !isCropping
         let assetID = self.assetID

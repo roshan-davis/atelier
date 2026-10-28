@@ -154,6 +154,12 @@ struct AtelierApp: App {
                     }
                 }
                 .disabled(model.mode != .develop)
+                Divider()
+                Button("New Preset…") { model.develop.showingNewPreset = true }
+                    .keyboardShortcut("n", modifiers: [.command, .shift])
+                    .disabled(model.mode != .develop || model.develop.assetID == nil)
+                Button("Manage Presets…") { model.develop.showingManagePresets = true }
+                    .disabled(model.mode != .develop)
             }
         }
 

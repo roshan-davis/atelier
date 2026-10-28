@@ -33,7 +33,8 @@ final class ColorTests: XCTestCase {
         XCTAssertEqual(try DevelopSettings.decoded(from: settings.encoded()), settings)
         XCTAssertEqual(DevelopSettings.Parameter.hsl(.luminance, .orange).panel, .hsl)
         XCTAssertEqual(DevelopSettings.Parameter.gradeShadowsHue.panel, .colorGrading)
-        XCTAssertEqual(DevelopSettings.Panel.hsl.parameters.count, 24)
+        XCTAssertEqual(DevelopSettings.Panel.hsl.parameters.filter { $0.hslBand != nil }.count, 24)
+        XCTAssertEqual(DevelopSettings.Panel.hsl.parameters.filter { $0.grayBand != nil }.count, 8)
     }
 
     func testRegionCurveLiftsShadows() {

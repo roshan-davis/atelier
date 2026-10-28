@@ -13,21 +13,22 @@ enum ColorLUT {
     private static let parameters: [DevelopSettings.Parameter] = DevelopSettings.Parameter.allCases
         .filter { $0.panel == .hsl || $0.panel == .colorGrading }
 
-    /// RGBA float cube data, or nil when both panels are at their defaults.
+    /// RGBA float cube data, or nil when both panels are at their defaults and the photo is in color.
     static func cube(for settings: DevelopSettings) -> Data? {
-        let key = parameters.map { settings[$0] }
-        let neutral = parameters.map { $0.defaultValue }
+        let key = parameters.map { settings[$0] } + [settings.monochrome ? 1 : 0]
+        let neutral = parameters.map { $0.defaultValue } + [0]
         guard key != neutral else { return nil }
         lock.lock()
         defer { lock.unlock() }
         if key == cachedKey, let cachedCube { return cachedCube }
-        let cube = build(HSLAdjustment(settings), ColorGrade(settings))
+        let cube = build(HSLAdjustment(settings), settings.monochrome ? BWMix(settings) : nil, ColorGrade(settings))
         cachedKey = key
         cachedCube = cube
         return cube
     }
 
-    private static func build(_ hsl: HSLAdjustment, _ grade: ColorGrade) -> Data {
+    /// In Black & White, `bw` replaces HSL; color grading then tones the grays.
+    private static func build(_ hsl: HSLAdjustment, _ bw: BWMix?, _ grade: ColorGrade) -> Data {
         let n = dimension
         var values = [Float](repeating: 0, count: n * n * n * 4)
         var index = 0
@@ -36,7 +37,11 @@ enum ColorLUT {
             for g in 0..<n {
                 for r in 0..<n {
                     var rgb = (Double(r) / Double(n - 1), Double(g) / Double(n - 1), Double(b) / Double(n - 1))
-                    if hsl.isActive { rgb = hsl.apply(rgb) }
+                    if let bw {
+                        rgb = bw.apply(rgb)
+                    } else if hsl.isActive {
+                        rgb = hsl.apply(rgb)
+                    }
                     if grade.isActive { rgb = grade.apply(rgb) }
                     values[index] = Float(min(1, max(0, rgb.0)))
                     values[index + 1] = Float(min(1, max(0, rgb.1)))
@@ -138,6 +143,30 @@ struct HSLAdjustment {
         // Luminance acts in proportion to how colorful the pixel is.
         let newLum = min(1, max(0, l + lumShift * 0.25 * s * (lumShift > 0 ? 1 - l : l) * 2))
         return hslToRGB(newHue, newSat, newLum)
+    }
+}
+
+/// Lightroom's Black & White Mix: each color band's slider makes that color lighter or darker
+/// gray than its plain luminance, in proportion to how colorful it was. Grays stay as they are.
+struct BWMix {
+    typealias Band = DevelopSettings.ColorBand
+    private let mix: [Double]
+
+    init(_ settings: DevelopSettings) {
+        mix = Band.allCases.map { settings[.gray($0)] / 100 }
+    }
+
+    func apply(_ color: RGB) -> RGB {
+        let y = luma(color)
+        let (h, s, _) = rgbToHSL(color)
+        var shift = 0.0
+        if s > 0.001 {
+            let weights = HSLAdjustment.weights(for: h)
+            for i in weights.indices where weights[i] > 0 { shift += weights[i] * mix[i] }
+        }
+        // At +100 a saturated color moves most of the way to white; at -100 most of the way to black.
+        let gray = min(1, max(0, y + shift * s * 0.8 * (shift > 0 ? 1 - y : y)))
+        return (gray, gray, gray)
     }
 }
 
