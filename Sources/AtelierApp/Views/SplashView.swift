@@ -70,7 +70,6 @@ final class SplashContentView: NSView {
     static var windowSize: CGSize { CGSize(width: Splash.size.width, height: Splash.size.height + stripHeight) }
 
     var onDismiss: () -> Void = {}
-    var onHover: (Bool) -> Void = { _ in }
 
     private let statusLayer = CATextLayer()
     private let progressLayer = CALayer()
@@ -197,16 +196,6 @@ final class SplashContentView: NSView {
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func mouseDown(with event: NSEvent) { onDismiss() }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        trackingAreas.forEach(removeTrackingArea)
-        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeAlways],
-                                       owner: self, userInfo: nil))
-    }
-
-    override func mouseEntered(with event: NSEvent) { onHover(true) }
-    override func mouseExited(with event: NSEvent) { onHover(false) }
 }
 
 /// Shows the splash in its own borderless window. At launch it goes up as the app starts
@@ -217,8 +206,6 @@ final class SplashController {
     static let shared = SplashController()
     private var window: NSPanel?
     private var content: SplashContentView?
-    private var hovering = false
-    private var shownAt = Date()
     private var launched = false
     /// The latest step, kept in case it arrives before the splash is up.
     private var status = ("Starting…", 0.05)
@@ -251,7 +238,7 @@ final class SplashController {
         report(status.0, progress: status.1)
         if finished {
             // The library loaded before the splash could go up.
-            dismiss(after: 2.5)
+            dismiss(after: 1)
         } else {
             // In case the library never reports in.
             dismiss(after: 20)
@@ -274,12 +261,12 @@ final class SplashController {
         CATransaction.flush()
     }
 
-    /// The last step: shows it, then fades out, leaving the splash up for at least 2.5 s.
+    /// The last step: shows it, then fades out a second later (Rosh, Oct 28, 2026).
     func finishLaunch(_ text: String) {
         finished = true
         report(text, progress: 1)
         guard window != nil else { return }
-        dismiss(after: max(0.8, 2.5 - Date().timeIntervalSince(shownAt)))
+        dismiss(after: 1)
     }
 
     private func present(_ image: SplashImage?) {
@@ -294,7 +281,6 @@ final class SplashController {
         panel.isReleasedWhenClosed = false
         panel.contentView = content
         content.onDismiss = { [weak self] in self?.dismiss() }
-        content.onHover = { [weak self] in self?.hovering = $0 }
         panel.center()
         panel.orderFrontRegardless()
         // Draw now: the run loop may not turn again until the catalog has opened. Safe here, since
@@ -303,15 +289,12 @@ final class SplashController {
         CATransaction.flush()
         window = panel
         self.content = content
-        hovering = false
-        shownAt = Date()
     }
 
     private func dismiss(after seconds: Double) {
         let panel = window
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(seconds))
-            while self?.hovering == true, self?.window === panel { try? await Task.sleep(for: .milliseconds(250)) }
             if let self, let panel, self.window === panel { self.dismiss() }
         }
     }
@@ -320,7 +303,6 @@ final class SplashController {
         guard let panel = window else { return }
         window = nil
         content = nil
-        hovering = false
         NSAnimationContext.runAnimationGroup({ $0.duration = 0.35; panel.animator().alphaValue = 0 },
                                              completionHandler: { panel.close() })
     }
