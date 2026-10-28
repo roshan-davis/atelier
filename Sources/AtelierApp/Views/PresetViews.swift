@@ -76,8 +76,9 @@ struct PresetsSection: View {
 
     private func isExpanded(_ group: PresetGroup) -> Binding<Bool> {
         Binding(get: {
-            // A search opens every group with a match.
-            !query.isEmpty || (group.isBuiltIn != toggled.contains(group.id))
+            // A search opens every group with a match. Otherwise a pack is open only when toggled,
+            // and one of the user's groups only when not.
+            !query.isEmpty || (group.isBuiltIn == toggled.contains(group.id))
         }, set: { open in
             guard query.isEmpty else { return }
             var set = toggled
