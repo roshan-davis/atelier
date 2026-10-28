@@ -183,6 +183,15 @@ Rosh asked for color matching from a reference picture: give a photo the look of
 - **How the fit works (Phase 1, HSL and refinement added in Phase 2):** both images are measured at about 384 pixels in Oklab, a perceptual color space, after the photo's current profile, lens corrections and crop. In order: White Balance moves Temp and Tint until the photo's average midtone color matches the reference's; Exposure moves the median brightness (at most ±2 EV); the RGB Tone Curve is fitted by histogram matching on brightness (smoothed, rising, never moving a tone by more than 30%, five points so it stays editable); Saturation matches the reference's typical chroma (-60 to +60); HSL moves each of the eight bands' hue (±50), saturation (±60) and luminance (±50) toward the reference's average color in that band, skipping bands with under 2% of either image's color; Color Grading Shadows and Highlights take any remaining color difference between dark and bright tones (split toning). Last, a refinement pass nudges Temp, Tint, Exposure and Saturation one at a time and keeps a nudge only when it brings the photo's whole color distribution closer to the reference's (sliced Wasserstein distance in Oklab), so the sliders fitted one by one settle together. Each step renders the photo through the real Develop pipeline and corrects itself against that render, so the result reflects what the sliders actually do. Every value is clamped, so an odd reference can't wreck the photo.
 - **Later phases:** Protect Skin Tones and automatic subject/background areas from the Select Subject mask (Phase 3). AI color-transfer models stay experiments only.
 
+### Launch splash screen (decided Oct 27, 2026)
+
+Rosh asked for a splash screen at launch that can be turned off, with images that rotate between launches.
+
+- **What it shows:** an 800 × 500 pt window (1600 × 1000 px on Retina) over the library window as Atelier opens. The app name and tagline sit at top left in white over a soft dark gradient. A **Don't show again** checkbox sits at bottom right, since Rosh's watermark is at bottom left on their photos. It fades out after 3 seconds, stays while the pointer is over it, and a click dismisses it at once. The name ("Atelier") and tagline ("Develop with intent.") are placeholders until Rosh picks them.
+- **Images:** each launch shows the next image in `~/Library/Application Support/Atelier/Splash/`, in name order. On first launch the folder is filled with the built-in images (Rosh's eagle, redwoods and watercolor portrait, from `Sources/AtelierApp/Resources/Splash`). After that the folder is Rosh's: images added or removed in Finder are picked up at the next launch, without a rebuild, and removed built-ins don't come back. An empty folder shows a plain dark gradient.
+- **Any image size, never stretched:** JPEG, PNG, HEIC or TIFF, ideally 1600 × 1000 px or larger. An image within 25% of the splash's 16:10 shape (3:2 and 4:3 included) fills it, cropped as little as possible and centred on the subject found by Vision's saliency detection. Anything else (portraits, squares, panoramas) is shown whole over a blurred, darkened copy of itself; tall images sit on the right so the name has room on the left.
+- **Settings > General > Splash Screen:** Show splash screen at launch (on by default; the same setting as the splash's checkbox), Show Splash Folder, and Preview Splash Screen.
+
 ## Scope by release
 
 The MVP proves the catalog, a usable develop module and one AI backend. Full develop parity and the plugin system come in v1.
@@ -268,7 +277,7 @@ Edits are a versioned list of parameters stored in the catalog, rendered live on
 ### Settings and keyboard
 
 Atelier > Settings… (⌘,) has these tabs:
-- **General:** catalog location (Show in Finder), photo count, backups kept on quit (default 10), Back Up Now, preview cache size.
+- **General:** catalog location (Show in Finder), photo count, backups kept on quit (default 10), Back Up Now, splash screen (show at launch, Show Splash Folder, Preview; see Launch splash screen), preview cache size.
 - **Appearance:** theme, picked from small previews: System (follows macOS), Light, Dark, Graphite (charcoal panels and a dark surround, like Lightroom), Darkroom (near black, so only the photo stands out) and Neutral Gray (a mid-gray surround for judging color and brightness). The theme changes every window at once, Settings included.
 - **Import:** default for new imports (leave files or copy into the library folder) and the library folder. The Import dialog starts from these. "Show RAW+JPEG pairs as one photo" (on by default; see RAW+JPEG pairs).
 - **Develop:** what a click or Z zooms to (50%, 100%, 200%, 400%), solo mode, and the histogram clipping warnings.

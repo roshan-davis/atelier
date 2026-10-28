@@ -124,9 +124,10 @@ private struct ThemeCard: View {
 
 // MARK: - General
 
-private struct GeneralSettings: View {
+struct GeneralSettings: View {
     @EnvironmentObject private var model: LibraryModel
     @AppStorage("backups.keep") private var backupsToKeep = 10
+    @AppStorage(Splash.showKey) private var showSplash = true
     @State private var previewsSize: String?
     @State private var backupMessage: String?
 
@@ -162,6 +163,23 @@ private struct GeneralSettings: View {
                 Text("Backups")
             } footer: {
                 Text("The catalog is backed up when Atelier quits. Backups are kept inside the catalog package.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Toggle("Show splash screen at launch", isOn: $showSplash)
+                HStack {
+                    Button("Show Splash Folder") {
+                        SplashController.installFolder()
+                        NSWorkspace.shared.activateFileViewerSelecting([Splash.folder])
+                    }
+                    Button("Preview Splash Screen") { SplashController.shared.show() }
+                }
+            } header: {
+                Text("Splash Screen")
+            } footer: {
+                Text("Each launch shows the next image in the Splash folder, in name order. Add JPEG, PNG or HEIC images, ideally 1600 × 1000 px or larger; landscape images fill the splash, others are shown whole.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

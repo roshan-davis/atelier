@@ -156,7 +156,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
            let icon = NSImage(contentsOf: iconURL) {
             NSApp.applicationIconImage = icon
         }
-        MainActor.assumeIsolated { Theme.current.apply() }
+        MainActor.assumeIsolated {
+            Theme.current.apply()
+            if LayoutSnapshots.outputFolder == nil { SplashController.shared.showAtLaunch() }
+        }
         NSApp.activate(ignoringOtherApps: true)
     }
 
