@@ -205,3 +205,69 @@ final class AITests: XCTestCase {
         XCTAssertTrue(CGImageDestinationFinalize(destination))
     }
 }
+
+final class ComfyProgressTests: XCTestCase {
+    private let workflow: [String: Any] = [
+        "1": ["class_type": "UnetLoaderGGUF"],
+        "2": ["class_type": "TextEncodeQwenImageEditPlus"],
+        "3": ["class_type": "KSampler"],
+        "4": ["class_type": "VAEDecode"],
+        "5": ["class_type": "SaveImage"],
+    ]
+    private let known: [String: TimeInterval] = ["UnetLoaderGGUF": 10, "TextEncodeQwenImageEditPlus": 10,
+                                                 "KSampler": 70, "VAEDecode": 10, "SaveImage": 0]
+
+    private func message(_ type: String, _ data: [String: Any] = [:]) -> [String: Any] {
+        var data = data
+        data["prompt_id"] = "p1"
+        return ["type": type, "data": data]
+    }
+
+    func testWeighsNodesAndSamplerSteps() throws {
+        var progress = ComfyProgress(workflow: workflow, known: known)
+        let start = Date()
+        XCTAssertNil(progress.fraction(at: start), "nothing before ComfyUI starts on it")
+        progress.apply(message("execution_start"), at: start)
+        progress.apply(message("executing", ["node": "1"]), at: start)
+        progress.apply(message("executing", ["node": "2"]), at: start.addingTimeInterval(10))
+        progress.apply(message("executing", ["node": "3"]), at: start.addingTimeInterval(20))
+        XCTAssertEqual(try XCTUnwrap(progress.fraction(at: start.addingTimeInterval(20))), 0.2, accuracy: 0.001)
+        progress.apply(message("progress", ["node": "3", "value": 2, "max": 4]), at: start.addingTimeInterval(55))
+        XCTAssertEqual(try XCTUnwrap(progress.fraction(at: start.addingTimeInterval(55))), 0.55, accuracy: 0.001)
+        progress.apply(message("executing", ["node": "4"]), at: start.addingTimeInterval(90))
+        XCTAssertEqual(try XCTUnwrap(progress.fraction(at: start.addingTimeInterval(90))), 0.9, accuracy: 0.001)
+        // A node without steps moves with time, but never reaches its end on its own.
+        XCTAssertEqual(try XCTUnwrap(progress.fraction(at: start.addingTimeInterval(95))), 0.95, accuracy: 0.001)
+        XCTAssertLessThan(try XCTUnwrap(progress.fraction(at: start.addingTimeInterval(500))), 1)
+        progress.apply(message("executing", ["node": NSNull()]), at: start.addingTimeInterval(100))
+        XCTAssertEqual(progress.fraction(at: start.addingTimeInterval(100)), 1)
+        XCTAssertEqual(try XCTUnwrap(progress.measured["KSampler"]), 70, accuracy: 0.001)
+        XCTAssertEqual(try XCTUnwrap(progress.measured["VAEDecode"]), 10, accuracy: 0.001)
+    }
+
+    func testCachedNodesLeaveTheTotal() throws {
+        var progress = ComfyProgress(workflow: workflow, known: known)
+        let start = Date()
+        progress.apply(message("execution_cached", ["nodes": ["1", "2"]]), at: start)
+        progress.apply(message("executing", ["node": "3"]), at: start)
+        progress.apply(message("progress", ["node": "3", "value": 1, "max": 2]), at: start)
+        XCTAssertEqual(try XCTUnwrap(progress.fraction(at: start)), 35.0 / 80, accuracy: 0.001)
+    }
+
+    func testNeverGoesBack() throws {
+        var progress = ComfyProgress(workflow: workflow, known: known)
+        let start = Date()
+        progress.apply(message("executing", ["node": "3"]), at: start)
+        progress.apply(message("progress", ["node": "3", "value": 3, "max": 4]), at: start)
+        let before = try XCTUnwrap(progress.fraction(at: start))
+        // A second sampler pass restarting its steps doesn't pull the bar back.
+        progress.apply(message("progress", ["node": "3", "value": 0, "max": 4]), at: start)
+        XCTAssertEqual(progress.fraction(at: start), before)
+    }
+
+    func testGuessesFavourTheSampler() {
+        XCTAssertGreaterThan(ComfyProgress.guess(for: "KSampler"), ComfyProgress.guess(for: "TextEncodeQwenImageEditPlus"))
+        XCTAssertLessThan(ComfyProgress.guess(for: "KSamplerSelect"), 1)
+        XCTAssertLessThan(ComfyProgress.guess(for: "ModelSamplingAuraFlow"), 1)
+    }
+}
