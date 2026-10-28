@@ -16,6 +16,7 @@ private struct PresetGroup: Identifiable {
 /// then the built-in packs. Click to apply, rest the pointer on one to preview it.
 struct PresetsSection: View {
     @ObservedObject var develop: DevelopController
+    @Binding var isExpanded: Bool
     @State private var search = ""
     /// Groups opened or closed away from their default (the user's open, built-in packs closed).
     @AppStorage("presets.toggledGroups") private var toggledList = ""
@@ -55,7 +56,9 @@ struct PresetsSection: View {
 
     private var query: String { search.trimmingCharacters(in: .whitespaces) }
 
-    private var groups: [PresetGroup] {
+    private var groups: [PresetGroup] { groups(matching: query) }
+
+    private func groups(matching query: String) -> [PresetGroup] {
         var result: [PresetGroup] = []
         for preset in develop.visiblePresets where query.isEmpty || preset.name.localizedCaseInsensitiveContains(query) {
             if let index = result.firstIndex(where: { $0.name == preset.group && $0.isBuiltIn == preset.isBuiltIn }) {
@@ -83,41 +86,55 @@ struct PresetsSection: View {
         })
     }
 
+    /// Closes every group, like VS Code's Collapse Folders.
+    private func collapseAllGroups() {
+        // The user's groups are open unless toggled; the packs are closed unless toggled.
+        let userGroups = groups(matching: "").filter { !$0.isBuiltIn }.map(\.id)
+        withAnimation(.easeInOut(duration: 0.15)) {
+            search = ""
+            toggledList = userGroups.sorted().joined(separator: "\n")
+        }
+    }
+
     var body: some View {
-        Section {
-            if let amount = develop.presetAmount {
-                AmountRow(develop: develop, amount: amount)
+        SidebarSection(title: "Presets", isExpanded: $isExpanded) {
+            Button {
+                develop.showingNewPreset = true
+            } label: {
+                Image(systemName: "plus")
             }
-            TextField("Search Presets", text: $search, prompt: Text("Search Presets"))
-                .textFieldStyle(.roundedBorder)
-                .controlSize(.small)
-                .labelsHidden()
-            if groups.isEmpty, !query.isEmpty {
-                Text("No presets named \"\(query)\".")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+            .help("Create Preset from the current settings (⇧⌘N)")
+            .disabled(develop.assetID == nil)
+            Button(action: collapseAllGroups) {
+                Image(systemName: "rectangle.compress.vertical")
             }
-            ForEach(groups) { group in
-                DisclosureGroup(isExpanded: isExpanded(group)) {
-                    ForEach(group.presets) { preset in
-                        row(preset)
+            .help("Collapse All Groups")
+        } content: {
+            VStack(alignment: .leading, spacing: 2) {
+                if let amount = develop.presetAmount {
+                    AmountRow(develop: develop, amount: amount)
+                        .padding(.bottom, 4)
+                }
+                TextField("Search Presets", text: $search, prompt: Text("Search Presets"))
+                    .textFieldStyle(.roundedBorder)
+                    .controlSize(.small)
+                    .labelsHidden()
+                    .padding(.bottom, 4)
+                if groups.isEmpty, !query.isEmpty {
+                    Text("No presets named \"\(query)\".")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(groups) { group in
+                    let open = isExpanded(group)
+                    groupLabel(group, open: open)
+                    if open.wrappedValue {
+                        ForEach(group.presets) { preset in
+                            row(preset)
+                                .padding(.leading, 16)
+                        }
                     }
-                } label: {
-                    groupLabel(group)
                 }
-            }
-        } header: {
-            HStack {
-                Text("Presets")
-                Spacer()
-                Button {
-                    develop.showingNewPreset = true
-                } label: {
-                    Image(systemName: "plus")
-                }
-                .buttonStyle(.borderless)
-                .help("Save the current settings as a preset (⇧⌘N)")
-                .disabled(develop.assetID == nil)
             }
         }
         .onDisappear {
@@ -172,7 +189,7 @@ struct PresetsSection: View {
     // MARK: Rows
 
     private func row(_ preset: DevelopPreset) -> some View {
-        HStack(spacing: 6) {
+        SidebarRow(isCurrent: develop.presetAmount?.preset.id == preset.id, onHover: { hover(preset, $0) }) {
             Label(preset.name, systemImage: preset.isBuiltIn ? "wand.and.stars" : "slider.horizontal.3")
                 .lineLimit(1)
             Spacer(minLength: 4)
@@ -183,9 +200,7 @@ struct PresetsSection: View {
                     .help("Built-in presets can't be changed; duplicate one to edit it")
             }
         }
-        .contentShape(Rectangle())
         .onTapGesture { develop.applyPreset(preset) }
-        .onHover { hover(preset, $0) }
         .help("Click to apply. Includes \(DevelopPreset.Part.allCases.filter { preset.parts.contains($0) }.map(\.title).joined(separator: ", ")).")
         .contextMenu { presetMenu(preset) }
         .draggable(preset.id.uuidString)
@@ -222,8 +237,13 @@ struct PresetsSection: View {
         }
     }
 
-    private func groupLabel(_ group: PresetGroup) -> some View {
-        HStack {
+    private func groupLabel(_ group: PresetGroup, open: Binding<Bool>) -> some View {
+        SidebarRow {
+            Image(systemName: "chevron.right")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .rotationEffect(.degrees(open.wrappedValue ? 90 : 0))
+                .frame(width: 10)
             Label(group.name, systemImage: group.isBuiltIn ? "shippingbox" : "folder")
                 .lineLimit(1)
             Spacer(minLength: 4)
@@ -231,7 +251,9 @@ struct PresetsSection: View {
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
         }
-        .contentShape(Rectangle())
+        .onTapGesture {
+            withAnimation(.easeInOut(duration: 0.15)) { open.wrappedValue.toggle() }
+        }
         .contextMenu { groupMenu(group) }
         .dropDestination(for: String.self) { items, _ in
             // Drag a preset of your own onto another of your groups to move it there.
