@@ -58,6 +58,7 @@ enum LayoutSnapshots {
         await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
                       to: folder.appendingPathComponent("develop-ai-1280x800.png"))
         model.develop.isAIOpen = false
+        await snapshotSliderPreviews(model: model, into: folder)
         await snapshotMatchLook(model: model, into: folder)
         await snapshotMasking(model: model, into: folder)
         await snapshotTransform(model: model, into: folder)
@@ -196,6 +197,27 @@ enum LayoutSnapshots {
     }
 
     /// Masking: a darker sky from a linear gradient, a brighter radial spot, and the overlay.
+    /// Each Option-drag view, as it shows while the slider is dragged with Option held.
+    private static func snapshotSliderPreviews(model: LibraryModel, into folder: URL) async {
+        let develop = model.develop
+        develop.set(.sharpening, to: 70)
+        develop.set(.sharpenMasking, to: 40)
+        develop.set(.whites, to: 60)
+        develop.set(.blacks, to: -60)
+        let previews: [(String, SliderPreview)] = [("sharpen-amount", .sharpenAmount), ("sharpen-edges", .sharpenEdges),
+                                                   ("sharpen-mask", .sharpenMask), ("clipping-highlights", .highlightClipping),
+                                                   ("clipping-shadows", .shadowClipping),
+                                                   ("grade-hue", .fullSaturation(.midtones))]
+        for (name, preview) in previews {
+            develop.sliderPreview = preview
+            try? await Task.sleep(for: .seconds(1))
+            await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
+                          to: folder.appendingPathComponent("develop-option-\(name)-1280x800.png"))
+        }
+        develop.sliderPreview = nil
+        for parameter in [DevelopSettings.Parameter.sharpening, .sharpenMasking, .whites, .blacks] { develop.reset(parameter) }
+    }
+
     private static func snapshotMasking(model: LibraryModel, into folder: URL) async {
         let develop = model.develop
         develop.isMasking = true
