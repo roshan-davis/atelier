@@ -33,7 +33,10 @@ struct AIBrushView: View {
                 if ai.isRunning {
                     VStack(spacing: 8) {
                         ProgressView()
-                        Text(ai.phase ?? "Working…").font(.callout)
+                        Text(ai.phase ?? "Working…").font(.callout).monospacedDigit()
+                        if let fraction = ai.fraction {
+                            AIPercentBar(fraction: fraction).frame(width: 180)
+                        }
                     }
                     .padding(14)
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
@@ -204,11 +207,16 @@ struct AIPanel: View {
             }
 
             if ai.isRunning {
-                HStack(spacing: 8) {
-                    ProgressView().controlSize(.small)
-                    Text(ai.phase ?? "Working…").font(.callout).lineLimit(1)
-                    Spacer()
-                    Button("Cancel") { ai.cancel() }
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text(ai.phase ?? "Working…").font(.callout).lineLimit(1).monospacedDigit()
+                        Spacer()
+                        Button("Cancel") { ai.cancel() }
+                    }
+                    if let fraction = ai.fraction {
+                        AIPercentBar(fraction: fraction)
+                    }
                 }
             } else {
                 Button {
@@ -261,5 +269,25 @@ struct AIPanel: View {
         }
         .font(.caption)
         .foregroundStyle(.secondary)
+    }
+}
+
+/// ComfyUI's progress as a bar and a percentage. Approximate: it weighs each step by how long it
+/// took on earlier runs.
+struct AIPercentBar: View {
+    var fraction: Double
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ProgressView(value: fraction)
+                .progressViewStyle(.linear)
+                .animation(.easeOut(duration: 0.4), value: fraction)
+            Text(fraction.formatted(.percent.precision(.fractionLength(0))))
+                .font(.caption)
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+                .frame(minWidth: 34, alignment: .trailing)
+        }
+        .help("Approximate, from ComfyUI's progress")
     }
 }

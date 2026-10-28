@@ -23,10 +23,13 @@ final class AIController: ObservableObject {
     @Published private(set) var backgroundMask: CGImage?
     @Published private(set) var isFindingSubject = false
     @Published private(set) var phase: String?
+    /// How far ComfyUI has got, 0...1, while it reports it.
+    @Published private(set) var fraction: Double?
     @Published private(set) var errorMessage: String?
     @Published private(set) var serverStatus: ServerStatus = .unknown
 
     var isRunning: Bool { task != nil }
+    private var isCancelling: Bool { task?.isCancelled ?? false }
     private var task: Task<Void, Never>?
     weak var model: LibraryModel?
 
@@ -103,14 +106,19 @@ final class AIController: ObservableObject {
         model.develop.flushSave()
         errorMessage = nil
         phase = "Starting"
+        fraction = nil
         let request = AIRequest(recipe: recipe, prompt: recipe.usesPrompt ? prompt : "", strokes: strokes)
         let settings = Self.settings
         let runner = AIRunner(catalog: model.catalog, client: ComfyClient(baseURL: settings.server))
         let recipe = self.recipe
         task = Task.detached {
             do {
-                let result = try await runner.run(request, on: id, settings: settings) { phase in
-                    Task { @MainActor in if self.task != nil { self.phase = phase } }
+                let result = try await runner.run(request, on: id, settings: settings) { progress in
+                    Task { @MainActor in
+                        guard self.task != nil, !self.isCancelling else { return }
+                        self.phase = progress.phase
+                        self.fraction = progress.fraction
+                    }
                 }
                 await MainActor.run {
                     self.finish()
@@ -144,11 +152,13 @@ final class AIController: ObservableObject {
     func cancel() {
         task?.cancel()
         phase = "Cancelling…"
+        fraction = nil
     }
 
     private func finish() {
         task = nil
         phase = nil
+        fraction = nil
     }
 }
 

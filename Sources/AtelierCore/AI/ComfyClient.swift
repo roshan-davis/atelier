@@ -125,6 +125,17 @@ public struct ComfyClient: Sendable {
         return data
     }
 
+    /// Opens ComfyUI's websocket for this client, to follow a prompt's progress. Open it before
+    /// queueing so the first messages aren't missed.
+    public func monitor() async -> ComfyMonitor {
+        var components = URLComponents(url: baseURL.appendingPathComponent("ws"), resolvingAgainstBaseURL: false)
+        components?.scheme = baseURL.scheme == "https" ? "wss" : "ws"
+        components?.queryItems = [URLQueryItem(name: "clientId", value: clientID)]
+        let monitor = ComfyMonitor(url: components?.url)
+        await monitor.waitUntilConnected()
+        return monitor
+    }
+
     /// Stops whatever the server is running (Cancel in Atelier).
     public func interrupt() async {
         var request = URLRequest(url: baseURL.appendingPathComponent("interrupt"))
@@ -186,6 +197,98 @@ public struct ComfyClient: Sendable {
             }
         }
         return nil
+    }
+}
+
+/// Follows one prompt on ComfyUI's websocket. When the socket can't connect (an older server,
+/// a proxy in the way), `fraction` stays nil and only the elapsed time shows.
+public final class ComfyMonitor: @unchecked Sendable {
+    private let lock = NSLock()
+    private let socket: URLSessionWebSocketTask?
+    private var promptID: String?
+    private var progress: ComfyProgress?
+    /// Messages that arrived before the prompt was queued, with when they came.
+    private var early: [([String: Any], Date)] = []
+    private var connected = false
+    private var closed = false
+
+    init(url: URL?) {
+        socket = url.map { URLSession.shared.webSocketTask(with: $0) }
+        socket?.resume()
+        receive()
+    }
+
+    deinit { socket?.cancel(with: .goingAway, reason: nil) }
+
+    /// ComfyUI sends its queue status as soon as a client connects; waits for that, briefly.
+    func waitUntilConnected(timeout: TimeInterval = 2) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline, !Task.isCancelled {
+            if lock.withLock({ connected || closed }) { return }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+    }
+
+    /// Starts following a queued prompt.
+    public func track(_ promptID: String, workflow: [String: Any], known: [String: TimeInterval]) {
+        lock.withLock {
+            self.promptID = promptID
+            var progress = ComfyProgress(workflow: workflow, known: known)
+            for (message, date) in early where Self.prompt(of: message).map({ $0 == promptID }) ?? true {
+                progress.apply(message, at: date)
+            }
+            early = []
+            self.progress = progress
+        }
+    }
+
+    /// 0...1 once ComfyUI has started on the prompt.
+    public func fraction() -> Double? {
+        lock.withLock { progress?.fraction() }
+    }
+
+    /// How long each node class took, for `ComfyTimings`.
+    public var measured: [String: TimeInterval] {
+        lock.withLock { progress?.measured ?? [:] }
+    }
+
+    public func close() {
+        lock.withLock { closed = true }
+        socket?.cancel(with: .normalClosure, reason: nil)
+    }
+
+    private func receive() {
+        socket?.receive { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .success(let message):
+                // Binary messages are preview images; only the JSON ones carry progress.
+                if case .string(let text) = message,
+                   let json = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any] {
+                    self.handle(json)
+                }
+                self.receive()
+            case .failure:
+                self.lock.withLock { self.closed = true }
+            }
+        }
+    }
+
+    private func handle(_ message: [String: Any]) {
+        lock.withLock {
+            connected = true
+            guard message["type"] as? String != "status" else { return }
+            guard let promptID else {
+                early.append((message, Date()))
+                return
+            }
+            if let id = Self.prompt(of: message), id != promptID { return }
+            progress?.apply(message)
+        }
+    }
+
+    private static func prompt(of message: [String: Any]) -> String? {
+        (message["data"] as? [String: Any])?["prompt_id"] as? String
     }
 }
 

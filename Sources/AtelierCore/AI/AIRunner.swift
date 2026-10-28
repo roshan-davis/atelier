@@ -43,6 +43,18 @@ public struct AIRequest: Sendable {
     }
 }
 
+/// What a run is doing, for the AI tool's progress line.
+public struct AIProgress: Sendable, Equatable {
+    public var phase: String
+    /// How far ComfyUI has got generating, 0...1, when it reports it.
+    public var fraction: Double?
+
+    public init(_ phase: String, fraction: Double? = nil) {
+        self.phase = phase
+        self.fraction = fraction
+    }
+}
+
 public struct AIResult: Sendable {
     public var assetID: Int64
     public var url: URL
@@ -61,7 +73,8 @@ public final class AIRunner: Sendable {
     }
 
     public func run(_ request: AIRequest, on assetID: Int64, settings: AISettings,
-                    progress: @escaping @Sendable (String) -> Void = { _ in }) async throws -> AIResult {
+                    progress report: @escaping @Sendable (AIProgress) -> Void = { _ in }) async throws -> AIResult {
+        let progress = { @Sendable (phase: String) in report(AIProgress(phase)) }
         guard let original = try catalog.fileURL(for: assetID), FileManager.default.fileExists(atPath: original.path) else {
             throw AIError("The original is offline. Connect its drive and try again.")
         }
@@ -131,14 +144,22 @@ public final class AIRunner: Sendable {
             if let model = settings.upscaleModel { values["Atelier Upscale Model"] = ["model_name": model] }
         }
         let workflow = try WorkflowBinder.bind(graph, values: values, required: required)
+        let monitor = await client.monitor()
+        defer { monitor.close() }
         let promptID = try await client.queue(workflow)
+        // Node times differ by recipe and by how much is generated.
+        let timingsKey = mask != nil ? "\(recipe.rawValue)-\(settings.generationSize)" : recipe.rawValue
+        monitor.track(promptID, workflow: workflow, known: ComfyTimings.load(timingsKey))
 
         let client = self.client
         let outputs = try await withTaskCancellationHandler {
-            try await client.outputs(of: promptID) { elapsed in progress("Generating… \(Int(elapsed)) s") }
+            try await client.outputs(of: promptID) { elapsed in
+                report(AIProgress("Generating… \(Int(elapsed)) s", fraction: monitor.fraction()))
+            }
         } onCancel: {
             Task { await client.interrupt() }
         }
+        ComfyTimings.save(monitor.measured, key: timingsKey)
         guard let first = outputs.last else { throw AIError("ComfyUI returned no image.") }
         progress("Blending the result")
         guard let generated = AIImaging.image(from: try await client.download(first)) else {
