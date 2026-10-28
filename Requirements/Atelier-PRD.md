@@ -109,6 +109,18 @@ Rosh wants several treatments of one photo (colour and black and white, two crop
 - **Remove:** right-click > Remove Virtual Copy…, or Photo > Remove Virtual Copy…, after a confirmation. Only catalog data goes; the original and its file are never touched.
 - **Files:** a copy shares the original's file. Export names it `name-Copy1.jpg`. XMP sidecars are written for the original only. Re-importing the folder never mistakes a copy for the file. Culling an import entry skips copies.
 
+### Remove and delete photos (decided Oct 28, 2026)
+
+Rosh asked for Remove (from the list) and Delete (from disk) on the right-click menus. As in Lightroom, it is one command with a dialog.
+
+- **Where:** right-click a photo in the grid, Loupe, Develop or the Filmstrip > Remove Photo… ("Remove 3 Photos…" with several selected), Photo > Remove Photo… (Delete), or the Delete key in the library window. It acts on the same photos as the rest of the menu. Delete does nothing while typing, cropping or painting an AI mask, and keeps its own job in Masking and Guided Upright (removing the selected part or guide).
+- **Dialog:** names the photo, or says how many photos. **Remove** (the default button) takes them out of the catalog with their develop settings, metadata, collections, import entries and virtual copies; the files stay where they are. **Delete from Disk** also moves the files to the Trash. Cancel or Esc does nothing.
+- **RAW+JPEG pairs:** when pairs are shown as one photo, the JPEG (or HEIC, TIFF) goes with its RAW. The dialog then has a checkbox per kind of file, for example "RAW (.NEF) 12 files" and "JPEG (.JPG) 12 files", all checked to start with. Unchecking one keeps those files and their photos; a JPEG whose RAW went shows as a photo of its own.
+- **Numbers before acting:** the dialog says how many files Delete from Disk will move to the Trash, how many virtual copies go with the photos, and how many files are on a drive that isn't connected (those stay in the catalog).
+- **Never erased silently:** files only go to the Trash. A file that can't (most network shares, such as megham, have no Trash) keeps its photo, and an alert offers Keep or Delete Immediately, as Finder does. The XMP sidecar goes to the Trash with the last photo of its name in the folder.
+- **Virtual copies and stacks:** a picked virtual copy only leaves the catalog; the file it shares stays. An Edit In or AI result stacked on a removed photo stays in the catalog as a photo of its own.
+- **After:** the next photo in the list is shown, as in Lightroom.
+
 ### Filmstrip (decided Oct 27, 2026)
 
 Rosh asked for Lightroom's Filmstrip: a bottom drawer with the thumbnails of the current list.
@@ -119,7 +131,7 @@ Rosh asked for Lightroom's Filmstrip: a bottom drawer with the thumbnails of the
 - **Collapse and open:** a small arrow tab centered on the bottom edge (▾ to hide, ▴ to show), View > Show Filmstrip, or F6.
 - **Size:** drag the Filmstrip's top edge to make thumbnails bigger or smaller (56 to 220 pt).
 - **Remembered:** open or collapsed, and the height, are kept between launches.
-- **Right-click menu (Oct 27, 2026):** right-click or Control-click a thumbnail for the same photo menu as the grid, loupe and Develop (Open in Loupe, Edit in Develop, Create Virtual Copy, Edit In, AI, Show in Finder, Set Rating, Set Flag, Set Color Label, Develop Settings, Apply Develop Preset, Match Look, collections and import entries, Write XMP Metadata, Export). As in Lightroom, it acts on the Filmstrip selection in every view, Loupe and Develop included; a right-clicked photo outside the selection becomes the selection first.
+- **Right-click menu (Oct 27, 2026):** right-click or Control-click a thumbnail for the same photo menu as the grid, loupe and Develop (Open in Loupe, Edit in Develop, Create Virtual Copy, Edit In, AI, Show in Finder, Set Rating, Set Flag, Set Color Label, Develop Settings, Apply Develop Preset, Match Look, collections and import entries, Write XMP Metadata, Export, Remove Photo…). As in Lightroom, it acts on the Filmstrip selection in every view, Loupe and Develop included; a right-clicked photo outside the selection becomes the selection first.
 
 ### Masking (decided Oct 27, 2026)
 
@@ -266,7 +278,7 @@ Edits are a versioned list of parameters stored in the catalog, rendered live on
   - Next: Calibration.
   - Sliders are compact Lightroom-style rows: name, slim track with a mark at the default and the change filled in, then the value (bold when changed). Double-click the name to reset, click the value to type one. Temp, Tint, Vibrance, Saturation and the HSL sliders have colored tracks; Temp moves in perceptual (logarithmic) steps.
 - Zoom in loupe and develop: Fit, Fill, 100% (one photo pixel per screen pixel) and 200% in the bar under the photo; Z or a click toggles Fit and 100% at the clicked point; pinch, or ⌥/⌘ and scroll, zooms freely; drag to pan; View > Zoom In (⌘=), Zoom Out (⌘-), Zoom to Fit (⌘0). Zoom is kept when moving between photos.
-- Right-click a photo in the grid, loupe or develop for: Open in Loupe, Edit in Develop, zoom levels, Show in Finder, Set Rating, Set Flag, Set Color Label, Develop Settings (Copy, Paste, Reset), Add to Collection, Remove from this collection or import, Write XMP Metadata, Export. Right-clicking an unselected grid photo selects it first.
+- Right-click a photo in the grid, loupe or develop for: Open in Loupe, Edit in Develop, zoom levels, Show in Finder, Set Rating, Set Flag, Set Color Label, Develop Settings (Copy, Paste, Reset), Add to Collection, Remove from this collection or import, Write XMP Metadata, Export, Remove Photo… (see Remove and delete photos). Right-clicking an unselected grid photo selects it first.
 - Masks (built Oct 27, 2026; see Masking under User experience principles): linear gradient, radial gradient, brush, luminance range and Select Subject (Vision), combined with add, subtract and intersect, each mask with its own local adjustments. Still to come: color range, and AI masks for sky, background and person from Core ML.
 - Crop & Straighten (R, or the crop button in the tool strip under the histogram): drag corners and edges to crop, inside the frame to move, outside to straighten; rule-of-thirds grid while dragging, a finer grid while rotating. The panel has an aspect picker (Original, 1 × 1, 4 × 5, 5 × 7, 2 × 3, 3 × 4, 16 × 10, 16 × 9, Free), a swap button (or X) and a lock, an Angle slider (±45°), rotate left and right (⌘[ and ⌘]), flip horizontal and vertical, Reset and Done (Return). Straightening shrinks the frame so it never shows past the photo's edge. The crop applies to previews, exports, Edit In and AI.
 - History: unlimited undo per photo; named snapshots; virtual copies share one original. Every change is a named step (Exposure +0.60, Straighten 4.0°, Preset: Punchy, Import Preset: name) listed in the Develop sidebar; click a step to go back to it, Edit > Undo (⌘Z) and Redo (⇧⌘Z) step through it, and Clear History keeps the current look. Snapshots save the current look by name and can be applied, updated with the current settings, renamed and deleted. History and snapshots are stored with the photo.

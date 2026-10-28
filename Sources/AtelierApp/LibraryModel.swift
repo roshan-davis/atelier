@@ -100,6 +100,8 @@ final class LibraryModel: ObservableObject {
     /// The Match Look dialog, while open, and Match each photo's progress in the status bar.
     @Published var matchLook: MatchLookModel?
     @Published var matchProgress: ImportStatus?
+    /// The Remove Photo dialog, while open.
+    @Published var removal: PhotoRemoval?
     var matchTask: Task<Void, Never>?
     private var exportTask: Task<Void, Never>?
     private var importTask: Task<Void, Never>?
@@ -637,6 +639,13 @@ final class LibraryModel: ObservableObject {
 
         if mode == .develop, handleTransformKey(event) { return true }
         if mode == .develop, handleMaskingKey(event) { return true }
+
+        // Delete opens Remove Photo, as in Lightroom; not while cropping or painting an AI mask.
+        if event.keyCode == 51 || event.keyCode == 117,
+           !(mode == .develop && (develop.isCropping || develop.isAIOpen)) {
+            beginRemovePhotos()
+            return true
+        }
 
         // [ and ] size the AI brush, as in Lightroom.
         if mode == .develop, develop.isAIOpen, event.keyCode == 33 || event.keyCode == 30 {

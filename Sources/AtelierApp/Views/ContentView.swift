@@ -103,6 +103,10 @@ struct ContentView: View {
             MatchLookSheet(match: match)
                 .environmentObject(model)
         }
+        .sheet(item: $model.removal) { removal in
+            RemovePhotosSheet(removal: removal)
+                .environmentObject(model)
+        }
         .sheet(isPresented: $model.showingShortcuts) {
             ShortcutsSheet()
         }
