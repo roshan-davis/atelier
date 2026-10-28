@@ -122,6 +122,15 @@ enum LayoutSnapshots {
         try? await Task.sleep(for: .seconds(1))
         await capture(AnyView(DevelopSidebar(develop: develop).environmentObject(model)), size: CGSize(width: 280, height: 1100),
                       to: folder.appendingPathComponent("presets-panel-280x1100.png"))
+        // Hovering a preset previews it in the Navigator only.
+        if let noir = develop.presets.first(where: { $0.name == "Noir" }) {
+            develop.previewPreset(noir)
+            try? await Task.sleep(for: .seconds(2))
+            print("SNAPSHOT: navigator preview \(develop.navigatorPreview.map { "\($0.size)" } ?? "none")")
+            await capture(AnyView(DevelopSidebar(develop: develop).environmentObject(model)), size: CGSize(width: 280, height: 700),
+                          to: folder.appendingPathComponent("presets-navigator-preview-280x700.png"))
+            develop.previewPreset(nil)
+        }
         if let highContrast = develop.presets.first(where: { $0.name == "High Contrast" }) {
             develop.applyPreset(highContrast)
         }

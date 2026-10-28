@@ -13,7 +13,7 @@ private struct PresetGroup: Identifiable {
 }
 
 /// The Presets list in the Develop sidebar, grouped like Lightroom's: the user's groups first,
-/// then the built-in packs. Click to apply, rest the pointer on one to preview it.
+/// then the built-in packs. Click to apply, rest the pointer on one to preview it in the Navigator.
 struct PresetsSection: View {
     @ObservedObject var develop: DevelopController
     @Binding var isExpanded: Bool
@@ -296,7 +296,7 @@ struct PresetsSection: View {
         hoverTask = Task { @MainActor in
             // A short rest before previewing, so sweeping across the list doesn't render each one;
             // a short grace on leaving, so moving to the next preset doesn't flash the photo back.
-            try? await Task.sleep(for: .milliseconds(inside ? 250 : 120))
+            try? await Task.sleep(for: .milliseconds(inside ? 120 : 150))
             guard !Task.isCancelled else { return }
             if inside {
                 // The preset just applied is already on the photo.

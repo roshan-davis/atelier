@@ -24,7 +24,7 @@ struct DevelopSidebar: View {
     /// Sections minimized by clicking their header, remembered between launches.
     @AppStorage("develop.sidebarCollapsed") private var collapsedList = ""
 
-    private static let sections = ["presets", "snapshots", "history"]
+    private static let sections = ["navigator", "presets", "snapshots", "history"]
 
     private func isExpanded(_ section: String) -> Binding<Bool> {
         Binding(get: { !collapsedList.split(separator: ",").contains(Substring(section)) }, set: { open in
@@ -39,6 +39,11 @@ struct DevelopSidebar: View {
         // sheets flash as they closed.
         ScrollView(.vertical) {
             VStack(spacing: 0) {
+                SidebarSection(title: "Navigator", isExpanded: isExpanded("navigator")) {
+                    EmptyView()
+                } content: {
+                    NavigatorView(develop: develop)
+                }
                 PresetsSection(develop: develop, isExpanded: isExpanded("presets"))
 
                 SidebarSection(title: "Snapshots", isExpanded: isExpanded("snapshots")) {
@@ -257,5 +262,37 @@ struct SidebarIconButtonStyle: ButtonStyle {
                 .contentShape(Rectangle())
                 .onHover { hovering = $0 }
         }
+    }
+}
+
+/// Lightroom Classic's Navigator: the open photo, small. Resting the pointer on a preset shows
+/// that preset here, so the big photo only changes when the preset is clicked.
+private struct NavigatorView: View {
+    @ObservedObject var develop: DevelopController
+
+    var body: some View {
+        let previewing = develop.previewingPreset
+        ZStack(alignment: .bottomLeading) {
+            Color.black.opacity(0.15)
+            if let image = (previewing != nil ? develop.navigatorPreview : nil) ?? develop.image {
+                Image(nsImage: image)
+                    .resizable()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fit)
+            }
+            if let previewing {
+                Text(develop.navigatorPreview == nil ? "Previewing \(previewing.name)…" : previewing.name)
+                    .font(.caption.weight(.semibold))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 4))
+                    .foregroundStyle(.white)
+                    .padding(6)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 150)
+        .clipShape(RoundedRectangle(cornerRadius: 4))
+        .help("Rest the pointer on a preset to preview it here; click the preset to apply it")
     }
 }
