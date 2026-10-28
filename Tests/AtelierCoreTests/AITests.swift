@@ -85,14 +85,31 @@ final class AITests: XCTestCase {
 
     func testBinderFillsInputsByTitle() throws {
         let graph = try AIRecipe.removeObject.workflow().graph
-        let bound = try WorkflowBinder.bind(graph, values: ["Atelier Prompt": ["text": "sand"], "Atelier Sampler": ["seed": 7]],
+        let bound = try WorkflowBinder.bind(graph, values: ["Atelier Prompt": ["text": "sand", "prompt": "sand"], "Atelier Sampler": ["seed": 7]],
                                             required: ["Atelier Prompt"])
-        let prompt = (bound["4"] as? [String: Any])?["inputs"] as? [String: Any]
-        XCTAssertEqual(prompt?["text"] as? String, "sand")
-        XCTAssertEqual(((bound["7"] as? [String: Any])?["inputs"] as? [String: Any])?["seed"] as? Int, 7)
+        let prompt = (bound["9"] as? [String: Any])?["inputs"] as? [String: Any]
+        XCTAssertEqual(prompt?["prompt"] as? String, "sand", "Qwen's encoder takes the prompt as `prompt`")
+        XCTAssertNil(prompt?["text"], "inputs the node doesn't have are skipped")
+        XCTAssertEqual(((bound["15"] as? [String: Any])?["inputs"] as? [String: Any])?["seed"] as? Int, 7)
         // The clip link is untouched.
-        XCTAssertEqual((prompt?["clip"] as? [Any])?.first as? String, "1")
+        XCTAssertEqual((prompt?["clip"] as? [Any])?.first as? String, "2")
         XCTAssertThrowsError(try WorkflowBinder.bind(graph, values: [:], required: ["Atelier Nothing"]))
+    }
+
+    func testBuiltInEditModelsArePermissive() {
+        for recipe in [AIRecipe.removeObject, .replaceBackground] {
+            XCTAssertFalse(recipe.builtInModels.isEmpty)
+            XCTAssertTrue(recipe.builtInModels.allSatisfy { $0.license == "Apache-2.0" && $0.allowedUse == .commercial })
+            let graph = (try? recipe.workflow().graph) ?? [:]
+            let files = graph.values.compactMap { ($0 as? [String: Any])?["inputs"] as? [String: Any] }
+                .flatMap { $0.values.compactMap { $0 as? String } }
+            for model in recipe.builtInModels { XCTAssertTrue(files.contains(model.file), "\(model.file) is in the workflow") }
+        }
+        XCTAssertEqual(AIRecipe.removeObject.instruction(for: "trash can"),
+                       "Remove the trash can and fill the area with the surrounding background so it looks natural")
+        XCTAssertEqual(AIRecipe.removeObject.instruction(for: "Remove the sign"), "Remove the sign")
+        XCTAssertEqual(AIRecipe.replaceBackground.instruction(for: "a beach at dusk"),
+                       "Replace the background with a beach at dusk. Keep the subject exactly as it is.")
     }
 
     func testMaskBoundsAndRegion() throws {
@@ -122,13 +139,14 @@ final class AITests: XCTestCase {
         let request = AIRequest(recipe: .removeObject, strokes: [BrushStroke(points: [CGPoint(x: 0.5, y: 0.5)], radius: 0.06)],
                                 seed: 42)
         let result = try await AIRunner(catalog: catalog, client: client())
-            .run(request, on: id, settings: AISettings(checkpoint: "my-inpaint.safetensors"))
+            .run(request, on: id, settings: AISettings(editModel: "my-edit.gguf"))
         XCTAssertEqual(result.url.lastPathComponent, "Beach-AI Remove Object.tif")
 
         let workflow = try XCTUnwrap(MockComfy.queued.first)
         let inputs = { (node: String) in (workflow[node] as? [String: Any])?["inputs"] as? [String: Any] }
-        XCTAssertEqual(inputs("1")?["ckpt_name"] as? String, "my-inpaint.safetensors")
-        XCTAssertEqual(inputs("7")?["seed"] as? Int, 42)
+        XCTAssertEqual(inputs("1")?["unet_name"] as? String, "my-edit.gguf")
+        XCTAssertEqual(inputs("15")?["seed"] as? Int, 42)
+        XCTAssertEqual(inputs("9")?["prompt"] as? String, AIRecipe.removeObject.defaultPrompt)
 
         let image = try XCTUnwrap(AIImaging.image(at: result.url))
         XCTAssertEqual(image.width, 400)
@@ -138,7 +156,10 @@ final class AITests: XCTestCase {
         let row = try XCTUnwrap(catalog.assetRows(filter: LibraryFilter()).first { $0.id == result.assetID })
         XCTAssertEqual(row.stackParentId, id)
         XCTAssertEqual(row.stackKind, .ai)
-        XCTAssertTrue(try catalog.derivation(of: result.assetID)?.provenance?.contains("\"seed\":42") ?? false)
+        let provenance = try XCTUnwrap(catalog.derivation(of: result.assetID)?.provenance)
+        XCTAssertTrue(provenance.contains("\"seed\":42"))
+        XCTAssertTrue(provenance.contains("\"license\":\"unknown\""), "a swapped edit model's license is unknown")
+        XCTAssertTrue(provenance.contains("Apache-2.0"), "the rest of the built-in models are recorded")
     }
 
     func testUpscaleAsksForTheChosenFactor() async throws {

@@ -26,7 +26,7 @@ public enum AIRecipe: String, CaseIterable, Codable, Sendable {
 
     public var summary: String {
         switch self {
-        case .removeObject: return "Paint over what should go. Only the painted area changes."
+        case .removeObject: return "Paint over what should go, and say what it is. Only the painted area changes."
         case .replaceBackground: return "Atelier finds the subject and keeps it; the rest is generated from your prompt."
         case .upscale: return "Enlarges the photo with an upscaling model."
         }
@@ -38,9 +38,31 @@ public enum AIRecipe: String, CaseIterable, Codable, Sendable {
 
     public var defaultPrompt: String {
         switch self {
-        case .removeObject: return "empty background, seamless continuation of the surroundings, natural texture"
+        case .removeObject: return "Remove the object and fill the area with the surrounding background so it looks natural"
         case .replaceBackground: return ""
         case .upscale: return ""
+        }
+    }
+
+    /// The instruction the edit model gets. Replace Background wraps the user's description.
+    public func instruction(for prompt: String) -> String {
+        let prompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        switch self {
+        case .removeObject:
+            if prompt.isEmpty { return defaultPrompt }
+            if prompt.lowercased().hasPrefix("remove") { return prompt }
+            return "Remove the \(prompt) and fill the area with the surrounding background so it looks natural"
+        case .replaceBackground: return "Replace the background with \(prompt). Keep the subject exactly as it is."
+        case .upscale: return ""
+        }
+    }
+
+    /// The models the built-in workflow loads, with their licenses, so a result can be checked
+    /// against the license gate. Upscale's model is the user's pick, so its license is unknown.
+    public var builtInModels: [AIModel] {
+        switch self {
+        case .removeObject, .replaceBackground: return AIModel.qwenImageEdit2511
+        case .upscale: return []
         }
     }
 
@@ -80,27 +102,40 @@ public enum AIRecipe: String, CaseIterable, Codable, Sendable {
         }
     }
 
-    /// Core nodes only: an inpainting checkpoint fills the masked area.
+    /// Qwen-Image-Edit-2511 (GGUF, via ComfyUI-GGUF) with the 4-step Lightning LoRA. The photo is
+    /// the edit reference; the mask limits which part of the latent is regenerated.
     static let inpaintWorkflow = """
         {
-          "1": {"class_type": "CheckpointLoaderSimple", "_meta": {"title": "Atelier Checkpoint"},
-                "inputs": {"ckpt_name": "inpainting.safetensors"}},
-          "2": {"class_type": "LoadImage", "_meta": {"title": "Atelier Image"}, "inputs": {"image": "input.png"}},
-          "3": {"class_type": "LoadImageMask", "_meta": {"title": "Atelier Mask"},
+          "1": {"class_type": "UnetLoaderGGUF", "_meta": {"title": "Atelier Edit Model"},
+                "inputs": {"unet_name": "qwen-image-edit-2511-Q6_K.gguf"}},
+          "2": {"class_type": "CLIPLoader", "_meta": {"title": "Atelier Text Encoder"},
+                "inputs": {"clip_name": "qwen_2.5_vl_7b.safetensors", "type": "qwen_image", "device": "default"}},
+          "3": {"class_type": "VAELoader", "inputs": {"vae_name": "qwen_image_vae.safetensors"}},
+          "4": {"class_type": "LoraLoaderModelOnly", "_meta": {"title": "Atelier Speed LoRA"},
+                "inputs": {"model": ["1", 0], "lora_name": "Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
+                           "strength_model": 1.0}},
+          "5": {"class_type": "ModelSamplingAuraFlow", "inputs": {"model": ["4", 0], "shift": 3.1}},
+          "6": {"class_type": "CFGNorm", "inputs": {"model": ["5", 0], "strength": 1.0}},
+          "7": {"class_type": "LoadImage", "_meta": {"title": "Atelier Image"}, "inputs": {"image": "input.png"}},
+          "8": {"class_type": "LoadImageMask", "_meta": {"title": "Atelier Mask"},
                 "inputs": {"image": "mask.png", "channel": "red"}},
-          "4": {"class_type": "CLIPTextEncode", "_meta": {"title": "Atelier Prompt"},
-                "inputs": {"text": "", "clip": ["1", 1]}},
-          "5": {"class_type": "CLIPTextEncode", "_meta": {"title": "Atelier Negative Prompt"},
-                "inputs": {"text": "blurry, artifacts, text, watermark, frame, border", "clip": ["1", 1]}},
-          "6": {"class_type": "VAEEncodeForInpaint",
-                "inputs": {"pixels": ["2", 0], "vae": ["1", 2], "mask": ["3", 0], "grow_mask_by": 8}},
-          "7": {"class_type": "KSampler", "_meta": {"title": "Atelier Sampler"},
-                "inputs": {"seed": 0, "steps": 30, "cfg": 6.5, "sampler_name": "dpmpp_2m", "scheduler": "karras",
-                           "denoise": 1.0, "model": ["1", 0], "positive": ["4", 0], "negative": ["5", 0],
-                           "latent_image": ["6", 0]}},
-          "8": {"class_type": "VAEDecode", "inputs": {"samples": ["7", 0], "vae": ["1", 2]}},
-          "9": {"class_type": "SaveImage", "_meta": {"title": "Atelier Output"},
-                "inputs": {"images": ["8", 0], "filename_prefix": "Atelier"}}
+          "9": {"class_type": "TextEncodeQwenImageEditPlus", "_meta": {"title": "Atelier Prompt"},
+                "inputs": {"prompt": "", "clip": ["2", 0], "vae": ["3", 0], "image1": ["7", 0]}},
+          "10": {"class_type": "TextEncodeQwenImageEditPlus", "_meta": {"title": "Atelier Negative Prompt"},
+                 "inputs": {"prompt": "", "clip": ["2", 0], "vae": ["3", 0], "image1": ["7", 0]}},
+          "11": {"class_type": "FluxKontextMultiReferenceLatentMethod",
+                 "inputs": {"conditioning": ["9", 0], "reference_latents_method": "index_timestep_zero"}},
+          "12": {"class_type": "FluxKontextMultiReferenceLatentMethod",
+                 "inputs": {"conditioning": ["10", 0], "reference_latents_method": "index_timestep_zero"}},
+          "13": {"class_type": "VAEEncode", "inputs": {"pixels": ["7", 0], "vae": ["3", 0]}},
+          "14": {"class_type": "SetLatentNoiseMask", "inputs": {"samples": ["13", 0], "mask": ["8", 0]}},
+          "15": {"class_type": "KSampler", "_meta": {"title": "Atelier Sampler"},
+                 "inputs": {"seed": 0, "steps": 4, "cfg": 1.0, "sampler_name": "euler", "scheduler": "simple",
+                            "denoise": 1.0, "model": ["6", 0], "positive": ["11", 0], "negative": ["12", 0],
+                            "latent_image": ["14", 0]}},
+          "16": {"class_type": "VAEDecode", "inputs": {"samples": ["15", 0], "vae": ["3", 0]}},
+          "17": {"class_type": "SaveImage", "_meta": {"title": "Atelier Output"},
+                 "inputs": {"images": ["16", 0], "filename_prefix": "Atelier"}}
         }
         """
 
@@ -122,6 +157,8 @@ public enum AIRecipe: String, CaseIterable, Codable, Sendable {
 /// Fills a workflow's inputs by node title.
 public enum WorkflowBinder {
     /// `values` maps a node title to the inputs to set on it. Titles in `required` must exist.
+    /// A value whose input the node doesn't have is skipped, so one binding can offer
+    /// alternatives (a prompt is `text` on CLIPTextEncode and `prompt` on Qwen's encoder).
     public static func bind(_ graph: [String: Any], values: [String: [String: Any]],
                             required: Set<String> = []) throws -> [String: Any] {
         var graph = graph
@@ -131,7 +168,7 @@ public enum WorkflowBinder {
                   let title = (node["_meta"] as? [String: Any])?["title"] as? String,
                   let inputs = values[title] else { continue }
             var nodeInputs = node["inputs"] as? [String: Any] ?? [:]
-            for (key, input) in inputs { nodeInputs[key] = input }
+            for (key, input) in inputs where nodeInputs[key] != nil { nodeInputs[key] = input }
             node["inputs"] = nodeInputs
             graph[id] = node
             found.insert(title)
@@ -141,4 +178,41 @@ public enum WorkflowBinder {
         }
         return graph
     }
+}
+
+/// A model a workflow loads, and what its license allows. Prep for the model registry and
+/// the license gate on export.
+public struct AIModel: Codable, Hashable, Sendable {
+    public enum AllowedUse: String, Codable, Sendable { case commercial, personal, research, unknown }
+
+    public var name: String
+    public var file: String
+    public var license: String
+    public var allowedUse: AllowedUse
+    public var source: URL?
+
+    public init(name: String, file: String, license: String, allowedUse: AllowedUse, source: URL? = nil) {
+        self.name = name
+        self.file = file
+        self.license = license
+        self.allowedUse = allowedUse
+        self.source = source
+    }
+
+    /// What the built-in edit workflow loads. All Apache 2.0, so results may go to the website or shop.
+    public static let qwenImageEdit2511: [AIModel] = [
+        AIModel(name: "Qwen-Image-Edit-2511 (Q6_K GGUF)", file: "qwen-image-edit-2511-Q6_K.gguf",
+                license: "Apache-2.0", allowedUse: .commercial,
+                source: URL(string: "https://huggingface.co/unsloth/Qwen-Image-Edit-2511-GGUF")),
+        AIModel(name: "Qwen2.5-VL 7B text encoder", file: "qwen_2.5_vl_7b.safetensors",
+                license: "Apache-2.0", allowedUse: .commercial,
+                source: URL(string: "https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI")),
+        AIModel(name: "Qwen-Image VAE", file: "qwen_image_vae.safetensors",
+                license: "Apache-2.0", allowedUse: .commercial,
+                source: URL(string: "https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI")),
+        AIModel(name: "Qwen-Image-Edit-2511 Lightning 4-step LoRA",
+                file: "Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
+                license: "Apache-2.0", allowedUse: .commercial,
+                source: URL(string: "https://huggingface.co/lightx2v/Qwen-Image-Edit-2511-Lightning")),
+    ]
 }

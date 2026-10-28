@@ -6,8 +6,9 @@ import UniformTypeIdentifiers
 /// How Atelier talks to ComfyUI, from Settings > AI.
 public struct AISettings: Codable, Hashable, Sendable {
     public var server: URL
-    /// Inpainting checkpoint for Remove Object and Replace Background; nil keeps the workflow's.
-    public var checkpoint: String?
+    /// Edit model (a diffusion model file, e.g. a Qwen-Image-Edit GGUF) for Remove Object and
+    /// Replace Background; nil keeps the workflow's.
+    public var editModel: String?
     /// Upscaling model (a 4x model) for Upscale; nil keeps the workflow's.
     public var upscaleModel: String?
     /// Long edge, in pixels, of what the model generates.
@@ -16,10 +17,10 @@ public struct AISettings: Codable, Hashable, Sendable {
 
     public static let defaultServer = URL(string: "http://127.0.0.1:8188")!
 
-    public init(server: URL = AISettings.defaultServer, checkpoint: String? = nil, upscaleModel: String? = nil,
+    public init(server: URL = AISettings.defaultServer, editModel: String? = nil, upscaleModel: String? = nil,
                 generationSize: Int = 1024, upscaleFactor: Int = 2) {
         self.server = server
-        self.checkpoint = checkpoint
+        self.editModel = editModel
         self.upscaleModel = upscaleModel
         self.generationSize = generationSize
         self.upscaleFactor = upscaleFactor
@@ -116,9 +117,10 @@ public final class AIRunner: Sendable {
             let maskName = try await client.upload(png: maskPNG, name: "atelier-\(token)-mask.png")
             values["Atelier Image"] = ["image": imageName]
             values["Atelier Mask"] = ["image": maskName]
-            values["Atelier Prompt"] = ["text": prompt.isEmpty ? recipe.defaultPrompt : prompt]
+            let instruction = recipe.instruction(for: prompt)
+            values["Atelier Prompt"] = ["text": instruction, "prompt": instruction]
             values["Atelier Sampler"] = ["seed": Int(request.seed)]
-            if let checkpoint = settings.checkpoint { values["Atelier Checkpoint"] = ["ckpt_name": checkpoint] }
+            if let editModel = settings.editModel { values["Atelier Edit Model"] = ["unet_name": editModel] }
             required.insert("Atelier Mask")
         } else {
             work = baseSize
@@ -165,7 +167,8 @@ public final class AIRunner: Sendable {
         let provenance: [String: Any] = [
             "recipe": recipe.rawValue,
             "workflow": isCustom ? recipe.workflowURL.lastPathComponent : "built-in",
-            "checkpoint": settings.checkpoint ?? "workflow default",
+            "editModel": settings.editModel ?? "workflow default",
+            "models": models(for: recipe, isCustom: isCustom, settings: settings),
             "upscaleModel": recipe == .upscale ? (settings.upscaleModel ?? "workflow default") : "",
             "prompt": prompt,
             "seed": Int(request.seed),
@@ -179,6 +182,21 @@ public final class AIRunner: Sendable {
         let id = try Importer(catalog: catalog, previews: nil)
             .addStacked(target, on: assetID, kind: .ai, name: recipe.title, provenance: json)
         return AIResult(assetID: id, url: target)
+    }
+
+    /// Which models made the result, with their licenses, for the license gate. Models Atelier
+    /// can't vouch for (a custom workflow, a different edit model) are recorded as unknown.
+    private func models(for recipe: AIRecipe, isCustom: Bool, settings: AISettings) -> [[String: String]] {
+        if isCustom { return [["name": recipe.workflowURL.lastPathComponent, "license": "unknown", "allowedUse": "unknown"]] }
+        var models = recipe.builtInModels
+        if let editModel = settings.editModel, let i = models.indices.first, models[i].file != editModel {
+            models[i] = AIModel(name: editModel, file: editModel, license: "unknown", allowedUse: .unknown)
+        }
+        if recipe == .upscale {
+            models = [AIModel(name: settings.upscaleModel ?? "workflow default", file: settings.upscaleModel ?? "",
+                              license: "unknown", allowedUse: .unknown)]
+        }
+        return models.map { ["name": $0.name, "file": $0.file, "license": $0.license, "allowedUse": $0.allowedUse.rawValue] }
     }
 
     /// 16-bit TIFF, keeping the rendered photo's metadata.
