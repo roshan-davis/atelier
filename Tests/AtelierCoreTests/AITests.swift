@@ -149,6 +149,10 @@ final class AITests: XCTestCase {
         // The model's reference is the photo with the painted area filled, not the photo itself.
         XCTAssertEqual((inputs("9")?["image1"] as? [Any])?.first as? String, "20")
         XCTAssertEqual((inputs("20")?["mask"] as? [Any])?.first as? String, "8")
+        // The reference latent is the filled image at the generation size, not Qwen's 1 MP rescale.
+        XCTAssertNil(inputs("9")?["vae"])
+        XCTAssertEqual((inputs("21")?["pixels"] as? [Any])?.first as? String, "20")
+        XCTAssertEqual((inputs("11")?["conditioning"] as? [Any])?.first as? String, "22")
 
         let image = try XCTUnwrap(AIImaging.image(at: result.url))
         XCTAssertEqual(image.width, 400)
