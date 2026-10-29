@@ -51,14 +51,9 @@ struct AIBrushView: View {
                     current = nil
                 })
             .onContinuousHover { phase in
-                if case .active(let point) = phase {
-                    hover = point
-                    if ai.recipe.usesBrush { NSCursor.crosshair.set() }
-                } else {
-                    hover = nil
-                    NSCursor.arrow.set()
-                }
+                if case .active(let point) = phase { hover = point } else { hover = nil }
             }
+            .cursor { [ai] point in ai.recipe.usesBrush && rect.contains(point) ? .crosshair : .arrow }
         }
         .onChange(of: assetID) { _, _ in ai.reset() }
         .onAppear { findSubjectIfNeeded() }

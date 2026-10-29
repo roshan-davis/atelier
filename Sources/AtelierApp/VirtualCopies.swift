@@ -50,6 +50,7 @@ extension LibraryModel {
         do {
             let removed = try catalog.removeVirtualCopies(copies)
             for id in copies { previews.remove(for: id) }
+            DeleteFeedback.play(.remove)
             status = "Removed \(removed) virtual cop\(removed == 1 ? "y" : "ies")"
         } catch {
             status = error.localizedDescription

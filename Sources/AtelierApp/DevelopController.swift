@@ -848,6 +848,7 @@ final class DevelopController: ObservableObject {
         guides.remove(at: index)
         selectedGuide = nil
         setGuides(guides)
+        DeleteFeedback.play(.remove)
     }
 
     /// The Transform's mapping between the corrected photo and the output.
@@ -1138,7 +1139,7 @@ final class DevelopController: ObservableObject {
     }
 
     func deletePreset(_ preset: DevelopPreset) {
-        presetFileChange { try presetStore.delete(preset.id) }
+        if presetFileChange({ try presetStore.delete(preset.id) }) { DeleteFeedback.play(.remove) }
     }
 
     func renamePresetGroup(_ group: String, to name: String) {
@@ -1146,7 +1147,7 @@ final class DevelopController: ObservableObject {
     }
 
     func deletePresetGroup(_ group: String) {
-        presetFileChange { _ = try presetStore.deleteGroup(group) }
+        if presetFileChange({ _ = try presetStore.deleteGroup(group) }) { DeleteFeedback.play(.remove) }
     }
 
     /// The user's preset in `group` named `name`, ignoring case, if there is one.
@@ -1166,13 +1167,17 @@ final class DevelopController: ObservableObject {
         presetFileChange { try presetStore.save(changed) }
     }
 
-    private func presetFileChange(_ change: () throws -> Void) {
+    /// Whether the change was saved.
+    @discardableResult
+    private func presetFileChange(_ change: () throws -> Void) -> Bool {
+        defer { presets = presetStore.all() }
         do {
             try change()
+            return true
         } catch {
             errorMessage = "Could not save presets: \(error.localizedDescription)"
+            return false
         }
-        presets = presetStore.all()
     }
 
     // MARK: History and snapshots
@@ -1248,6 +1253,7 @@ final class DevelopController: ObservableObject {
         history.snapshots.removeAll { $0.id == id }
         dirty = true
         flushSave()
+        DeleteFeedback.play(.remove)
     }
 
     /// Turns the change in progress into a history step now.
@@ -1698,6 +1704,7 @@ extension DevelopController {
             selectedComponentID = nil
         }
         changed(step: "Delete \(name)")
+        DeleteFeedback.play(.remove)
     }
 
     func deleteAllMasks() {
@@ -1707,6 +1714,7 @@ extension DevelopController {
         selectedComponentID = nil
         maskTool = nil
         changed(step: "Delete All Masks")
+        DeleteFeedback.play(.remove)
     }
 
     /// Removes a part; the whole mask goes with its last part.
@@ -1718,6 +1726,7 @@ extension DevelopController {
         settings.masks[index].components[0].mode = .add
         if selectedComponentID == id { selectedComponentID = nil }
         changed(step: "Delete Part of \(settings.masks[index].name)")
+        DeleteFeedback.play(.remove)
     }
 
     /// Delete key in Masking: the selected part, or the selected mask.

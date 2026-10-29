@@ -37,6 +37,11 @@ extension LibraryModel {
                 let result = try catalog.deletePhotos(files, virtualCopies: copies)
                 finishRemoving(result.trashed + result.missing, copies: copies, next: next)
                 report(result, copies: copies.count)
+                if !result.trashed.isEmpty {
+                    DeleteFeedback.play(.trash)
+                } else if !result.missing.isEmpty || !copies.isEmpty {
+                    DeleteFeedback.play(.remove)
+                }
                 if !result.notTrashed.isEmpty {
                     // After the sheet has gone.
                     let failures = result.notTrashed
@@ -45,6 +50,7 @@ extension LibraryModel {
             } else {
                 try catalog.removePhotos(files.map(\.assetID) + copies)
                 finishRemoving(files, copies: copies, next: next)
+                DeleteFeedback.play(.remove)
                 let photos = removal.photoCount
                 status = "Removed \(photos) photo\(photos == 1 ? "" : "s") from the catalog. The files are still on disk."
             }
@@ -106,6 +112,7 @@ extension LibraryModel {
             let next = photoAfterRemoving(Set(files.map(\.assetID)))
             let result = try catalog.deletePhotosImmediately(files)
             finishRemoving(result.trashed + result.missing, copies: [], next: next)
+            if !result.trashed.isEmpty { DeleteFeedback.play(.trash) }
             let deleted = result.trashed.count
             status = "Deleted \(deleted) file\(deleted == 1 ? "" : "s")"
                 + (result.notTrashed.isEmpty ? "" : ". \(result.notTrashed.count) couldn’t be deleted: \(result.notTrashed[0].reason)")

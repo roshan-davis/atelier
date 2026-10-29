@@ -92,16 +92,9 @@ private struct MaskOverlay: View {
                 .onChanged { drag in dragChanged(drag, space: space) }
                 .onEnded { drag in dragEnded(drag, space: space) })
             .onContinuousHover { phase in
-                if case .active(let point) = phase {
-                    hover = point
-                    if keys.spaceDown { NSCursor.openHand.set() }
-                    else if isPainting || develop.maskTool != nil { NSCursor.crosshair.set() }
-                    else { NSCursor.arrow.set() }
-                } else {
-                    hover = nil
-                    NSCursor.arrow.set()
-                }
+                if case .active(let point) = phase { hover = point } else { hover = nil }
             }
+            .cursor { point in cursor(for: beginAction(at: point, space: space)) }
         }
         .onAppear { keys.install() }
         .onDisappear { keys.remove() }
@@ -273,7 +266,11 @@ private struct MaskOverlay: View {
 
     private func dragChanged(_ drag: DragGesture.Value, space: MaskSpace) {
         hover = drag.location
-        if action == nil { action = beginAction(at: drag.startLocation, space: space) }
+        if action == nil {
+            let begun = beginAction(at: drag.startLocation, space: space)
+            if case .paint(let erasing) = begun { startStroke(at: drag.startLocation, erasing: erasing, space: space) }
+            action = begun
+        }
         guard let action else { return }
         switch action {
         case .drawLinear(let start):
@@ -375,8 +372,20 @@ private struct MaskOverlay: View {
         }
     }
 
+    /// What the pointer shows over `point`: what a drag starting there would do.
+    private func cursor(for action: DragAction) -> CursorShape {
+        switch action {
+        case .drawLinear, .drawRadial, .drawBox, .paint: return .crosshair
+        case .movePin, .linearEnd, .radialAxis, .pan: return .grab
+        case .radialRotate: return .rotate
+        case .selectPin: return .link
+        case .none: return .arrow
+        }
+    }
+
     /// Decides what a drag starting at `point` does: drawing with the current tool, a handle
-    /// of the selected part, a pin, or painting into the selected brush part.
+    /// of the selected part, a pin, or painting into the selected brush part. Changes nothing,
+    /// so the cursor asks it too.
     private func beginAction(at point: CGPoint, space: MaskSpace) -> DragAction {
         if keys.spaceDown { return .pan(last: point) }
         if let tool = develop.maskTool {
@@ -385,7 +394,7 @@ private struct MaskOverlay: View {
             case .linear: return .drawLinear(start: point)
             case .radial: return .drawRadial(center: point)
             case .object: return .drawBox(start: point)
-            case .brush: return startPainting(at: point, space: space)
+            case .brush: return painting
             case .luminance, .subject: return .none
             }
         }
@@ -422,16 +431,18 @@ private struct MaskOverlay: View {
                 }
             }
         }
-        if isPainting, space.rect.contains(point) { return startPainting(at: point, space: space) }
+        if isPainting, space.rect.contains(point) { return painting }
         // Zoomed in, a drag on empty photo moves around it.
         return frame.canPan ? .pan(last: point) : .none
     }
 
-    private func startPainting(at point: CGPoint, space: MaskSpace) -> DragAction {
-        let erasing = develop.brushErasing || NSEvent.modifierFlags.contains(.option)
+    private var painting: DragAction {
+        .paint(erasing: develop.brushErasing || NSEvent.modifierFlags.contains(.option))
+    }
+
+    private func startStroke(at point: CGPoint, erasing: Bool, space: MaskSpace) {
         stroke = DevelopSettings.MaskStroke(points: [space.maskPoint(point)], size: develop.brushSize,
                                             feather: develop.brushFeather, flow: develop.brushFlow, erases: erasing)
-        return .paint(erasing: erasing)
     }
 
     private func replaceSelected(_ shape: Component.Shape) {

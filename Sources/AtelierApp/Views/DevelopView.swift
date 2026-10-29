@@ -238,11 +238,11 @@ private struct SliderCompareView: View {
                 Color.clear
                     .frame(width: 20, height: size.height)
                     .contentShape(Rectangle())
-                    .onHover { inside in (inside ? NSCursor.resizeLeftRight : NSCursor.arrow).set() }
                     .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .named("slider")).onChanged { value in
                         guard size.width > 0 else { return }
                         position = min(1, max(0, value.location.x / size.width))
                     })
+                    .cursor(.columnResize)
                     .position(x: dividerX, y: size.height / 2)
                 Circle()
                     .fill(Color.white)
@@ -528,7 +528,19 @@ private struct CurveEditor: View {
             .gesture(DragGesture(minimumDistance: 0)
                 .onChanged { value in drag(value, size: size) }
                 .onEnded { value in endDrag(value, size: size) })
+            // A hand on a point; elsewhere a click adds one, as with Lightroom's point curve.
+            .cursor { location in nearestPoint(to: location, in: size) == nil ? .crosshair : .grab }
         }
+    }
+
+    /// The point a drag starting at `location` picks up, if any.
+    private func nearestPoint(to location: CGPoint, in size: CGSize) -> Int? {
+        let points = self.points
+        let nearest = points.indices.min { a, b in
+            distance(position(of: points[a], in: size), location) < distance(position(of: points[b], in: size), location)
+        }
+        guard let nearest, distance(position(of: points[nearest], in: size), location) < 12 else { return nil }
+        return nearest
     }
 
     private func curvePath(size: CGSize, _ f: (Double) -> Double) -> Path {
@@ -551,10 +563,7 @@ private struct CurveEditor: View {
         if dragIndex == nil {
             // Grab the nearest point, or add one on the curve where the drag began.
             let start = value.startLocation
-            let nearest = points.indices.min { a, b in
-                distance(position(of: points[a], in: size), start) < distance(position(of: points[b], in: size), start)
-            }
-            if let nearest, distance(position(of: points[nearest], in: size), start) < 12 {
+            if let nearest = nearestPoint(to: start, in: size) {
                 dragIndex = nearest
             } else {
                 let x = value.value(at: start, in: size).x
@@ -736,6 +745,7 @@ private struct ColorWheel: View {
                     if !option { saturation = min(100, (dx * dx + dy * dy).squareRoot() / radius * 100).rounded() }
                 }
                 .onEnded { _ in onOption?(false) })
+            .cursor(.crosshair)
         }
         .aspectRatio(1, contentMode: .fit)
     }

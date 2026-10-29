@@ -276,9 +276,7 @@ struct GuidedUprightView: View {
             .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .local)
                 .onChanged { drag in dragChanged(drag, rect: rect) }
                 .onEnded { drag in dragEnded(drag, rect: rect) })
-            .onContinuousHover { phase in
-                if case .active = phase { NSCursor.crosshair.set() } else { NSCursor.arrow.set() }
-            }
+            .cursor { point in cursor(for: beginAction(at: point, rect: rect)) }
         }
         .onChange(of: develop.assetID) { _, _ in
             action = nil
@@ -382,6 +380,15 @@ struct GuidedUprightView: View {
     }
 
     // MARK: Dragging
+
+    /// What the pointer shows over `point`: what a drag starting there would do.
+    private func cursor(for action: DragAction) -> CursorShape {
+        switch action {
+        case .draw: return .crosshair
+        case .moveEnd, .pan: return .grab
+        case .select(let index): return index == nil ? .arrow : .link
+        }
+    }
 
     private func beginAction(at point: CGPoint, rect: CGRect) -> DragAction {
         if NSEvent.modifierFlags.contains([.command, .option]) {

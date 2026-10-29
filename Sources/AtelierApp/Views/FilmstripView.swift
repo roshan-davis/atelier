@@ -34,9 +34,6 @@ struct FilmstripView: View {
                 Color.clear
                     .frame(height: 8)
                     .contentShape(Rectangle())
-                    .onHover { inside in
-                        if inside { NSCursor.resizeUpDown.push() } else { NSCursor.pop() }
-                    }
                     .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .global)
                         .onChanged { value in
                             let start = startHeight ?? height
@@ -44,6 +41,7 @@ struct FilmstripView: View {
                             height = min(Filmstrip.maxHeight, max(Filmstrip.minHeight, start - value.translation.height))
                         }
                         .onEnded { _ in startHeight = nil })
+                    .cursor(.rowResize)
             )
             .help("Drag to resize the Filmstrip")
     }

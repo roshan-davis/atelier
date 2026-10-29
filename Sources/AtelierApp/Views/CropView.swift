@@ -229,13 +229,7 @@ struct CropEditorView: View {
                     dragStart = nil
                     handle = nil
                 })
-            .onContinuousHover { phase in
-                if case .active(let point) = phase {
-                    cursor(for: hit(point, rect: rect)).set()
-                } else {
-                    NSCursor.arrow.set()
-                }
-            }
+            .cursor { point in cursor(for: hit(point, rect: rect)) }
         }
     }
 
@@ -297,13 +291,20 @@ struct CropEditorView: View {
         return rect.contains(point) ? .move : .rotate
     }
 
-    private func cursor(for handle: Handle) -> NSCursor {
+    /// As in Lightroom: a hand inside the frame, resize arrows on its edges and corners, and a
+    /// curved arrow outside it for straightening.
+    private func cursor(for handle: Handle) -> CursorShape {
         switch handle {
-        case .move: return .openHand
-        case .left, .right: return .resizeLeftRight
-        case .top, .bottom: return .resizeUpDown
-        case .rotate: return .crosshair
-        default: return .crosshair
+        case .move: return .grab
+        case .rotate: return .rotate
+        case .left: return .resize(.left)
+        case .right: return .resize(.right)
+        case .top: return .resize(.top)
+        case .bottom: return .resize(.bottom)
+        case .topLeft: return .resize(.topLeft)
+        case .topRight: return .resize(.topRight)
+        case .bottomLeft: return .resize(.bottomLeft)
+        case .bottomRight: return .resize(.bottomRight)
         }
     }
 
