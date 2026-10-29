@@ -583,19 +583,21 @@ def main():
     save(red_overlay(base, bright), "mask-luminance-overlay.jpg")
     pair("mask-luminance", base, mix(base, highlights(base, -0.6), bright))
 
-    # Presets (approximations of the built-in looks)
-    looks = {
-        "portrait-400": lambda i: grain(color_grade(contrast(i, -0.2), highlights=(35, 0.3)), 0.25),
-        "vivid-slide": lambda i: saturation(contrast(i, 0.45), 0.35),
-        "teal-orange": lambda i: color_grade(contrast(i, 0.2), shadows=(190, 0.7), highlights=(30, 0.6)),
-        "noir": lambda i: vignette(contrast(bw(i), 0.6), -0.7),
-        "faded-matte": lambda i: tone_curve(saturation(i, -0.25), matte),
-        "golden-hour": lambda i: hsl(temperature(i, 0.45), sat={"orange": 0.4, "yellow": 0.4}),
-    }
-    for name, look in looks.items():
-        image = look(base)
-        small = cv2.resize(image, (480, round(480 * H / W)), interpolation=cv2.INTER_AREA)
-        save(small, f"preset-{name}.jpg", quality=76)
+    # Presets: the real built-in looks, read from BuiltInPresets.swift and rendered with the
+    # renderer's numpy port (Scripts/presets/develop_sim.py).
+    sys.path.insert(0, os.path.join(ROOT, "Scripts/presets"))
+    import develop_sim
+    from preset_sheets import parse_presets
+    presets = {name: s for _, name, s in parse_presets()[1]}
+    shown = ["Portrait 400", "Pastel 400", "Chrome 64", "Vivid Slide", "Golden Hour", "Muted Chrome",
+             "Teal & Orange", "Dark & Moody", "Faded Matte", "Classic 400", "Dark Sky", "Noir"]
+    small_base = cv2.resize(base, (480, round(480 * H / W)), interpolation=cv2.INTER_AREA)
+    linear = develop_sim.from_srgb_encoded(small_base)
+    scale = 480 / Image.open(os.path.join(SPLASH, "splash-redwoods.jpg")).width
+    for name in shown:
+        image = develop_sim.to_srgb_encoded(develop_sim.develop(linear, presets[name], scale))
+        slug = name.lower().replace(" & ", "-").replace(" ", "-")
+        save(image, f"preset-{slug}.jpg", quality=76)
     small = cv2.resize(base, (480, round(480 * H / W)), interpolation=cv2.INTER_AREA)
     save(small, "preset-none.jpg", quality=76)
 

@@ -28,14 +28,14 @@ final class PresetTests: XCTestCase {
         XCTAssertEqual(presets.first { $0.name == "Gold 200" }?.id.uuidString, "6E2B6B5A-0202-4C5E-9A7E-0A7E11E50202")
         for group in DevelopPreset.builtInGroups {
             let count = presets.filter { $0.group == group }.count
-            XCTAssertTrue((4...6).contains(count), "\(group) has \(count) presets")
+            XCTAssertTrue((4...9).contains(count), "\(group) has \(count) presets")
         }
         XCTAssertTrue(presets.allSatisfy(\.isBuiltIn))
     }
 
     func testPackPresetsCarryOnlyTheLook() {
         let photoParts: Set<DevelopPreset.Part> = [.profile, .whiteBalance, .lensCorrections, .transform, .crop, .masks]
-        for preset in DevelopPreset.builtIn where preset.group != "Atelier" {
+        for preset in DevelopPreset.builtIn {
             XCTAssertTrue(preset.parts.isDisjoint(with: photoParts), preset.name)
             XCTAssertTrue(preset.parts.contains(.treatment), preset.name)
             // A pack preset never resets the photo's exposure.
@@ -50,9 +50,42 @@ final class PresetTests: XCTestCase {
         XCTAssertEqual(result.exposure, 0.7)
         XCTAssertEqual(result.sharpening, 60)
         XCTAssertFalse(result.monochrome)
-        XCTAssertEqual(result.contrast, 15)
+        XCTAssertEqual(result.contrast, 20)
         let noir = DevelopPreset.builtIn.first { $0.name == "Noir" }!
         XCTAssertTrue(noir.applied(to: .neutral).monochrome)
+    }
+
+    func testBuiltInNamesAreUniqueWithinEachPack() {
+        for group in DevelopPreset.builtInGroups {
+            let names = DevelopPreset.builtIn.filter { $0.group == group }.map(\.name)
+            XCTAssertEqual(Set(names).count, names.count, group)
+        }
+        // Presets that moved packs or were added keep IDs from their own pack's numbers.
+        XCTAssertEqual(DevelopPreset.builtIn.first { $0.name == "Muted Chrome" }?.id.uuidString,
+                       "6E2B6B5A-0801-4C5E-9A7E-0A7E11E50801")
+        XCTAssertEqual(DevelopPreset.builtIn.first { $0.name == "Teal & Orange" }?.id.uuidString,
+                       "6E2B6B5A-0701-4C5E-9A7E-0A7E11E50701")
+    }
+
+    // MARK: Recent
+
+    func testRecentPresetsAreNewestFirstWithoutRepeats() {
+        let a = UUID(), b = UUID(), c = UUID()
+        var ids: [UUID] = []
+        ids = RecentPresets.adding(a, to: ids)
+        ids = RecentPresets.adding(b, to: ids)
+        ids = RecentPresets.adding(a, to: ids)
+        XCTAssertEqual(ids, [a, b])
+        ids = RecentPresets.adding(c, to: ids, limit: 2)
+        XCTAssertEqual(ids, [c, a])
+        for _ in 0..<10 { ids = RecentPresets.adding(UUID(), to: ids) }
+        XCTAssertEqual(ids.count, RecentPresets.limit)
+    }
+
+    func testRecentPresetsSkipMissingOnes() {
+        let kept = DevelopPreset.builtIn[3], other = DevelopPreset.builtIn[0]
+        let found = RecentPresets.presets([UUID(), kept.id, other.id], in: [other, kept])
+        XCTAssertEqual(found.map(\.id), [kept.id, other.id])
     }
 
     func testBuiltInGroupNamesAreReserved() {

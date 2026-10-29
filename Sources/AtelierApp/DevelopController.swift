@@ -320,6 +320,21 @@ final class DevelopController: ObservableObject {
     var visiblePresets: [DevelopPreset] {
         presets.filter { !$0.isBuiltIn || !hiddenPresetGroups.contains($0.group) }
     }
+    /// The presets applied most recently, newest first, for the Recent group (an app preference).
+    @Published private(set) var recentPresetIDs = (UserDefaults.standard.stringArray(forKey: "presets.recent") ?? [])
+        .compactMap(UUID.init(uuidString:)) {
+        didSet { UserDefaults.standard.set(recentPresetIDs.map(\.uuidString), forKey: "presets.recent") }
+    }
+    /// The Recent group's presets: hidden packs and deleted presets drop out.
+    var recentPresets: [DevelopPreset] { RecentPresets.presets(recentPresetIDs, in: visiblePresets) }
+
+    func removeFromRecent(_ preset: DevelopPreset) {
+        recentPresetIDs.removeAll { $0 == preset.id }
+    }
+
+    func clearRecentPresets() {
+        recentPresetIDs = []
+    }
     /// The user's groups, User Presets first, for the group pickers.
     var userPresetGroups: [String] {
         var groups = [DevelopPreset.defaultGroup]
@@ -1174,6 +1189,7 @@ final class DevelopController: ObservableObject {
         navigatorPreview = nil
         let step = "Preset: \(preset.name)"
         let targets = assetIDs ?? assetID.map { [$0] } ?? []
+        if !targets.isEmpty { recentPresetIDs = RecentPresets.adding(preset.id, to: recentPresetIDs) }
         for id in targets where id != assetID {
             let base = (try? catalog.developSettings(for: id)) ?? .neutral
             let newSettings = preset.applied(to: base)

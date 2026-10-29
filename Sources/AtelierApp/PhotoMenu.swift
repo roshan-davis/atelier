@@ -88,8 +88,17 @@ extension LibraryModel {
         develop.addItem(ClosureMenuItem("Reset All Settings\(count)") { self.resetDevelopSettings() })
         menu.addItem(submenu("Develop Settings", develop))
 
-        // One submenu per group, the user's groups first, as in the Presets panel.
+        // Recent, then one submenu per group, the user's groups first, as in the Presets panel.
         let presets = NSMenu()
+        let recent = self.develop.recentPresets
+        if !recent.isEmpty {
+            let menu = NSMenu()
+            for preset in recent {
+                menu.addItem(ClosureMenuItem(preset.name) { self.develop.applyPreset(preset, onto: ids) })
+            }
+            presets.addItem(submenu("Recent", menu))
+            presets.addItem(.separator())
+        }
         var groupMenu: NSMenu?
         var lastGroup: (String, Bool)?
         for preset in self.develop.visiblePresets {

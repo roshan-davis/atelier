@@ -6,14 +6,19 @@ private struct PresetGroup: Identifiable {
     let name: String
     let isBuiltIn: Bool
     var presets: [DevelopPreset]
+    /// The Recent group: the last presets applied, from any group.
+    var isRecent = false
+
+    static let recentName = "Recent"
 
     /// The user's groups can't take a built-in pack's name, but older preset files might have.
-    var id: String { (isBuiltIn ? "pack:" : "user:") + name }
-    var isDefault: Bool { !isBuiltIn && name == DevelopPreset.defaultGroup }
+    var id: String { isRecent ? "recent" : (isBuiltIn ? "pack:" : "user:") + name }
+    var isDefault: Bool { !isBuiltIn && !isRecent && name == DevelopPreset.defaultGroup }
 }
 
 /// The Presets list in the Develop sidebar, grouped like Lightroom's: the user's groups first,
-/// then the built-in packs. Click to apply, rest the pointer on one to preview it in the Navigator.
+/// then the built-in packs, under a Recent group of the presets applied last. Click to apply, rest
+/// the pointer on one to preview it in the Navigator.
 struct PresetsSection: View {
     @ObservedObject var develop: DevelopController
     @Binding var isExpanded: Bool
@@ -60,8 +65,13 @@ struct PresetsSection: View {
 
     private func groups(matching query: String) -> [PresetGroup] {
         var result: [PresetGroup] = []
+        // Recent is a shortcut, so a search (which already finds every preset) leaves it out.
+        let recent = develop.recentPresets
+        if query.isEmpty, !recent.isEmpty {
+            result.append(PresetGroup(name: PresetGroup.recentName, isBuiltIn: false, presets: recent, isRecent: true))
+        }
         for preset in develop.visiblePresets where query.isEmpty || preset.name.localizedCaseInsensitiveContains(query) {
-            if let index = result.firstIndex(where: { $0.name == preset.group && $0.isBuiltIn == preset.isBuiltIn }) {
+            if let index = result.firstIndex(where: { !$0.isRecent && $0.name == preset.group && $0.isBuiltIn == preset.isBuiltIn }) {
                 result[index].presets.append(preset)
             } else {
                 result.append(PresetGroup(name: preset.group, isBuiltIn: preset.isBuiltIn, presets: [preset]))
@@ -131,7 +141,7 @@ struct PresetsSection: View {
                     groupLabel(group, open: open)
                     if open.wrappedValue {
                         ForEach(group.presets) { preset in
-                            row(preset)
+                            row(preset, inRecent: group.isRecent)
                                 .padding(.leading, 16)
                         }
                     }
@@ -189,7 +199,7 @@ struct PresetsSection: View {
 
     // MARK: Rows
 
-    private func row(_ preset: DevelopPreset) -> some View {
+    private func row(_ preset: DevelopPreset, inRecent: Bool = false) -> some View {
         // A button rather than a tap gesture: a click on the row always applies the preset.
         Button {
             apply(preset)
@@ -207,8 +217,15 @@ struct PresetsSection: View {
         }
         .buttonStyle(.plain)
         .disabled(develop.assetID == nil)
-        .help("Click to apply. Includes \(DevelopPreset.Part.allCases.filter { preset.parts.contains($0) }.map(\.title).joined(separator: ", ")).")
-        .contextMenu { presetMenu(preset) }
+        .help((inRecent ? "From \(preset.group). " : "")
+            + "Click to apply. Includes \(DevelopPreset.Part.allCases.filter { preset.parts.contains($0) }.map(\.title).joined(separator: ", ")).")
+        .contextMenu {
+            if inRecent {
+                Button("Remove from Recent") { develop.removeFromRecent(preset) }
+                Divider()
+            }
+            presetMenu(preset)
+        }
     }
 
     private func apply(_ preset: DevelopPreset) {
@@ -254,7 +271,7 @@ struct PresetsSection: View {
                 .foregroundStyle(.secondary)
                 .rotationEffect(.degrees(open.wrappedValue ? 90 : 0))
                 .frame(width: 10)
-            Label(group.name, systemImage: group.isBuiltIn ? "shippingbox" : "folder")
+            Label(group.name, systemImage: group.isRecent ? "clock" : group.isBuiltIn ? "shippingbox" : "folder")
                 .lineLimit(1)
             Spacer(minLength: 4)
             Text("\(group.presets.count)")
@@ -269,7 +286,9 @@ struct PresetsSection: View {
 
     @ViewBuilder
     private func groupMenu(_ group: PresetGroup) -> some View {
-        if group.isBuiltIn {
+        if group.isRecent {
+            Button("Clear Recent") { develop.clearRecentPresets() }
+        } else if group.isBuiltIn {
             Button("Hide Group") { _ = develop.hiddenPresetGroups.insert(group.name) }
             Button("Manage Presets…") { develop.showingManagePresets = true }
         } else {
