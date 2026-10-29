@@ -158,13 +158,6 @@ private struct CropLayout {
         return CGSize(width: imageAspect * c + s, height: imageAspect * s + c)
     }
 
-    /// The rendered (straightened, uncropped) photo's frame.
-    var imageRect: CGRect {
-        let size = Self.boundingSize(imageAspect: imageAspect, radians: angle * .pi / 180)
-        return CGRect(x: center.x - size.width * scale / 2, y: center.y - size.height * scale / 2,
-                      width: size.width * scale, height: size.height * scale)
-    }
-
     /// The turned photo's frame before straightening; crop fractions are measured in it.
     var frame: CGRect {
         CGRect(x: center.x - imageAspect * scale / 2, y: center.y - scale / 2,
@@ -198,11 +191,14 @@ struct CropEditorView: View {
             let layout = CropLayout(viewSize: geometry.size, imageAspect: develop.orientedAspect, angle: crop.angle)
             let rect = layout.rect(for: crop)
             ZStack(alignment: .topLeading) {
+                // The photo renders upright and the view turns it, so straightening follows the
+                // pointer at once instead of stretching the last render until the next one lands.
                 Image(nsImage: image)
                     .resizable()
                     .interpolation(.high)
-                    .frame(width: layout.imageRect.width, height: layout.imageRect.height)
-                    .position(x: layout.imageRect.midX, y: layout.imageRect.midY)
+                    .frame(width: layout.frame.width, height: layout.frame.height)
+                    .rotationEffect(.degrees(crop.angle))
+                    .position(x: layout.frame.midX, y: layout.frame.midY)
                 Path { path in
                     path.addRect(CGRect(origin: .zero, size: geometry.size))
                     path.addRect(rect)

@@ -103,7 +103,8 @@ final class DevelopController: ObservableObject {
         didSet { if sliderPreview != oldValue { scheduleRender() } }
     }
 
-    /// The crop tool is open: the photo renders whole (turned and straightened) under the crop frame.
+    /// The crop tool is open: the photo renders whole and turned, but not straightened, under the
+    /// crop frame; the crop view turns it by the angle so straightening is instant.
     @Published var isCropping = false {
         didSet {
             guard isCropping != oldValue else { return }
@@ -1275,6 +1276,10 @@ final class DevelopController: ObservableObject {
         var settings = showingBefore ? beforeSettings : self.settings
         if isGuiding { settings = guidedViewSettings(settings) }
         let cropping = !isCropping
+        if isCropping, var crop = settings.crop {
+            crop.angle = 0
+            settings.crop = crop
+        }
         let assetID = self.assetID
         let overlay = isMasking && showMaskOverlay ? selectedMaskID : nil
         let preview = showingBefore ? nil : sliderPreview
