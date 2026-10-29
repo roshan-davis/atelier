@@ -398,7 +398,11 @@ final class DevelopController: ObservableObject {
                     self.lensCorrectionSupported = session.lensCorrectionSupported
                     self.isRAW = session.isRAW
                     self.focalLength35 = session.focalLength35
-                    // Photos saved when Constrain Crop enlarged the photo instead of cropping it.
+                    // Keep the saved crop; photos saved when Constrain Crop enlarged the photo
+                    // instead of cropping it get the largest crop.
+                    if self.settings.constrainCrop, self.settings.crop?.hasCut == true {
+                        self.constrainedGeometry = self.settings.lensGeometryKey
+                    }
                     if self.constrainCropIfNeeded() {
                         self.dirty = true
                         self.scheduleSave()
@@ -831,14 +835,25 @@ final class DevelopController: ObservableObject {
         return { geometry.showsPhoto(at: $0) }
     }
 
-    /// Constrain Crop, as in Lightroom: shrinks the crop (keeping its shape and center where it
-    /// can) until no gray edge shows. Returns whether the crop changed.
+    /// The shape-deciding settings Constrain Crop last fitted the crop to.
+    private var constrainedGeometry: DevelopSettings?
+
+    /// Constrain Crop, as in Lightroom. When it is turned on or the correction changes, the crop
+    /// becomes the largest one of its shape with no gray edge, placed where it fits best (so it
+    /// grows back when a correction gets milder). Otherwise the crop is only kept inside the
+    /// photo, so a crop drawn by hand stays. Returns whether the crop changed.
     @discardableResult
     private func constrainCropIfNeeded() -> Bool {
-        guard let bounds = cropBounds else { return false }
-        let fitted = crop.fitted(imageAspect: orientedAspect, onPhoto: bounds)
-        guard fitted != crop else { return false }
-        settings.crop = fitted
+        guard let bounds = cropBounds else {
+            constrainedGeometry = nil
+            return false
+        }
+        let key = settings.lensGeometryKey
+        let updated = key == constrainedGeometry ? crop.fitted(imageAspect: orientedAspect, onPhoto: bounds)
+            : crop.largest(imageAspect: orientedAspect, onPhoto: bounds)
+        constrainedGeometry = key
+        guard updated != crop else { return false }
+        settings.crop = updated
         return true
     }
 
@@ -1155,6 +1170,8 @@ final class DevelopController: ObservableObject {
         guard history.steps.indices.contains(position) else { return }
         history.position = position
         settings = history.steps[position].settings
+        // The step's crop is already constrained; keep it.
+        constrainedGeometry = settings.constrainCrop ? settings.lensGeometryKey : nil
         committed = settings
         beforeImage = nil
         validateMaskSelection()

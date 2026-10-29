@@ -609,6 +609,51 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             return moved.scaled(by: low)
         }
 
+        /// Constrain Crop: the largest crop of this one's shape and straighten angle that passes
+        /// `onPhoto` (see `fits`). Its position is searched as well as its size, since a
+        /// perspective correction leaves an uneven shape (a keystone fix is wider at one end),
+        /// so centering it would waste photo.
+        public func largest(imageAspect: Double, onPhoto: @escaping (CGPoint) -> Bool) -> Crop {
+            let full = Crop.centered(aspect: width * imageAspect / height, imageAspect: imageAspect)
+            func candidate(_ cx: Double, _ cy: Double, _ scale: Double) -> Crop {
+                var copy = self
+                copy.width = full.width * scale
+                copy.height = full.height * scale
+                copy.x = cx - copy.width / 2
+                copy.y = cy - copy.height / 2
+                return copy
+            }
+            func largestScale(_ cx: Double, _ cy: Double) -> Double {
+                guard candidate(cx, cy, 0.001).fits(imageAspect: imageAspect, onPhoto: onPhoto) else { return 0 }
+                var low = 0.001, high = 1.0
+                for _ in 0..<24 {
+                    let mid = (low + high) / 2
+                    if candidate(cx, cy, mid).fits(imageAspect: imageAspect, onPhoto: onPhoto) { low = mid } else { high = mid }
+                }
+                return low
+            }
+            // From the photo's center, move while the crop can grow.
+            var cx = 0.5, cy = 0.5
+            var best = largestScale(cx, cy)
+            guard best > 0 else { return fitted(imageAspect: imageAspect, onPhoto: onPhoto) }
+            var step = 0.1
+            while step > 0.0002 {
+                var improved = false
+                for (dx, dy) in [(step, 0.0), (-step, 0.0), (0.0, step), (0.0, -step)] {
+                    let scale = largestScale(cx + dx, cy + dy)
+                    if scale > best + 1e-9 {
+                        best = scale
+                        cx += dx
+                        cy += dy
+                        improved = true
+                        break
+                    }
+                }
+                if !improved { step /= 2 }
+            }
+            return candidate(cx, cy, best)
+        }
+
         /// Scaled about its center.
         public func scaled(by factor: Double) -> Crop {
             var copy = self

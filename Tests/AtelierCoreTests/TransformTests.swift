@@ -152,6 +152,27 @@ final class TransformTests: XCTestCase {
         XCTAssertEqual(try settings.encoded(), try saved.encoded())
     }
 
+    func testConstrainCropFindsTheLargestCropNotJustACenteredOne() {
+        // A tilted shot corrected unevenly: the photo left over is not centered, so the largest
+        // crop of the photo's shape sits off center and is clearly bigger than a centered one.
+        var settings = DevelopSettings()
+        settings.upright = .init(mode: .full, pitch: 10, yaw: -8, roll: 2)
+        let geometry = LensGeometry(settings: settings, size: size, focalLength35: 24)
+        let onPhoto = geometry.showsPhoto(at:)
+        let centered = DevelopSettings.Crop().fitted(imageAspect: 1.5, onPhoto: onPhoto)
+        let largest = DevelopSettings.Crop().largest(imageAspect: 1.5, onPhoto: onPhoto)
+        XCTAssertTrue(largest.fits(imageAspect: 1.5, onPhoto: onPhoto))
+        XCTAssertGreaterThan(largest.width * largest.height, centered.width * centered.height * 1.1)
+        XCTAssertEqual(largest.width, largest.height, accuracy: 1e-6)
+        // No room left: 1% bigger, anywhere near, shows gray.
+        for (dx, dy) in [(0.0, 0.0), (0.005, 0), (-0.005, 0), (0, 0.005), (0, -0.005)] {
+            var bigger = largest.scaled(by: 1.01)
+            bigger.x += dx
+            bigger.y += dy
+            XCTAssertFalse(bigger.fits(imageAspect: 1.5, onPhoto: onPhoto))
+        }
+    }
+
     func testUprightWithoutShearStillDecodes() throws {
         // Settings saved before Guided had a slant.
         let json = #"{"mode":"guided","pitch":4,"yaw":-1,"roll":0.5,"guides":[]}"#
