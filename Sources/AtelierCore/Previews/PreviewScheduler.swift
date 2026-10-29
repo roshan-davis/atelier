@@ -3,7 +3,8 @@ import Foundation
 /// Builds previews in the background on two lanes, so the grid fills quickly:
 /// thumbnails on a fast lane with several workers, 2560 px previews on a slow lane.
 /// Requests are de-duplicated, and requests that have not started can be cancelled,
-/// for example when a grid cell scrolls off screen.
+/// for example when a grid cell scrolls off screen. A preview that could not be built (an
+/// offline or unreadable file) is not tried again until `retryFailed` says something changed.
 public final class PreviewScheduler: @unchecked Sendable {
     public typealias Completion = @Sendable (_ assetID: Int64, _ size: PreviewCache.Size) -> Void
 
@@ -18,6 +19,7 @@ public final class PreviewScheduler: @unchecked Sendable {
     private let previewQueue = OperationQueue()
     private let lock = NSLock()
     private var pending: [Key: Operation] = [:]
+    private var failed: Set<Key> = []
     private var completion: Completion?
 
     public init(cache: PreviewCache) {
@@ -30,7 +32,7 @@ public final class PreviewScheduler: @unchecked Sendable {
         previewQueue.maxConcurrentOperationCount = 2
     }
 
-    /// Called on a background thread after each preview is written.
+    /// Called on a background thread after each preview is written; not for failures.
     public func onFinish(_ completion: @escaping Completion) {
         lock.withLock { self.completion = completion }
     }
@@ -43,6 +45,7 @@ public final class PreviewScheduler: @unchecked Sendable {
         if cache.has(size, for: assetID) { return }
         let key = Key(assetID: assetID, size: size)
         let operation: BlockOperation? = lock.withLock {
+            if failed.contains(key) { return nil }
             if let existing = pending[key] {
                 if urgent { existing.queuePriority = .veryHigh }
                 return nil
@@ -59,7 +62,7 @@ public final class PreviewScheduler: @unchecked Sendable {
                     case .preview: try? cache.generatePreview(for: assetID, from: source)
                     }
                 }
-                self?.finish(key)
+                self?.finish(key, written: cache.has(size, for: assetID))
             }
             operation.queuePriority = urgent ? .veryHigh : .normal
             pending[key] = operation
@@ -79,15 +82,33 @@ public final class PreviewScheduler: @unchecked Sendable {
         }
     }
 
+    /// Lets failed previews be tried again: those of one photo after its file changed, or all
+    /// of them after a drive or network volume came or went.
+    public func retryFailed(for assetID: Int64? = nil) {
+        lock.withLock {
+            if let assetID {
+                failed = failed.filter { $0.assetID != assetID }
+            } else {
+                failed.removeAll()
+            }
+        }
+    }
+
     /// Blocks until queued work is done. For tests.
     public func waitUntilIdle() {
         thumbnailQueue.waitUntilAllOperationsAreFinished()
         previewQueue.waitUntilAllOperationsAreFinished()
     }
 
-    private func finish(_ key: Key) {
+    /// Reporting a failure as a finished preview would make the grid ask for it again at once,
+    /// and the library would refresh in a loop for as long as the file can't be read.
+    private func finish(_ key: Key, written: Bool) {
         let completion: Completion? = lock.withLock {
             pending[key] = nil
+            guard written else {
+                failed.insert(key)
+                return nil
+            }
             return self.completion
         }
         completion?(key.assetID, key.size)

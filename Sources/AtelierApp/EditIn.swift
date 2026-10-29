@@ -215,6 +215,7 @@ extension LibraryModel {
     /// An external editor saved: re-read the file and rebuild its previews.
     func editedFileChanged(_ id: Int64) {
         try? catalog.refreshFileInfo(for: id)
+        previewScheduler.retryFailed(for: id)
         let settings = (try? catalog.developSettings(for: id)) ?? .neutral
         develop.refreshPreviews(for: id, settings: settings)
         if develop.assetID == id { develop.reopen() }

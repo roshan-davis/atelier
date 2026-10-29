@@ -459,6 +459,8 @@ final class LibraryModel: ObservableObject {
 
     func refreshVolumes() {
         perform { try $0.refreshVolumes() }
+        // Photos on a drive that just came back can be read now.
+        previewScheduler.retryFailed()
     }
 
     /// Settings > Metadata: keeps sidecars in step with catalog edits, quietly.

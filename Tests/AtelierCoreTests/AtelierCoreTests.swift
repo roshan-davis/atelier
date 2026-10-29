@@ -215,6 +215,34 @@ final class AtelierCoreTests: XCTestCase {
         XCTAssertEqual(props[kCGImagePropertyPixelWidth] as? Int, 256)
     }
 
+    /// A file that can't be read must not report a finished preview, or the grid asks again at
+    /// once and the library refreshes in a loop.
+    func testFailedPreviewIsNotReportedOrRetriedUntilAsked() throws {
+        let cache = PreviewCache(rootURL: workDir.appendingPathComponent("Previews"))
+        let scheduler = PreviewScheduler(cache: cache)
+        let reports = Counter()
+        scheduler.onFinish { _, _ in reports.increment() }
+        let missing = workDir.appendingPathComponent("offline.NEF")
+
+        scheduler.request(.thumbnail, for: 1, source: missing)
+        scheduler.waitUntilIdle()
+        scheduler.request(.thumbnail, for: 1, source: missing)
+        scheduler.waitUntilIdle()
+        XCTAssertEqual(reports.value, 0)
+        XCTAssertFalse(cache.has(.thumbnail, for: 1))
+
+        // The same photo after its drive came back.
+        let file = try makeShoot(count: 1).appendingPathComponent("IMG_0001.jpg")
+        scheduler.request(.thumbnail, for: 1, source: file)
+        scheduler.waitUntilIdle()
+        XCTAssertFalse(cache.has(.thumbnail, for: 1), "a failed preview waits for retryFailed")
+        scheduler.retryFailed()
+        scheduler.request(.thumbnail, for: 1, source: file)
+        scheduler.waitUntilIdle()
+        XCTAssertTrue(cache.has(.thumbnail, for: 1))
+        XCTAssertEqual(reports.value, 1)
+    }
+
     // MARK: Helpers
 
     private func makeShoot(count: Int, width: Int = 64, height: Int = 48) throws -> URL {
@@ -242,4 +270,11 @@ final class AtelierCoreTests: XCTestCase {
         CGImageDestinationAddImage(destination, image, nil)
         XCTAssertTrue(CGImageDestinationFinalize(destination))
     }
+}
+
+private final class Counter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+    var value: Int { lock.withLock { count } }
+    func increment() { lock.withLock { count += 1 } }
 }
