@@ -38,7 +38,7 @@ enum LocalContrast {
         }
         func box(_ input: CIImage) -> CIImage {
             let filter = CIFilter.boxBlur()
-            filter.inputImage = Dehaze.clamped(input)
+            filter.inputImage = input.clampedToExtent()
             filter.radius = Float(radius)
             return filter.outputImage?.cropped(to: extent) ?? input
         }
@@ -63,7 +63,7 @@ enum LocalContrast {
         }
         func box(_ input: CIImage) -> CIImage {
             let filter = CIFilter.boxBlur()
-            filter.inputImage = Dehaze.clamped(input)
+            filter.inputImage = input.clampedToExtent()
             filter.radius = Float(radius)
             return filter.outputImage?.cropped(to: extent) ?? input
         }
@@ -135,7 +135,6 @@ enum LocalContrast {
                 return float4(rgb, color.a);
             }
             """
-        guard let built = try? CIKernel.kernels(withMetalString: source), built.count == 4 else { return nil }
-        return Dictionary(built.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
+        return RuntimeKernels.build(source)
     }()
 }
