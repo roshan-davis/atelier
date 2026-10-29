@@ -36,9 +36,11 @@ struct DevelopImageView: View {
                                           zoom: model.zoomState,
                                           onReport: onZoomReport,
                                           menu: { model.photoMenu(includeZoom: true) },
-                                          onPick: develop.isPickingFringe ? { (point: CGPoint) in develop.pickFringe(at: point) } : nil)
+                                          onPick: photoPick)
                         if develop.isPickingFringe {
                             FringePickerHint(develop: develop)
+                        } else if develop.isPickingGradeColor {
+                            GradePickerHint(develop: develop)
                         }
                     } else if develop.compareMode == .sideBySide {
                         // Both panes share the zoom and stay on the same spot, as in Lightroom.
@@ -128,6 +130,13 @@ struct DevelopImageView: View {
             zoom.restoreCenter = center
             zoom.objectWillChange.send()
         }
+    }
+
+    /// What a click on the photo does while a color picker is out.
+    private var photoPick: ((CGPoint) -> Void)? {
+        if develop.isPickingFringe { return { point in develop.pickFringe(at: point) } }
+        if develop.isPickingGradeColor { return { point in develop.pickGradeColor(at: point) } }
+        return nil
     }
 
     private func onZoomReport(_ report: ZoomReport) {
@@ -337,6 +346,9 @@ struct DevelopPanel: View {
                     ForEach(DevelopSettings.Panel.allCases, id: \.self) { panel in
                         PanelSection(title: panel.title, isExpanded: isExpanded(panel.rawValue), soloMode: $soloMode,
                                      isModified: develop.isModified(panel), reset: { develop.reset(panel) },
+                                     isOn: panel == .colorGrading
+                                        ? Binding(get: { develop.isColorGradingOn }, set: { develop.setColorGradingOn($0) })
+                                        : nil,
                                      expandAll: expandAll, collapseAll: collapseAll) {
                             switch panel {
                             case .basic:
@@ -657,100 +669,6 @@ private struct HSLPanel: View {
     }
 }
 
-/// Color Grading: a wheel per tonal region plus Global, then Blending and Balance.
-private struct ColorGradingPanel: View {
-    @ObservedObject var develop: DevelopController
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
-                ForEach(DevelopSettings.GradeRegion.allCases, id: \.self) { region in
-                    VStack(spacing: 6) {
-                        Text(region.rawValue)
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .onTapGesture(count: 2) {
-                                develop.reset(region.hue)
-                                develop.reset(region.saturation)
-                                develop.reset(region.luminance)
-                            }
-                            .help("Double-click to reset")
-                        ColorWheel(hue: Binding(get: { develop.value(region.hue) },
-                                                set: { develop.set(region.hue, to: $0) }),
-                                   saturation: Binding(get: { develop.value(region.saturation) },
-                                                       set: { develop.set(region.saturation, to: $0) }),
-                                   onOption: { develop.sliderPreview = $0 ? .fullSaturation(region) : nil })
-                            .help(SliderPreview.fullSaturation(region).hint)
-                        DevelopSlider(value: Binding(get: { develop.value(region.luminance) },
-                                                     set: { develop.set(region.luminance, to: $0) }),
-                                      range: region.luminance.range, step: 1, origin: 0,
-                                      gradient: [Color.black, Color.white])
-                            .help("Luminance")
-                        Text("H \(Int(develop.value(region.hue))) · S \(Int(develop.value(region.saturation))) · L \(Int(develop.value(region.luminance)))")
-                            .font(.caption2)
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-            GroupHeading(title: "Blend")
-            ParameterSlider(parameter: .gradeBlending, develop: develop)
-            ParameterSlider(parameter: .gradeBalance, develop: develop)
-        }
-    }
-}
-
-/// Drag inside the wheel to choose a tint: angle is hue, distance from the center is saturation.
-/// With Option held only the hue changes, and the photo shows it at full saturation.
-private struct ColorWheel: View {
-    @Binding var hue: Double
-    @Binding var saturation: Double
-    var onOption: ((Bool) -> Void)?
-
-    var body: some View {
-        GeometryReader { geometry in
-            let size = min(geometry.size.width, geometry.size.height)
-            let radius = size / 2
-            let center = CGPoint(x: geometry.size.width / 2, y: geometry.size.height / 2)
-            let angle = hue * .pi / 180
-            let distance = radius * saturation / 100
-            ZStack {
-                Circle()
-                    // SwiftUI sweeps clockwise on screen and a reversed range (end < start) draws only
-                    // the first color, so run 0°→360° with hue falling, which puts hue rising
-                    // counterclockwise from red at 3 o'clock, where the puck places it.
-                    .fill(AngularGradient(colors: (0...12).map { Color(hue: Double(12 - $0) / 12, saturation: 0.8, brightness: 0.9) },
-                                          center: .center, startAngle: .degrees(0), endAngle: .degrees(360)))
-                Circle()
-                    .fill(RadialGradient(colors: [Color(white: 0.5), Color(white: 0.5).opacity(0)],
-                                         center: .center, startRadius: 0, endRadius: radius))
-                Circle().stroke(Color.black.opacity(0.4), lineWidth: 1)
-                Circle()
-                    .fill(Color.white)
-                    .overlay(Circle().stroke(Color.black.opacity(0.6), lineWidth: 1))
-                    .frame(width: 10, height: 10)
-                    .position(x: center.x + distance * cos(angle), y: center.y - distance * sin(angle))
-            }
-            .frame(width: size, height: size)
-            .position(center)
-            .contentShape(Circle())
-            .gesture(DragGesture(minimumDistance: 0)
-                .onChanged { value in
-                    let option = NSEvent.modifierFlags.contains(.option)
-                    onOption?(option)
-                    let dx = value.location.x - center.x, dy = center.y - value.location.y
-                    var degrees = atan2(dy, dx) * 180 / .pi
-                    if degrees < 0 { degrees += 360 }
-                    hue = degrees.rounded()
-                    if !option { saturation = min(100, (dx * dx + dy * dy).squareRoot() / radius * 100).rounded() }
-                }
-                .onEnded { _ in onOption?(false) })
-            .cursor(.crosshair)
-        }
-        .aspectRatio(1, contentMode: .fit)
-    }
-}
-
 /// A collapsible panel with a Lightroom-style header.
 struct PanelSection<Content: View>: View {
     let title: String
@@ -758,6 +676,8 @@ struct PanelSection<Content: View>: View {
     @Binding var soloMode: Bool
     var isModified = false
     var reset: (() -> Void)?
+    /// The panel's on/off switch, for panels that have one (Color Grading).
+    var isOn: Binding<Bool>? = nil
     let expandAll: () -> Void
     let collapseAll: () -> Void
     @ViewBuilder let content: () -> Content
@@ -777,6 +697,14 @@ struct PanelSection<Content: View>: View {
                         .help("This panel has edits")
                 }
                 Spacer()
+                if let isOn {
+                    Toggle(title, isOn: isOn)
+                        .toggleStyle(.switch)
+                        .controlSize(.mini)
+                        .labelsHidden()
+                        .help(isOn.wrappedValue ? "Turn \(title) off to compare; its settings are kept"
+                                                : "Turn \(title) back on")
+                }
                 if isModified, let reset {
                     Button(action: reset) {
                         Image(systemName: "arrow.uturn.backward")
@@ -962,6 +890,12 @@ struct ParameterSlider: View {
         }
         if let band = parameter.grayBand {
             return [Color.black, Color(hue: band.hue / 360, saturation: 0.85, brightness: 0.95), Color.white]
+        }
+        if DevelopSettings.GradeRegion.allCases.contains(where: { $0.hue == parameter }) {
+            return (0...6).map { Color(hue: Double($0) / 6, saturation: 0.8, brightness: 0.9) }
+        }
+        if let region = DevelopSettings.GradeRegion.allCases.first(where: { $0.saturation == parameter }) {
+            return [Color.gray, Color(hue: develop.value(region.hue) / 360, saturation: 0.8, brightness: 0.9)]
         }
         switch parameter {
         case .temperature: return [Color(red: 0.3, green: 0.5, blue: 1), Color(red: 1, green: 0.85, blue: 0.3)]

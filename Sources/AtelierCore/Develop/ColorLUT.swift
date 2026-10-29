@@ -21,14 +21,38 @@ enum ColorLUT {
         lock.lock()
         defer { lock.unlock() }
         if key == cachedKey, let cachedCube { return cachedCube }
-        let cube = build(HSLAdjustment(settings), settings.monochrome ? BWMix(settings) : nil, ColorGrade(settings))
+        let hsl = HSLAdjustment(settings), bw = settings.monochrome ? BWMix(settings) : nil, grade = ColorGrade(settings)
+        // In Black & White, the B&W Mix replaces HSL; color grading then tones the grays.
+        let cube = build { color in
+            var rgb = color
+            if let bw {
+                rgb = bw.apply(rgb)
+            } else if hsl.isActive {
+                rgb = hsl.apply(rgb)
+            }
+            return grade.isActive ? grade.apply(rgb) : rgb
+        }
         cachedKey = key
         cachedCube = cube
         return cube
     }
 
-    /// In Black & White, `bw` replaces HSL; color grading then tones the grays.
-    private static func build(_ hsl: HSLAdjustment, _ bw: BWMix?, _ grade: ColorGrade) -> Data {
+    /// Color Grading Balance's Option-drag view: the colors after HSL, mapped to the color of the
+    /// tonal range each falls in (see `ColorGrade.regionMap`).
+    static func regionMapCube(for settings: DevelopSettings) -> Data {
+        let hsl = HSLAdjustment(settings), bw = settings.monochrome ? BWMix(settings) : nil, grade = ColorGrade(settings)
+        return build { color in
+            var rgb = color
+            if let bw {
+                rgb = bw.apply(rgb)
+            } else if hsl.isActive {
+                rgb = hsl.apply(rgb)
+            }
+            return grade.regionMap(rgb)
+        }
+    }
+
+    private static func build(_ map: (RGB) -> RGB) -> Data {
         let n = dimension
         var values = [Float](repeating: 0, count: n * n * n * 4)
         var index = 0
@@ -36,13 +60,7 @@ enum ColorLUT {
         for b in 0..<n {
             for g in 0..<n {
                 for r in 0..<n {
-                    var rgb = (Double(r) / Double(n - 1), Double(g) / Double(n - 1), Double(b) / Double(n - 1))
-                    if let bw {
-                        rgb = bw.apply(rgb)
-                    } else if hsl.isActive {
-                        rgb = hsl.apply(rgb)
-                    }
-                    if grade.isActive { rgb = grade.apply(rgb) }
+                    let rgb = map((Double(r) / Double(n - 1), Double(g) / Double(n - 1), Double(b) / Double(n - 1)))
                     values[index] = Float(min(1, max(0, rgb.0)))
                     values[index + 1] = Float(min(1, max(0, rgb.1)))
                     values[index + 2] = Float(min(1, max(0, rgb.2)))
@@ -172,29 +190,43 @@ struct BWMix {
 
 /// Lightroom-style color grading: tint shadows, midtones and highlights separately (and the
 /// whole photo with Global), with Blending widening the overlap and Balance moving the split.
-struct ColorGrade {
-    typealias Region = DevelopSettings.GradeRegion
-    private let tints: [(RGB, Double)]
+///
+/// The hue numbers are Lightroom's (0 red, 60 yellow, 120 green, 240 blue), but each tint is
+/// built in Oklab, so the same Saturation looks equally strong at every hue. Luminance raises or
+/// lowers lightness with a roll-off toward white and black, so it never clips; a tint that would
+/// leave the screen's colors is shortened instead of clipped, so it keeps its hue.
+public struct ColorGrade {
+    public typealias Region = DevelopSettings.GradeRegion
+    /// Oklab chroma a wheel adds at Saturation 100 where its range has full weight.
+    static let chroma = 0.10
+    /// How far Luminance ±100 moves lightness, as a share of the way to white or black.
+    static let luminanceStrength = 0.3
+
+    /// Per region, in `Region.allCases` order: the Oklab a/b tint at full weight and Luminance (-1...1).
+    private let tints: [(SIMD2<Double>, Double)]
     private let blending: Double
     private let balance: Double
     let isActive: Bool
 
     init(_ settings: DevelopSettings) {
         tints = Region.allCases.map { region in
-            let saturation = settings[region.saturation] / 100
-            let hueColor = hslToRGB(settings[region.hue], 1, 0.5)
-            let y = luma(hueColor)
-            let offset = (hueColor.0 - y, hueColor.1 - y, hueColor.2 - y)
-            return ((offset.0 * saturation * 0.3, offset.1 * saturation * 0.3, offset.2 * saturation * 0.3),
-                    settings[region.luminance] / 100 * 0.2)
+            (Self.direction(hue: settings[region.hue]) * (settings[region.saturation] / 100 * Self.chroma),
+             settings[region.luminance] / 100)
         }
         blending = settings[.gradeBlending] / 100
         balance = settings[.gradeBalance] / 100
-        isActive = Region.allCases.contains { settings[$0.saturation] != 0 || settings[$0.luminance] != 0 }
+        isActive = settings[.gradeDisabled] < 0.5
+            && Region.allCases.contains { settings[$0.saturation] != 0 || settings[$0.luminance] != 0 }
     }
 
     /// Shadow, midtone, highlight and global weights for a luminance.
     func weights(for y: Double) -> [Double] {
+        Self.weights(luma: y, blending: blending, balance: balance)
+    }
+
+    /// Shadow, midtone, highlight and global weights for an sRGB-encoded luma, with Blending
+    /// (0...1) and Balance (-1...1) as fractions of their sliders.
+    public static func weights(luma y: Double, blending: Double, balance: Double) -> [Double] {
         let pivot = 0.5 - balance * 0.3
         let exponent = 2.5 - 2 * blending
         let shadows = pow(max(0, 1 - y / pivot), exponent)
@@ -202,15 +234,142 @@ struct ColorGrade {
         return [shadows, max(0, 1 - shadows - highlights), highlights, 1]
     }
 
+    /// The position of `region` in `Region.allCases` and in `weights`.
+    public static func index(of region: Region) -> Int {
+        Region.allCases.firstIndex(of: region) ?? 0
+    }
+
     func apply(_ color: RGB) -> RGB {
         let weights = self.weights(for: luma(color))
-        var out = color
-        for (i, (offset, lum)) in tints.enumerated() {
-            let w = weights[i]
-            out.0 += w * (offset.0 + lum)
-            out.1 += w * (offset.1 + lum)
-            out.2 += w * (offset.2 + lum)
+        var shift = SIMD2<Double>(0, 0)
+        var lift = 0.0
+        for (i, (tint, luminance)) in tints.enumerated() {
+            shift += tint * weights[i]
+            lift += luminance * weights[i]
+        }
+        var lab = Oklab.fromEncoded(color)
+        let lightness = lab.x
+        lab.x = min(1, max(0, lightness + lift * Self.luminanceStrength * (lift > 0 ? 1 - lightness : lightness)))
+        // A new lightness can put a vivid color out of gamut: keep its hue and lower its chroma.
+        if !Oklab.inGamut(lab) {
+            let base = lab
+            let scale = Self.largestFraction { Oklab.inGamut(SIMD3(base.x, base.y * $0, base.z * $0)) }
+            lab.y *= scale
+            lab.z *= scale
+        }
+        let start = lab
+        let reach = Self.largestFraction { Oklab.inGamut(SIMD3(start.x, start.y + shift.x * $0, start.z + shift.y * $0)) }
+        lab.y += shift.x * reach
+        lab.z += shift.y * reach
+        return Oklab.toEncoded(lab)
+    }
+
+    /// The largest t in 0...1 for which `fits` holds, given it holds at 0 and fails past some point.
+    static func largestFraction(_ fits: (Double) -> Bool) -> Double {
+        if fits(1) { return 1 }
+        var low = 0.0, high = 1.0
+        for _ in 0..<14 {
+            let mid = (low + high) / 2
+            if fits(mid) { low = mid } else { high = mid }
+        }
+        return low
+    }
+
+    // MARK: Hues
+
+    /// The Oklab a/b direction (unit length) each whole-degree hue tints toward. Red, yellow,
+    /// green, cyan, blue and magenta (0, 60 ... 300) point at their pure colors, and the hues
+    /// between turn evenly from one to the next: the HSL hues between them bunch up in Oklab
+    /// (226 to 242 all point almost the same way), which would leave dead spots on the wheel.
+    static let directions: [SIMD2<Double>] = {
+        var anchors = (0..<6).map { k -> Double in
+            let lab = Oklab.fromEncoded(hslToRGB(Double(k * 60), 1, 0.5))
+            return atan2(lab.z, lab.y)
+        }
+        // Unwrap so the angles rise around the circle.
+        for k in 1..<6 { while anchors[k] < anchors[k - 1] { anchors[k] += 2 * .pi } }
+        anchors.append(anchors[0] + 2 * .pi)
+        return (0..<360).map { hue in
+            let k = hue / 60, t = Double(hue % 60) / 60
+            let angle = anchors[k] + (anchors[k + 1] - anchors[k]) * t
+            return SIMD2(cos(angle), sin(angle))
+        }
+    }()
+
+    /// The Oklab a/b direction (unit length) a wheel at `hue` tints toward.
+    public static func direction(hue: Double) -> SIMD2<Double> {
+        let h = (hue.truncatingRemainder(dividingBy: 360) + 360).truncatingRemainder(dividingBy: 360)
+        let i = min(359, Int(h)), t = h - Double(i)
+        let mixed = directions[i] * (1 - t) + directions[(i + 1) % 360] * t
+        return mixed / max(1e-9, (mixed * mixed).sum().squareRoot())
+    }
+
+    /// The whole-degree hue whose tint points most nearly along `ab` in Oklab.
+    public static func hue(towards ab: SIMD2<Double>) -> Double {
+        let length = (ab * ab).sum().squareRoot()
+        guard length > 1e-9 else { return 0 }
+        let unit = ab / length
+        var best = 0, bestDot = -2.0
+        for (hue, direction) in directions.enumerated() {
+            let dot = (direction * unit).sum()
+            if dot > bestDot {
+                best = hue
+                bestDot = dot
+            }
+        }
+        return Double(best)
+    }
+
+    /// Mid gray tinted by a wheel at full weight, sRGB-encoded: the color the wheel's dot shows.
+    public static func swatch(hue: Double, saturation: Double) -> (red: Double, green: Double, blue: Double) {
+        var settings = DevelopSettings()
+        settings[.gradeGlobalHue] = hue
+        settings[.gradeGlobalSat] = saturation
+        let color = ColorGrade(settings).apply((0.5, 0.5, 0.5))
+        return (color.0, color.1, color.2)
+    }
+
+    // MARK: Views and tools
+
+    /// Balance's Option-drag view: each tone in the color of its range (blue shadows, gray
+    /// midtones, yellow highlights), mixed where the ranges overlap.
+    func regionMap(_ color: RGB) -> RGB {
+        let weights = self.weights(for: luma(color))
+        let colors: [RGB] = [(0.2, 0.4, 0.95), (0.5, 0.5, 0.5), (1, 0.8, 0.25)]
+        let total = max(1e-6, weights[0] + weights[1] + weights[2])
+        var out: RGB = (0, 0, 0)
+        for i in 0..<3 {
+            out.0 += colors[i].0 * weights[i] / total
+            out.1 += colors[i].1 * weights[i] / total
+            out.2 += colors[i].2 * weights[i] / total
         }
         return out
+    }
+
+    /// A wheel setting that turns a color cast neutral.
+    public struct Neutralizing: Sendable, Equatable {
+        public var region: Region
+        public var hue: Double
+        public var saturation: Double
+    }
+
+    /// The wheel setting that cancels the cast of `sample` (the photo's sRGB-encoded color at a
+    /// spot, as rendered with `settings`): `region`'s wheel, or with nil the shadows, midtones or
+    /// highlights wheel that covers the spot most. Nil when the spot is barely in that range.
+    public static func neutralizing(_ sample: SIMD3<Double>, settings: DevelopSettings, region: Region?) -> Neutralizing? {
+        let color: RGB = (sample.x, sample.y, sample.z)
+        let weights = Self.weights(luma: luma(color), blending: settings[.gradeBlending] / 100,
+                                   balance: settings[.gradeBalance] / 100)
+        let tonal: [Region] = [.shadows, .midtones, .highlights]
+        let chosen = region ?? tonal.max { weights[index(of: $0)] < weights[index(of: $1)] } ?? .midtones
+        let weight = weights[index(of: chosen)]
+        guard weight > 0.15 else { return nil }
+        let lab = Oklab.fromEncoded(color)
+        let cast = SIMD2(lab.y, lab.z)
+        let current = direction(hue: settings[chosen.hue]) * (settings[chosen.saturation] / 100 * chroma)
+        let wanted = current - cast / weight
+        let saturation = min(100, ((wanted * wanted).sum().squareRoot() / chroma * 100).rounded())
+        return Neutralizing(region: chosen, hue: saturation > 0 ? hue(towards: wanted) : settings[chosen.hue],
+                            saturation: saturation)
     }
 }

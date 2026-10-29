@@ -23,7 +23,8 @@ public final class PreviewCache: Sendable {
     /// 4: Lightroom-like film grain (`FilmGrain`) with Roughness.
     /// 5: Dehaze with the dark channel prior (`Dehaze`) instead of a flat contrast change, and
     ///    a hue-preserving tone curve (`ToneCurve`).
-    public static let version = 5
+    /// 6: Color Grading tints in Oklab with gamut-safe Luminance (`ColorGrade`).
+    public static let version = 6
 
     /// Clears previews written by an older version. The old folder is moved aside at once and
     /// deleted in the background, so a large cache doesn't hold up launch.

@@ -103,7 +103,21 @@ public final class DevelopRenderer: @unchecked Sendable {
                                         masks: MaskProvider? = nil, overlay: UUID? = nil,
                                         preview: SliderPreview? = nil) -> CIImage {
         var settings = settings
-        if case .fullSaturation(let region) = preview { settings[region.saturation] = 100 }
+        switch preview {
+        case .fullSaturation(let region):
+            settings[region.saturation] = 100
+        case .blendingSaturation:
+            for region in DevelopSettings.GradeRegion.allCases where settings[region.saturation] > 0 {
+                settings[region.saturation] = 100
+            }
+        case .gradeSolo(let only):
+            for region in DevelopSettings.GradeRegion.allCases where region != only {
+                settings[region.saturation] = 0
+                settings[region.luminance] = 0
+            }
+        default:
+            break
+        }
         var image = input
         let extent = input.extent
 
@@ -154,6 +168,15 @@ public final class DevelopRenderer: @unchecked Sendable {
         }
 
         // HSL (or the B&W Mix) and color grading share one color cube in sRGB-encoded values.
+        if preview == .gradeRegions {
+            // Balance's view stops here: what matters is which tones fall in which range.
+            let filter = CIFilter.colorCubeWithColorSpace()
+            filter.inputImage = image
+            filter.cubeDimension = Float(ColorLUT.dimension)
+            filter.cubeData = ColorLUT.regionMapCube(for: settings)
+            filter.colorSpace = sRGB
+            return filter.outputImage ?? image
+        }
         if let cube = ColorLUT.cube(for: settings) {
             let filter = CIFilter.colorCubeWithColorSpace()
             filter.inputImage = image
@@ -683,6 +706,30 @@ public final class DevelopSession: @unchecked Sendable {
         return (0..<(width * height)).map {
             SIMD3(Double(pixels[$0 * 4]), Double(pixels[$0 * 4 + 1]), Double(pixels[$0 * 4 + 2]))
         }
+    }
+
+    /// The finished photo's average sRGB-encoded color around `point` (0...1 from the top left of
+    /// the cropped photo), for Color Grading's color picker.
+    public func color(at point: CGPoint, settings: DevelopSettings, radius: Int = 2) -> SIMD3<Double>? {
+        guard let image = image(with: settings) else { return nil }
+        let extent = image.extent
+        let x = extent.minX + point.x * extent.width, y = extent.minY + (1 - point.y) * extent.height
+        let side = CGFloat(radius * 2 + 1)
+        let region = CGRect(x: (x - side / 2).rounded(.down), y: (y - side / 2).rounded(.down), width: side, height: side)
+            .intersection(extent.integral)
+        guard !region.isNull, region.width >= 1, region.height >= 1 else { return nil }
+        let width = Int(region.width), height = Int(region.height)
+        var pixels = [Float](repeating: 0, count: width * height * 4)
+        pixels.withUnsafeMutableBytes { buffer in
+            renderer.context.render(image, toBitmap: buffer.baseAddress!, rowBytes: width * 16, bounds: region,
+                                    format: .RGBAf, colorSpace: DevelopRenderer.sRGB)
+        }
+        var sum = SIMD3<Double>(0, 0, 0)
+        for i in 0..<(width * height) {
+            sum += SIMD3(Double(pixels[i * 4]), Double(pixels[i * 4 + 1]), Double(pixels[i * 4 + 2]))
+        }
+        let mean = sum / Double(width * height)
+        return SIMD3(min(1, max(0, mean.x)), min(1, max(0, mean.y)), min(1, max(0, mean.z)))
     }
 
     /// Rendered in sRGB, for measuring colors (Match Look).

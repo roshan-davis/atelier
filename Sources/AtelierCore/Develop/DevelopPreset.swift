@@ -180,7 +180,8 @@ public struct DevelopPreset: Codable, Hashable, Sendable, Identifiable {
     /// The preset at `amount` (0 to 2, 1 is the preset as saved), like Lightroom's preset Amount:
     /// each slider the preset moves goes that fraction of the way from `base`, and past it above 1.
     /// Point curves blend the same way. Color grading hues, white balance on photos left as
-    /// shot, and switches (treatment, profile, crop, masks) take the preset's value.
+    /// shot, and switches (treatment, profile, crop, masks, Color Grading on or off) take the
+    /// preset's value.
     public func applied(to base: DevelopSettings, amount: Double) -> DevelopSettings {
         let full = applied(to: base)
         guard amount != 1 else { return full }
@@ -194,7 +195,7 @@ public struct DevelopPreset: Codable, Hashable, Sendable, Identifiable {
                 if base.temperature != nil, full.temperature != nil {
                     result[.temperature] = from + (to - from) * amount
                 }
-            case .gradeShadowsHue, .gradeMidtonesHue, .gradeHighlightsHue, .gradeGlobalHue:
+            case .gradeShadowsHue, .gradeMidtonesHue, .gradeHighlightsHue, .gradeGlobalHue, .gradeDisabled:
                 break
             default:
                 result[parameter] = from + (to - from) * amount

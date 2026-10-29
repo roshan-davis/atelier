@@ -48,6 +48,7 @@ final class DevelopController: ObservableObject {
         didSet {
             guard isPickingWhiteBalance, !oldValue else { return }
             isPickingFringe = false
+            isPickingGradeColor = false
             isCropping = false
             isAIOpen = false
             isMasking = false
@@ -66,6 +67,7 @@ final class DevelopController: ObservableObject {
             fringeMessage = nil
             guard isPickingFringe else { return }
             isPickingWhiteBalance = false
+            isPickingGradeColor = false
             isCropping = false
             isAIOpen = false
             isMasking = false
@@ -76,6 +78,27 @@ final class DevelopController: ObservableObject {
     }
     /// Why the last click with the Fringe Color Selector set nothing.
     @Published private(set) var fringeMessage: String?
+    /// Color Grading's color picker is out: a click on the photo sets a wheel so that spot's color
+    /// cast turns neutral. The photo still zooms and pans.
+    @Published var isPickingGradeColor = false {
+        didSet {
+            guard isPickingGradeColor != oldValue else { return }
+            gradeColorMessage = nil
+            guard isPickingGradeColor else { return }
+            isPickingWhiteBalance = false
+            isPickingFringe = false
+            isCropping = false
+            isAIOpen = false
+            isMasking = false
+            isGuiding = false
+            showingBefore = false
+            compareMode = .off
+        }
+    }
+    /// The wheel the color picker sets; nil picks Shadows, Midtones or Highlights by the spot's tone.
+    @Published var gradePickRegion: DevelopSettings.GradeRegion?
+    /// Why the last click with Color Grading's color picker set nothing.
+    @Published private(set) var gradeColorMessage: String?
     @Published var showingBefore = false {
         didSet { if showingBefore != oldValue { scheduleRender() } }
     }
@@ -100,6 +123,8 @@ final class DevelopController: ObservableObject {
     @Published var sliderPosition = 0.5
 
     @Published private(set) var histogram: Histogram?
+    /// Where the render's colors sit on the Color Grading wheels.
+    @Published private(set) var colorScope: ColorScope?
 
     /// Lightroom's Option-drag view, while Option is held on a slider that has one.
     @Published var sliderPreview: SliderPreview? = nil {
@@ -118,6 +143,7 @@ final class DevelopController: ObservableObject {
                 isGuiding = false
                 isPickingWhiteBalance = false
                 isPickingFringe = false
+                isPickingGradeColor = false
             } else {
                 showCropOfWholeImage()
             }
@@ -154,6 +180,7 @@ final class DevelopController: ObservableObject {
             isGuiding = false
             isPickingWhiteBalance = false
             isPickingFringe = false
+            isPickingGradeColor = false
             showingBefore = false
             compareMode = .off
         }
@@ -169,6 +196,7 @@ final class DevelopController: ObservableObject {
                 isGuiding = false
                 isPickingWhiteBalance = false
                 isPickingFringe = false
+                isPickingGradeColor = false
                 showingBefore = false
                 compareMode = .off
                 if selectedMaskID == nil { selectedMaskID = settings.masks.last?.id }
@@ -185,6 +213,7 @@ final class DevelopController: ObservableObject {
             if isGuiding {
                 isPickingWhiteBalance = false
                 isPickingFringe = false
+                isPickingGradeColor = false
                 isCropping = false
                 isAIOpen = false
                 isMasking = false
@@ -369,6 +398,7 @@ final class DevelopController: ObservableObject {
         imageIsWhole = false
         beforeImage = nil
         histogram = nil
+        colorScope = nil
         fullImage = nil
         fullImageSettings = nil
         fullBeforeImage = nil
@@ -381,6 +411,7 @@ final class DevelopController: ObservableObject {
         isGuiding = false
         isPickingWhiteBalance = false
         isPickingFringe = false
+        isPickingGradeColor = false
         uprightMessage = nil
         sourceSize = nil
         selectedMaskID = nil
@@ -621,6 +652,94 @@ final class DevelopController: ObservableObject {
         default: settings[parameter] = DevelopSettings.neutral[parameter]
         }
         changed(step: "Reset \(Self.parameterName(parameter))")
+    }
+
+    // MARK: Color Grading
+
+    /// A wheel's hue and saturation together, as one history step.
+    func setGradeColor(_ region: DevelopSettings.GradeRegion, hue: Double, saturation: Double) {
+        guard assetID != nil else { return }
+        settings[region.hue] = hue
+        settings[region.saturation] = saturation
+        changed(step: "Color Grading \(region.rawValue) \(Int(settings[region.hue].rounded()))°, "
+                + "\(Int(settings[region.saturation].rounded()))")
+    }
+
+    /// Resets a wheel's hue and saturation, and with `luminance` its Luminance too.
+    func resetGrade(_ region: DevelopSettings.GradeRegion, luminance: Bool) {
+        guard assetID != nil else { return }
+        var parameters = [region.hue, region.saturation]
+        if luminance { parameters.append(region.luminance) }
+        for parameter in parameters { settings[parameter] = DevelopSettings.neutral[parameter] }
+        changed(step: "Reset Color Grading \(region.rawValue)")
+    }
+
+    /// Color Grading's panel switch, as in Lightroom: off hides every wheel's effect and keeps
+    /// their settings.
+    var isColorGradingOn: Bool { settings[.gradeDisabled] < 0.5 }
+
+    func setColorGradingOn(_ on: Bool) {
+        guard assetID != nil, on != isColorGradingOn else { return }
+        settings[.gradeDisabled] = on ? 0 : 1
+        changed(step: on ? "Color Grading On" : "Color Grading Off")
+    }
+
+    /// One wheel's settings, for Copy and Paste in a wheel's right-click menu.
+    struct GradeWheelValues: Equatable {
+        var hue: Double
+        var saturation: Double
+        var luminance: Double
+    }
+
+    @Published private(set) var copiedGradeWheel: GradeWheelValues?
+
+    func copyGradeWheel(_ region: DevelopSettings.GradeRegion) {
+        copiedGradeWheel = GradeWheelValues(hue: settings[region.hue], saturation: settings[region.saturation],
+                                            luminance: settings[region.luminance])
+    }
+
+    func pasteGradeWheel(onto region: DevelopSettings.GradeRegion) {
+        guard assetID != nil, let copied = copiedGradeWheel else { return }
+        settings[region.hue] = copied.hue
+        settings[region.saturation] = copied.saturation
+        settings[region.luminance] = copied.luminance
+        changed(step: "Paste Color Grading \(region.rawValue)")
+    }
+
+    /// The wheel under the pointer, which the arrow keys nudge.
+    var hoveredGradeRegion: DevelopSettings.GradeRegion?
+
+    /// Arrow keys over a wheel: Left and Right turn the hue, Up and Down change saturation.
+    func nudgeGrade(_ region: DevelopSettings.GradeRegion, hue: Double, saturation: Double) {
+        var newHue = (settings[region.hue] + hue).truncatingRemainder(dividingBy: 360)
+        if newHue < 0 { newHue += 360 }
+        setGradeColor(region, hue: newHue, saturation: min(100, max(0, settings[region.saturation] + saturation)))
+    }
+
+    /// Color Grading's color picker: sets a wheel so the clicked spot's color cast turns neutral.
+    func pickGradeColor(at point: CGPoint) {
+        let sharp = wantsFullResolution ? fullSession : nil
+        guard let session = sharp ?? self.session, let assetID else { return }
+        let settings = self.settings
+        let region = gradePickRegion
+        let pickQueue = sharp != nil ? fullQueue : queue
+        pickQueue.async {
+            let sample = session.color(at: point, settings: settings)
+            let pick = sample.flatMap { ColorGrade.neutralizing($0, settings: settings, region: region) }
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard self.assetID == assetID, self.isPickingGradeColor else { return }
+                    guard let pick else {
+                        self.gradeColorMessage = sample == nil || region == nil
+                            ? "Cannot read the color there. Click another spot."
+                            : "That spot is hardly in the \(region!.rawValue). Click another spot, or use the 3-Way view."
+                        return
+                    }
+                    self.isPickingGradeColor = false
+                    self.setGradeColor(pick.region, hue: pick.hue, saturation: pick.saturation)
+                }
+            }
+        }
     }
 
     func setPoints(_ points: [DevelopSettings.CurvePoint], for channel: DevelopSettings.CurveChannel) {
@@ -1320,6 +1439,7 @@ final class DevelopController: ObservableObject {
             let cgImage = session.render(settings, cropping: cropping, overlay: overlay, preview: preview)
             // The red overlay or an Option-drag view would skew the histogram; keep the last one while it shows.
             let histogram = overlay == nil && preview == nil ? cgImage.flatMap { Histogram(image: $0) } : nil
+            let scope = overlay == nil && preview == nil ? cgImage.flatMap { ColorScope(image: $0) } : nil
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     self.rendering = false
@@ -1329,6 +1449,7 @@ final class DevelopController: ObservableObject {
                         self.image = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
                         self.imageIsWhole = !cropping
                         if let histogram { self.histogram = histogram }
+                        if let scope { self.colorScope = scope }
                     }
                     if self.needsRender {
                         self.needsRender = false

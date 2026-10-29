@@ -785,6 +785,22 @@ final class LibraryModel: ObservableObject {
             develop.isPickingFringe = false
             return true
         }
+        if mode == .develop, develop.isPickingGradeColor, event.keyCode == 53 {  // escape
+            develop.isPickingGradeColor = false
+            return true
+        }
+        // Arrow keys over a Color Grading wheel nudge it (Shift for bigger steps) instead of
+        // changing photos.
+        if mode == .develop, let region = develop.hoveredGradeRegion, (123...126).contains(event.keyCode) {
+            let step = event.modifierFlags.contains(.shift) ? 10.0 : 1.0
+            switch event.keyCode {
+            case 123: develop.nudgeGrade(region, hue: -step, saturation: 0)   // left
+            case 124: develop.nudgeGrade(region, hue: step, saturation: 0)    // right
+            case 125: develop.nudgeGrade(region, hue: 0, saturation: -step)   // down
+            default: develop.nudgeGrade(region, hue: 0, saturation: step)     // up
+            }
+            return true
+        }
         if mode == .develop, handleTransformKey(event) { return true }
         if mode == .develop, handleMaskingKey(event) { return true }
 

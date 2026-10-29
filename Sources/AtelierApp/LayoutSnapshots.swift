@@ -62,6 +62,7 @@ enum LayoutSnapshots {
                       to: folder.appendingPathComponent("develop-ai-1280x800.png"))
         model.develop.isAIOpen = false
         await snapshotSliderPreviews(model: model, into: folder)
+        await snapshotColorGrading(model: model, into: folder)
         await snapshotMatchLook(model: model, into: folder)
         await snapshotMasking(model: model, into: folder)
         await snapshotTransform(model: model, into: folder)
@@ -215,7 +216,8 @@ enum LayoutSnapshots {
         let previews: [(String, SliderPreview)] = [("sharpen-amount", .sharpenAmount), ("sharpen-edges", .sharpenEdges),
                                                    ("sharpen-mask", .sharpenMask), ("clipping-highlights", .highlightClipping),
                                                    ("clipping-shadows", .shadowClipping),
-                                                   ("grade-hue", .fullSaturation(.midtones))]
+                                                   ("grade-hue", .fullSaturation(.midtones)),
+                                                   ("grade-balance", .gradeRegions), ("grade-solo-shadows", .gradeSolo(.shadows))]
         for (name, preview) in previews {
             develop.sliderPreview = preview
             try? await Task.sleep(for: .seconds(1))
@@ -224,6 +226,35 @@ enum LayoutSnapshots {
         }
         develop.sliderPreview = nil
         for parameter in [DevelopSettings.Parameter.sharpening, .sharpenMasking, .whites, .blacks] { develop.reset(parameter) }
+    }
+
+    /// Color Grading: the 3-Way view and each single wheel, with the photo's colors on the
+    /// wheels and the tonal range graph, the panel switched off, and the color picker's hint.
+    private static func snapshotColorGrading(model: LibraryModel, into folder: URL) async {
+        let develop = model.develop
+        develop.set(.gradeMidtonesLum, to: 10)
+        develop.set(.gradeBalance, to: -20)
+        try? await Task.sleep(for: .seconds(1))
+        for view in ["3-Way"] + DevelopSettings.GradeRegion.allCases.map(\.rawValue) {
+            UserDefaults.standard.set(view, forKey: "develop.gradeView")
+            await capture(AnyView(ColorGradingPanel(develop: develop).padding(12).frame(width: 320)
+                                    .background(Color(nsColor: .windowBackgroundColor))),
+                          size: CGSize(width: 320, height: view == "3-Way" ? 560 : 520),
+                          to: folder.appendingPathComponent("color-grading-\(view.lowercased())-320.png"))
+        }
+        UserDefaults.standard.set("3-Way", forKey: "develop.gradeView")
+        develop.setColorGradingOn(false)
+        try? await Task.sleep(for: .seconds(1))
+        await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
+                      to: folder.appendingPathComponent("develop-grading-off-1280x800.png"))
+        develop.setColorGradingOn(true)
+        develop.isPickingGradeColor = true
+        try? await Task.sleep(for: .seconds(1))
+        await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
+                      to: folder.appendingPathComponent("develop-grading-picker-1280x800.png"))
+        develop.isPickingGradeColor = false
+        develop.reset(.gradeMidtonesLum)
+        develop.reset(.gradeBalance)
     }
 
     private static func snapshotMasking(model: LibraryModel, into folder: URL) async {
