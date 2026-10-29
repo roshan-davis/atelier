@@ -42,8 +42,9 @@ final class ColorTests: XCTestCase {
         settings[.curveShadows] = 100
         XCTAssertGreaterThan(DevelopRenderer.toneCurveValue(settings, at: 0.125), 0.2)
         XCTAssertEqual(DevelopRenderer.toneCurveValue(settings, at: 0.9), 0.9, accuracy: 0.001)
-        XCTAssertNotNil(DevelopRenderer.toneCurveLUT(settings))
-        XCTAssertNil(DevelopRenderer.toneCurveLUT(.neutral))
+        XCTAssertNotNil(DevelopRenderer.masterCurveLUT(settings))
+        XCTAssertNil(DevelopRenderer.masterCurveLUT(.neutral))
+        XCTAssertNil(DevelopRenderer.channelCurvesLUT(settings))
     }
 
     func testPointCurves() throws {
@@ -59,11 +60,13 @@ final class ColorTests: XCTestCase {
         XCTAssertEqual(decoded, settings)
         XCTAssertTrue(decoded.hasPointCurve)
 
-        let lut = try XCTUnwrap(DevelopRenderer.toneCurveLUT(settings, samples: 11))
-        // Sample 5 is x = 0.5: the RGB curve darkens it; blue is lifted on top.
-        XCTAssertEqual(Double(lut[15]), 0.3, accuracy: 0.01)
-        XCTAssertGreaterThan(lut[17], lut[15])
-        XCTAssertEqual(lut[15], lut[16])
+        // Sample 5 is x = 0.5: the RGB curve darkens it; the blue curve lifts blue alone.
+        let master = try XCTUnwrap(DevelopRenderer.masterCurveLUT(settings, samples: 11))
+        XCTAssertEqual(Double(master[5]), 0.3, accuracy: 0.01)
+        let channels = try XCTUnwrap(DevelopRenderer.channelCurvesLUT(settings, samples: 11))
+        XCTAssertEqual(Double(channels[15]), 0.5, accuracy: 0.001, "red is a straight line")
+        XCTAssertEqual(channels[15], channels[16])
+        XCTAssertGreaterThan(channels[17], channels[15])
     }
 
     func testHSLWeightsAndGrays() {
@@ -97,6 +100,39 @@ final class ColorTests: XCTestCase {
         grade[.gradeShadowsSat] = 100
         let tinted = try pixel(XCTUnwrap(dark.render(grade)))
         XCTAssertGreaterThan(tinted.2, tinted.0 + 0.03, "shadows tinted blue: \(tinted)")
+    }
+
+    /// Contrast moves an orange's brightness and saturation but keeps its hue, as in Lightroom;
+    /// a per-channel curve would turn it redder.
+    func testContrastKeepsHue() throws {
+        XCTAssertTrue(ToneCurve.kernelAvailable)
+        let file = workDir.appendingPathComponent("orange.jpg")
+        try makeJPEG(at: file, color: [0.85, 0.5, 0.2])
+        let session = try XCTUnwrap(DevelopRenderer.shared.session(for: file, maxPixelSize: 32))
+        let before = try pixel(XCTUnwrap(session.render(.neutral)))
+        var settings = DevelopSettings()
+        settings.contrast = 100
+        settings.whites = 40
+        settings.blacks = -40
+        let after = try pixel(XCTUnwrap(session.render(settings)))
+        XCTAssertNotEqual(after.0, before.0, accuracy: 0.005, "contrast changed the color")
+        XCTAssertEqual(hue(after), hue(before), accuracy: 3, "before \(before), after \(after)")
+
+        let grayFile = workDir.appendingPathComponent("gray.jpg")
+        try makeJPEG(at: grayFile, color: [0.6, 0.6, 0.6])
+        let gray = try pixel(XCTUnwrap(XCTUnwrap(DevelopRenderer.shared.session(for: grayFile, maxPixelSize: 32))
+            .render(settings)))
+        XCTAssertEqual(gray.0, gray.1, accuracy: 0.01, "gray stays gray")
+        XCTAssertEqual(gray.1, gray.2, accuracy: 0.01, "gray stays gray")
+    }
+
+    private func hue(_ c: (Double, Double, Double)) -> Double {
+        let high = max(c.0, c.1, c.2), low = min(c.0, c.1, c.2), d = high - low
+        guard d > 0 else { return 0 }
+        var h: Double
+        if high == c.0 { h = (c.1 - c.2) / d } else if high == c.1 { h = 2 + (c.2 - c.0) / d } else { h = 4 + (c.0 - c.1) / d }
+        h *= 60
+        return h < 0 ? h + 360 : h
     }
 
     // MARK: Helpers

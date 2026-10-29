@@ -100,9 +100,13 @@ public final class DevelopRenderer: @unchecked Sendable {
             image = filter.outputImage ?? image
         }
 
-        // Tone curve, applied in sRGB-encoded values so contrast behaves perceptually.
-        // CIColorCurves names its color space explicitly, so no gamma round trip is needed.
-        if let lut = toneCurveLUT(settings) {
+        // Tone curve, applied in sRGB-encoded values so contrast behaves perceptually. Basic tone,
+        // the region sliders and the RGB curve keep each color's hue, as Lightroom does; the
+        // Red, Green and Blue curves then work on their own channel, as color curves should.
+        if let lut = masterCurveLUT(settings) {
+            image = ToneCurve.apply(lut, to: image)
+        }
+        if let lut = channelCurvesLUT(settings) {
             let filter = CIFilter.colorCurves()
             filter.inputImage = image
             filter.curvesData = lut.withUnsafeBufferPointer { Data(buffer: $0) }
@@ -319,21 +323,34 @@ public final class DevelopRenderer: @unchecked Sendable {
         return min(1, max(0, y))
     }
 
-    /// The tone curve sampled as RGB triples for CIColorCurves: Basic and region tone (never
-    /// decreasing, so tones keep their order), then the RGB point curve, then each channel's.
-    static func toneCurveLUT(_ settings: DevelopSettings, samples: Int = 1024) -> [Float]? {
-        guard hasToneCurve(settings) else { return nil }
+    /// Basic and region tone (never decreasing, so tones keep their order), then the RGB point
+    /// curve, sampled from 0 to 1; nil when it is a straight line.
+    static func masterCurveLUT(_ settings: DevelopSettings, samples: Int = 1024) -> [Float]? {
         let master = settings.points(for: .rgb)
-        let channels = [settings.points(for: .red), settings.points(for: .green), settings.points(for: .blue)]
+        guard toneCurvePoints(settings) != nil || curveRegions.contains(where: { settings[$0.0] != 0 })
+                || master != DevelopSettings.CurvePoint.identity else { return nil }
         var lut = [Float]()
-        lut.reserveCapacity(samples * 3)
+        lut.reserveCapacity(samples)
         var previous = 0.0
         for i in 0..<samples {
             let base = max(previous, toneCurveValue(settings, at: Double(i) / Double(samples - 1)))
             previous = base
-            let y = pointCurveValue(master, at: base)
+            lut.append(Float(pointCurveValue(master, at: base)))
+        }
+        return lut
+    }
+
+    /// The Red, Green and Blue point curves sampled as RGB triples for CIColorCurves; nil when
+    /// all three are straight lines.
+    static func channelCurvesLUT(_ settings: DevelopSettings, samples: Int = 1024) -> [Float]? {
+        let channels = [settings.points(for: .red), settings.points(for: .green), settings.points(for: .blue)]
+        guard channels.contains(where: { $0 != DevelopSettings.CurvePoint.identity }) else { return nil }
+        var lut = [Float]()
+        lut.reserveCapacity(samples * 3)
+        for i in 0..<samples {
+            let x = Double(i) / Double(samples - 1)
             for points in channels {
-                lut.append(Float(pointCurveValue(points, at: y)))
+                lut.append(Float(pointCurveValue(points, at: x)))
             }
         }
         return lut
