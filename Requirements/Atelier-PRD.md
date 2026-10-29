@@ -55,6 +55,7 @@ Every feature follows these rules. A feature is not done until it meets them.
 7. **Errors name the file and the reason**, and the rest of the batch continues. Problems are listed on request instead of interrupting with alerts.
 8. **Keyboard first for repeated work.** Culling, rating, flagging, labels and view switching all have single-key shortcuts; every command is in a menu.
 9. **Sensible defaults, remembered choices.** Names default to the folder or event, the last import mode and library folder are remembered, and Atelier reopens on the view, photo and filter you left (see Restore last session).
+10. **Switching modes keeps your place.** Opening a tool (Crop, Masking, AI, Guided Upright, the white balance picker, Loupe and Develop) and coming back keeps the zoom and the spot you were zoomed in on; a crop moves the spot with the photo. This is one shared view state that every mode reads and writes, not something each tool saves for itself. (Rosh, Oct 29, 2026.)
 10. **Plain language.** Labels describe what happens to the user's photos ("Leave files where they are", "Copy into my library folder"), not internal terms.
 
 ### Import flow
