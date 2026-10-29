@@ -63,6 +63,17 @@ final class DevelopController: ObservableObject {
     }
     /// The photo without edits, rendered once per open photo for the compare views.
     @Published private(set) var beforeImage: NSImage?
+    /// The photo without edits at full size, for zooming in the compare views.
+    @Published private(set) var fullBeforeImage: NSImage?
+    private var fullBeforeSettings: DevelopSettings?
+    private var fullBeforeRendering = false
+    private var fullBeforeNeedsRender = false
+
+    /// The sharpest unedited image for the compare views.
+    var displayBeforeImage: NSImage? {
+        if let fullBeforeImage, fullBeforeSettings == beforeSettings { return fullBeforeImage }
+        return beforeImage
+    }
     /// Where the slider divides before (left) and after (right), 0...1.
     @Published var sliderPosition = 0.5
 
@@ -187,7 +198,12 @@ final class DevelopController: ObservableObject {
 
     /// Set while the photo is zoomed past fit; renders the full-resolution image as well.
     @Published var wantsFullResolution = false {
-        didSet { if wantsFullResolution, !oldValue { scheduleFullRender() } }
+        didSet {
+            if wantsFullResolution, !oldValue {
+                scheduleFullRender()
+                scheduleFullBeforeRender()
+            }
+        }
     }
     @Published private(set) var fullImage: NSImage?
     private var fullImageSettings: DevelopSettings?
@@ -294,6 +310,8 @@ final class DevelopController: ObservableObject {
         histogram = nil
         fullImage = nil
         fullImageSettings = nil
+        fullBeforeImage = nil
+        fullBeforeSettings = nil
         fullSession = nil
         sourceURL = nil
         errorMessage = nil
@@ -1106,12 +1124,53 @@ final class DevelopController: ObservableObject {
                         self.fullNeedsRender = false
                         if !self.rendering { self.scheduleFullRender() }
                     }
+                    if self.fullBeforeNeedsRender {
+                        self.fullBeforeNeedsRender = false
+                        self.scheduleFullBeforeRender()
+                    }
+                }
+            }
+        }
+    }
+
+    /// Renders the unedited photo at full size while a compare view is zoomed past fit, sharing
+    /// the full-size session with the edited render.
+    private func scheduleFullBeforeRender() {
+        guard wantsFullResolution, compareMode != .off, let url = sourceURL else { return }
+        let before = beforeSettings
+        guard fullBeforeSettings != before else { return }
+        // Wait for the edited render when it is still opening the full-size photo, so the
+        // photo isn't decoded twice at once.
+        if fullBeforeRendering || (fullSession == nil && fullRendering) {
+            fullBeforeNeedsRender = true
+            return
+        }
+        fullBeforeRendering = true
+        let assetID = self.assetID
+        let existing = fullSession
+        fullQueue.async {
+            let session = existing ?? DevelopRenderer.shared.session(for: url, maxPixelSize: nil)
+            let cgImage = session?.render(before)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    self.fullBeforeRendering = false
+                    guard self.assetID == assetID, let session else { return }
+                    if self.fullSession == nil { self.fullSession = session }
+                    if let cgImage {
+                        self.fullBeforeImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+                        self.fullBeforeSettings = before
+                    }
+                    if self.fullBeforeNeedsRender {
+                        self.fullBeforeNeedsRender = false
+                        self.scheduleFullBeforeRender()
+                    }
                 }
             }
         }
     }
 
     private func renderBeforeIfNeeded() {
+        scheduleFullBeforeRender()
         guard beforeImage == nil, let session else { return }
         let assetID = self.assetID
         let before = beforeSettings
