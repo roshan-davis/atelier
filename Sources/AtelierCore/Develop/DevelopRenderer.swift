@@ -538,6 +538,7 @@ public final class DevelopSession: @unchecked Sendable {
                 filter.inputImage = image
                 filter.ev = Float(settings.exposure)
                 image = filter.outputImage ?? image
+                if settings.exposure > 0 { image = ExposureRolloff.apply(image) }
             }
         }
         // Masks are drawn on the upright photo's frame, so start it at the origin.
