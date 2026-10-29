@@ -33,6 +33,10 @@ final class ZoomState: ObservableObject {
     /// Where the next photo should be centered (0...1 across and down the photo), for the
     /// settings that bring back a zoomed photo's position. The photo view takes it.
     var pendingCenter: CGPoint?
+    /// Where the photo view on screen now should be centered (0...1 across and down the
+    /// photo), taken by the next view to update whatever photo it shows. For coming back from
+    /// the compare views, where the photo view is new but the photo is the same.
+    var restoreCenter: CGPoint?
     /// The visible center of the photo shown now, from the photo view.
     var currentCenter: (@MainActor () -> CGPoint?)?
     /// Centers the photo view on a point (0...1 across and down the photo), zooming in first
@@ -105,6 +109,10 @@ struct ZoomableImageView: NSViewRepresentable {
         if let center = zoom.pendingCenter, let image, image !== view.shownImage {
             view.pendingCenter = center
             zoom.pendingCenter = nil
+        }
+        if let center = zoom.restoreCenter {
+            view.pendingCenter = center
+            zoom.restoreCenter = nil
         }
         view.setImage(image, pixelSize: pixelSize)
         view.setDimmed(dimmed)
@@ -229,12 +237,14 @@ final class ZoomScrollView: NSScrollView {
         for peer in peers { peer.follow(magnification: magnification, level: level, center: center) }
     }
 
+    /// Doesn't report: the leading pane reports the zoom, and a report from every follow
+    /// during a pinch would publish to the whole window on every frame.
     private func follow(magnification target: CGFloat, level newLevel: ZoomLevel, center: CGPoint) {
         following = true
         defer { following = false }
         level = newLevel
         if abs(magnification - target) > 0.0001 { magnification = target }
-        scroll(toRelative: center)
+        scroll(toRelative: center, reporting: false)
     }
 
     /// A pane that appears or resizes after its partner takes the partner's zoom and spot.
@@ -303,13 +313,13 @@ final class ZoomScrollView: NSScrollView {
         scroll(toRelative: center)
     }
 
-    private func scroll(toRelative center: CGPoint) {
+    private func scroll(toRelative center: CGPoint, reporting: Bool = true) {
         let size = contentView.bounds.size
         let origin = NSPoint(x: center.x * documentSize.width - size.width / 2,
                              y: center.y * documentSize.height - size.height / 2)
         contentView.scroll(to: contentView.constrainBoundsRect(NSRect(origin: origin, size: size)).origin)
         reflectScrolledClipView(contentView)
-        report()
+        if reporting { report() }
     }
 
     func setDimmed(_ dimmed: Bool) {

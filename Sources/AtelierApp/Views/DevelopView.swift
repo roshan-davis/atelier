@@ -106,10 +106,13 @@ struct DevelopImageView: View {
             guard let saved = zoomBeforeCompare else { return }
             zoomBeforeCompare = nil
             guard saved.assetID == develop.assetID else { return }
-            zoom.pendingCenter = saved.center
-            zoom.level = saved.level
+            // The photo view for Off already exists by now, unsized; it takes the spot once
+            // it has a size, so the zoom doesn't land on the photo's top-left corner.
+            zoom.restoreCenter = saved.center
+            if zoom.level != saved.level { zoom.level = saved.level } else { zoom.objectWillChange.send() }
         } else {
-            zoom.pendingCenter = center
+            zoom.restoreCenter = center
+            zoom.objectWillChange.send()
         }
     }
 
