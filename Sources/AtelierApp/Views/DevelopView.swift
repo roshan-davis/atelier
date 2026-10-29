@@ -735,7 +735,7 @@ private struct HSLPanel: View {
     }
 }
 
-/// A collapsible panel with a Lightroom-style header.
+/// A collapsible Develop panel, with the same header band as the left column's sections.
 struct PanelSection<Content: View>: View {
     let title: String
     @Binding var isExpanded: Bool
@@ -751,40 +751,25 @@ struct PanelSection<Content: View>: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 6) {
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.bold))
-                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 12)
-                Text(title)
-                    .font(.headline)
-                if isModified {
-                    Circle().fill(Color.accentColor).frame(width: 6, height: 6)
-                        .help("This panel has edits")
-                }
-                Spacer()
-                if let isOn {
-                    Toggle(title, isOn: isOn)
-                        .toggleStyle(.switch)
-                        .controlSize(.mini)
-                        .labelsHidden()
-                        .help(isOn.wrappedValue ? "Turn \(title) off to compare; its settings are kept"
-                                                : "Turn \(title) back on")
-                }
-                if isModified, let reset {
-                    Button(action: reset) {
-                        Image(systemName: "arrow.uturn.backward")
+            SectionBand(title: title, isExpanded: $isExpanded, isModified: isModified) { hovering in
+                HStack(spacing: 4) {
+                    if let isOn {
+                        Toggle(title, isOn: isOn)
+                            .toggleStyle(.switch)
+                            .controlSize(.mini)
+                            .labelsHidden()
+                            .help(isOn.wrappedValue ? "Turn \(title) off to compare; its settings are kept"
+                                                    : "Turn \(title) back on")
                     }
-                    .buttonStyle(.borderless)
-                    .help("Reset \(title)")
+                    if isModified, let reset {
+                        Button(action: reset) {
+                            Image(systemName: "arrow.uturn.backward")
+                        }
+                        .buttonStyle(SidebarIconButtonStyle())
+                        .opacity(hovering ? 1 : 0.6)
+                        .help("Reset \(title)")
+                    }
                 }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .contentShape(Rectangle())
-            .onTapGesture {
-                withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() }
             }
             .contextMenu {
                 Toggle("Solo Mode", isOn: $soloMode)
@@ -795,7 +780,7 @@ struct PanelSection<Content: View>: View {
             if isExpanded {
                 content()
                     .padding(.horizontal, 12)
-                    .padding(.bottom, 12)
+                    .padding(.vertical, 10)
                     .opacity(isOn?.wrappedValue == false ? 0.45 : 1)
             }
             Divider()
