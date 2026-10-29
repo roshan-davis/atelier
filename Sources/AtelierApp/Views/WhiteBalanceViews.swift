@@ -70,9 +70,7 @@ struct WhiteBalancePickerView: View {
                 develop.findWhiteBalance(at: CGPoint(x: (location.x - rect.minX) / rect.width,
                                                      y: (location.y - rect.minY) / rect.height))
             }
-            .onContinuousHover { phase in
-                if case .active = phase { NSCursor.crosshair.set() } else { NSCursor.arrow.set() }
-            }
+            .cursor { point in rect.contains(point) ? .eyedropper : .arrow }
         }
     }
 }

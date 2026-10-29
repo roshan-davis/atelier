@@ -56,20 +56,22 @@ Every feature follows these rules. A feature is not done until it meets them.
 8. **Keyboard first for repeated work.** Culling, rating, flagging, labels and view switching all have single-key shortcuts; every command is in a menu.
 9. **Sensible defaults, remembered choices.** Names default to the folder or event, the last import mode and library folder are remembered, and Atelier reopens on the view, photo and filter you left (see Restore last session).
 10. **Switching modes keeps your place.** Opening a tool (Crop, Masking, AI, Guided Upright, the white balance picker, Loupe and Develop) and coming back keeps the zoom and the spot you were zoomed in on; a crop moves the spot with the photo. This is one shared view state that every mode reads and writes, not something each tool saves for itself. (Rosh, Oct 29, 2026.)
-11. **Plain language.** Labels describe what happens to the user's photos ("Leave files where they are", "Copy into my library folder"), not internal terms.
+11. **The cursor always says what a click or drag will do.** Resize arrows on frame edges, corners and dividers (diagonal at crop corners), a hand where a drag moves something (the zoomed photo, a pin, a handle, the Navigator rectangle) that closes while dragging, a curved arrow where a drag rotates, a crosshair where a drag draws or paints, an eyedropper for every color picker, a pointing hand where a click selects, and a magnifier over a photo at Fit (double-click zooms). A drag keeps its cursor until the mouse goes up, even off the handle, and a tool that closes puts the arrow back. One shared mechanism does this (`Cursors.swift`: views name a `CursorShape` for a spot, worked out with the same hit test their drag uses); no view sets an `NSCursor` itself, so a new tool gets correct cursors by naming its shapes. (Rosh, Oct 29, 2026.)
+12. **Deleting sounds and looks like macOS.** Moving photos to the Trash plays Finder's Trash sound; removing anything from Atelier (a mask or mask part, preset or preset group, guide, snapshot, virtual copy, collection, import entry, or photos taken out of the catalog) plays the Dock's poof sound. Both show a small puff of smoke at the pointer (the window's middle for a delete from the keyboard). One function (`DeleteFeedback.play`) does it for every delete. Settings > General > Feedback turns it off; the sound follows System Settings > Sound > "Play user interface sound effects" and the puff is skipped with Reduce Motion. (Rosh, Oct 29, 2026. Rosh remembered it from Lightroom; the poof and both sounds are macOS's own, from the Dock and Finder.)
+13. **Plain language.** Labels describe what happens to the user's photos ("Leave files where they are", "Copy into my library folder"), not internal terms.
 
 ### Import flow
 
-12. File > Import Photos (Shift-Cmd-I), the toolbar button, or dropping folders or photos on the window opens the Import dialog.
-13. The dialog has four parts, top to bottom:
+14. File > Import Photos (Shift-Cmd-I), the toolbar button, or dropping folders or photos on the window opens the Import dialog.
+15. The dialog has four parts, top to bottom:
    - **Photos:** a drop zone with "Choose Folders or Photos…". Each chosen source shows its photo count and can be removed. "Add More…" adds sources.
    - **Import into:** a new import entry (named after the first folder by default) or an existing one.
    - **Files:** leave files where they are, or copy them into the library folder (dated folders, hash-verified).
    - **Keywords:** optional, applied to every photo.
    - **Culling:** optional "Cull before importing" (see Culling).
-14. The Import button reads "Import N Photos" and is disabled until at least one photo is found.
-15. After Import, the dialog closes, the import entry is selected, photos appear as they are cataloged, and the status bar shows progress with Cancel.
-16. When done, the status bar summarizes imported, already-in-catalog and unreadable files, with "Show Problems" listing any failures.
+16. The Import button reads "Import N Photos" and is disabled until at least one photo is found.
+17. After Import, the dialog closes, the import entry is selected, photos appear as they are cataloged, and the status bar shows progress with Cancel.
+18. When done, the status bar summarizes imported, already-in-catalog and unreadable files, with "Show Problems" listing any failures.
 
 ### Culling (decided Oct 26, 2026)
 

@@ -128,6 +128,7 @@ struct GeneralSettings: View {
     @EnvironmentObject private var model: LibraryModel
     @AppStorage("backups.keep") private var backupsToKeep = 10
     @AppStorage(Splash.showKey) private var showSplash = true
+    @AppStorage(DeleteFeedback.enabledKey) private var deleteEffects = true
     @State private var previewsSize: String?
     @State private var backupMessage: String?
 
@@ -163,6 +164,16 @@ struct GeneralSettings: View {
                 Text("Backups")
             } footer: {
                 Text("The catalog is backed up when Atelier quits. Backups are kept inside the catalog package.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Toggle("Play a sound and animation when deleting", isOn: $deleteEffects)
+            } header: {
+                Text("Feedback")
+            } footer: {
+                Text("Moving photos to the Trash plays Finder’s Trash sound; removing a mask, preset, guide or catalog entry plays the Dock’s poof. Both show a puff of smoke at the pointer. The sound follows System Settings > Sound > Play user interface sound effects.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

@@ -286,6 +286,7 @@ private struct AreaBox: View {
                     moved.origin.y = min(1 - from.height, max(0, from.minY + value.translation.height / frame.height))
                     area = moved
                 }.onEnded { _ in start = nil })
+                .cursor(.grab)
                 .offset(x: rect.minX, y: rect.minY)
             Circle()
                 .fill(Color.white)
@@ -300,6 +301,7 @@ private struct AreaBox: View {
                     resized.size.height = min(1 - from.minY, max(Self.minimumSize, from.height + value.translation.height / frame.height))
                     area = resized
                 }.onEnded { _ in start = nil })
+                .cursor(.resize(.bottomRight))
                 .offset(x: rect.maxX - 7, y: rect.maxY - 7)
         }
     }

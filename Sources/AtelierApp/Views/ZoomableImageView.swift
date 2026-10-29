@@ -187,7 +187,7 @@ final class ZoomScrollView: NSScrollView {
     /// Takes clicks instead of zooming; see `ZoomableImageView.onPick`.
     var onPick: ((CGPoint) -> Void)? {
         didSet {
-            if (onPick == nil) != (oldValue == nil) { canvas.window?.invalidateCursorRects(for: canvas) }
+            if (onPick == nil) != (oldValue == nil) { Cursors.shared.refresh() }
         }
     }
     /// Told what part of the photo is in view, for the Navigator.
@@ -236,6 +236,7 @@ final class ZoomScrollView: NSScrollView {
         guard let view else {
             overlayHost?.removeFromSuperview()
             overlayHost = nil
+            Cursors.shared.refresh()
             return
         }
         if let overlayHost {
@@ -249,8 +250,12 @@ final class ZoomScrollView: NSScrollView {
             host.autoresizingMask = [.width, .height]
             addSubview(host, positioned: .above, relativeTo: nil)
             overlayHost = host
+            Cursors.shared.refresh()
         }
     }
+
+    /// A tool is drawn over the photo; it decides the cursor.
+    var hasOverlay: Bool { overlayHost != nil }
 
     override func tile() {
         super.tile()
@@ -346,7 +351,7 @@ final class ZoomScrollView: NSScrollView {
         scroll(toRelative: center, reporting: false)
         // Still know the zoom here, so this pane can be dragged.
         lastReport = ZoomReport(percent: Double(magnification * 100), fitPercent: Double(fitMagnification * 100))
-        canvas.window?.invalidateCursorRects(for: canvas)
+        Cursors.shared.refresh()
     }
 
     /// A pane that appears or resizes after its partner takes the partner's zoom and spot.
@@ -464,7 +469,7 @@ final class ZoomScrollView: NSScrollView {
         let visible = contentView.bounds
         let center = anchor ?? NSPoint(x: visible.midX, y: visible.midY)
         setMagnification(target, centeredAt: center)
-        canvas.window?.invalidateCursorRects(for: canvas)
+        Cursors.shared.refresh()
         report()
     }
 
@@ -571,13 +576,42 @@ final class ZoomCanvasView: NSView {
         layer?.contents = image?.cgImage(forProposedRect: nil, context: nil, hints: nil)
     }
 
-    override func resetCursorRects() {
-        if scrollView?.onPick != nil {
-            addCursorRect(visibleRect, cursor: .crosshair)
-        } else if scrollView?.canPan == true {
-            addCursorRect(visibleRect, cursor: .openHand)
-        }
+    // MARK: Cursor
+
+    private var tracking: NSTrackingArea?
+
+    /// A picker's eyedropper, a hand once zoomed in, else a magnifier for double-click to zoom.
+    /// Under a tool (Masking) the tool decides.
+    private var cursorShape: CursorShape? {
+        guard let scrollView, !scrollView.hasOverlay else { return nil }
+        if scrollView.onPick != nil { return .eyedropper }
+        return scrollView.canPan ? .grab : .zoomIn
     }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let tracking { removeTrackingArea(tracking) }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .mouseMoved, .cursorUpdate,
+                                                         .activeInKeyWindow, .inVisibleRect], owner: self)
+        addTrackingArea(area)
+        tracking = area
+    }
+
+    private func claimCursor() {
+        Cursors.shared.hover(self, layer: .photo, window: window) { [weak self] in self?.cursorShape }
+    }
+
+    override func mouseEntered(with event: NSEvent) { claimCursor() }
+    override func mouseMoved(with event: NSEvent) { claimCursor() }
+    override func cursorUpdate(with event: NSEvent) { claimCursor() }
+    override func mouseExited(with event: NSEvent) { Cursors.shared.leave(self) }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil { Cursors.shared.remove(self) }
+    }
+
+    // MARK: Mouse
 
     override func mouseDown(with event: NSEvent) {
         dragStart = event.locationInWindow
@@ -589,7 +623,7 @@ final class ZoomCanvasView: NSView {
         let location = event.locationInWindow
         let delta = NSPoint(x: location.x - start.x, y: location.y - start.y)
         if !dragged, abs(delta.x) + abs(delta.y) < 3 { return }
-        if !dragged { NSCursor.closedHand.push() }
+        if !dragged { Cursors.shared.press(self, shape: .grabbing, window: window) }
         dragged = true
         scrollView.pan(by: delta)
         dragStart = location
@@ -597,7 +631,7 @@ final class ZoomCanvasView: NSView {
 
     override func mouseUp(with event: NSEvent) {
         if dragged {
-            NSCursor.pop()
+            Cursors.shared.release(self)
         } else if let onPick = scrollView?.onPick {
             let point = convert(event.locationInWindow, from: nil)
             if bounds.width > 0, bounds.height > 0, bounds.contains(point) {

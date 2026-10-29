@@ -318,7 +318,6 @@ private struct NavigatorViewport: View {
     /// From the pointer to the middle of the rectangle, kept while dragging so a rectangle
     /// grabbed off-center doesn't jump under the pointer.
     @State private var grab: CGPoint?
-    @State private var dragging = false
 
     var body: some View {
         GeometryReader { geometry in
@@ -348,26 +347,16 @@ private struct NavigatorViewport: View {
                             grab = .zero
                         }
                     }
-                    if !dragging {
-                        dragging = true
-                        NSCursor.closedHand.push()
-                    }
                     let offset = grab ?? .zero
                     zoom.focus?(CGPoint(x: min(1, max(0, point.x + offset.x)), y: min(1, max(0, point.y + offset.y))))
                 }
                 .onEnded { _ in
                     grab = nil
-                    if dragging { NSCursor.pop() }
-                    dragging = false
                 })
-            .onContinuousHover { phase in
-                guard !dragging else { return }
-                if case .active(let location) = phase, photo.contains(location) {
-                    let inside = viewport.visible?.contains(Self.relative(location, in: photo)) == true
-                    (inside ? NSCursor.openHand : NSCursor.pointingHand).set()
-                } else {
-                    NSCursor.arrow.set()
-                }
+            // A hand on the rectangle; elsewhere a click centers there. Either way a drag moves it.
+            .cursor(whileDragging: .grabbing) { location in
+                guard photo.contains(location) else { return .arrow }
+                return viewport.visible?.contains(Self.relative(location, in: photo)) == true ? .grab : .link
             }
         }
     }

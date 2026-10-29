@@ -532,7 +532,7 @@ final class LibraryModel: ObservableObject {
 
     func removeSelectionFromCurrentCollection() {
         guard case .collection(let id) = sidebarSelection else { return }
-        perform { try $0.removeAssets(self.pairTargetIDs, fromCollection: id) }
+        if perform({ try $0.removeAssets(self.pairTargetIDs, fromCollection: id) }) { DeleteFeedback.play(.remove) }
     }
 
     func renameCollection(_ id: Int64, to name: String) {
@@ -547,7 +547,7 @@ final class LibraryModel: ObservableObject {
 
     func removeSelectionFromCurrentImport() {
         guard case .importGroup(let id) = sidebarSelection else { return }
-        perform { try $0.removeAssets(self.pairTargetIDs, fromImportGroup: id) }
+        if perform({ try $0.removeAssets(self.pairTargetIDs, fromImportGroup: id) }) { DeleteFeedback.play(.remove) }
     }
 
     func renameImportGroup(_ id: Int64, to name: String) {
@@ -557,21 +557,25 @@ final class LibraryModel: ObservableObject {
     /// Deletes the entry; its photos stay in All Photographs and their folders.
     func deleteImportGroup(_ id: Int64) {
         if sidebarSelection == .importGroup(id) { sidebarSelection = .all }
-        perform { try $0.deleteImportGroup(id) }
+        if perform({ try $0.deleteImportGroup(id) }) { DeleteFeedback.play(.remove) }
     }
 
     func deleteCollection(_ id: Int64) {
         if sidebarSelection == .collection(id) { sidebarSelection = .all }
-        perform { try $0.deleteCollection(id) }
+        if perform({ try $0.deleteCollection(id) }) { DeleteFeedback.play(.remove) }
     }
 
-    private func perform(_ edit: (Catalog) throws -> Void) {
+    /// Whether the edit was made.
+    @discardableResult
+    private func perform(_ edit: (Catalog) throws -> Void) -> Bool {
         do {
             try edit(catalog)
             reloadDetail()
             if UserDefaults.standard.bool(forKey: "xmp.autoWrite") { autoWriteXMP(pairTargetIDs) }
+            return true
         } catch {
             status = error.localizedDescription
+            return false
         }
     }
 

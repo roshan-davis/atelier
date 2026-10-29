@@ -277,9 +277,6 @@ private struct PanelResizeHandle: View {
                 Color.clear
                     .frame(width: 8)
                     .contentShape(Rectangle())
-                    .onHover { inside in
-                        if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
-                    }
                     .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .global)
                         .onChanged { value in
                             let start = startWidth ?? width
@@ -287,6 +284,7 @@ private struct PanelResizeHandle: View {
                             width = min(560, max(280, start - value.translation.width))
                         }
                         .onEnded { _ in startWidth = nil })
+                    .cursor(.columnResize)
             )
             .help("Drag to resize the panel")
     }
