@@ -75,6 +75,11 @@ final class LibraryModel: ObservableObject {
     @Published var focusedID: Int64? {
         didSet {
             guard focusedID != oldValue else { return }
+            // As in Lightroom, Fit, Fill and the fixed zooms carry over to the next photo, but a
+            // pinch to an in-between zoom goes back to Fit.
+            if case .percent(let value) = zoom, value != 100, value != 200, value != Self.clickZoomPercent {
+                zoom = .fit
+            }
             reloadDetail()
             if mode == .develop { develop.open(focusedID) }
         }
