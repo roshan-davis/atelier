@@ -67,6 +67,9 @@ public final class DevelopRenderer: @unchecked Sendable {
             // Clamp first so the edges stay sharp when sampled.
             image = image.clampedToExtent().transformed(by: rotation)
                 .cropped(to: CGRect(origin: .zero, size: size).applying(rotation))
+            // Clamping smears the edge pixels into streaks past the photo's tilted edges; the
+            // crop stays on the photo, but the crop tool shows those corners, so cut them away.
+            if !cropping { image = straightenedOutline(crop, size: size, of: image) }
         }
         guard cropping else { return image }
         // The crop is measured from the top left; Core Image's y axis points up.
@@ -74,6 +77,19 @@ public final class DevelopRenderer: @unchecked Sendable {
                           width: crop.width * size.width, height: crop.height * size.height).integral
         image = image.cropped(to: rect)
         return image.transformed(by: CGAffineTransform(translationX: -rect.minX, y: -rect.minY))
+    }
+
+    /// `image` with everything outside the straightened photo made transparent, so the crop
+    /// tool shows empty corners around the tilted photo, as Lightroom does. `size` is the
+    /// turned photo's size; the edge is antialiased.
+    public static func straightenedOutline(_ crop: DevelopSettings.Crop, size: CGSize, of image: CIImage) -> CIImage {
+        guard crop.angle != 0 else { return image }
+        let rotation = CGAffineTransform(translationX: size.width / 2, y: size.height / 2)
+            .rotated(by: -CGFloat(crop.angle) * .pi / 180)
+            .translatedBy(x: -size.width / 2, y: -size.height / 2)
+        let outline = CIImage(color: .white).cropped(to: CGRect(origin: .zero, size: size)).transformed(by: rotation)
+        return image.applyingFilter("CISourceInCompositing", parameters: [kCIInputBackgroundImageKey: outline])
+            .cropped(to: image.extent)
     }
 
     // MARK: Adjustments after decode
@@ -485,8 +501,11 @@ public final class DevelopSession: @unchecked Sendable {
             guard let crop else { return mask }
             return DevelopRenderer.applyGeometry(crop, to: mask, cropping: cropping)
         }
-        return DevelopRenderer.applyAdjustments(settings, to: image, scale: renderScale, masks: provider, overlay: overlay,
-                                                preview: preview)
+        let adjusted = DevelopRenderer.applyAdjustments(settings, to: image, scale: renderScale, masks: provider,
+                                                        overlay: overlay, preview: preview)
+        guard !cropping, let crop else { return adjusted }
+        // Vignetting and grain would paint the crop tool's empty corners; cut them again.
+        return DevelopRenderer.straightenedOutline(crop, size: crop.orientedSize(sourceExtent.size), of: adjusted)
     }
 
     /// Pipeline step 1: decode with white balance and exposure, the profile, then the lens

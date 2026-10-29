@@ -57,6 +57,25 @@ final class GeometryTests: XCTestCase {
         XCTAssertGreaterThan(uncropped.extent.width, 300, "the whole straightened photo is larger than its frame")
     }
 
+    /// The crop tool's view of a straightened photo leaves the corners outside it empty
+    /// instead of smearing the photo's edge pixels into streaks.
+    func testStraightenedCornersAreEmpty() {
+        var crop = Crop()
+        crop.angle = 20
+        let uncropped = DevelopRenderer.applyGeometry(crop, to: image(width: 300, height: 200), cropping: false)
+        let context = CIContext(options: [.workingColorSpace: NSNull()])
+        func pixel(_ x: CGFloat, _ y: CGFloat) -> [UInt8] {
+            var rgba = [UInt8](repeating: 0, count: 4)
+            context.render(uncropped, toBitmap: &rgba, rowBytes: 4, bounds: CGRect(x: x, y: y, width: 1, height: 1),
+                           format: .RGBA8, colorSpace: nil)
+            return rgba
+        }
+        let extent = uncropped.extent
+        XCTAssertEqual(pixel(extent.minX + 2, extent.minY + 2)[3], 0, "a corner of the bounding box is off the photo")
+        XCTAssertEqual(pixel(extent.maxX - 3, extent.maxY - 3)[3], 0)
+        XCTAssertEqual(pixel(extent.midX, extent.midY)[3], 255, "the photo itself stays opaque")
+    }
+
     func testCenteredAspect() {
         let square = Crop.centered(aspect: 1, imageAspect: 1.5)
         XCTAssertEqual(square.width, 1 / 1.5, accuracy: 1e-9)
