@@ -18,6 +18,8 @@ public final class DevelopRenderer: @unchecked Sendable {
     public static let sRGB = CGColorSpace(name: CGColorSpace.sRGB)!
     /// Camera matches by file and modification date; see `CameraMatch`.
     let cameraMatches = NSCache<NSString, CameraMatchBox>()
+    /// Lateral chromatic aberration by file; see `LateralCA`.
+    let lateralCAs = NSCache<NSString, LateralCABox>()
 
     public init() {
         context = CIContext(options: [
@@ -461,6 +463,12 @@ public final class DevelopSession: @unchecked Sendable {
                       preview: SliderPreview? = nil) -> CIImage? {
         lock.lock()
         defer { lock.unlock() }
+        if let view = preview?.defringeView {
+            // Defringe's Option-drag views show step 1 alone, cropped like the photo.
+            guard var image = corrected(settings, defringeView: view) else { return nil }
+            if let crop = settings.crop { image = DevelopRenderer.applyGeometry(crop, to: image, cropping: cropping) }
+            return image
+        }
         guard var image = corrected(settings) else { return nil }
         let sourceExtent = image.extent
         let source = image
@@ -482,8 +490,9 @@ public final class DevelopSession: @unchecked Sendable {
     }
 
     /// Pipeline step 1: decode with white balance and exposure, the profile, then the lens
-    /// corrections and the Transform. The result starts at the origin. Call with the lock held.
-    private func corrected(_ settings: DevelopSettings) -> CIImage? {
+    /// corrections (chromatic aberration, Defringe, vignetting, distortion) and the Transform.
+    /// The result starts at the origin. Call with the lock held.
+    private func corrected(_ settings: DevelopSettings, defringeView: Defringe.View = .photo) -> CIImage? {
         var image: CIImage
         if let raw = rawFilter {
             raw.neutralTemperature = Float(settings.temperature ?? asShotTemperature)
@@ -523,6 +532,15 @@ public final class DevelopSession: @unchecked Sendable {
             image = image.transformed(by: CGAffineTransform(translationX: -image.extent.minX, y: -image.extent.minY))
         }
         let extent = image.extent
+        // Remove Chromatic Aberration, measured once per file from a render big enough to see it.
+        if settings.removeChromaticAberration {
+            let profile = settings.lensProfileCorrections
+            let lateral: LateralCA? = max(extent.width, extent.height) >= LateralCA.minimumSize
+                ? renderer.lateralCA(for: url, profileCorrections: profile, image: image)
+                : renderer.cachedLateralCA(for: url, profileCorrections: profile)
+            if let lateral { image = lateral.apply(to: image) }
+        }
+        image = Defringe.apply(image, settings: settings, scale: renderScale, view: defringeView)
         // Lens vignetting, around the uncropped photo's center, before the warp moves it.
         if settings[.lensVignette] != 0 {
             let filter = CIFilter.vignetteEffect()
@@ -616,6 +634,36 @@ public final class DevelopSession: @unchecked Sendable {
         defer { lock.unlock() }
         guard let source = corrected(settings) else { return false }
         return subject(of: source, key: settings.lensGeometryKey, box: selection.box) != nil
+    }
+
+    /// The working-space colors in a square `radius` pixels around `point` (0...1 from the top
+    /// left of the cropped photo), after chromatic aberration and before Defringe, for the
+    /// Fringe Color Selector.
+    public func fringeColors(at point: CGPoint, settings: DevelopSettings, radius: Int = 2) -> [SIMD3<Double>] {
+        var plain = settings
+        for color in DevelopSettings.FringeColor.allCases { plain[color.amount] = 0 }
+        lock.lock()
+        var image = corrected(plain)
+        if let whole = image, let crop = settings.crop {
+            image = DevelopRenderer.applyGeometry(crop, to: whole)
+        }
+        lock.unlock()
+        guard let image else { return [] }
+        let extent = image.extent
+        let x = extent.minX + point.x * extent.width, y = extent.minY + (1 - point.y) * extent.height
+        let side = CGFloat(radius * 2 + 1)
+        let region = CGRect(x: (x - side / 2).rounded(.down), y: (y - side / 2).rounded(.down), width: side, height: side)
+            .intersection(extent.integral)
+        guard !region.isNull, region.width >= 1, region.height >= 1 else { return [] }
+        let width = Int(region.width), height = Int(region.height)
+        var pixels = [Float](repeating: 0, count: width * height * 4)
+        pixels.withUnsafeMutableBytes { buffer in
+            renderer.context.render(image, toBitmap: buffer.baseAddress!, rowBytes: width * 16, bounds: region,
+                                    format: .RGBAf, colorSpace: DevelopRenderer.workingSpace)
+        }
+        return (0..<(width * height)).map {
+            SIMD3(Double(pixels[$0 * 4]), Double(pixels[$0 * 4 + 1]), Double(pixels[$0 * 4 + 2]))
+        }
     }
 
     /// Rendered in sRGB, for measuring colors (Match Look).
