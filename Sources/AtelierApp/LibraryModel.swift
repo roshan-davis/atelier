@@ -181,6 +181,7 @@ final class LibraryModel: ObservableObject {
                                                queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.editWatcher.check() }
         }
+        ZoomTrace.watch(objectWillChange, "LibraryModel changed")
     }
 
     // MARK: Observation

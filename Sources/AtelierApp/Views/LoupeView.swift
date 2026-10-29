@@ -13,6 +13,7 @@ struct LoupeView: View {
     @State private var fullKey: FullKey?
 
     var body: some View {
+        let _ = ZoomTrace.count("LoupeView body")
         VStack(spacing: 0) {
             ZStack(alignment: .bottomLeading) {
                 Color(nsColor: theme.surround)
@@ -114,6 +115,7 @@ struct LoupeView: View {
             return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
         }.value
         guard !Task.isCancelled, currentFullKey == key, let rendered else { return }
+        ZoomTrace.count("loupe full-resolution image loaded")
         fullImage = rendered
         fullKey = key
     }

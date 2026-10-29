@@ -1,4 +1,5 @@
 import AppKit
+import QuartzCore
 import SwiftUI
 
 /// Zoom for loupe and develop. 100% shows one pixel of the full-size photo per screen pixel.
@@ -39,6 +40,7 @@ struct ZoomableImageView: NSViewRepresentable {
     }
 
     func updateNSView(_ view: ZoomScrollView, context: Context) {
+        ZoomTrace.count("updateNSView", "zoom \(zoom.label)")
         view.menuProvider = menu
         view.onReport = onReport
         view.onZoomChange = { level in
@@ -84,7 +86,11 @@ final class ZoomScrollView: NSScrollView {
     // MARK: Content
 
     func setImage(_ image: NSImage?, pixelSize: CGSize?) {
-        canvas.setImage(image)
+        let start = CACurrentMediaTime()
+        let changed = canvas.setImage(image)
+        if changed {
+            ZoomTrace.count("setImage", "\(canvas.contentsDescription), took \(ZoomTrace.milliseconds(since: start))")
+        }
         guard let image, image.size.width > 0, image.size.height > 0 else { return }
         // Keep the displayed image's aspect, at the full-size photo's long edge.
         var pixels = image.size
@@ -95,6 +101,7 @@ final class ZoomScrollView: NSScrollView {
         let backing = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
         let size = CGSize(width: pixels.width / backing, height: pixels.height / backing)
         guard abs(size.width - documentSize.width) > 0.5 || abs(size.height - documentSize.height) > 0.5 else { return }
+        ZoomTrace.count("documentSize changed", "\(documentSize) → \(size)")
         documentSize = size
         canvas.frame = CGRect(origin: .zero, size: size)
         applyLevel(level, anchor: nil)
@@ -108,6 +115,7 @@ final class ZoomScrollView: NSScrollView {
 
     func apply(_ newLevel: ZoomLevel) {
         guard newLevel != level else { return }
+        ZoomTrace.count("apply from SwiftUI", "\(level.label) → \(newLevel.label)")
         applyLevel(newLevel, anchor: nil)
     }
 
@@ -132,6 +140,7 @@ final class ZoomScrollView: NSScrollView {
 
     /// Zooms around `anchor` (document coordinates), or around the visible center.
     private func applyLevel(_ newLevel: ZoomLevel, anchor: NSPoint?) {
+        ZoomTrace.count("applyLevel", "\(newLevel.label), magnification \(magnification) → \(magnification(for: newLevel))")
         level = newLevel
         let target = min(maxMagnification, max(minMagnification, magnification(for: newLevel)))
         let visible = contentView.bounds
@@ -150,6 +159,7 @@ final class ZoomScrollView: NSScrollView {
     var canPan: Bool { lastReport.isZoomedPastFit || level == .fill }
 
     override func setFrameSize(_ newSize: NSSize) {
+        ZoomTrace.count("setFrameSize", "\(frame.size) → \(newSize), level \(level.label)")
         super.setFrameSize(newSize)
         if level == .fit || level == .fill {
             magnification = magnification(for: level)
@@ -158,12 +168,63 @@ final class ZoomScrollView: NSScrollView {
     }
 
     @objc private func didEndMagnify() {
+        ZoomTrace.count("didEndLiveMagnify", "magnification \(magnification)")
         level = .percent(Double(magnification * 100))
         onZoomChange?(level)
         report()
     }
 
+    // MARK: Tracing
+
+    private var link: CADisplayLink?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        link?.invalidate()
+        link = nil
+        guard window != nil else { return }
+        let link = displayLink(target: self, selector: #selector(traceFrame(_:)))
+        link.add(to: .main, forMode: .common)
+        self.link = link
+    }
+
+    @objc private func traceFrame(_ link: CADisplayLink) {
+        ZoomTrace.frame(link.timestamp, interval: link.targetTimestamp - link.timestamp)
+    }
+
+    private var layerState: String {
+        let layer = canvas.layer
+        let transform = layer.map { CATransform3DIsIdentity($0.transform) ? "identity" : "\(CATransform3DGetAffineTransform($0.transform))" } ?? "-"
+        let clipTransform = contentView.layer.map { CATransform3DIsIdentity($0.sublayerTransform) ? "identity" : "\(CATransform3DGetAffineTransform($0.sublayerTransform))" } ?? "-"
+        return "canvas frame \(canvas.frame), layer bounds \(layer?.bounds ?? .zero), contentsScale \(layer?.contentsScale ?? 0), "
+            + "transform \(transform), clip sublayerTransform \(clipTransform), clip bounds \(contentView.bounds), "
+            + "contents \(layer?.contents == nil ? "nil" : "set"), \(canvas.contentsDescription), magnification \(magnification)"
+    }
+
+    override func magnify(with event: NSEvent) {
+        ZoomTrace.touch("pinch")
+        if event.phase == .began { ZoomTrace.log("layer at start: \(layerState)") }
+        let before = magnification
+        let start = CACurrentMediaTime()
+        super.magnify(with: event)
+        ZoomTrace.count("magnify", String(format: "phase %lu, %.3f → %.3f, handled in %@",
+                                          event.phase.rawValue, before, magnification, ZoomTrace.milliseconds(since: start)))
+        if event.phase == .ended || event.phase == .cancelled { ZoomTrace.log("layer at end: \(layerState)") }
+    }
+
+    override func smartMagnify(with event: NSEvent) {
+        ZoomTrace.touch("smart magnify")
+        super.smartMagnify(with: event)
+    }
+
     override func scrollWheel(with event: NSEvent) {
+        ZoomTrace.touch("scroll")
+        let start = CACurrentMediaTime()
+        defer {
+            ZoomTrace.count("scrollWheel", String(format: "phase %lu, momentum %lu, Δ(%.1f, %.1f), handled in %@",
+                                                  event.phase.rawValue, event.momentumPhase.rawValue,
+                                                  event.scrollingDeltaX, event.scrollingDeltaY, ZoomTrace.milliseconds(since: start)))
+        }
         guard !event.modifierFlags.intersection([.command, .option]).isEmpty else {
             super.scrollWheel(with: event)
             return
@@ -178,6 +239,7 @@ final class ZoomScrollView: NSScrollView {
     private func report() {
         let report = ZoomReport(percent: Double(magnification * 100), fitPercent: Double(fitMagnification * 100))
         guard report != lastReport else { return }
+        ZoomTrace.count("report", "\(Int(report.percent))%, fit \(Int(report.fitPercent))%")
         lastReport = report
         let onReport = self.onReport
         // Reports can arrive during SwiftUI layout; publish afterwards.
@@ -218,10 +280,21 @@ final class ZoomCanvasView: NSView {
 
     override var isFlipped: Bool { true }
 
-    func setImage(_ image: NSImage?) {
-        guard image !== currentImage else { return }
+    /// Returns whether the image changed.
+    @discardableResult
+    func setImage(_ image: NSImage?) -> Bool {
+        guard image !== currentImage else { return false }
         currentImage = image
         layer?.contents = image?.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        return true
+    }
+
+    var contentsDescription: String {
+        guard let contents = layer?.contents else { return "no image" }
+        guard CFGetTypeID(contents as CFTypeRef) == CGImage.typeID else { return "contents \(type(of: contents))" }
+        let image = contents as! CGImage
+        return "image \(image.width)×\(image.height), \(image.bitsPerPixel) bpp, \(image.colorSpace?.name.map { $0 as String } ?? "no color space"), "
+            + "alpha \(image.alphaInfo.rawValue), bitmapInfo \(image.bitmapInfo.rawValue)"
     }
 
     override func resetCursorRects() {
