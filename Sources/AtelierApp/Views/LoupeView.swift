@@ -5,6 +5,8 @@ import SwiftUI
 /// One photo at a time from the 2560 px preview. Arrow keys step, Esc or G returns to the grid.
 struct LoupeView: View {
     @EnvironmentObject private var model: LibraryModel
+    /// The model's zoom, watched here so the full-resolution load follows it.
+    @ObservedObject var zoom: ZoomState
     @Environment(\.theme) private var theme
     @State private var image: NSImage?
     @State private var loadedID: Int64?
@@ -20,10 +22,10 @@ struct LoupeView: View {
                 if let image {
                     ZoomableImageView(image: fullKey == currentFullKey ? fullImage ?? image : image,
                                       pixelSize: pixelSize,
-                                      zoom: $model.zoom,
+                                      zoom: zoom,
                                       dimmed: model.detail?.metadata.flag == .rejected,
                                       onReport: { report in
-                                          if model.zoomReport != report { model.zoomReport = report }
+                                          if zoom.report != report { zoom.report = report }
                                       },
                                       menu: { model.photoMenu(includeZoom: true) })
                 } else if model.focusedID != nil {
@@ -43,15 +45,15 @@ struct LoupeView: View {
                         .foregroundStyle(.secondary)
                         .fixedSize()
                     Spacer(minLength: 8)
-                    ZoomControls(zoom: $model.zoom, report: model.zoomReport)
+                    ZoomControls(zoom: zoom)
                 }
                 HStack {
                     Spacer(minLength: 0)
-                    ZoomControls(zoom: $model.zoom, report: model.zoomReport)
+                    ZoomControls(zoom: zoom)
                 }
                 HStack {
                     Spacer(minLength: 0)
-                    ZoomControls(zoom: $model.zoom, report: model.zoomReport, compact: true)
+                    ZoomControls(zoom: zoom, compact: true)
                 }
             }
             .font(.callout)
@@ -81,7 +83,7 @@ struct LoupeView: View {
     }
 
     private var wantedFullKey: FullKey? {
-        model.zoomReport.isZoomedPastFit ? currentFullKey : nil
+        zoom.report.isZoomedPastFit ? currentFullKey : nil
     }
 
     private var pixelSize: CGSize? {

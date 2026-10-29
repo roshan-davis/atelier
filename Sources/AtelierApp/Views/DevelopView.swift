@@ -20,7 +20,7 @@ struct DevelopImageView: View {
                         AIBrushView(ai: model.ai, image: image, assetID: develop.assetID)
                     } else if develop.isMasking {
                         MaskEditorView(develop: develop, image: image, display: develop.displayImage ?? image,
-                                       pixelSize: pixelSize, zoom: $model.zoom,
+                                       pixelSize: pixelSize, zoom: model.zoomState,
                                        onReport: { report in
                                            if model.zoomReport != report { model.zoomReport = report }
                                            if develop.wantsFullResolution != report.isZoomedPastFit {
@@ -32,7 +32,7 @@ struct DevelopImageView: View {
                     } else if develop.showingBefore || develop.compareMode == .off {
                         ZoomableImageView(image: develop.displayImage ?? image,
                                           pixelSize: pixelSize,
-                                          zoom: $model.zoom,
+                                          zoom: model.zoomState,
                                           onReport: { report in
                                               if model.zoomReport != report { model.zoomReport = report }
                                               if develop.wantsFullResolution != report.isZoomedPastFit {
@@ -98,7 +98,7 @@ struct DevelopImageView: View {
                 Text("Drag across the photo to move the divider").foregroundStyle(.secondary).fixedSize()
             }
             Spacer(minLength: 8)
-            ZoomControls(zoom: $model.zoom, report: model.zoomReport, compact: compact)
+            ZoomControls(zoom: model.zoomState, compact: compact)
                 .disabled(develop.compareMode != .off || develop.isCropping || develop.isAIOpen || develop.isGuiding)
         }
     }

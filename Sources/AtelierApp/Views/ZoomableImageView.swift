@@ -25,12 +25,20 @@ struct ZoomReport: Equatable {
     var isZoomedPastFit: Bool { percent > fitPercent * 1.01 }
 }
 
+/// The loupe and develop zoom, and what it currently shows. Kept out of `LibraryModel` so a
+/// zoom change redraws only the photo and the zoom bar, not the whole window.
+@MainActor
+final class ZoomState: ObservableObject {
+    @Published var level: ZoomLevel = .fit
+    @Published var report = ZoomReport()
+}
+
 /// A photo that zooms with pinch, the zoom bar, ⌘/⌥-scroll or a click, and pans by dragging.
 struct ZoomableImageView: NSViewRepresentable {
     let image: NSImage?
     /// Size of the full-resolution photo; the displayed image may be a smaller proxy.
     let pixelSize: CGSize?
-    @Binding var zoom: ZoomLevel
+    @ObservedObject var zoom: ZoomState
     var dimmed = false
     var onReport: (ZoomReport) -> Void
     var menu: () -> NSMenu?
@@ -40,15 +48,16 @@ struct ZoomableImageView: NSViewRepresentable {
     }
 
     func updateNSView(_ view: ZoomScrollView, context: Context) {
-        ZoomTrace.count("updateNSView", "zoom \(zoom.label)")
+        ZoomTrace.count("updateNSView", "zoom \(zoom.level.label)")
         view.menuProvider = menu
         view.onReport = onReport
+        let zoom = self.zoom
         view.onZoomChange = { level in
-            if zoom != level { zoom = level }
+            if zoom.level != level { zoom.level = level }
         }
         view.setImage(image, pixelSize: pixelSize)
         view.setDimmed(dimmed)
-        view.apply(zoom)
+        view.apply(zoom.level)
     }
 }
 
@@ -345,10 +354,11 @@ final class CenteringClipView: NSClipView {
 
 /// Fit, Fill, 100%, 200% and the current zoom, under the photo.
 struct ZoomControls: View {
-    @Binding var zoom: ZoomLevel
-    let report: ZoomReport
+    @ObservedObject var zoom: ZoomState
     /// A single menu instead of the segmented buttons, for narrow columns.
     var compact = false
+
+    private var report: ZoomReport { zoom.report }
 
     private var percentText: String {
         report.percent > 0 ? "\(Int(report.percent.rounded()))%" : "Zoom"
@@ -358,14 +368,14 @@ struct ZoomControls: View {
         if compact {
             Menu(percentText) {
                 ForEach(ZoomLevel.presets, id: \.self) { level in
-                    Button(level.label) { zoom = level }
+                    Button(level.label) { zoom.level = level }
                 }
             }
             .fixedSize()
             .help("Zoom (Z toggles Fit and 100%; pinch, or hold ⌥ and scroll)")
         } else {
             HStack(spacing: 8) {
-                Picker("Zoom", selection: $zoom) {
+                Picker("Zoom", selection: $zoom.level) {
                     ForEach(ZoomLevel.presets, id: \.self) { Text($0.label).tag($0) }
                 }
                 .pickerStyle(.segmented)
