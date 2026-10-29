@@ -361,21 +361,29 @@ final class LibraryModel: ObservableObject {
         }
     }
 
-    /// Each photo's zoom when it was left, for "Return to its last zoom". Kept until quit.
-    private var zoomByPhoto: [Int64: ZoomLevel] = [:]
+    /// Each photo's zoom and visible center when it was left, for "Return to its last zoom".
+    /// Kept until quit.
+    private var zoomByPhoto: [Int64: (level: ZoomLevel, center: CGPoint?)] = [:]
 
     private func zoomForNextPhoto(leaving previous: Int64?) {
         // The first photo after launch keeps the zoom the session restored.
         guard let previous else { return }
+        let center = zoomState.currentCenter?()
         let next: ZoomLevel
         switch ZoomOnPhotoChange.current {
         case .keep:
+            // Same zoom on the same spot of the next photo, as Lightroom does for checking
+            // focus across a burst.
+            zoomState.pendingCenter = center
             return
         case .reset:
             next = ZoomOnPhotoChange.resetLevel
+            zoomState.pendingCenter = nil
         case .remember:
-            zoomByPhoto[previous] = zoom
-            next = focusedID.flatMap { zoomByPhoto[$0] } ?? ZoomOnPhotoChange.resetLevel
+            zoomByPhoto[previous] = (zoom, center)
+            let saved = focusedID.flatMap { zoomByPhoto[$0] }
+            next = saved?.level ?? ZoomOnPhotoChange.resetLevel
+            zoomState.pendingCenter = saved?.center
         }
         if zoom != next { zoom = next }
     }

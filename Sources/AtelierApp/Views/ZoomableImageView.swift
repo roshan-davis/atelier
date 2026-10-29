@@ -30,6 +30,11 @@ struct ZoomReport: Equatable {
 final class ZoomState: ObservableObject {
     @Published var level: ZoomLevel = .fit
     @Published var report = ZoomReport()
+    /// Where the next photo should be centered (0...1 across and down the photo), for the
+    /// settings that bring back a zoomed photo's position. The photo view takes it.
+    var pendingCenter: CGPoint?
+    /// The visible center of the photo shown now, from the photo view.
+    var currentCenter: (@MainActor () -> CGPoint?)?
 }
 
 /// A photo that zooms with pinch, the zoom bar, ⌘/⌥-scroll or a click, and pans by dragging.
@@ -53,9 +58,15 @@ struct ZoomableImageView: NSViewRepresentable {
         view.onZoomChange = { level in
             if zoom.level != level { zoom.level = level }
         }
+        zoom.currentCenter = { [weak view] in view?.relativeCenter }
+        if let center = zoom.pendingCenter {
+            view.pendingCenter = center
+            zoom.pendingCenter = nil
+        }
         view.setImage(image, pixelSize: pixelSize)
         view.setDimmed(dimmed)
         view.apply(zoom.level)
+        view.applyPendingCenter()
     }
 }
 
@@ -66,6 +77,9 @@ final class ZoomScrollView: NSScrollView {
     private var lastReport = ZoomReport()
     private let padding: CGFloat = 16
 
+    /// A position to center on (0...1 across and down the photo) once the photo and the view
+    /// have their sizes.
+    var pendingCenter: CGPoint?
     var onZoomChange: ((ZoomLevel) -> Void)?
     var onReport: ((ZoomReport) -> Void)?
     var menuProvider: (() -> NSMenu?)?
@@ -104,9 +118,36 @@ final class ZoomScrollView: NSScrollView {
         let backing = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
         let size = CGSize(width: pixels.width / backing, height: pixels.height / backing)
         guard abs(size.width - documentSize.width) > 0.5 || abs(size.height - documentSize.height) > 0.5 else { return }
+        // Keep the same spot of the photo in the middle when its size changes (the proxy
+        // replacing the cached preview, or the next photo at a kept zoom).
+        let center = relativeCenter
         documentSize = size
         canvas.frame = CGRect(origin: .zero, size: size)
         applyLevel(level, anchor: nil)
+        if let center { scroll(toRelative: center) }
+    }
+
+    /// The middle of what's visible, 0...1 across and down the photo; nil before it has a size.
+    var relativeCenter: CGPoint? {
+        guard documentSize.width > 0, documentSize.height > 0 else { return nil }
+        let visible = contentView.bounds
+        return CGPoint(x: min(1, max(0, visible.midX / documentSize.width)),
+                       y: min(1, max(0, visible.midY / documentSize.height)))
+    }
+
+    func applyPendingCenter() {
+        guard let center = pendingCenter, documentSize.width > 0, bounds.width > 0, bounds.height > 0 else { return }
+        pendingCenter = nil
+        scroll(toRelative: center)
+    }
+
+    private func scroll(toRelative center: CGPoint) {
+        let size = contentView.bounds.size
+        let origin = NSPoint(x: center.x * documentSize.width - size.width / 2,
+                             y: center.y * documentSize.height - size.height / 2)
+        contentView.scroll(to: contentView.constrainBoundsRect(NSRect(origin: origin, size: size)).origin)
+        reflectScrolledClipView(contentView)
+        report()
     }
 
     func setDimmed(_ dimmed: Bool) {
@@ -163,6 +204,7 @@ final class ZoomScrollView: NSScrollView {
         if level == .fit || level == .fill {
             magnification = magnification(for: level)
         }
+        applyPendingCenter()
         report()
     }
 
