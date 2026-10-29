@@ -26,7 +26,7 @@ struct ColorGradingPanel: View {
                     threeWay
                 }
             }
-            GroupHeading(title: "Blend")
+            GroupHeading(title: "Blend") { develop.reset(group: "Blend", parameters: [.gradeBlending, .gradeBalance]) }
             ParameterSlider(parameter: .gradeBlending, develop: develop)
             ParameterSlider(parameter: .gradeBalance, develop: develop)
             ToneRangeGraph(blending: develop.value(.gradeBlending) / 100, balance: develop.value(.gradeBalance) / 100)

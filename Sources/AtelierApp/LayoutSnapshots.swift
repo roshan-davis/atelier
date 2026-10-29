@@ -252,7 +252,18 @@ enum LayoutSnapshots {
         try? await Task.sleep(for: .seconds(1))
         await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
                       to: folder.appendingPathComponent("develop-grading-picker-1280x800.png"))
-        develop.isPickingGradeColor = false
+        develop.isPickingWhiteBalance = true
+        try? await Task.sleep(for: .seconds(1))
+        await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
+                      to: folder.appendingPathComponent("develop-wb-picker-1280x800.png"))
+        develop.picker = nil
+        develop.setPanelOn(.detail, false)
+        develop.setPanelOn(.effects, false)
+        try? await Task.sleep(for: .seconds(1))
+        await capture(AnyView(DevelopPanel(develop: develop).environmentObject(model)), size: CGSize(width: 320, height: 2600),
+                      to: folder.appendingPathComponent("panel-switches-off-320x2600.png"))
+        develop.setPanelOn(.detail, true)
+        develop.setPanelOn(.effects, true)
         develop.reset(.gradeMidtonesLum)
         develop.reset(.gradeBalance)
     }

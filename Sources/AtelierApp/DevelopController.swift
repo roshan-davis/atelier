@@ -646,6 +646,25 @@ final class DevelopController: ObservableObject {
         changed(step: "Reset \(Self.parameterName(parameter))")
     }
 
+    /// A group heading's reset (Tone, Presence, Sharpening, Region, ...), as one history step.
+    func reset(group: String, parameters: [DevelopSettings.Parameter]) {
+        guard assetID != nil else { return }
+        let before = settings
+        for parameter in parameters {
+            if parameter == .temperature {
+                settings.temperature = nil
+            } else {
+                settings[parameter] = DevelopSettings.neutral[parameter]
+            }
+        }
+        guard settings != before else { return }
+        if parameters.contains(where: { ($0.panel == .lensCorrections && !$0.isDefringe) || $0.panel == .transform }) {
+            shapeChanged(step: "Reset \(group)")
+        } else {
+            changed(step: "Reset \(group)")
+        }
+    }
+
     // MARK: Color Grading
 
     /// A wheel's hue and saturation together, as one history step.
