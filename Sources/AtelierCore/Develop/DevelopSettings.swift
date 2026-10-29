@@ -48,6 +48,9 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
     public var showsWholePhoto = false
     /// Basic > Treatment: Black & White turns the photo gray through the B&W Mix sliders.
     public var monochrome = false
+    /// Panels turned off with the switch in their header, as in Lightroom: their settings are
+    /// kept but have no effect until the panel is turned back on. See `applyingPanelSwitches()`.
+    public internal(set) var disabledPanels: Set<Panel> = []
 
     public init() {}
 
@@ -203,6 +206,12 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         upright = try? c.decodeIfPresent(Upright.self, forKey: Key("upright"))
         constrainCrop = try c.decodeIfPresent(Bool.self, forKey: Key("constrainCrop")) ?? false
         monochrome = try c.decodeIfPresent(Bool.self, forKey: Key("monochrome")) ?? false
+        let disabled = try c.decodeIfPresent([String].self, forKey: Key("disabledPanels")) ?? []
+        disabledPanels = Set(disabled.compactMap(Panel.init(rawValue:)).filter(\.hasSwitch))
+        // Color Grading's switch was first saved as a slider value.
+        if (try c.decodeIfPresent(Double.self, forKey: Key("gradeDisabled")) ?? 0) >= 0.5 {
+            disabledPanels.insert(.colorGrading)
+        }
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -221,6 +230,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         try c.encodeIfPresent(upright, forKey: Key("upright"))
         if constrainCrop { try c.encode(true, forKey: Key("constrainCrop")) }
         if monochrome { try c.encode(true, forKey: Key("monochrome")) }
+        if !disabledPanels.isEmpty { try c.encode(disabledPanels.map(\.rawValue).sorted(), forKey: Key("disabledPanels")) }
     }
 
     public static let neutral = DevelopSettings()
@@ -228,7 +238,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
     public var isNeutral: Bool {
         temperature == nil && values.isEmpty && pointCurves.isEmpty && storedCrop == nil && masks.isEmpty
             && profile == .cameraMatching && lensProfileCorrections && !removeChromaticAberration && upright == nil
-            && !constrainCrop && !monochrome
+            && !constrainCrop && !monochrome && disabledPanels.isEmpty
     }
 
     public func encoded() throws -> String {
@@ -262,8 +272,11 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
     }
 
     /// The Develop panels, in Lightroom's order.
-    public enum Panel: String, CaseIterable, Sendable {
+    public enum Panel: String, CaseIterable, Sendable, Codable {
         case basic, toneCurve, hsl, colorGrading, detail, lensCorrections, transform, effects
+
+        /// Every panel but Basic has an on/off switch in its header, as in Lightroom.
+        public var hasSwitch: Bool { self != .basic }
 
         public var title: String {
             switch self {
@@ -357,8 +370,6 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         case gradeHighlightsHue, gradeHighlightsSat, gradeHighlightsLum
         case gradeGlobalHue, gradeGlobalSat, gradeGlobalLum
         case gradeBlending, gradeBalance
-        /// Color Grading's panel switch: 1 turns every wheel off without losing their settings.
-        case gradeDisabled
         case sharpening, sharpenRadius, sharpenDetail, sharpenMasking, luminanceNoise, colorNoise
         case lensDistortion
         case lensDefringePurpleAmount, lensDefringePurpleHueLow, lensDefringePurpleHueHigh
@@ -419,7 +430,6 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             case .transformScale: return 50...150
             case .gradeShadowsHue, .gradeMidtonesHue, .gradeHighlightsHue, .gradeGlobalHue: return 0...360
             case .gradeShadowsSat, .gradeMidtonesSat, .gradeHighlightsSat, .gradeGlobalSat: return 0...100
-            case .gradeDisabled: return 0...1
             case .lensDefringePurpleAmount, .lensDefringeGreenAmount: return 0...20
             case .lensDefringePurpleHueLow, .lensDefringePurpleHueHigh, .lensDefringeGreenHueLow,
                  .lensDefringeGreenHueHigh: return 0...100
@@ -458,7 +468,6 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             case .curveShadows: return "Shadows"
             case .gradeBlending: return "Blending"
             case .gradeBalance: return "Balance"
-            case .gradeDisabled: return "Off"
             default:
                 if rawValue.hasPrefix("grade") {
                     if rawValue.hasSuffix("Hue") { return "Hue" }
@@ -502,7 +511,6 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             case .transformVertical, .transformHorizontal, .transformRotate, .transformAspect, .transformScale,
                  .transformOffsetX, .transformOffsetY: return "Transform"
             case .gradeBlending, .gradeBalance: return "Blend"
-            case .gradeDisabled: return "Color Grading"
             default:
                 return GradeRegion.allCases.first { rawValue.hasPrefix("grade\($0.rawValue)") }?.rawValue ?? ""
             }

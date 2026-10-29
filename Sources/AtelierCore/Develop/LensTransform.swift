@@ -84,13 +84,14 @@ extension DevelopSettings {
     /// The settings that decide the corrected photo's shape, for caching what depends on it.
     /// Chromatic aberration and Defringe change colors, not the shape, so they are left out.
     public var lensGeometryKey: DevelopSettings {
+        let settings = applyingPanelSwitches()
         var key = DevelopSettings()
-        key.lensProfileCorrections = lensProfileCorrections
-        key.upright = upright
+        key.lensProfileCorrections = settings.lensProfileCorrections
+        key.upright = settings.upright
         key.showsWholePhoto = showsWholePhoto
         for parameter in Parameter.allCases
         where (parameter.panel == .lensCorrections && !parameter.isDefringe) || parameter.panel == .transform {
-            key[parameter] = self[parameter]
+            key[parameter] = settings[parameter]
         }
         return key
     }
@@ -117,6 +118,7 @@ public struct LensGeometry: Sendable {
 
     /// `size` is the photo's (any scale); `focalLength35` its 35 mm equivalent focal length.
     public init(settings: DevelopSettings, size: CGSize, focalLength35: Double) {
+        let settings = settings.applyingPanelSwitches()
         let long = max(1, Double(max(size.width, size.height)))
         halfWidth = Double(size.width) / long / 2
         halfHeight = Double(size.height) / long / 2
