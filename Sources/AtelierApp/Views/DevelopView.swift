@@ -661,8 +661,11 @@ private struct ColorWheel: View {
             let distance = radius * saturation / 100
             ZStack {
                 Circle()
-                    .fill(AngularGradient(colors: (0...6).map { Color(hue: Double($0) / 6, saturation: 0.8, brightness: 0.9) },
-                                          center: .center, startAngle: .degrees(0), endAngle: .degrees(-360)))
+                    // SwiftUI sweeps clockwise on screen and a reversed range (end < start) draws only
+                    // the first color, so run 0°→360° with hue falling, which puts hue rising
+                    // counterclockwise from red at 3 o'clock, where the puck places it.
+                    .fill(AngularGradient(colors: (0...12).map { Color(hue: Double(12 - $0) / 12, saturation: 0.8, brightness: 0.9) },
+                                          center: .center, startAngle: .degrees(0), endAngle: .degrees(360)))
                 Circle()
                     .fill(RadialGradient(colors: [Color(white: 0.5), Color(white: 0.5).opacity(0)],
                                          center: .center, startRadius: 0, endRadius: radius))
