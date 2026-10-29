@@ -397,9 +397,9 @@ final class LibraryModel: ObservableObject {
         if zoom != next { zoom = next }
     }
 
-    private static let photoZoomsKey = "zoom.byPhoto"
+    nonisolated private static let photoZoomsKey = "zoom.byPhoto"
     /// Photos remembered at most; the ones zoomed longest ago are dropped first.
-    private static let photoZoomsLimit = 2000
+    nonisolated private static let photoZoomsLimit = 2000
 
     /// Records the open photo's zoom too, as the app quits.
     func rememberCurrentPhotoZoom() {
@@ -422,8 +422,11 @@ final class LibraryModel: ObservableObject {
             case .fill: kind = 1
             case .percent(let value): kind = 2; percent = value
             }
-            let center = entry.center.map { [Double($0.x), Double($0.y)] } ?? [-1, -1]
-            let row = [kind, percent] + center
+            var row: [Double] = [kind, percent, -1, -1]
+            if let center = entry.center {
+                row[2] = Double(center.x)
+                row[3] = Double(center.y)
+            }
             if let old = stored[String(id)], Array(old.prefix(4)) == row { continue }
             stored[String(id)] = row + [now]
         }
