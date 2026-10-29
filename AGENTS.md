@@ -18,7 +18,7 @@ Atelier is Rosh's personal Lightroom-style photo catalog and editor.
 - **One Processor contract** for Edit In apps, plugins and AI backends. Don't add a second integration path.
 - **AI backend order:** ComfyUI headless API first, then Core ML, then MLX. Nothing is bundled with the app.
 - **Licensing:** images for Rosh's website or shop may only come from permissively licensed models (Apache 2.0 or MIT, e.g. Qwen-Image-Edit-2511, FLUX.2 [klein] 4B). Non-commercial models (e.g. Qwen-Image-2.1, Fibo 2.0, FLUX.2 [klein] 9B) are for experiments only.
-- **One look and feel:** every tool must look and work like the rest, whatever its idea came from (PRD UX principle 13). Reuse the shared pieces (`PanelSection` and its panel switch, `ParameterSlider`/`DevelopSlider`, `GroupHeading`, `.cursor`, `DeleteFeedback`) instead of building a tool's own copy. When you add or change a pattern, apply it to every panel and tool that has the same kind of control, not just the one you were asked about, and list the others for Rosh to test.
+- **One look and feel:** every tool must look and work like the rest, whatever its idea came from (PRD UX principle 13). Reuse the shared pieces (listed under [Solve a pattern once, centrally](#solve-a-pattern-once-centrally)) instead of building a tool's own copy. When you add or change a pattern, apply it to every panel and tool that has the same kind of control, not just the one you were asked about, and list the others for Rosh to test.
 - **Cursors:** never set an `NSCursor` in a view. Name the shape with `.cursor(_:)` (SwiftUI) or `Cursors.shared` (AppKit), from `Sources/AtelierApp/Cursors.swift`; for a tool with handles, work the shape out from the same hit test its drag uses. Add a `CursorShape` case if one is missing. PRD UX principle 11.
 - **Deletes:** every delete calls `DeleteFeedback.play(.trash)` (files to the Trash) or `.remove` (anything else) once it succeeds. PRD UX principle 12.
 - **Preview cache:** when the way previews are rendered changes, bump `PreviewCache.version` in `Sources/AtelierCore/Previews/PreviewCache.swift` (and note why in its comment) so old previews are rebuilt.
@@ -44,8 +44,8 @@ Rosh's most common complaint is the same bug showing up tool by tool. Before you
   | Drawing a tool on the photo | an overlay on the Develop photo view (as Masking does), not a second photo view | `Views/MaskViews.swift`, `Views/DevelopView.swift` |
   | Cursors | `CursorShape`, `.cursor(_:)`, `Cursors.shared` | `Cursors.swift` |
   | Delete sound and poof | `DeleteFeedback.play(_:)` | `DeleteFeedback.swift` |
-  | Panel header, on/off switch | `PanelSection`; `DevelopSettings.disabledPanels` + `applyingPanelSwitches()` before rendering | `Views/DevelopView.swift`, `AtelierCore/Develop/PanelSwitches.swift` |
-  | Sliders | `SliderRow` (double-click name resets, click value to type, ⌥-drag view) | `Views/DevelopView.swift` |
+  | Panel header, on/off switch | `PanelSection` (with `SectionBand`, the header band both sidebars use); `DevelopSettings.disabledPanels` + `applyingPanelSwitches()` before rendering | `Views/DevelopView.swift`, `AtelierCore/Develop/PanelSwitches.swift` |
+  | Sliders | `SliderRow` (its track is `DevelopSlider`; `ParameterSlider` binds it to a Develop setting) (double-click name resets, click value to type, ⌥-drag view) | `Views/DevelopView.swift` |
   | Group headings with reset | `GroupHeading(reset:)` (⌥ shows "Reset X") | `Views/DevelopView.swift` |
   | Eyedroppers / color pickers | `DevelopController.picker` (`PhotoPicker`), `PickerButton`, `PickerHint` | `DevelopController.swift`, `Views/DevelopView.swift` |
   | Right-click photo menu | one menu for grid, Loupe, Develop and Filmstrip | `PhotoMenu.swift` |
