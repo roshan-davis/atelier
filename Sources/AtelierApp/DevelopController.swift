@@ -836,6 +836,20 @@ final class DevelopController: ObservableObject {
         return true
     }
 
+    /// The crop's corners on the Guided view (0...1 from its top left), so a crop, Constrain
+    /// Crop's included, shows there although the view is uncropped. nil without a cut.
+    var guidedCropCorners: [CGPoint]? {
+        guard let crop = settings.crop, crop.hasCut, let sourceSize, let view = lensGeometry else { return nil }
+        let normal = LensGeometry(settings: settings, size: sourceSize, focalLength35: focalLength35)
+        let turned = crop.orientedSize(sourceSize)
+        return [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)].map { u, v in
+            let output = CGPoint(x: u * crop.width * turned.width, y: v * crop.height * turned.height)
+            let p = crop.sourcePoint(fromOutput: output, sourceSize: sourceSize)
+            let corrected = CGPoint(x: p.x / sourceSize.width, y: p.y / sourceSize.height)
+            return view.outputPoint(fromSource: normal.sourcePoint(fromOutput: corrected))
+        }
+    }
+
     /// What the Guided tool shows: the whole corrected photo, uncropped and zoomed out as far as
     /// it needs, so no guide is pushed out of view. The edit itself is unchanged.
     private func guidedViewSettings(_ settings: DevelopSettings) -> DevelopSettings {

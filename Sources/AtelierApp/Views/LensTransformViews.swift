@@ -189,9 +189,22 @@ struct TransformPanel: View {
             Toggle("Constrain Crop", isOn: Binding(get: { develop.settings.constrainCrop },
                                                    set: { develop.setConstrainCrop($0) }))
                 .help("Crop to the largest area with no gray edges, as in Lightroom; the crop then stays inside the photo when you adjust it")
+            if develop.settings.constrainCrop {
+                Text(constrainCropLine)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             ParameterGroups(panel: .transform, develop: develop)
         }
         .font(.callout)
+    }
+
+    private var constrainCropLine: String {
+        let crop = develop.crop
+        guard crop.hasCut else { return "No gray edges to crop." }
+        let kept = Int((crop.width * crop.height * 100).rounded())
+        return "Cropped to \(kept)% of the photo so no gray edges show. Crop & Straighten (R) adjusts it."
     }
 
     private func uprightButton(_ mode: Mode?, help: String) -> some View {
@@ -249,6 +262,16 @@ struct GuidedUprightView: View {
                     .position(x: rect.midX, y: rect.midY)
                 Canvas { context, _ in
                     context.clip(to: Path(rect))
+                    if let corners = develop.guidedCropCorners {
+                        // The crop (Constrain Crop's too): dim what it cuts, outline what it keeps.
+                        var kept = Path()
+                        kept.addLines(corners.map { CGPoint(x: rect.minX + $0.x * rect.width, y: rect.minY + $0.y * rect.height) })
+                        kept.closeSubpath()
+                        var outside = Path(rect)
+                        outside.addPath(kept)
+                        context.fill(outside, with: .color(.black.opacity(0.45)), style: FillStyle(eoFill: true))
+                        context.stroke(kept, with: .color(.white.opacity(0.85)), lineWidth: 1)
+                    }
                     for (index, guide) in viewGuides(rect).enumerated() {
                         if case .moveEnd(let moving, _) = action, moving == index, draft != nil { continue }
                         drawGuide(guide, selected: develop.selectedGuide == index, in: &context)
