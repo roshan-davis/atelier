@@ -357,6 +357,8 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         case gradeHighlightsHue, gradeHighlightsSat, gradeHighlightsLum
         case gradeGlobalHue, gradeGlobalSat, gradeGlobalLum
         case gradeBlending, gradeBalance
+        /// Color Grading's panel switch: 1 turns every wheel off without losing their settings.
+        case gradeDisabled
         case sharpening, sharpenRadius, sharpenDetail, sharpenMasking, luminanceNoise, colorNoise
         case lensDistortion
         case lensDefringePurpleAmount, lensDefringePurpleHueLow, lensDefringePurpleHueHigh
@@ -417,6 +419,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             case .transformScale: return 50...150
             case .gradeShadowsHue, .gradeMidtonesHue, .gradeHighlightsHue, .gradeGlobalHue: return 0...360
             case .gradeShadowsSat, .gradeMidtonesSat, .gradeHighlightsSat, .gradeGlobalSat: return 0...100
+            case .gradeDisabled: return 0...1
             case .lensDefringePurpleAmount, .lensDefringeGreenAmount: return 0...20
             case .lensDefringePurpleHueLow, .lensDefringePurpleHueHigh, .lensDefringeGreenHueLow,
                  .lensDefringeGreenHueHigh: return 0...100
@@ -455,6 +458,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             case .curveShadows: return "Shadows"
             case .gradeBlending: return "Blending"
             case .gradeBalance: return "Balance"
+            case .gradeDisabled: return "Off"
             default:
                 if rawValue.hasPrefix("grade") {
                     if rawValue.hasSuffix("Hue") { return "Hue" }
@@ -498,6 +502,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             case .transformVertical, .transformHorizontal, .transformRotate, .transformAspect, .transformScale,
                  .transformOffsetX, .transformOffsetY: return "Transform"
             case .gradeBlending, .gradeBalance: return "Blend"
+            case .gradeDisabled: return "Color Grading"
             default:
                 return GradeRegion.allCases.first { rawValue.hasPrefix("grade\($0.rawValue)") }?.rawValue ?? ""
             }

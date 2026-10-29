@@ -19,6 +19,14 @@ public enum SliderPreview: Hashable, Sendable {
     case shadowClipping
     /// Color Grading hue: the region's tint at full saturation, so the hue is easy to judge.
     case fullSaturation(DevelopSettings.GradeRegion)
+    /// Color Grading Blending: every wheel that has a tint at full saturation, so the overlap
+    /// between them is easy to see.
+    case blendingSaturation
+    /// Color Grading Balance: the photo in the colors of the tonal ranges (blue shadows, gray
+    /// midtones, yellow highlights), so the split is easy to see.
+    case gradeRegions
+    /// Color Grading's eye button: the photo graded by one wheel alone.
+    case gradeSolo(DevelopSettings.GradeRegion)
     /// Defringe Amount: white, with the fringes being turned neutral shown in their color.
     case defringeAmount(DevelopSettings.FringeColor)
     /// Defringe Hue: black outside the Hue range, so it shows which colors can be affected.
@@ -36,6 +44,8 @@ public enum SliderPreview: Hashable, Sendable {
         case .lensDefringeGreenAmount: self = .defringeAmount(.green)
         case .lensDefringePurpleHueLow, .lensDefringePurpleHueHigh: self = .defringeHue(.purple)
         case .lensDefringeGreenHueLow, .lensDefringeGreenHueHigh: self = .defringeHue(.green)
+        case .gradeBlending: self = .blendingSaturation
+        case .gradeBalance: self = .gradeRegions
         default:
             guard let region = DevelopSettings.GradeRegion.allCases.first(where: { $0.hue == parameter }) else { return nil }
             self = .fullSaturation(region)
@@ -50,7 +60,10 @@ public enum SliderPreview: Hashable, Sendable {
         case .sharpenMask: return "Hold Option while dragging to see where sharpening applies (white)"
         case .highlightClipping: return "Hold Option while dragging to see clipped highlights"
         case .shadowClipping: return "Hold Option while dragging to see clipped shadows"
-        case .fullSaturation: return "Hold Option while dragging to change only the hue, shown at full saturation"
+        case .fullSaturation: return "Hold Option while dragging to see the hue at full saturation"
+        case .blendingSaturation: return "Hold Option while dragging to see the tints at full saturation"
+        case .gradeRegions: return "Hold Option while dragging to see the shadows (blue), midtones (gray) and highlights (yellow)"
+        case .gradeSolo(let region): return "Press and hold to see the photo with only the \(region.rawValue) wheel"
         case .defringeAmount: return "Hold Option while dragging to see the fringes being removed (in color, on white)"
         case .defringeHue: return "Hold Option while dragging to see which colors the range covers (the rest turns black)"
         }

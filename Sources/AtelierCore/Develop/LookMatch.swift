@@ -589,7 +589,8 @@ public enum LookMatcher {
     /// and bright tones once the midtones match (split toning).
     static func fitGrade(_ settings: inout DevelopSettings, reference: LookSample,
                          measure: (DevelopSettings) -> LookSample?) {
-        guard let photo = measure(settings) else { return }
+        // Color Grading switched off stays off.
+        guard settings[.gradeDisabled] < 0.5, let photo = measure(settings) else { return }
         let midShift = reference.midtoneAB - photo.midtoneAB
         let probe = 20.0
         var needs: [(DevelopSettings.GradeRegion, SIMD2<Double>, Double)] = []
@@ -618,17 +619,8 @@ public enum LookMatcher {
         }
     }
 
-    /// Oklab a/b direction of each grading wheel hue (whole degrees), found by tinting middle gray
-    /// the way Color Grading does.
-    static let gradeDirections: [Double] = (0..<360).map { hue in
-        let color = hslToRGB(Double(hue), 1, 0.5)
-        let y = luma(color)
-        func lin(_ c: Double) -> Double { c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4) }
-        let tinted = (0.5 + (color.0 - y) * 0.05, 0.5 + (color.1 - y) * 0.05, 0.5 + (color.2 - y) * 0.05)
-        let gray = LookSample.oklab(lin(0.5), lin(0.5), lin(0.5))
-        let lab = LookSample.oklab(lin(tinted.0), lin(tinted.1), lin(tinted.2))
-        return atan2(lab.2 - gray.2, lab.1 - gray.1)
-    }
+    /// Oklab a/b direction of each grading wheel hue (whole degrees), as Color Grading tints.
+    static let gradeDirections: [Double] = ColorGrade.directions.map { atan2($0.y, $0.x) }
 
     /// The grading wheel hue that pushes colors most nearly along `direction` in Oklab a/b.
     static func gradeHue(towards direction: SIMD2<Double>) -> Double {
