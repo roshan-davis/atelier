@@ -369,7 +369,6 @@ final class LibraryModel: ObservableObject {
         // The first photo after launch keeps the zoom the session restored.
         guard let previous else { return }
         let center = zoomState.currentCenter?()
-        ZoomTrace.log("leave \(previous) at \(zoom) center \(String(describing: center)) -> \(focusedID ?? -1) mode \(ZoomOnPhotoChange.current)")
         let next: ZoomLevel
         switch ZoomOnPhotoChange.current {
         case .keep:
