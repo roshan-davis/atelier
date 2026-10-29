@@ -34,22 +34,24 @@ struct DevelopImageView: View {
                         ZoomableImageView(image: develop.displayImage ?? image,
                                           pixelSize: pixelSize,
                                           zoom: model.zoomState,
-                                          onReport: { report in
-                                              if model.zoomReport != report { model.zoomReport = report }
-                                              if develop.wantsFullResolution != report.isZoomedPastFit {
-                                                  develop.wantsFullResolution = report.isZoomedPastFit
-                                              }
-                                          },
+                                          onReport: onZoomReport,
                                           menu: { model.photoMenu(includeZoom: true) })
                     } else if develop.compareMode == .sideBySide {
+                        // Both panes share the zoom and stay on the same spot, as in Lightroom.
                         HStack(spacing: 12) {
-                            ComparePane(image: develop.beforeImage, label: "Before")
-                            ComparePane(image: image, label: "After")
+                            ComparePane(image: develop.displayBeforeImage, label: "Before", pixelSize: pixelSize,
+                                        zoom: model.zoomState, onReport: onZoomReport,
+                                        menu: { model.photoMenu(includeZoom: true) })
+                            ComparePane(image: develop.displayImage ?? image, label: "After", pixelSize: pixelSize,
+                                        zoom: model.zoomState, onReport: onZoomReport,
+                                        menu: { model.photoMenu(includeZoom: true) })
                         }
-                        .padding(16)
+                        .padding(.horizontal, 8)
                     } else {
-                        SliderCompareView(before: develop.beforeImage, after: image, position: $develop.sliderPosition)
-                            .padding(16)
+                        SliderCompareView(before: develop.displayBeforeImage, after: develop.displayImage ?? image,
+                                          pixelSize: pixelSize, zoom: model.zoomState, onReport: onZoomReport,
+                                          menu: { model.photoMenu(includeZoom: true) },
+                                          position: $develop.sliderPosition)
                     }
                 }
                 if develop.isLoading {
@@ -81,6 +83,44 @@ struct DevelopImageView: View {
             .padding(.vertical, 6)
         }
         .onAppear { develop.open(model.focusedID) }
+        .onChange(of: develop.compareMode) { old, new in compareModeChanged(from: old, to: new) }
+    }
+
+    /// The zoom and spot from before a compare view opened, brought back when it closes.
+    private struct ZoomBeforeCompare {
+        var level: ZoomLevel
+        var center: CGPoint?
+        var assetID: Int64?
+    }
+    @State private var zoomBeforeCompare: ZoomBeforeCompare?
+
+    /// The compare views open at Fit; closing them returns to the zoom and spot you left, as
+    /// long as it's the same photo. Switching between them keeps the spot.
+    private func compareModeChanged(from old: CompareMode, to new: CompareMode) {
+        let zoom = model.zoomState
+        let center = zoom.viewport.visible.map { CGPoint(x: $0.midX, y: $0.midY) }
+        if old == .off {
+            zoomBeforeCompare = ZoomBeforeCompare(level: zoom.level, center: center, assetID: develop.assetID)
+            zoom.level = .fit
+        } else if new == .off {
+            guard let saved = zoomBeforeCompare else { return }
+            zoomBeforeCompare = nil
+            guard saved.assetID == develop.assetID else { return }
+            // The photo view for Off already exists by now, unsized; it takes the spot once
+            // it has a size, so the zoom doesn't land on the photo's top-left corner.
+            zoom.restoreCenter = saved.center
+            if zoom.level != saved.level { zoom.level = saved.level } else { zoom.objectWillChange.send() }
+        } else {
+            zoom.restoreCenter = center
+            zoom.objectWillChange.send()
+        }
+    }
+
+    private func onZoomReport(_ report: ZoomReport) {
+        if model.zoomReport != report { model.zoomReport = report }
+        if develop.wantsFullResolution != report.isZoomedPastFit {
+            develop.wantsFullResolution = report.isZoomedPastFit
+        }
     }
 
     private var pixelSize: CGSize? {
@@ -96,11 +136,11 @@ struct DevelopImageView: View {
             comparePicker(iconsOnly: compact)
                 .disabled(develop.isCropping || develop.isAIOpen || develop.isMasking || develop.isGuiding)
             if !compact, develop.compareMode == .slider {
-                Text("Drag across the photo to move the divider").foregroundStyle(.secondary).fixedSize()
+                Text("Drag the divider to compare").foregroundStyle(.secondary).fixedSize()
             }
             Spacer(minLength: 8)
             ZoomControls(zoom: model.zoomState, compact: compact)
-                .disabled(develop.compareMode != .off || develop.isCropping || develop.isAIOpen || develop.isGuiding)
+                .disabled(develop.isCropping || develop.isAIOpen || develop.isGuiding)
         }
     }
 
@@ -121,18 +161,6 @@ struct DevelopImageView: View {
     }
 }
 
-private struct PhotoImage: View {
-    let image: NSImage
-
-    var body: some View {
-        Image(nsImage: image)
-            .resizable()
-            .interpolation(.high)
-            .aspectRatio(contentMode: .fit)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
 private struct Badge: View {
     let text: String
 
@@ -148,78 +176,80 @@ private struct Badge: View {
 private struct ComparePane: View {
     let image: NSImage?
     let label: String
+    let pixelSize: CGSize?
+    @ObservedObject var zoom: ZoomState
+    var onReport: (ZoomReport) -> Void
+    var menu: () -> NSMenu?
 
     var body: some View {
         ZStack(alignment: .topLeading) {
             if let image {
-                PhotoImage(image: image)
+                ZoomableImageView(image: image, pixelSize: pixelSize, zoom: zoom, onReport: onReport, menu: menu)
             } else {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            Badge(text: label).padding(8)
+            Badge(text: label).padding(8).allowsHitTesting(false)
         }
     }
 }
 
-/// The edited photo with the original revealed to the left of a draggable divider.
+/// The edited photo with the original revealed to the left of a draggable divider. Both zoom
+/// and pan together: drag the photo to move around, drag the divider to compare.
 private struct SliderCompareView: View {
     let before: NSImage?
     let after: NSImage
+    let pixelSize: CGSize?
+    @ObservedObject var zoom: ZoomState
+    var onReport: (ZoomReport) -> Void
+    var menu: () -> NSMenu?
     @Binding var position: Double
 
     var body: some View {
         GeometryReader { geometry in
-            let rect = fittedRect(for: after.size, in: geometry.size)
-            let dividerX = rect.minX + rect.width * position
+            let size = geometry.size
+            let dividerX = size.width * position
             ZStack(alignment: .topLeading) {
-                Image(nsImage: after)
-                    .resizable()
-                    .interpolation(.high)
-                    .frame(width: rect.width, height: rect.height)
-                    .position(x: rect.midX, y: rect.midY)
+                ZoomableImageView(image: after, pixelSize: pixelSize, zoom: zoom, onReport: onReport, menu: menu)
                 if let before {
-                    Image(nsImage: before)
-                        .resizable()
-                        .interpolation(.high)
-                        .frame(width: rect.width, height: rect.height)
-                        .mask(alignment: .leading) {
-                            Rectangle().frame(width: rect.width * position)
-                        }
-                        .position(x: rect.midX, y: rect.midY)
+                    ZoomableImageView(image: before, pixelSize: pixelSize, zoom: zoom, visibleWidth: CGFloat(position),
+                                      onReport: onReport, menu: menu)
                 }
                 Rectangle()
                     .fill(Color.white)
-                    .frame(width: 2, height: rect.height)
+                    .frame(width: 2, height: size.height)
                     .shadow(color: .black.opacity(0.5), radius: 2)
-                    .position(x: dividerX, y: rect.midY)
+                    .position(x: dividerX, y: size.height / 2)
+                    .allowsHitTesting(false)
+                // A strip wider than the line, so the divider is easy to grab.
+                Color.clear
+                    .frame(width: 20, height: size.height)
+                    .contentShape(Rectangle())
+                    .onHover { inside in (inside ? NSCursor.resizeLeftRight : NSCursor.arrow).set() }
+                    .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .named("slider")).onChanged { value in
+                        guard size.width > 0 else { return }
+                        position = min(1, max(0, value.location.x / size.width))
+                    })
+                    .position(x: dividerX, y: size.height / 2)
                 Circle()
                     .fill(Color.white)
                     .frame(width: 30, height: 30)
                     .overlay(Image(systemName: "arrow.left.and.right").font(.caption.bold()).foregroundStyle(Color.black))
                     .shadow(color: .black.opacity(0.4), radius: 3)
-                    .position(x: dividerX, y: rect.midY)
+                    .position(x: dividerX, y: size.height / 2)
+                    .allowsHitTesting(false)
                 Badge(text: "Before")
                     .fixedSize()
-                    .position(x: rect.minX + 44, y: rect.minY + 20)
+                    .position(x: 52, y: 22)
                     .opacity(position > 0.12 ? 1 : 0)
+                    .allowsHitTesting(false)
                 Badge(text: "After")
                     .fixedSize()
-                    .position(x: rect.maxX - 38, y: rect.minY + 20)
+                    .position(x: size.width - 46, y: 22)
                     .opacity(position < 0.88 ? 1 : 0)
+                    .allowsHitTesting(false)
             }
-            .contentShape(Rectangle())
-            .gesture(DragGesture(minimumDistance: 0).onChanged { value in
-                guard rect.width > 0 else { return }
-                position = min(1, max(0, (value.location.x - rect.minX) / rect.width))
-            })
+            .coordinateSpace(.named("slider"))
         }
-    }
-
-    private func fittedRect(for size: NSSize, in bounds: CGSize) -> CGRect {
-        guard size.width > 0, size.height > 0 else { return .zero }
-        let scale = min(bounds.width / size.width, bounds.height / size.height)
-        let width = size.width * scale, height = size.height * scale
-        return CGRect(x: (bounds.width - width) / 2, y: (bounds.height - height) / 2, width: width, height: height)
     }
 }
 

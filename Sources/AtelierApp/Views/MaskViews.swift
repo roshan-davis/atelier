@@ -100,12 +100,19 @@ struct MaskEditorView: View {
             }
             .onChange(of: layout.report, initial: true) { _, report in onReport(report) }
             .onChange(of: geometry.frame(in: .global), initial: true) { _, frame in navigator.frame = frame }
+            .onChange(of: rect, initial: true) { _, rect in
+                zoom.viewport.update(navigator.visibleFraction(of: rect, in: geometry.size), from: navigator)
+            }
         }
         .onAppear {
             navigator.setZoom = { [zoom] level in if zoom.level != level { zoom.level = level } }
+            zoom.focus = { [weak navigator] center in navigator?.focus(on: center) }
             navigator.install()
         }
-        .onDisappear { navigator.remove() }
+        .onDisappear {
+            navigator.remove()
+            zoom.viewport.clear(from: navigator)
+        }
         .onChange(of: develop.assetID) { _, _ in
             action = nil
             stroke = nil
@@ -892,6 +899,24 @@ final class MaskNavigator: ObservableObject {
         center = CGPoint(x: (size.width / 2 - anchor.x) / width + fraction.x,
                          y: (size.height / 2 - anchor.y) / height + fraction.y)
         setZoom?(next <= fit * 1.001 ? .fit : .percent(Double(next * 100)))
+    }
+
+    /// Centers on `point` (0...1 across and down the photo) for the Navigator, zooming in from
+    /// Fit first as the Develop photo view does.
+    func focus(on point: CGPoint) {
+        center = CGPoint(x: min(1, max(0, point.x)), y: min(1, max(0, point.y)))
+        if !canPan { setZoom?(.percent(LibraryModel.clickZoomPercent)) }
+    }
+
+    /// The part of the photo at `rect` that a view of `size` shows, 0...1 across and down the
+    /// photo; nil when all of it is in view.
+    func visibleFraction(of rect: CGRect, in size: CGSize) -> CGRect? {
+        guard rect.width > 0, rect.height > 0 else { return nil }
+        let shown = CGRect(origin: .zero, size: size).intersection(rect)
+        guard !shown.isNull else { return nil }
+        let fraction = CGRect(x: (shown.minX - rect.minX) / rect.width, y: (shown.minY - rect.minY) / rect.height,
+                              width: shown.width / rect.width, height: shown.height / rect.height)
+        return fraction.width < 0.995 || fraction.height < 0.995 ? fraction : nil
     }
 
     func pan(by delta: CGSize) {
