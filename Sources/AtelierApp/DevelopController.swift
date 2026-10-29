@@ -787,6 +787,8 @@ final class DevelopController: ObservableObject {
     /// settings. Moving any of the panel's controls turns it back on (see `changed`).
     func setPanelOn(_ panel: DevelopSettings.Panel, _ on: Bool) {
         guard assetID != nil, panel.hasSwitch, on != isPanelOn(panel) else { return }
+        // Its own history step, at once, so an edit right after it is compared with the panel off.
+        commitPendingStep()
         settings.setPanel(panel, on: on)
         let step = "\(panel.title) \(on ? "On" : "Off")"
         if panel == .lensCorrections || panel == .transform {
@@ -795,6 +797,7 @@ final class DevelopController: ObservableObject {
         } else {
             changed(step: step)
         }
+        commitPendingStep()
     }
 
     func isModified(_ panel: DevelopSettings.Panel) -> Bool {
