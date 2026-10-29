@@ -191,14 +191,24 @@ struct CropEditorView: View {
             let layout = CropLayout(viewSize: geometry.size, imageAspect: develop.orientedAspect, angle: crop.angle)
             let rect = layout.rect(for: crop)
             ZStack(alignment: .topLeading) {
-                // The photo renders upright and the view turns it, so straightening follows the
-                // pointer at once instead of stretching the last render until the next one lands.
-                Image(nsImage: image)
-                    .resizable()
-                    .interpolation(.high)
-                    .frame(width: layout.frame.width, height: layout.frame.height)
-                    .rotationEffect(.degrees(crop.angle))
-                    .position(x: layout.frame.midX, y: layout.frame.midY)
+                if develop.imageIsWhole {
+                    // The photo renders upright and the view turns it, so straightening follows the
+                    // pointer at once instead of stretching the last render until the next one lands.
+                    Image(nsImage: image)
+                        .resizable()
+                        .interpolation(.high)
+                        .frame(width: layout.frame.width, height: layout.frame.height)
+                        .rotationEffect(.degrees(crop.angle))
+                        .position(x: layout.frame.midX, y: layout.frame.midY)
+                } else {
+                    // Just opened: the cropped render is still showing. It is exactly what lies inside
+                    // the crop frame, so place it there until the whole photo arrives around it.
+                    Image(nsImage: image)
+                        .resizable()
+                        .interpolation(.high)
+                        .frame(width: rect.width, height: rect.height)
+                        .position(x: rect.midX, y: rect.midY)
+                }
                 Path { path in
                     path.addRect(CGRect(origin: .zero, size: geometry.size))
                     path.addRect(rect)

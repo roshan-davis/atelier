@@ -35,6 +35,8 @@ final class DevelopController: ObservableObject {
     @Published private(set) var assetID: Int64?
     @Published private(set) var settings = DevelopSettings()
     @Published private(set) var image: NSImage?
+    /// `image` is the whole, uncropped photo (rendered for the crop tool) rather than the crop.
+    @Published private(set) var imageIsWhole = false
     @Published private(set) var isLoading = false
     @Published private(set) var errorMessage: String?
     @Published private(set) var asShotTemperature: Double = 5500
@@ -340,6 +342,7 @@ final class DevelopController: ObservableObject {
         self.assetID = assetID
         session = nil
         image = nil
+        imageIsWhole = false
         beforeImage = nil
         histogram = nil
         fullImage = nil
@@ -1292,6 +1295,7 @@ final class DevelopController: ObservableObject {
                     self.rendering = false
                     if self.assetID == assetID, let cgImage {
                         self.image = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+                        self.imageIsWhole = !cropping
                         if let histogram { self.histogram = histogram }
                     }
                     if self.needsRender {
