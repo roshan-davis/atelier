@@ -28,8 +28,6 @@ struct DevelopImageView: View {
                                        })
                     } else if develop.isGuiding {
                         GuidedUprightView(develop: develop, image: image)
-                    } else if develop.isPickingWhiteBalance {
-                        WhiteBalancePickerView(develop: develop, image: image)
                     } else if develop.showingBefore || develop.compareMode == .off {
                         ZoomableImageView(image: develop.displayImage ?? image,
                                           pixelSize: pixelSize,
@@ -37,10 +35,8 @@ struct DevelopImageView: View {
                                           onReport: onZoomReport,
                                           menu: { model.photoMenu(includeZoom: true) },
                                           onPick: photoPick)
-                        if develop.isPickingFringe {
-                            FringePickerHint(develop: develop)
-                        } else if develop.isPickingGradeColor {
-                            GradePickerHint(develop: develop)
+                        if let picker = develop.picker {
+                            PickerHint(text: develop.pickerMessage ?? picker.hint, isWarning: develop.pickerMessage != nil)
                         }
                     } else if develop.compareMode == .sideBySide {
                         // Both panes share the zoom and stay on the same spot, as in Lightroom.
@@ -134,9 +130,12 @@ struct DevelopImageView: View {
 
     /// What a click on the photo does while a color picker is out.
     private var photoPick: ((CGPoint) -> Void)? {
-        if develop.isPickingFringe { return { point in develop.pickFringe(at: point) } }
-        if develop.isPickingGradeColor { return { point in develop.pickGradeColor(at: point) } }
-        return nil
+        switch develop.picker {
+        case .whiteBalance: return { point in develop.findWhiteBalance(at: point) }
+        case .fringe: return { point in develop.pickFringe(at: point) }
+        case .gradeColor: return { point in develop.pickGradeColor(at: point) }
+        case nil: return nil
+        }
     }
 
     private func onZoomReport(_ report: ZoomReport) {
@@ -181,6 +180,50 @@ struct DevelopImageView: View {
         .labelsHidden()
         .fixedSize()
         .help("Compare with the original: side by side, or drag a slider across the photo (Y)")
+    }
+}
+
+/// What to click while a color picker is out, at the top of the photo; every picker uses it.
+private struct PickerHint: View {
+    let text: String
+    var isWarning = false
+
+    var body: some View {
+        Text(text)
+            .font(.callout)
+            .foregroundStyle(isWarning ? Color.orange : Color.primary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(.regularMaterial, in: Capsule())
+            .frame(maxWidth: .infinity)
+            .padding(.top, 10)
+            .allowsHitTesting(false)
+    }
+}
+
+/// The eyedropper button that takes a color picker out or puts it away; every picker uses it.
+struct PickerButton: View {
+    @ObservedObject var develop: DevelopController
+    let kind: DevelopController.PhotoPicker
+    let help: String
+    /// Runs before the picker comes out, to set what it picks for.
+    var willPick: () -> Void = {}
+
+    var body: some View {
+        Button {
+            if develop.picker == kind {
+                develop.picker = nil
+            } else {
+                willPick()
+                develop.picker = kind
+            }
+        } label: {
+            Image(systemName: "eyedropper")
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(develop.picker == kind ? Color.accentColor : Color.secondary)
+        .disabled(develop.assetID == nil)
+        .help(help)
     }
 }
 
@@ -346,8 +389,8 @@ struct DevelopPanel: View {
                     ForEach(DevelopSettings.Panel.allCases, id: \.self) { panel in
                         PanelSection(title: panel.title, isExpanded: isExpanded(panel.rawValue), soloMode: $soloMode,
                                      isModified: develop.isModified(panel), reset: { develop.reset(panel) },
-                                     isOn: panel == .colorGrading
-                                        ? Binding(get: { develop.isColorGradingOn }, set: { develop.setColorGradingOn($0) })
+                                     isOn: panel.hasSwitch
+                                        ? Binding(get: { develop.isPanelOn(panel) }, set: { develop.setPanelOn(panel, $0) })
                                         : nil,
                                      expandAll: expandAll, collapseAll: collapseAll) {
                             switch panel {
@@ -370,7 +413,7 @@ struct DevelopPanel: View {
                             default:
                                 VStack(alignment: .leading, spacing: 7) {
                                     ForEach(groups(in: panel), id: \.0) { group in
-                                        GroupHeading(title: group.0)
+                                        GroupHeading(title: group.0) { develop.reset(group: group.0, parameters: group.1) }
                                         ForEach(group.1, id: \.self) { parameter in
                                             ParameterSlider(parameter: parameter, develop: develop)
                                         }
@@ -419,14 +462,30 @@ struct DevelopPanel: View {
     }
 }
 
+/// A group's name inside a panel. With `reset`, double-clicking it resets the group (as
+/// double-clicking a slider's name resets the slider), and while ⌥ is held it reads
+/// "Reset Tone" and a click resets, as in Lightroom.
 struct GroupHeading: View {
     let title: String
+    var reset: (() -> Void)?
+    @ObservedObject private var keys = ModifierKeys.shared
 
     var body: some View {
-        Text(title)
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(.secondary)
-            .padding(.top, 4)
+        if let reset {
+            Text(keys.option ? "Reset \(title)" : title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(keys.option ? Color.accentColor : Color.secondary)
+                .padding(.top, 4)
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) { reset() }
+                .onTapGesture { if NSEvent.modifierFlags.contains(.option) { reset() } }
+                .help("Double-click to reset \(title), or ⌥-click")
+        } else {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.top, 4)
+        }
     }
 }
 
@@ -466,7 +525,7 @@ private struct ToneCurvePanel: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            GroupHeading(title: "Region")
+            GroupHeading(title: "Region") { develop.reset(group: "Region", parameters: regions) }
             ForEach(regions, id: \.self) { parameter in
                 ParameterSlider(parameter: parameter, develop: develop)
             }
@@ -637,7 +696,9 @@ private struct HSLPanel: View {
         if develop.settings.monochrome {
             // Black & White: the B&W Mix takes HSL's place, as in Lightroom.
             VStack(alignment: .leading, spacing: 7) {
-                GroupHeading(title: "B&W Mix")
+                GroupHeading(title: "B&W Mix") {
+                    develop.reset(group: "B&W Mix", parameters: DevelopSettings.ColorBand.allCases.map { .gray($0) })
+                }
                 ForEach(DevelopSettings.ColorBand.allCases, id: \.self) { band in
                     ParameterSlider(parameter: .gray(band), develop: develop)
                 }
@@ -660,7 +721,12 @@ private struct HSLPanel: View {
             .controlSize(.small)
             .labelsHidden()
             ForEach(channels, id: \.self) { channel in
-                if channels.count > 1 { GroupHeading(title: channel.rawValue) }
+                if channels.count > 1 {
+                    GroupHeading(title: channel.rawValue) {
+                        develop.reset(group: channel.rawValue,
+                                      parameters: DevelopSettings.ColorBand.allCases.map { .hsl(channel, $0) })
+                    }
+                }
                 ForEach(DevelopSettings.ColorBand.allCases, id: \.self) { band in
                     ParameterSlider(parameter: .hsl(channel, band), develop: develop)
                 }
@@ -669,14 +735,15 @@ private struct HSLPanel: View {
     }
 }
 
-/// A collapsible panel with a Lightroom-style header.
+/// A collapsible Develop panel, with the same header band as the left column's sections.
 struct PanelSection<Content: View>: View {
     let title: String
     @Binding var isExpanded: Bool
     @Binding var soloMode: Bool
     var isModified = false
     var reset: (() -> Void)?
-    /// The panel's on/off switch, for panels that have one (Color Grading).
+    /// The panel's on/off switch, for every panel but Basic. While off, the panel's controls
+    /// are dimmed but still work; moving one turns the panel back on.
     var isOn: Binding<Bool>? = nil
     let expandAll: () -> Void
     let collapseAll: () -> Void
@@ -684,40 +751,26 @@ struct PanelSection<Content: View>: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 6) {
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.bold))
-                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 12)
-                Text(title)
-                    .font(.headline)
-                if isModified {
-                    Circle().fill(Color.accentColor).frame(width: 6, height: 6)
-                        .help("This panel has edits")
-                }
-                Spacer()
-                if let isOn {
-                    Toggle(title, isOn: isOn)
-                        .toggleStyle(.switch)
-                        .controlSize(.mini)
-                        .labelsHidden()
-                        .help(isOn.wrappedValue ? "Turn \(title) off to compare; its settings are kept"
-                                                : "Turn \(title) back on")
-                }
-                if isModified, let reset {
-                    Button(action: reset) {
-                        Image(systemName: "arrow.uturn.backward")
+            SectionBand(title: title, isExpanded: $isExpanded, isModified: isModified) { hovering in
+                // The switch sits last, so it stays in one column whether or not a reset shows.
+                HStack(spacing: 4) {
+                    if isModified, let reset {
+                        Button(action: reset) {
+                            Image(systemName: "arrow.uturn.backward")
+                        }
+                        .buttonStyle(SidebarIconButtonStyle())
+                        .opacity(hovering ? 1 : 0.6)
+                        .help("Reset \(title)")
                     }
-                    .buttonStyle(.borderless)
-                    .help("Reset \(title)")
+                    if let isOn {
+                        Toggle(title, isOn: isOn)
+                            .toggleStyle(.switch)
+                            .controlSize(.mini)
+                            .labelsHidden()
+                            .help(isOn.wrappedValue ? "Turn \(title) off to compare; its settings are kept"
+                                                    : "Turn \(title) back on")
+                    }
                 }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .contentShape(Rectangle())
-            .onTapGesture {
-                withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() }
             }
             .contextMenu {
                 Toggle("Solo Mode", isOn: $soloMode)
@@ -732,7 +785,8 @@ struct PanelSection<Content: View>: View {
             if isExpanded {
                 content()
                     .padding(.horizontal, 12)
-                    .padding(.bottom, 12)
+                    .padding(.vertical, 10)
+                    .opacity(isOn?.wrappedValue == false ? 0.45 : 1)
             }
             Divider()
         }
@@ -795,16 +849,12 @@ private struct HistogramView: View {
 struct ParameterSlider: View {
     let parameter: DevelopSettings.Parameter
     @ObservedObject var develop: DevelopController
-    @State private var editing = false
-    @State private var draft = 0.0
-    @FocusState private var fieldFocused: Bool
 
     private var binding: Binding<Double> {
         Binding(get: { develop.sliderValue(parameter) }, set: { develop.setSlider(parameter, to: $0) })
     }
 
-    private var formatted: String {
-        let value = develop.sliderValue(parameter)
+    private func formatted(_ value: Double) -> String {
         switch parameter {
         case .temperature where !develop.isRAW: return value == 0 ? "0" : String(format: "%+.0f", value)
         case .temperature: return "\(Int(value.rounded())) K"
@@ -818,64 +868,15 @@ struct ParameterSlider: View {
     }
 
     var body: some View {
-        HStack(spacing: 8) {
-            Text(parameter.label)
-                .lineLimit(1)
-                .frame(width: 78, alignment: .leading)
-                .contentShape(Rectangle())
-                .onTapGesture(count: 2) {
-                    if NSEvent.modifierFlags.contains(.shift), develop.canAuto(parameter) {
-                        develop.autoTone(only: parameter)
-                    } else {
-                        develop.reset(parameter)
-                    }
-                }
-                .help(develop.canAuto(parameter) ? "Double-click to reset; Shift-double-click for Auto" : "Double-click to reset")
-            DevelopSlider(value: binding, range: develop.sliderRange(parameter), step: step,
-                          origin: develop.sliderDefault(parameter), gradient: trackGradient,
-                          logarithmic: parameter == .temperature && develop.isRAW,
-                          onOption: SliderPreview(parameter: parameter).map { preview in
-                              { (held: Bool) in develop.sliderPreview = held ? preview : nil }
-                          })
-                .help(SliderPreview(parameter: parameter)?.hint ?? "")
-            Group {
-                if editing {
-                    TextField("Value", value: $draft, format: .number.precision(.fractionLength(0...2)))
-                        .labelsHidden()
-                        .textFieldStyle(.roundedBorder)
-                        .multilineTextAlignment(.trailing)
-                        .focused($fieldFocused)
-                        .onSubmit(commit)
-                        .onChange(of: fieldFocused) { if !fieldFocused { commit() } }
-                        .onExitCommand { editing = false }
-                } else {
-                    Text(formatted)
-                        .monospacedDigit()
-                        .foregroundStyle(isDefault ? .secondary : .primary)
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            draft = develop.sliderValue(parameter)
-                            editing = true
-                            fieldFocused = true
-                        }
-                        .help("Click to type a value")
-                }
-            }
-            .frame(width: parameter == .temperature ? 58 : 44)
-        }
-        .font(.callout)
-        .frame(height: 20)
-    }
-
-    private var isDefault: Bool {
-        develop.sliderValue(parameter) == develop.sliderDefault(parameter)
-    }
-
-    private func commit() {
-        guard editing else { return }
-        develop.setSlider(parameter, to: draft)
-        editing = false
+        let preview = SliderPreview(parameter: parameter)
+        SliderRow(label: parameter.label, value: binding, range: develop.sliderRange(parameter), step: step,
+                  origin: develop.sliderDefault(parameter), gradient: trackGradient,
+                  logarithmic: parameter == .temperature && develop.isRAW,
+                  format: formatted, valueWidth: parameter == .temperature ? 58 : 44,
+                  reset: { develop.reset(parameter) },
+                  auto: develop.canAuto(parameter) ? { develop.autoTone(only: parameter) } : nil,
+                  trackHelp: preview?.hint ?? "",
+                  onOption: preview.map { preview in { (held: Bool) in develop.sliderPreview = held ? preview : nil } })
     }
 
     /// Colored tracks where Lightroom has them.
@@ -916,6 +917,85 @@ struct ParameterSlider: View {
         case .sharpenRadius, .transformRotate: return 0.1
         default: return 1
         }
+    }
+}
+
+/// The one slider row every slider in Atelier uses: the name (double-click resets, Shift-double-
+/// click sets Auto where there is one), a slim Lightroom-style track (⌥ while dragging shows the
+/// slider's view where it has one), and the value (click it to type one).
+struct SliderRow: View {
+    let label: String
+    @Binding var value: Double
+    let range: ClosedRange<Double>
+    var step: Double = 1
+    /// Where the track's fill starts, and what a reset goes back to unless `reset` says otherwise.
+    var origin: Double = 0
+    var gradient: [Color]?
+    var logarithmic = false
+    var format: (Double) -> String = { "\(Int($0.rounded()))" }
+    var valueWidth: CGFloat = 44
+    var reset: (() -> Void)?
+    var auto: (() -> Void)?
+    var trackHelp = ""
+    var onOption: ((Bool) -> Void)?
+
+    @State private var editing = false
+    @State private var draft = 0.0
+    @FocusState private var fieldFocused: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(label)
+                .lineLimit(1)
+                .frame(width: 78, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) {
+                    if NSEvent.modifierFlags.contains(.shift), let auto {
+                        auto()
+                    } else if let reset {
+                        reset()
+                    } else {
+                        value = origin
+                    }
+                }
+                .help(auto != nil ? "Double-click to reset; Shift-double-click for Auto" : "Double-click to reset")
+            DevelopSlider(value: $value, range: range, step: step, origin: origin, gradient: gradient,
+                          logarithmic: logarithmic, onOption: onOption)
+                .help(trackHelp)
+            Group {
+                if editing {
+                    TextField("Value", value: $draft, format: .number.precision(.fractionLength(0...2)))
+                        .labelsHidden()
+                        .textFieldStyle(.roundedBorder)
+                        .multilineTextAlignment(.trailing)
+                        .focused($fieldFocused)
+                        .onSubmit(commit)
+                        .onChange(of: fieldFocused) { if !fieldFocused { commit() } }
+                        .onExitCommand { editing = false }
+                } else {
+                    Text(format(value))
+                        .monospacedDigit()
+                        .foregroundStyle(value == origin ? .secondary : .primary)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            draft = value
+                            editing = true
+                            fieldFocused = true
+                        }
+                        .help("Click to type a value")
+                }
+            }
+            .frame(width: valueWidth)
+        }
+        .font(.callout)
+        .frame(height: 20)
+    }
+
+    private func commit() {
+        guard editing else { return }
+        value = min(max(draft, range.lowerBound), range.upperBound)
+        editing = false
     }
 }
 

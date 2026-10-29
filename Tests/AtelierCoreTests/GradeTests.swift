@@ -64,9 +64,8 @@ final class GradeTests: XCTestCase {
         var settings = DevelopSettings()
         settings[.gradeShadowsSat] = 50
         XCTAssertTrue(ColorGrade(settings).isActive)
-        settings[.gradeDisabled] = 1
+        settings.setPanel(.colorGrading, on: false)
         XCTAssertFalse(ColorGrade(settings).isActive)
-        XCTAssertEqual(DevelopSettings.Parameter.gradeDisabled.panel, .colorGrading)
         XCTAssertEqual(try DevelopSettings.decoded(from: settings.encoded()), settings)
     }
 

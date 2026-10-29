@@ -172,42 +172,62 @@ private struct HistoryRow: View {
     }
 }
 
-/// A section of the Develop sidebar with a VS Code–style header band: click anywhere on the
-/// band to minimize or show the section; its buttons sit on the right of the band.
+/// The VS Code–style header band every section in both Develop columns uses (Rosh's choice,
+/// Oct 29, 2026): click anywhere on the band to minimize or show the section; a dot after the
+/// title when it has edits; its buttons sit on the right, given the hover state to dim them.
+struct SectionBand<Trailing: View>: View {
+    let title: String
+    @Binding var isExpanded: Bool
+    var isModified = false
+    @ViewBuilder var trailing: (_ hovering: Bool) -> Trailing
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: 2) {
+            Text(title.uppercased())
+                .font(.system(size: 11, weight: .semibold))
+                .tracking(0.6)
+                .foregroundStyle(isExpanded ? .primary : .secondary)
+                .lineLimit(1)
+            if isModified {
+                Circle().fill(Color.accentColor).frame(width: 6, height: 6)
+                    .padding(.leading, 4)
+                    .help("This section has edits")
+            }
+            Spacer(minLength: 6)
+            trailing(hovering)
+        }
+        .padding(.leading, 12)
+        .padding(.trailing, 6)
+        .frame(height: 28)
+        .background(Color.primary.opacity(hovering ? 0.09 : 0.05))
+        .contentShape(Rectangle())
+        .onTapGesture {
+            withAnimation(.easeInOut(duration: 0.18)) { isExpanded.toggle() }
+        }
+        .onHover { hovering = $0 }
+        .help(isExpanded ? "Click to minimize \(title)" : "Click to show \(title)")
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityAction(named: isExpanded ? "Minimize" : "Show") { isExpanded.toggle() }
+    }
+}
+
+/// A section of the Develop sidebar: a header band, then its content.
 struct SidebarSection<Actions: View, Content: View>: View {
     let title: String
     @Binding var isExpanded: Bool
     @ViewBuilder var actions: () -> Actions
     @ViewBuilder var content: () -> Content
-    @State private var hovering = false
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 2) {
-                Text(title.uppercased())
-                    .font(.system(size: 11, weight: .semibold))
-                    .tracking(0.6)
-                    .foregroundStyle(isExpanded ? .primary : .secondary)
-                    .lineLimit(1)
-                Spacer(minLength: 6)
+            SectionBand(title: title, isExpanded: $isExpanded) { hovering in
                 if isExpanded {
                     HStack(spacing: 0) { actions() }
                         .buttonStyle(SidebarIconButtonStyle())
                         .opacity(hovering ? 1 : 0.6)
                 }
             }
-            .padding(.leading, 12)
-            .padding(.trailing, 6)
-            .frame(height: 28)
-            .background(Color.primary.opacity(hovering ? 0.09 : 0.05))
-            .contentShape(Rectangle())
-            .onTapGesture {
-                withAnimation(.easeInOut(duration: 0.18)) { isExpanded.toggle() }
-            }
-            .onHover { hovering = $0 }
-            .help(isExpanded ? "Click to minimize \(title)" : "Click to show \(title)")
-            .accessibilityAddTraits(.isHeader)
-            .accessibilityAction(named: isExpanded ? "Minimize" : "Show") { isExpanded.toggle() }
 
             if isExpanded {
                 content()

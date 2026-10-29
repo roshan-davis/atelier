@@ -61,9 +61,24 @@ public struct DevelopPreset: Codable, Hashable, Sendable, Identifiable {
             }
         }
 
+        /// The panel whose switch the part carries, for parts that are a whole panel.
+        var panel: DevelopSettings.Panel? {
+            switch self {
+            case .toneCurve: return .toneCurve
+            case .hsl: return .hsl
+            case .colorGrading: return .colorGrading
+            case .detail: return .detail
+            case .effects: return .effects
+            case .lensCorrections: return .lensCorrections
+            case .transform: return .transform
+            default: return nil
+            }
+        }
+
         /// Whether `settings` has anything in this part away from its default.
         public func isChanged(in settings: DevelopSettings) -> Bool {
             let parametersChanged = parameters.contains { $0 != .temperature && settings[$0] != $0.defaultValue }
+                || panel.map { !settings.isOn($0) } == true
             switch self {
             case .profile: return settings.profile != .cameraMatching
             case .treatment: return settings.monochrome || parametersChanged
@@ -173,6 +188,7 @@ public struct DevelopPreset: Codable, Hashable, Sendable, Identifiable {
             for parameter in part.parameters where parameter != .temperature {
                 result[parameter] = settings[parameter]
             }
+            if let panel = part.panel { result.setPanel(panel, on: settings.isOn(panel)) }
         }
         return result
     }
@@ -195,7 +211,7 @@ public struct DevelopPreset: Codable, Hashable, Sendable, Identifiable {
                 if base.temperature != nil, full.temperature != nil {
                     result[.temperature] = from + (to - from) * amount
                 }
-            case .gradeShadowsHue, .gradeMidtonesHue, .gradeHighlightsHue, .gradeGlobalHue, .gradeDisabled:
+            case .gradeShadowsHue, .gradeMidtonesHue, .gradeHighlightsHue, .gradeGlobalHue:
                 break
             default:
                 result[parameter] = from + (to - from) * amount

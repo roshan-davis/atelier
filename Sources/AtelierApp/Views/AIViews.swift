@@ -153,15 +153,9 @@ struct AIPanel: View {
             }
 
             if ai.recipe.usesBrush {
-                HStack(spacing: 8) {
-                    Text("Brush Size").frame(width: 78, alignment: .leading)
-                    DevelopSlider(value: Binding(get: { ai.brushSize * 100 }, set: { ai.brushSize = $0 / 100 }),
-                                  range: 0.5...15, step: 0.1, origin: 0.5, gradient: nil)
-                    Text(String(format: "%.1f", ai.brushSize * 100))
-                        .monospacedDigit()
-                        .frame(width: 34, alignment: .trailing)
-                }
-                .frame(height: 18)
+                SliderRow(label: "Brush Size", value: Binding(get: { ai.brushSize * 100 }, set: { ai.brushSize = $0 / 100 }),
+                          range: 0.5...15, step: 0.1, origin: 0.5, format: { String(format: "%.1f", $0) },
+                          reset: { ai.brushSize = 0.03 })
                 HStack {
                     Picker("Brush", selection: $ai.erasing) {
                         Text("Paint").tag(false)

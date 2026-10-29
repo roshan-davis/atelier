@@ -19,13 +19,6 @@ struct ColorGradingPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             viewPicker
-            if develop.isPickingGradeColor || develop.gradeColorMessage != nil {
-                Text(develop.gradeColorMessage
-                     ?? "Click a spot in the photo whose color should turn neutral. Esc to cancel.")
-                    .font(.caption)
-                    .foregroundStyle(develop.gradeColorMessage == nil ? Color.secondary : Color.orange)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
             Group {
                 if let single {
                     singleView(single)
@@ -33,8 +26,7 @@ struct ColorGradingPanel: View {
                     threeWay
                 }
             }
-            .opacity(develop.isColorGradingOn ? 1 : 0.45)
-            GroupHeading(title: "Blend")
+            GroupHeading(title: "Blend") { develop.reset(group: "Blend", parameters: [.gradeBlending, .gradeBalance]) }
             ParameterSlider(parameter: .gradeBlending, develop: develop)
             ParameterSlider(parameter: .gradeBalance, develop: develop)
             ToneRangeGraph(blending: develop.value(.gradeBlending) / 100, balance: develop.value(.gradeBalance) / 100)
@@ -60,18 +52,12 @@ struct ColorGradingPanel: View {
                 viewButton(region.rawValue, help: region.rawValue) { RegionGlyph(region: region) }
             }
             Divider().frame(height: 14).padding(.horizontal, 2)
-            Button {
+            PickerButton(develop: develop, kind: .gradeColor,
+                         help: single.map { "Color picker: click a spot to set the \($0.rawValue) wheel so its color cast turns neutral" }
+                             ?? "Color picker: click a spot to set the Shadows, Midtones or Highlights wheel (by the spot's tone) "
+                             + "so its color cast turns neutral") {
                 develop.gradePickRegion = single
-                develop.isPickingGradeColor.toggle()
-            } label: {
-                Image(systemName: "eyedropper")
             }
-            .buttonStyle(.borderless)
-            .foregroundStyle(develop.isPickingGradeColor ? Color.accentColor : Color.secondary)
-            .disabled(develop.assetID == nil || !develop.isColorGradingOn)
-            .help(single.map { "Color picker: click a spot to set the \($0.rawValue) wheel so its color cast turns neutral" }
-                  ?? "Color picker: click a spot to set the Shadows, Midtones or Highlights wheel (by the spot's tone) "
-                  + "so its color cast turns neutral")
         }
     }
 
@@ -488,21 +474,5 @@ private struct RegionGlyph: View {
         }
         .overlay(Circle().stroke(Color.secondary, lineWidth: 1))
         .frame(width: 12, height: 12)
-    }
-}
-
-/// Shown on the photo while Color Grading's color picker is out.
-struct GradePickerHint: View {
-    @ObservedObject var develop: DevelopController
-
-    var body: some View {
-        Text(develop.gradeColorMessage ?? "Click a spot whose color cast should turn neutral. Esc to cancel.")
-            .font(.callout)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(.regularMaterial, in: Capsule())
-            .frame(maxWidth: .infinity)
-            .padding(.top, 10)
-            .allowsHitTesting(false)
     }
 }

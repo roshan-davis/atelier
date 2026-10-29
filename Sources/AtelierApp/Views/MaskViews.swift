@@ -666,7 +666,8 @@ struct MasksPanel: View {
         VStack(alignment: .leading, spacing: 6) {
             GroupHeading(title: "Brush")
             SliderRow(label: "Size", value: Binding(get: { develop.brushSize * 100 }, set: { develop.brushSize = $0 / 100 }),
-                      range: 0.5...40, step: 0.1, origin: 0.5, format: { String(format: "%.1f", $0) })
+                      range: 0.5...40, step: 0.1, origin: 0.5, format: { String(format: "%.1f", $0) },
+                      reset: { develop.brushSize = 0.06 })
             SliderRow(label: "Feather", value: $develop.brushFeather, range: 0...100, step: 1, origin: 0)
             SliderRow(label: "Flow", value: $develop.brushFlow, range: 1...100, step: 1, origin: 1)
             Picker("Brush", selection: $develop.brushErasing) {
@@ -790,35 +791,6 @@ struct MasksPanel: View {
         case .saturation: return [Color.gray, Color(red: 1, green: 0.4, blue: 0.2), Color(red: 0.3, green: 0.6, blue: 1)]
         default: return nil
         }
-    }
-}
-
-/// A Lightroom-style slider row: name (double-click resets), slim track, value.
-private struct SliderRow: View {
-    let label: String
-    @Binding var value: Double
-    let range: ClosedRange<Double>
-    let step: Double
-    let origin: Double
-    var gradient: [Color]?
-    var format: (Double) -> String = { "\(Int($0.rounded()))" }
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Text(label)
-                .lineLimit(1)
-                .frame(width: 78, alignment: .leading)
-                .contentShape(Rectangle())
-                .onTapGesture(count: 2) { value = origin }
-                .help("Double-click to reset")
-            DevelopSlider(value: $value, range: range, step: step, origin: origin, gradient: gradient)
-            Text(format(value))
-                .monospacedDigit()
-                .foregroundStyle(value == origin ? .secondary : .primary)
-                .frame(width: 44, alignment: .trailing)
-        }
-        .font(.callout)
-        .frame(height: 20)
     }
 }
 

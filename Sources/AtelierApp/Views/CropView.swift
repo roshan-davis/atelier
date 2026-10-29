@@ -429,20 +429,8 @@ struct CropPanel: View {
                 .buttonStyle(.borderless)
                 .help(crop.lockedAspect == nil ? "Lock the aspect ratio" : "Unlock the aspect ratio")
             }
-            HStack(spacing: 8) {
-                Text("Angle")
-                    .frame(width: 78, alignment: .leading)
-                    .contentShape(Rectangle())
-                    .onTapGesture(count: 2) { setAngle(0) }
-                    .help("Double-click to reset")
-                DevelopSlider(value: Binding(get: { crop.angle }, set: { setAngle($0) }),
-                              range: -45...45, step: 0.1, origin: 0, gradient: nil)
-                Text(String(format: "%.1f°", crop.angle))
-                    .monospacedDigit()
-                    .foregroundStyle(crop.angle == 0 ? .secondary : .primary)
-                    .frame(width: 44, alignment: .trailing)
-            }
-            .font(.callout)
+            SliderRow(label: "Angle", value: Binding(get: { crop.angle }, set: { setAngle($0) }),
+                      range: -45...45, step: 0.1, format: { String(format: "%.1f°", $0) })
             HStack(spacing: 6) {
                 Button { develop.setCrop(crop.turned(clockwise: false)) } label: {
                     Image(systemName: "rotate.left")
