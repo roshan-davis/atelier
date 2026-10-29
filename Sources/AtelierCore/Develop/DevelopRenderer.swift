@@ -87,7 +87,6 @@ public final class DevelopRenderer: @unchecked Sendable {
         if case .fullSaturation(let region) = preview { settings[region.saturation] = 100 }
         var image = input
         let extent = input.extent
-        let longEdge = Double(max(extent.width, extent.height))
 
         // Highlights and shadows. CIHighlightShadowAdjust only recovers highlights, so positive
         // highlights are handled by the tone curve below.
@@ -118,13 +117,12 @@ public final class DevelopRenderer: @unchecked Sendable {
         if settings.dehaze != 0 {
             image = dehaze(image, amount: settings.dehaze / 100)
         }
-        // Clarity works on midtone local contrast with a wide radius, texture on fine detail.
+        // Clarity works on wide areas, weighted to the midtones; Texture on medium-sized detail.
         if settings.clarity != 0 {
-            image = localContrast(image, amount: settings.clarity / 100 * 0.6, radius: longEdge * 0.012, extent: extent)
+            image = LocalContrast.apply(image, amount: settings.clarity / 100, kind: LocalContrast.clarity, scale: scale)
         }
         if settings.texture != 0 {
-            image = localContrast(image, amount: settings.texture / 100 * 0.5, radius: max(1, longEdge * 0.003),
-                                  extent: extent)
+            image = LocalContrast.apply(image, amount: settings.texture / 100, kind: LocalContrast.texture, scale: scale)
         }
 
         // In Black & White the B&W Mix decides the grays, so vibrance and saturation do nothing.
@@ -232,20 +230,6 @@ public final class DevelopRenderer: @unchecked Sendable {
     /// Removes (positive) or adds (negative) haze; see `Dehaze`.
     static func dehaze(_ image: CIImage, amount: Double) -> CIImage {
         Dehaze.apply(image, amount: amount)
-    }
-
-    /// Unsharp mask for positive amounts, a blend toward a blurred copy for negative ones.
-    static func localContrast(_ image: CIImage, amount: Double, radius: Double, extent: CGRect) -> CIImage {
-        let source = image.clampedToExtent()
-        if amount > 0 {
-            let filter = CIFilter.unsharpMask()
-            filter.inputImage = source
-            filter.radius = Float(radius)
-            filter.intensity = Float(amount)
-            return filter.outputImage?.cropped(to: extent) ?? image
-        }
-        let blurred = source.applyingGaussianBlur(sigma: radius / 2).cropped(to: extent)
-        return mix(image, blurred, amount: min(1, -amount * 1.2))
     }
 
     /// Sharpening on luminance at Amount (0...150) and Radius. Detail below its default of 25
