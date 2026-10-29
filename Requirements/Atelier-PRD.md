@@ -149,7 +149,7 @@ Rosh asked for Lightroom's graduated, radial and brush adjustments, edited throu
 - **Soft edges:** feathered masks keep their in-between values all the way to the render, so a 50% feather looks like one.
 - **Combining parts:** Add unions a part into the mask, Subtract cuts it out, and Intersect keeps only where both overlap.
 - **Adjustments per mask:** under the list, the selected mask's sliders, as in Lightroom: Amount (0 to 200%, scales all of the mask's sliders), Temp, Tint, Exposure, Contrast, Highlights, Shadows, Whites, Blacks, Texture, Clarity, Dehaze, Saturation, Sharpness and Noise, plus Invert. Double-click a slider's name to reset it; Reset Sliders clears them all.
-- **Where it sits in the pipeline:** masks are applied after the global adjustments and before vignetting and grain (pipeline step 6). Masks are tied to the photo, not to the frame: they stay on the same spot when the crop, straighten, rotation or flips change.
+- **Where it sits in the pipeline:** masks are applied after the global adjustments and before vignetting and grain (pipeline step 7). Masks are tied to the photo, not to the frame: they stay on the same spot when the crop, straighten, rotation or flips change.
 - **History and storage:** every change is a history step (New Mask: Linear Gradient, Mask 1 Exposure +0.50, Edit Mask 1). Masks are saved in the develop settings JSON with the photo, copied by Copy and Paste Settings and by virtual copies, and optional in presets (the Masks part, off by default, as Lightroom's Masking checkbox). They render in previews, exports, Edit In and AI.
 - **Later:** Select Sky and Background, color range, and Lightroom's Auto Mask for the brush.
 
@@ -230,7 +230,7 @@ Rosh asked for Lightroom-style presets: save your own edits as a preset into a g
   - **Landscape:** Vivid Landscape, Golden Hour (warm highlights, lifted orange and yellow), Blue Hour (cool, deep blues), Deep Greens (richer, darker greens), Haze Cut (dehaze and clarity for distant scenes).
   - **Vintage & Matte:** Faded Matte, Seventies (warm, yellow-green cast, low contrast), Washed Teal, Cross Process (green shadows, yellow highlights, high saturation), Dusty Pastel.
   - **Cinematic:** Teal & Orange, Bleach Bypass (low saturation, high contrast), Noir (deep B&W with a strong vignette), Night City (cool shadows, magenta-teal grade), Warm Drama.
-- **Black & White mix (needed for good B&W presets):** today B&W is Saturation −100, and HSL runs after Saturation (pipeline step 4), so a B&W photo can't brighten skies or darken skin like a colored filter. The Black & White pack therefore adds Lightroom's Black & White treatment: a Treatment switch (Color / Black & White) at the top of Basic (V toggles it); in Black & White, the HSL / Color panel shows the B&W Mix in place of HSL: eight sliders (Red to Magenta, −100 to 100) that set how bright each color becomes in gray. Converting happens in step 4, in place of HSL, so Color Grading can still tone the result (Selenium, Sepia); Vibrance and Saturation have no effect in Black & White, as in Lightroom. It is part of the develop settings and a new preset part, "Treatment & B&W Mix". The existing "Black & White" Atelier preset keeps working as before.
+- **Black & White mix (needed for good B&W presets):** today B&W is Saturation −100, and HSL runs after Saturation (pipeline step 5), so a B&W photo can't brighten skies or darken skin like a colored filter. The Black & White pack therefore adds Lightroom's Black & White treatment: a Treatment switch (Color / Black & White) at the top of Basic (V toggles it); in Black & White, the HSL / Color panel shows the B&W Mix in place of HSL: eight sliders (Red to Magenta, −100 to 100) that set how bright each color becomes in gray. Converting happens in step 5, in place of HSL, so Color Grading can still tone the result (Selenium, Sepia); Vibrance and Saturation have no effect in Black & White, as in Lightroom. It is part of the develop settings and a new preset part, "Treatment & B&W Mix". The existing "Black & White" Atelier preset keeps working as before.
 - **Storage:** your presets stay in one file, `~/Library/Application Support/Atelier/Presets.json`, shared by every catalog. Each preset keeps its name, group, included parts and settings. Exposure became its own part (it used to be inside Tone); presets saved before that keep Exposure. Built-in presets live in the app and keep fixed IDs so photos and import settings that use them never break. Which groups are open and which packs are hidden are app preferences.
 - **Later:** importing Lightroom .xmp/.lrtemplate develop presets and exporting a group to share; Favorites; preset thumbnails generated from the open photo; Adaptive (AI mask) presets.
 
@@ -291,14 +291,15 @@ Edits are a versioned list of parameters stored in the catalog, rendered live on
 
 ### Pipeline order
 
-1. RAW decode and demosaic (CIRAWFilter): white balance, exposure baseline, noise reduction, profile lens corrections, then the profile (camera-matched base look or Apple Neutral), manual lens corrections and the Transform (Upright and the perspective sliders).
-2. Linear-light global adjustments: exposure, highlights, shadows, whites, blacks.
-3. Tone: contrast, tone curve (parametric and point, per channel).
-4. Color: vibrance, saturation, HSL (8 hues), color grading (shadows, midtones, highlights).
-5. Detail: sharpening with masking, texture, clarity, dehaze.
-6. Local adjustments: each mask carries its own subset of steps 2 to 5.
-7. Geometry: crop, straighten, post-crop vignette.
-8. Output transform: working space (linear Rec. 2020 or ProPhoto) to display or export space.
+1. RAW decode and demosaic (CIRAWFilter): white balance, exposure, profile lens corrections, then the profile (camera-matched base look or Apple Neutral), manual lens corrections and the Transform (Upright and the perspective sliders). Non-RAW files get white balance and exposure (with its highlight roll-off) here.
+2. Geometry: crop, straighten, rotation and flips, so everything after follows the crop.
+3. Tone, in a perceptual (gamma-encoded) space: Highlights and Shadows (local), then one hue-preserving tone curve for Contrast, Whites, Blacks, the region sliders and the RGB curve, then the Red, Green and Blue curves per channel.
+4. Presence: Dehaze, Clarity, Texture.
+5. Color: Vibrance, Saturation, then HSL or the B&W Mix, and color grading (one color cube).
+6. Detail: noise reduction, then sharpening with masking.
+7. Local adjustments: each mask carries its own subset of steps 3 to 6.
+8. Effects: post-crop vignetting, grain.
+9. Output transform: working space (linear Rec. 2020) to display or export space.
 
 ### Tools and requirements
 

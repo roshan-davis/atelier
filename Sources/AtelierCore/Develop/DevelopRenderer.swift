@@ -5,8 +5,9 @@ import ImageIO
 import UniformTypeIdentifiers
 
 /// Renders develop settings on the GPU with Core Image, following the PRD pipeline order:
-/// RAW decode with white balance and exposure, then highlights and shadows, tone (contrast,
-/// whites, blacks) in a perceptual space, then color (vibrance, saturation).
+/// RAW decode with white balance and exposure, geometry, then highlights and shadows and the
+/// tone curve in a perceptual space, presence (dehaze, clarity, texture), color, detail,
+/// masks and effects.
 public final class DevelopRenderer: @unchecked Sendable {
     public static let shared = DevelopRenderer()
 
