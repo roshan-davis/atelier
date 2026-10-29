@@ -13,7 +13,7 @@ struct MaskEditorView: View {
     let display: NSImage
     /// The full-size photo's cropped size, so 100% is one photo pixel per point as elsewhere.
     let pixelSize: CGSize?
-    @Binding var zoom: ZoomLevel
+    @ObservedObject var zoom: ZoomState
     var onReport: (ZoomReport) -> Void
 
     private typealias Point = DevelopSettings.MaskPoint
@@ -47,7 +47,7 @@ struct MaskEditorView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let layout = navigator.layout(size: geometry.size, document: pixelSize ?? image.size, zoom: zoom)
+            let layout = navigator.layout(size: geometry.size, document: pixelSize ?? image.size, zoom: zoom.level)
             let rect = layout.rect
             let space = MaskSpace(sourceSize: develop.sourceSize ?? image.size, crop: develop.crop, rect: rect,
                                   outputSize: image.size)
@@ -102,7 +102,7 @@ struct MaskEditorView: View {
             .onChange(of: geometry.frame(in: .global), initial: true) { _, frame in navigator.frame = frame }
         }
         .onAppear {
-            navigator.setZoom = { level in if zoom != level { zoom = level } }
+            navigator.setZoom = { [zoom] level in if zoom.level != level { zoom.level = level } }
             navigator.install()
         }
         .onDisappear { navigator.remove() }

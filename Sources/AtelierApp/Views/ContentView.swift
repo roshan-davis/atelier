@@ -33,7 +33,7 @@ struct ContentView: View {
                             case .grid:
                                 GridView(model: model, background: theme.gridBackground)
                             case .loupe:
-                                LoupeView()
+                                LoupeView(zoom: model.zoomState)
                             case .develop:
                                 DevelopImageView(develop: model.develop)
                             }

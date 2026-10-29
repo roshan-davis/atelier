@@ -111,8 +111,16 @@ final class LibraryModel: ObservableObject {
     /// Bumped when previews are generated so visible cells reload their images.
     @Published var previewRevision = 0
     /// Zoom shared by loupe and develop; kept when moving between photos, as in Lightroom.
-    @Published var zoom: ZoomLevel = .fit
-    @Published var zoomReport = ZoomReport()
+    /// Not published here: only the photo and the zoom bar watch it.
+    let zoomState = ZoomState()
+    var zoom: ZoomLevel {
+        get { zoomState.level }
+        set { zoomState.level = newValue }
+    }
+    var zoomReport: ZoomReport {
+        get { zoomState.report }
+        set { zoomState.report = newValue }
+    }
     @Published var showingShortcuts = false
     /// The Cull view, while open.
     @Published var cullSession: CullModel?
@@ -458,6 +466,8 @@ final class LibraryModel: ObservableObject {
 
     func refreshVolumes() {
         perform { try $0.refreshVolumes() }
+        // Photos on a drive that just came back can be read now.
+        previewScheduler.retryFailed()
     }
 
     /// Settings > Metadata: keeps sidecars in step with catalog edits, quietly.

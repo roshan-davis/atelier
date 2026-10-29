@@ -24,7 +24,7 @@ extension LibraryModel {
         }
         // Save shortly after anything changes. A throttle rather than a debounce, so a long import's
         // stream of progress updates can't hold the save off; stopping in Xcode skips willTerminate.
-        sessionObserver = objectWillChange.sink { [weak self] _ in
+        sessionObserver = objectWillChange.merge(with: zoomState.objectWillChange).sink { [weak self] _ in
             MainActor.assumeIsolated { self?.scheduleSessionSave() }
         }
     }
