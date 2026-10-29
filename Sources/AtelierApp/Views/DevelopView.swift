@@ -837,8 +837,14 @@ struct ParameterSlider: View {
                 .lineLimit(1)
                 .frame(width: 78, alignment: .leading)
                 .contentShape(Rectangle())
-                .onTapGesture(count: 2) { develop.reset(parameter) }
-                .help("Double-click to reset")
+                .onTapGesture(count: 2) {
+                    if NSEvent.modifierFlags.contains(.shift), develop.canAuto(parameter) {
+                        develop.autoTone(only: parameter)
+                    } else {
+                        develop.reset(parameter)
+                    }
+                }
+                .help(develop.canAuto(parameter) ? "Double-click to reset; Shift-double-click for Auto" : "Double-click to reset")
             DevelopSlider(value: binding, range: develop.sliderRange(parameter), step: step,
                           origin: develop.sliderDefault(parameter), gradient: trackGradient,
                           logarithmic: parameter == .temperature && develop.isRAW,

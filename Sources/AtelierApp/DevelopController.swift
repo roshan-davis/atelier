@@ -472,6 +472,40 @@ final class DevelopController: ObservableObject {
         }
     }
 
+    // MARK: Auto
+
+    /// Auto is measuring the photo.
+    @Published private(set) var isFindingAutoTone = false
+
+    /// Sliders with an Auto value (Shift-double-click on the name, as in Lightroom).
+    func canAuto(_ parameter: DevelopSettings.Parameter) -> Bool {
+        parameter == .temperature || parameter == .tint || AutoTone.parameters.contains(parameter)
+    }
+
+    /// Basic > Auto, or with `only` that one slider. Temp and Tint run Auto white balance.
+    func autoTone(only parameter: DevelopSettings.Parameter? = nil) {
+        if parameter == .temperature || parameter == .tint {
+            findWhiteBalance()
+            return
+        }
+        guard let session, let assetID, !isFindingAutoTone else { return }
+        let settings = self.settings
+        isFindingAutoTone = true
+        queue.async {
+            let found = AutoTone.apply(session: session, settings: settings, only: parameter)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    self.isFindingAutoTone = false
+                    guard self.assetID == assetID, let found, found != self.settings else { return }
+                    for tone in AutoTone.parameters where parameter == nil || parameter == tone {
+                        self.settings[tone] = found[tone]
+                    }
+                    self.changed(step: parameter.map { "Auto \(Self.parameterName($0))" } ?? "Auto Tone")
+                }
+            }
+        }
+    }
+
     func set(_ parameter: DevelopSettings.Parameter, to value: Double) {
         guard assetID != nil else { return }
         settings[parameter] = value
