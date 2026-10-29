@@ -75,8 +75,7 @@ final class LibraryModel: ObservableObject {
     @Published var focusedID: Int64? {
         didSet {
             guard focusedID != oldValue else { return }
-            // Every photo opens at Fit, however the last one was zoomed.
-            if zoom != .fit { zoom = .fit }
+            zoomForNextPhoto(leaving: oldValue)
             reloadDetail()
             if mode == .develop { develop.open(focusedID) }
         }
@@ -112,7 +111,8 @@ final class LibraryModel: ObservableObject {
     private var shownImportGroup: Int64?
     /// Bumped when previews are generated so visible cells reload their images.
     @Published var previewRevision = 0
-    /// Zoom shared by loupe and develop; back to Fit when moving to another photo.
+    /// Zoom shared by loupe and develop; what happens on moving to another photo is a setting
+    /// (see `ZoomOnPhotoChange`).
     /// Not published here: only the photo and the zoom bar watch it.
     let zoomState = ZoomState()
     var zoom: ZoomLevel {
@@ -342,6 +342,42 @@ final class LibraryModel: ObservableObject {
         } else {
             zoom = zoomReport.isZoomedPastFit ? .fit : .percent(Self.clickZoomPercent)
         }
+    }
+
+    /// Settings > Develop > "When you move to another photo": open it at Fit or Fill (the
+    /// default, at Fit), return to the zoom it was left at, or keep the zoom as Lightroom does.
+    enum ZoomOnPhotoChange: String, CaseIterable {
+        case reset, remember, keep
+        nonisolated static let key = "zoom.onPhotoChange"
+        nonisolated static let resetLevelKey = "zoom.resetLevel"
+
+        nonisolated static var current: ZoomOnPhotoChange {
+            UserDefaults.standard.string(forKey: key).flatMap { ZoomOnPhotoChange(rawValue: $0) } ?? .reset
+        }
+
+        /// Fit or Fill, for `reset` and for photos `remember` hasn't seen zoomed.
+        nonisolated static var resetLevel: ZoomLevel {
+            UserDefaults.standard.string(forKey: resetLevelKey) == "fill" ? .fill : .fit
+        }
+    }
+
+    /// Each photo's zoom when it was left, for "Return to its last zoom". Kept until quit.
+    private var zoomByPhoto: [Int64: ZoomLevel] = [:]
+
+    private func zoomForNextPhoto(leaving previous: Int64?) {
+        // The first photo after launch keeps the zoom the session restored.
+        guard let previous else { return }
+        let next: ZoomLevel
+        switch ZoomOnPhotoChange.current {
+        case .keep:
+            return
+        case .reset:
+            next = ZoomOnPhotoChange.resetLevel
+        case .remember:
+            zoomByPhoto[previous] = zoom
+            next = focusedID.flatMap { zoomByPhoto[$0] } ?? ZoomOnPhotoChange.resetLevel
+        }
+        if zoom != next { zoom = next }
     }
 
     /// Settings > Develop: the zoom a click or Z goes to (Lightroom's 1:1 by default).
