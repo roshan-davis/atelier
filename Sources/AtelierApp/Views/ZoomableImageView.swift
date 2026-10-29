@@ -35,6 +35,36 @@ final class ZoomState: ObservableObject {
     var pendingCenter: CGPoint?
     /// The visible center of the photo shown now, from the photo view.
     var currentCenter: (@MainActor () -> CGPoint?)?
+    /// Centers the photo view on a point (0...1 across and down the photo), zooming in first
+    /// when the whole photo is in view. Set by the photo view; the Navigator calls it.
+    var focus: (@MainActor (CGPoint) -> Void)?
+    /// The part of the photo in view, for the Navigator's rectangle.
+    let viewport = ZoomViewport()
+}
+
+/// The part of the photo the photo view shows. Its own object so that scrolling redraws only
+/// the Navigator's rectangle, not the photo view or the zoom bar.
+@MainActor
+final class ZoomViewport: ObservableObject {
+    /// 0...1 across and down the photo; nil when the whole photo is in view or no photo view
+    /// is showing.
+    @Published private(set) var visible: CGRect?
+    private var owner: ObjectIdentifier?
+
+    func update(_ rect: CGRect?, from source: AnyObject) {
+        owner = ObjectIdentifier(source)
+        if let rect, let visible, abs(rect.minX - visible.minX) < 0.0005, abs(rect.minY - visible.minY) < 0.0005,
+           abs(rect.width - visible.width) < 0.0005, abs(rect.height - visible.height) < 0.0005 { return }
+        if rect != visible { visible = rect }
+    }
+
+    /// Clears the rectangle when `source` was the last photo view to report, so a view that
+    /// goes away doesn't wipe out the one that replaced it.
+    func clear(from source: AnyObject) {
+        guard owner == ObjectIdentifier(source) else { return }
+        owner = nil
+        if visible != nil { visible = nil }
+    }
 }
 
 /// A photo that zooms with pinch, the zoom bar, ⌘/⌥-scroll or a click, and pans by dragging.
@@ -59,6 +89,8 @@ struct ZoomableImageView: NSViewRepresentable {
             if zoom.level != level { zoom.level = level }
         }
         zoom.currentCenter = { [weak view] in view?.relativeCenter }
+        zoom.focus = { [weak view] center in view?.focus(on: center) }
+        view.viewport = zoom.viewport
         // Only a new photo takes the position: ZoomState changes reach this view before the
         // window passes it the next photo, and the photo still shown must not use it.
         if let center = zoom.pendingCenter, let image, image !== view.shownImage {
@@ -85,6 +117,10 @@ final class ZoomScrollView: NSScrollView {
     var onZoomChange: ((ZoomLevel) -> Void)?
     var onReport: ((ZoomReport) -> Void)?
     var menuProvider: (() -> NSMenu?)?
+    /// Told what part of the photo is in view, for the Navigator.
+    weak var viewport: ZoomViewport? {
+        didSet { if viewport !== oldValue { reportVisible() } }
+    }
 
     init() {
         super.init(frame: .zero)
@@ -102,6 +138,9 @@ final class ZoomScrollView: NSScrollView {
         contentView.drawsBackground = false
         NotificationCenter.default.addObserver(self, selector: #selector(didEndMagnify),
                                                name: NSScrollView.didEndLiveMagnifyNotification, object: self)
+        contentView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(self, selector: #selector(visibleDidChange),
+                                               name: NSView.boundsDidChangeNotification, object: contentView)
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
@@ -139,6 +178,51 @@ final class ZoomScrollView: NSScrollView {
         let visible = contentView.bounds
         return CGPoint(x: min(1, max(0, visible.midX / documentSize.width)),
                        y: min(1, max(0, visible.midY / documentSize.height)))
+    }
+
+    /// Scrolls so `center` (0...1 across and down the photo) is in the middle, for the
+    /// Navigator. From Fit it first zooms to the click zoom, as Lightroom's Navigator does.
+    func focus(on center: CGPoint) {
+        guard documentSize.width > 0, documentSize.height > 0 else { return }
+        if !canPan {
+            let next = ZoomLevel.percent(LibraryModel.clickZoomPercent)
+            applyLevel(next, anchor: nil)
+            onZoomChange?(next)
+        }
+        scroll(toRelative: center)
+    }
+
+    @objc private func visibleDidChange() {
+        reportVisible()
+    }
+
+    /// Tells the Navigator what part of the photo is in view, after the current layout pass.
+    private func reportVisible() {
+        guard let viewport else { return }
+        var visible: CGRect?
+        if documentSize.width > 0, documentSize.height > 0 {
+            let shown = contentView.bounds.intersection(CGRect(origin: .zero, size: documentSize))
+            if !shown.isNull {
+                let rect = CGRect(x: shown.minX / documentSize.width, y: shown.minY / documentSize.height,
+                                  width: shown.width / documentSize.width, height: shown.height / documentSize.height)
+                if rect.width < 0.995 || rect.height < 0.995 { visible = rect }
+            }
+        }
+        DispatchQueue.main.async { [weak self, weak viewport] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                viewport?.update(visible, from: self)
+            }
+        }
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard window == nil else { return reportVisible() }
+        guard let viewport else { return }
+        DispatchQueue.main.async { [weak viewport] in
+            MainActor.assumeIsolated { viewport?.clear(from: self) }
+        }
     }
 
     func applyPendingCenter() {
@@ -212,6 +296,7 @@ final class ZoomScrollView: NSScrollView {
         }
         applyPendingCenter()
         report()
+        reportVisible()
     }
 
     @objc private func didEndMagnify() {

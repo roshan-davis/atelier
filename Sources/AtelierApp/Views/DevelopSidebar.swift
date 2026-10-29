@@ -1,3 +1,4 @@
+import AppKit
 import AtelierCore
 import SwiftUI
 
@@ -41,7 +42,7 @@ struct DevelopSidebar: View {
             SidebarSection(title: "Navigator", isExpanded: isExpanded("navigator")) {
                 EmptyView()
             } content: {
-                NavigatorView(develop: develop)
+                NavigatorView(develop: develop, zoom: model.zoomState)
             }
             Divider()
             // A plain stack rather than a List: List rebuilds its rows, which made the presets'
@@ -271,19 +272,24 @@ struct SidebarIconButtonStyle: ButtonStyle {
 }
 
 /// Lightroom Classic's Navigator: the open photo, small. Resting the pointer on a preset shows
-/// that preset here, so the big photo only changes when the preset is clicked.
+/// that preset here, so the big photo only changes when the preset is clicked. While the photo
+/// is zoomed, a rectangle shows the part in view; click or drag here to move around the photo.
 private struct NavigatorView: View {
     @ObservedObject var develop: DevelopController
+    let zoom: ZoomState
 
     var body: some View {
         let previewing = develop.previewingPreset
+        let image = (previewing != nil ? develop.navigatorPreview : nil) ?? develop.image
         ZStack(alignment: .bottomLeading) {
             Color.black.opacity(0.15)
-            if let image = (previewing != nil ? develop.navigatorPreview : nil) ?? develop.image {
+            if let image {
                 Image(nsImage: image)
                     .resizable()
                     .interpolation(.high)
                     .aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                NavigatorViewport(viewport: zoom.viewport, zoom: zoom, imageSize: image.size)
             }
             if let previewing {
                 Text(develop.navigatorPreview == nil ? "Previewing \(previewing.name)…" : previewing.name)
@@ -293,11 +299,90 @@ private struct NavigatorView: View {
                     .background(Color.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 4))
                     .foregroundStyle(.white)
                     .padding(6)
+                    .allowsHitTesting(false)
             }
         }
         .frame(maxWidth: .infinity)
         .frame(height: 150)
         .clipShape(RoundedRectangle(cornerRadius: 4))
-        .help("Rest the pointer on a preset to preview it here; click the preset to apply it")
+        .help("Click or drag to move around the photo; rest the pointer on a preset to preview it here")
+    }
+}
+
+/// The Navigator's rectangle over the part of the photo in view, and the click and drag that
+/// move it. Watches only the viewport, so scrolling the photo redraws just this.
+private struct NavigatorViewport: View {
+    @ObservedObject var viewport: ZoomViewport
+    let zoom: ZoomState
+    let imageSize: CGSize
+    /// From the pointer to the middle of the rectangle, kept while dragging so a rectangle
+    /// grabbed off-center doesn't jump under the pointer.
+    @State private var grab: CGPoint?
+    @State private var dragging = false
+
+    var body: some View {
+        GeometryReader { geometry in
+            let photo = Self.fitted(imageSize, in: geometry.size)
+            ZStack(alignment: .topLeading) {
+                Color.clear
+                if let visible = viewport.visible {
+                    let rect = CGRect(x: photo.minX + visible.minX * photo.width, y: photo.minY + visible.minY * photo.height,
+                                      width: visible.width * photo.width, height: visible.height * photo.height)
+                    ZStack {
+                        Rectangle().strokeBorder(Color.black.opacity(0.55), lineWidth: 3)
+                        Rectangle().strokeBorder(Color.white, lineWidth: 1.5).padding(0.75)
+                    }
+                    .frame(width: max(4, rect.width), height: max(4, rect.height))
+                    .offset(x: rect.minX, y: rect.minY)
+                }
+            }
+            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
+            .contentShape(Path(photo))
+            .gesture(DragGesture(minimumDistance: 0)
+                .onChanged { drag in
+                    let point = Self.relative(drag.location, in: photo)
+                    if grab == nil {
+                        if let visible = viewport.visible, visible.contains(point) {
+                            grab = CGPoint(x: visible.midX - point.x, y: visible.midY - point.y)
+                        } else {
+                            grab = .zero
+                        }
+                    }
+                    if !dragging {
+                        dragging = true
+                        NSCursor.closedHand.push()
+                    }
+                    let offset = grab ?? .zero
+                    zoom.focus?(CGPoint(x: min(1, max(0, point.x + offset.x)), y: min(1, max(0, point.y + offset.y))))
+                }
+                .onEnded { _ in
+                    grab = nil
+                    if dragging { NSCursor.pop() }
+                    dragging = false
+                })
+            .onContinuousHover { phase in
+                guard !dragging else { return }
+                if case .active(let location) = phase, photo.contains(location) {
+                    let inside = viewport.visible?.contains(Self.relative(location, in: photo)) == true
+                    (inside ? NSCursor.openHand : NSCursor.pointingHand).set()
+                } else {
+                    NSCursor.arrow.set()
+                }
+            }
+        }
+    }
+
+    /// Where an image of `size` sits when fitted into `bounds`, centered.
+    private static func fitted(_ size: CGSize, in bounds: CGSize) -> CGRect {
+        guard size.width > 0, size.height > 0 else { return CGRect(origin: .zero, size: bounds) }
+        let scale = min(bounds.width / size.width, bounds.height / size.height)
+        let width = size.width * scale, height = size.height * scale
+        return CGRect(x: (bounds.width - width) / 2, y: (bounds.height - height) / 2, width: width, height: height)
+    }
+
+    /// `location` as 0...1 across and down `photo`.
+    private static func relative(_ location: CGPoint, in photo: CGRect) -> CGPoint {
+        CGPoint(x: min(1, max(0, (location.x - photo.minX) / max(1, photo.width))),
+                y: min(1, max(0, (location.y - photo.minY) / max(1, photo.height))))
     }
 }

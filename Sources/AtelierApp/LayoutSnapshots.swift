@@ -126,6 +126,11 @@ enum LayoutSnapshots {
         try? await Task.sleep(for: .seconds(1))
         await capture(AnyView(DevelopSidebar(develop: develop).environmentObject(model)), size: CGSize(width: 280, height: 1100),
                       to: folder.appendingPathComponent("presets-panel-280x1100.png"))
+        // Zoomed in: the Navigator outlines the part of the photo in view.
+        model.zoomState.viewport.update(CGRect(x: 0.35, y: 0.25, width: 0.4, height: 0.45), from: develop)
+        await capture(AnyView(DevelopSidebar(develop: develop).environmentObject(model)), size: CGSize(width: 280, height: 400),
+                      to: folder.appendingPathComponent("navigator-zoomed-280x400.png"))
+        model.zoomState.viewport.clear(from: develop)
         // Hovering a preset previews it in the Navigator only.
         if let noir = develop.presets.first(where: { $0.name == "Noir" }) {
             develop.previewPreset(noir)
