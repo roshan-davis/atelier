@@ -74,7 +74,7 @@ final class ZoomViewport: ObservableObject {
     }
 }
 
-/// A photo that zooms with pinch, the zoom bar, ⌘/⌥-scroll or a click, and pans by dragging.
+/// A photo that zooms with pinch, the zoom bar, ⌘/⌥-scroll or a double-click, and pans by dragging.
 struct ZoomableImageView: NSViewRepresentable {
     let image: NSImage?
     /// Size of the full-resolution photo; the displayed image may be a smaller proxy.
@@ -495,7 +495,8 @@ final class ZoomCanvasView: NSView {
             if bounds.width > 0, bounds.height > 0, bounds.contains(point) {
                 onPick(CGPoint(x: point.x / bounds.width, y: point.y / bounds.height))
             }
-        } else if event.clickCount == 1 {
+        } else if event.clickCount == 2 {
+            // Double-click, not a single click, so a stray click never resets the zoom (Rosh, Oct 29, 2026).
             scrollView?.toggleZoom(at: convert(event.locationInWindow, from: nil))
         }
         dragStart = nil
