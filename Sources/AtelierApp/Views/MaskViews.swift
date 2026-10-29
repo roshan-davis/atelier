@@ -105,6 +105,8 @@ struct MaskEditorView: View {
             }
         }
         .onAppear {
+            // Open on the spot the Develop view was zoomed in on.
+            if let center = zoom.viewport.lastCenter { navigator.center = center }
             navigator.setZoom = { [zoom] level in if zoom.level != level { zoom.level = level } }
             zoom.focus = { [weak navigator] center in navigator?.focus(on: center) }
             navigator.install()

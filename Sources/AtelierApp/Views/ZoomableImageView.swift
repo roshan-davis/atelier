@@ -56,10 +56,14 @@ final class ZoomViewport: ObservableObject {
     /// 0...1 across and down the photo; nil when the whole photo is in view or no photo view
     /// is showing.
     @Published private(set) var visible: CGRect?
+    /// The middle of the part in view, 0...1 across and down the photo; nil at Fit. Unlike
+    /// `visible` it outlasts the photo view, so the next one (after Crop or Masking) can take it.
+    private(set) var lastCenter: CGPoint?
     private var owner: ObjectIdentifier?
 
     func update(_ rect: CGRect?, from source: AnyObject) {
         owner = ObjectIdentifier(source)
+        lastCenter = rect.map { CGPoint(x: $0.midX, y: $0.midY) }
         if let rect, let visible, abs(rect.minX - visible.minX) < 0.0005, abs(rect.minY - visible.minY) < 0.0005,
            abs(rect.width - visible.width) < 0.0005, abs(rect.height - visible.height) < 0.0005 { return }
         if rect != visible { visible = rect }

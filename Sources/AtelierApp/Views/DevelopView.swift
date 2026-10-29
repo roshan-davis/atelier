@@ -88,6 +88,51 @@ struct DevelopImageView: View {
         }
         .onAppear { develop.open(model.focusedID) }
         .onChange(of: develop.compareMode) { old, new in compareModeChanged(from: old, to: new) }
+        .onChange(of: develop.isCropping) { _, cropping in croppingChanged(cropping) }
+        .onChange(of: develop.isMasking) { _, masking in
+            // Back from Masking at the same zoom: keep the spot it was panned to.
+            if !masking { restoreZoomCenter(model.zoomState.viewport.lastCenter) }
+        }
+    }
+
+    /// The zoomed spot when the crop tool opened (it always shows the whole photo), and the crop then.
+    private struct ZoomBeforeCrop {
+        var center: CGPoint
+        var crop: DevelopSettings.Crop
+        var assetID: Int64?
+    }
+    @State private var zoomBeforeCrop: ZoomBeforeCrop?
+
+    /// Closing the crop tool returns to the spot you were zoomed in on, moved with the new crop,
+    /// instead of the photo's top-left corner.
+    private func croppingChanged(_ cropping: Bool) {
+        if cropping {
+            zoomBeforeCrop = model.zoomState.viewport.lastCenter.map {
+                ZoomBeforeCrop(center: $0, crop: develop.crop, assetID: develop.assetID)
+            }
+            return
+        }
+        guard let saved = zoomBeforeCrop else { return }
+        zoomBeforeCrop = nil
+        guard saved.assetID == develop.assetID, let sourceSize = develop.sourceSize else { return }
+        let old = saved.crop, new = develop.crop
+        let oldSize = old.outputSize(sourceSize), newSize = new.outputSize(sourceSize)
+        guard oldSize.width > 0, oldSize.height > 0, newSize.width > 0, newSize.height > 0 else { return }
+        let source = old.sourcePoint(fromOutput: CGPoint(x: saved.center.x * oldSize.width,
+                                                         y: saved.center.y * oldSize.height), sourceSize: sourceSize)
+        let point = new.outputPoint(fromSource: source, sourceSize: sourceSize)
+        restoreZoomCenter(CGPoint(x: min(1, max(0, point.x / newSize.width)),
+                                  y: min(1, max(0, point.y / newSize.height))))
+    }
+
+    /// Hands `center` to the photo view that is about to replace a tool's view. It exists by
+    /// now, unsized, and takes the spot once it has a size (as for the compare views).
+    private func restoreZoomCenter(_ center: CGPoint?) {
+        // Only for the plain photo view; another tool opening instead keeps its own spot.
+        guard let center, !develop.isCropping, !develop.isMasking, !develop.isAIOpen, !develop.isGuiding,
+              !develop.isPickingWhiteBalance, develop.compareMode == .off else { return }
+        model.zoomState.restoreCenter = center
+        model.zoomState.objectWillChange.send()
     }
 
     /// The zoom and spot from before a compare view opened, brought back when it closes.
