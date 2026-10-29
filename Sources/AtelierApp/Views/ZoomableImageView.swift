@@ -60,7 +60,9 @@ struct ZoomableImageView: NSViewRepresentable {
             if zoom.level != level { zoom.level = level }
         }
         zoom.currentCenter = { [weak view] in view?.relativeCenter }
-        if let center = zoom.pendingCenter {
+        // Only a new photo takes the position: ZoomState changes reach this view before the
+        // window passes it the next photo, and the photo still shown must not use it.
+        if let center = zoom.pendingCenter, let image, image !== view.shownImage {
             ZoomTrace.log("updateNSView takes pendingCenter \(center)")
             view.pendingCenter = center
             zoom.pendingCenter = nil
@@ -108,7 +110,11 @@ final class ZoomScrollView: NSScrollView {
 
     // MARK: Content
 
+    /// The image last passed to `setImage`.
+    private(set) var shownImage: NSImage?
+
     func setImage(_ image: NSImage?, pixelSize: CGSize?) {
+        shownImage = image
         canvas.setImage(image)
         ZoomTrace.log("setImage image=\(ZoomTrace.size(image?.size)) pixelSize=\(ZoomTrace.size(pixelSize)) bounds=\(ZoomTrace.size(bounds.size)) doc=\(ZoomTrace.size(documentSize)) level=\(level) mag=\(magnification) center=\(String(describing: relativeCenter))")
         guard let image, image.size.width > 0, image.size.height > 0 else { return }
