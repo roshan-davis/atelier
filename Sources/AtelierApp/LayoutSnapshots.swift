@@ -26,7 +26,10 @@ enum LayoutSnapshots {
         model.mode = .develop
         // Some edits, so sliders sit away from their defaults as they would on a real photo.
         for (parameter, value) in [(DevelopSettings.Parameter.exposure, 0.6), (.contrast, 25), (.dehaze, -20),
-                                   (.vignette, -30), (.grain, 40)] {
+                                   (.vignette, -30), (.grain, 40),
+                                   // Teal shadows, orange highlights: the pucks should sit on those hues.
+                                   (.gradeShadowsHue, 200), (.gradeShadowsSat, 40),
+                                   (.gradeHighlightsHue, 35), (.gradeHighlightsSat, 30)] {
             model.develop.set(parameter, to: value)
         }
         try? await Task.sleep(for: .seconds(3))
