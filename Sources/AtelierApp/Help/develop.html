@@ -106,12 +106,14 @@
 
 <h2 id="panels">Panels</h2>
 <ul>
-  <li><b>Click a header</b> to open or fold a panel. Atelier remembers which are open.</li>
+  <li><b>Click a header band</b> to open or fold a panel. Atelier remembers which are open. The left column's sections (Navigator, Presets, Snapshots, History) work the same way.</li>
   <li><b>A blue dot</b> next to the name means the panel has edits; <b>↺</b> resets just that panel.</li>
-  <li><b>Right-click a header</b> for <span class="path">Solo Mode</span> (opening one panel closes the others), <span class="path">Expand All Panels</span> and <span class="path">Collapse All Panels</span>.</li>
+  <li><b>The on/off switch</b> (every panel but Basic) turns the whole panel off to compare, keeping its settings. While it's off the controls are dimmed but still work: moving one turns the panel back on. Exports and presets follow the switch.</li>
+  <li><b>Right-click a header</b> for <span class="path">Solo Mode</span> (opening one panel closes the others), <span class="path">Expand All Panels</span>, <span class="path">Collapse All Panels</span> and that panel's Help page.</li>
   <li><b>Drag the panel's left edge</b> to make the column wider or narrower.</li>
-  <li>Color Grading has an <b>on/off switch</b> in its header, to compare with and without it while keeping its settings.</li>
 </ul>
+<h3 id="group-reset">Reset a group</h3>
+<p>Double-click a group heading inside a panel (White Balance, Tone, Presence, Region, Sharpening, Grain…) to reset just those sliders. Or hold <kbd>⌥</kbd>: the heading reads “Reset Tone” and one click resets it, as in Lightroom.</p>
 <h3 id="sliders">Sliders</h3>
 <div class="pins pinned">
   <div class="panel">
@@ -126,7 +128,11 @@
   <li>Double-click a slider's <b>name</b> to reset it. Shift-double-click a Tone slider's name to set it automatically.</li>
   <li>Click the <b>value</b> to type a number; Return sets it, Esc cancels. Bold means changed.</li>
 </ol>
+<p>Every slider in Atelier works this way, in Masking, Crop and the AI brush too.</p>
 <p>The small tick on the track is the default; the blue fill is your change. Colored tracks (Temp, Tint, Vibrance, HSL) show which way each end goes. Hold <kbd>⌥</kbd> while dragging many sliders to see what they affect: see <a href="basic.html#option-drag">⌥-drag views</a>.</p>
+
+<h3 id="color-pickers">Color pickers</h3>
+<p>The White Balance Selector, Defringe's Fringe Color Selector and Color Grading's color picker all work the same way: click the eyedropper, then click the photo. A hint at the top of the photo says what to click (in orange if the click didn't set anything, with the reason). You can still zoom and move around while it's out, only one is out at a time, and <kbd>Esc</kbd> puts it away.</p>
 
 <h2 id="history">History and undo</h2>
 <p>Every change is a named step in <b>History</b> (Exposure +0.45, Straighten 4.0°, Preset: Punchy). History is kept with the photo, forever.</p>

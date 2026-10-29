@@ -64,7 +64,7 @@
 <figure>
   <div class="pins pinned">
   <div class="panel">
-    <div class="ph"><span class="chev">›</span>Color Grading<span class="dot"></span><span class="grow"></span><span class="switch" data-pin="5" data-pin-side="right"></span><span class="reset">↺</span></div>
+    <div class="ph"><span class="chev">›</span>Color Grading<span class="dot"></span><span class="grow"></span><span class="reset">↺</span><span class="switch" data-pin="5" data-pin-side="right"></span></div>
     <div class="pb">
       <div class="row" data-pin="1"><span class="gh" style="margin:0;flex:1">Adjust</span>
         <span class="icon on" title="3-Way" style="width:22px;height:20px">⁂</span>
@@ -76,14 +76,17 @@
       <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
         <div class="gh" style="margin:0">Midtones 👁</div>
         <img src="images/wheel-midtones.svg" alt="" style="width:118px">
-        <div class="sl" style="width:118px" data-name="" data-value="" data-at="0.5" data-gradient="bw"></div>
+        <div style="width:118px;height:3px;border-radius:2px;background:linear-gradient(90deg,#000,#fff);position:relative;margin:6px 0 4px"><i style="position:absolute;left:50%;top:-4px;width:11px;height:11px;margin-left:-5.5px;border-radius:50%;background:#fff;box-shadow:0 0 2px #000"></i></div>
+        <div style="font-size:10px;color:var(--app-text-2)">H 0 · S 0 · L 0</div>
       </div>
       <div style="display:flex;justify-content:space-around" data-pin="3">
         <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
           <div class="gh" style="margin:0">Shadows 👁</div><img src="images/wheel-shadows.svg" alt="" style="width:118px">
+          <div style="width:118px;height:3px;border-radius:2px;background:linear-gradient(90deg,#000,#fff);position:relative;margin:6px 0 4px"><i style="position:absolute;left:50%;top:-4px;width:11px;height:11px;margin-left:-5.5px;border-radius:50%;background:#fff;box-shadow:0 0 2px #000"></i></div>
           <div style="font-size:10px;color:var(--app-text-2)">H 195 · S 55 · L 0</div></div>
         <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
           <div class="gh" style="margin:0">Highlights 👁</div><img src="images/wheel-highlights.svg" alt="" style="width:118px">
+          <div style="width:118px;height:3px;border-radius:2px;background:linear-gradient(90deg,#000,#fff);position:relative;margin:6px 0 4px"><i style="position:absolute;left:50%;top:-4px;width:11px;height:11px;margin-left:-5.5px;border-radius:50%;background:#fff;box-shadow:0 0 2px #000"></i></div>
           <div style="font-size:10px;color:var(--app-text-2)">H 35 · S 55 · L 0</div></div>
       </div>
       <div class="gh" data-pin="4">Blend</div>
@@ -103,7 +106,7 @@
   <li><b>Color picker</b> (eyedropper): see <a href="#picker">Color picker</a>.</li>
   <li>In 3-Way, each wheel has a <b>Luminance</b> slider under it and its values (H · S · L) below. A single-wheel view has Hue, Saturation and Luminance sliders instead, where you can type exact numbers.</li>
   <li><b>Blending and Balance</b>, with a graph of where each range applies: see <a href="#blend">below</a>.</li>
-  <li><b>The panel switch</b> turns all Color Grading off to compare, keeping the settings.</li>
+  <li><b>The panel switch</b> turns all Color Grading off to compare, keeping the settings. Every panel but Basic has one.</li>
 </ol>
 <p><b>Luminance</b> lightens or darkens that tonal range. It rolls off toward white and black instead of clipping: lightening the shadows lifts and tints the blacks, darkening the highlights tints the whites.</p>
 <p><b>Global</b> tints the whole photo, on top of the three ranges.</p>
