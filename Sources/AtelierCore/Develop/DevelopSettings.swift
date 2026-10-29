@@ -42,6 +42,9 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
     public var upright: Upright?
     /// Transform > Constrain Crop: enlarge the corrected photo so no empty edges show.
     public var constrainCrop = false
+    /// View only, never saved: shrink the corrected photo so all of it shows, for the Guided
+    /// Upright tool (Lightroom cuts off what the correction pushes out of the frame).
+    public var showsWholePhoto = false
     /// Basic > Treatment: Black & White turns the photo gray through the B&W Mix sliders.
     public var monochrome = false
 

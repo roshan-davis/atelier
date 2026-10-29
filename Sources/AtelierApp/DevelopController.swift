@@ -808,7 +808,17 @@ final class DevelopController: ObservableObject {
     /// The Transform's mapping between the corrected photo and the output, for the guides tool.
     var lensGeometry: LensGeometry? {
         guard let sourceSize else { return nil }
-        return LensGeometry(settings: settings, size: sourceSize, focalLength35: focalLength35)
+        return LensGeometry(settings: isGuiding ? guidedViewSettings(settings) : settings, size: sourceSize,
+                            focalLength35: focalLength35)
+    }
+
+    /// What the Guided tool shows: the whole corrected photo, uncropped and zoomed out as far as
+    /// it needs, so no guide is pushed out of view. The edit itself is unchanged.
+    private func guidedViewSettings(_ settings: DevelopSettings) -> DevelopSettings {
+        var view = settings
+        view.crop = nil
+        view.showsWholePhoto = true
+        return view
     }
 
     /// An edit that changes the photo's shape, so the Before view has to follow.
@@ -1169,7 +1179,7 @@ final class DevelopController: ObservableObject {
         }
         rendering = true
         var settings = showingBefore ? beforeSettings : self.settings
-        if isGuiding { settings.crop = nil }
+        if isGuiding { settings = guidedViewSettings(settings) }
         let cropping = !isCropping
         let assetID = self.assetID
         let overlay = isMasking && showMaskOverlay ? selectedMaskID : nil

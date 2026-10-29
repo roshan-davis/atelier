@@ -88,6 +88,7 @@ extension DevelopSettings {
         key.lensProfileCorrections = lensProfileCorrections
         key.upright = upright
         key.constrainCrop = constrainCrop
+        key.showsWholePhoto = showsWholePhoto
         for parameter in Parameter.allCases
         where (parameter.panel == .lensCorrections && !parameter.isDefringe) || parameter.panel == .transform {
             key[parameter] = self[parameter]
@@ -133,7 +134,10 @@ public struct LensGeometry: Sendable {
             offsetY: settings[.transformOffsetY] / 100 * halfHeight,
             focal: Self.focal(focalLength35))
         var matrix = transform.matrix
-        if settings.constrainCrop {
+        if settings.showsWholePhoto {
+            let shrink = Self.wholeScale(matrix: matrix, halfWidth: halfWidth, halfHeight: halfHeight)
+            matrix = Matrix3.scale(shrink, shrink) * matrix
+        } else if settings.constrainCrop {
             let grow = Self.fillScale(matrix: matrix, distortion: distortion, halfWidth: halfWidth, halfHeight: halfHeight)
             matrix = Matrix3.scale(grow, grow) * matrix
         }
@@ -171,6 +175,24 @@ public struct LensGeometry: Sendable {
         let p = inverse.apply(output)
         let r2 = (p.x * p.x + p.y * p.y) / (halfWidth * halfWidth + halfHeight * halfHeight)
         return p * (1 + distortion * r2)
+    }
+
+    /// The largest scale (at most 1) that keeps the whole corrected photo in the frame, with a
+    /// little margin.
+    static func wholeScale(matrix: Matrix3, halfWidth: Double, halfHeight: Double) -> Double {
+        var reach = 1.0
+        let steps = 12
+        for i in 0...steps {
+            let t = Double(i) / Double(steps) * 2 - 1
+            for point in [SIMD2(t * halfWidth, -halfHeight), SIMD2(t * halfWidth, halfHeight),
+                          SIMD2(-halfWidth, t * halfHeight), SIMD2(halfWidth, t * halfHeight)] {
+                let p = matrix.apply(point)
+                // A point behind the camera comes out flipped or infinite: zoom out as far as allowed.
+                guard p.x.isFinite, p.y.isFinite else { reach = .infinity; continue }
+                reach = max(reach, abs(p.x) / halfWidth, abs(p.y) / halfHeight)
+            }
+        }
+        return reach > 1 ? 1 / min(reach * 1.03, 5) : 1
     }
 
     /// The smallest enlargement (at least 1) that keeps every output edge point on the photo.
