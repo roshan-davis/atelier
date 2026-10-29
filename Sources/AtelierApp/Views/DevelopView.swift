@@ -28,6 +28,8 @@ struct DevelopImageView: View {
                                        })
                     } else if develop.isGuiding {
                         GuidedUprightView(develop: develop, image: image)
+                    } else if develop.isPickingWhiteBalance {
+                        WhiteBalancePickerView(develop: develop, image: image)
                     } else if develop.showingBefore || develop.compareMode == .off {
                         ZoomableImageView(image: develop.displayImage ?? image,
                                           pixelSize: pixelSize,
@@ -812,12 +814,13 @@ struct ParameterSlider: View {
     @FocusState private var fieldFocused: Bool
 
     private var binding: Binding<Double> {
-        Binding(get: { develop.value(parameter) }, set: { develop.set(parameter, to: $0) })
+        Binding(get: { develop.sliderValue(parameter) }, set: { develop.setSlider(parameter, to: $0) })
     }
 
     private var formatted: String {
-        let value = develop.value(parameter)
+        let value = develop.sliderValue(parameter)
         switch parameter {
+        case .temperature where !develop.isRAW: return value == 0 ? "0" : String(format: "%+.0f", value)
         case .temperature: return "\(Int(value.rounded())) K"
         case .exposure: return String(format: "%+.2f", value)
         case .sharpenRadius: return String(format: "%.1f", value)
@@ -836,9 +839,9 @@ struct ParameterSlider: View {
                 .contentShape(Rectangle())
                 .onTapGesture(count: 2) { develop.reset(parameter) }
                 .help("Double-click to reset")
-            DevelopSlider(value: binding, range: parameter.range, step: step,
-                          origin: develop.defaultValue(parameter), gradient: trackGradient,
-                          logarithmic: parameter == .temperature,
+            DevelopSlider(value: binding, range: develop.sliderRange(parameter), step: step,
+                          origin: develop.sliderDefault(parameter), gradient: trackGradient,
+                          logarithmic: parameter == .temperature && develop.isRAW,
                           onOption: SliderPreview(parameter: parameter).map { preview in
                               { (held: Bool) in develop.sliderPreview = held ? preview : nil }
                           })
@@ -860,7 +863,7 @@ struct ParameterSlider: View {
                         .frame(maxWidth: .infinity, alignment: .trailing)
                         .contentShape(Rectangle())
                         .onTapGesture {
-                            draft = develop.value(parameter)
+                            draft = develop.sliderValue(parameter)
                             editing = true
                             fieldFocused = true
                         }
@@ -874,12 +877,12 @@ struct ParameterSlider: View {
     }
 
     private var isDefault: Bool {
-        develop.value(parameter) == develop.defaultValue(parameter)
+        develop.sliderValue(parameter) == develop.sliderDefault(parameter)
     }
 
     private func commit() {
         guard editing else { return }
-        develop.set(parameter, to: draft)
+        develop.setSlider(parameter, to: draft)
         editing = false
     }
 
@@ -910,7 +913,7 @@ struct ParameterSlider: View {
 
     private var step: Double {
         switch parameter {
-        case .temperature: return 50
+        case .temperature: return develop.isRAW ? 50 : 1
         case .exposure: return 0.05
         case .sharpenRadius, .transformRotate: return 0.1
         default: return 1

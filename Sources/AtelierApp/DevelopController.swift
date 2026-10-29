@@ -38,6 +38,22 @@ final class DevelopController: ObservableObject {
     @Published private(set) var isLoading = false
     @Published private(set) var errorMessage: String?
     @Published private(set) var asShotTemperature: Double = 5500
+    /// The camera's tint, which the stored Tint is relative to; shown added, as Lightroom does.
+    @Published private(set) var asShotTint: Double = 0
+    /// The White Balance Selector is out: the next click on the photo makes that spot neutral.
+    @Published var isPickingWhiteBalance = false {
+        didSet {
+            guard isPickingWhiteBalance, !oldValue else { return }
+            isCropping = false
+            isAIOpen = false
+            isMasking = false
+            isGuiding = false
+            showingBefore = false
+            compareMode = .off
+        }
+    }
+    /// Auto or the White Balance Selector is measuring the photo.
+    @Published private(set) var isFindingWhiteBalance = false
     @Published var showingBefore = false {
         didSet { if showingBefore != oldValue { scheduleRender() } }
     }
@@ -66,6 +82,7 @@ final class DevelopController: ObservableObject {
                 isAIOpen = false
                 isMasking = false
                 isGuiding = false
+                isPickingWhiteBalance = false
             }
             scheduleRender()
         }
@@ -77,6 +94,7 @@ final class DevelopController: ObservableObject {
             isCropping = false
             isMasking = false
             isGuiding = false
+            isPickingWhiteBalance = false
             showingBefore = false
             compareMode = .off
         }
@@ -90,6 +108,7 @@ final class DevelopController: ObservableObject {
                 isCropping = false
                 isAIOpen = false
                 isGuiding = false
+                isPickingWhiteBalance = false
                 showingBefore = false
                 compareMode = .off
                 if selectedMaskID == nil { selectedMaskID = settings.masks.last?.id }
@@ -104,6 +123,7 @@ final class DevelopController: ObservableObject {
         didSet {
             guard isGuiding != oldValue else { return }
             if isGuiding {
+                isPickingWhiteBalance = false
                 isCropping = false
                 isAIOpen = false
                 isMasking = false
@@ -278,6 +298,7 @@ final class DevelopController: ObservableObject {
         showingBefore = false
         isCropping = false
         isGuiding = false
+        isPickingWhiteBalance = false
         uprightMessage = nil
         sourceSize = nil
         selectedMaskID = nil
@@ -318,6 +339,7 @@ final class DevelopController: ObservableObject {
                     self.session = session
                     self.sourceSize = session.sourceSize
                     self.asShotTemperature = session.asShotTemperature
+                    self.asShotTint = session.asShotTint
                     self.lensName = session.lensName
                     self.lensCorrectionSupported = session.lensCorrectionSupported
                     self.isRAW = session.isRAW
@@ -346,11 +368,116 @@ final class DevelopController: ObservableObject {
         parameter == .temperature ? asShotTemperature : parameter.defaultValue
     }
 
+    // MARK: Slider display
+
+    /// What a Basic slider shows. As in Lightroom, Tint shows the camera's tint plus the change,
+    /// and a JPEG, HEIC or TIFF has no real Kelvin, so its Temp is a relative -100...+100.
+    func sliderValue(_ parameter: DevelopSettings.Parameter) -> Double {
+        switch parameter {
+        case .temperature where !isRAW:
+            return settings.temperature.map { Self.relativeTemperature(kelvin: $0) } ?? 0
+        case .tint: return asShotTint + settings.tint
+        default: return value(parameter)
+        }
+    }
+
+    func setSlider(_ parameter: DevelopSettings.Parameter, to shown: Double) {
+        switch parameter {
+        case .temperature where !isRAW:
+            let relative = min(100, max(-100, shown.rounded()))
+            guard assetID != nil else { return }
+            settings.temperature = relative == 0 ? nil : Self.kelvin(relativeTemperature: relative)
+            changed(step: "Temp \(relative == 0 ? "0" : String(format: "%+.0f", relative))")
+        case .tint:
+            let range = sliderRange(.tint)
+            set(.tint, to: min(range.upperBound, max(range.lowerBound, shown)) - asShotTint)
+        default:
+            set(parameter, to: shown)
+        }
+    }
+
+    func sliderRange(_ parameter: DevelopSettings.Parameter) -> ClosedRange<Double> {
+        switch parameter {
+        case .temperature where !isRAW: return -100...100
+        case .tint: return isRAW ? -150...150 : -100...100
+        default: return parameter.range
+        }
+    }
+
+    func sliderDefault(_ parameter: DevelopSettings.Parameter) -> Double {
+        switch parameter {
+        case .temperature where !isRAW: return 0
+        case .tint: return asShotTint
+        default: return defaultValue(parameter)
+        }
+    }
+
+    /// A relative Temp for non-RAW files, the same scale masks use: each 100 doubles or
+    /// halves the Kelvin shift from 6500 K by a factor of 2^0.8.
+    nonisolated static func kelvin(relativeTemperature relative: Double) -> Double {
+        6500 * pow(2, relative / 100 * 0.8)
+    }
+
+    nonisolated static func relativeTemperature(kelvin: Double) -> Double {
+        (log2(kelvin / 6500) / 0.8 * 100).rounded()
+    }
+
+    // MARK: White balance
+
+    /// The White Balance menu's current entry: As Shot, a preset, or Custom.
+    var whiteBalanceName: String {
+        if settings.temperature == nil, settings.tint == 0 { return "As Shot" }
+        if isRAW, let preset = WhiteBalance.presets.first(where: { matches($0) }) { return preset.name }
+        return "Custom"
+    }
+
+    private func matches(_ preset: WhiteBalance.Preset) -> Bool {
+        settings.temperature == preset.temperature && abs(settings.tint - (preset.tint - asShotTint).rounded()) < 0.5
+    }
+
+    func setWhiteBalanceAsShot() {
+        guard assetID != nil, settings.temperature != nil || settings.tint != 0 else { return }
+        settings.temperature = nil
+        settings.tint = 0
+        changed(step: "White Balance: As Shot")
+    }
+
+    func applyWhiteBalance(_ preset: WhiteBalance.Preset) {
+        guard assetID != nil, !matches(preset) else { return }
+        settings.temperature = preset.temperature
+        settings.tint = (preset.tint - asShotTint).rounded()
+        changed(step: "White Balance: \(preset.name)")
+    }
+
+    /// Auto white balance (⇧⌘U), or with `point` (0 to 1 from the top left of the shown photo)
+    /// the White Balance Selector: makes that spot neutral.
+    func findWhiteBalance(at point: CGPoint? = nil) {
+        isPickingWhiteBalance = false
+        guard let session, let assetID, !isFindingWhiteBalance else { return }
+        let settings = self.settings
+        let tint = asShotTint
+        let area = point.map { CGRect(x: $0.x - 0.006, y: $0.y - 0.006, width: 0.012, height: 0.012) }
+        isFindingWhiteBalance = true
+        queue.async {
+            let found = WhiteBalance.neutral(session: session, settings: settings, area: area, asShotTint: tint)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    self.isFindingWhiteBalance = false
+                    guard self.assetID == assetID, let found else { return }
+                    self.settings.temperature = found.temperature
+                    self.settings.tint = found.tint
+                    self.changed(step: point == nil ? "White Balance: Auto" : "White Balance Selector")
+                }
+            }
+        }
+    }
+
     func set(_ parameter: DevelopSettings.Parameter, to value: Double) {
         guard assetID != nil else { return }
         settings[parameter] = value
         if parameter.panel == .lensCorrections || parameter.panel == .transform { beforeImage = nil }
-        changed(step: Self.stepName(parameter, value: settings[parameter]))
+        let shown = parameter == .tint ? asShotTint + settings[parameter] : settings[parameter]
+        changed(step: Self.stepName(parameter, value: shown))
         if beforeImage == nil, compareMode != .off { renderBeforeIfNeeded() }
     }
 

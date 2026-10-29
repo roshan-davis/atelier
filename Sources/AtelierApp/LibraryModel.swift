@@ -662,6 +662,10 @@ final class LibraryModel: ObservableObject {
         guard let window = NSApp.keyWindow, window === mainWindow, window.attachedSheet == nil else { return false }
         if window.firstResponder is NSText { return false }
 
+        if mode == .develop, develop.isPickingWhiteBalance, event.keyCode == 53 {  // escape
+            develop.isPickingWhiteBalance = false
+            return true
+        }
         if mode == .develop, handleTransformKey(event) { return true }
         if mode == .develop, handleMaskingKey(event) { return true }
 
@@ -741,6 +745,10 @@ final class LibraryModel: ObservableObject {
         case .treatment:
             guard mode == .develop, develop.assetID != nil else { return false }
             develop.setMonochrome(!develop.settings.monochrome)
+        case .whiteBalance:
+            if mode != .develop { openDevelop() }
+            guard mode == .develop, develop.assetID != nil else { return false }
+            develop.isPickingWhiteBalance.toggle()
         }
         return true
     }

@@ -68,6 +68,9 @@ struct ParameterGroups: View {
     var body: some View {
         ForEach(groups, id: \.0) { group in
             GroupHeading(title: group.0)
+            if group.1.first == .temperature {
+                WhiteBalanceRow(develop: develop)
+            }
             ForEach(group.1, id: \.self) { parameter in
                 ParameterSlider(parameter: parameter, develop: develop)
             }
