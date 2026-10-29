@@ -243,11 +243,18 @@ final class ZoomScrollView: NSScrollView {
         } else {
             let host = OverlayHostingView(rootView: view)
             host.scrollView = self
+            // Cover the whole view, not the overlay's own ideal size, or clicks miss it.
+            host.sizingOptions = []
             host.frame = bounds
             host.autoresizingMask = [.width, .height]
             addSubview(host, positioned: .above, relativeTo: nil)
             overlayHost = host
         }
+    }
+
+    override func tile() {
+        super.tile()
+        overlayHost?.frame = bounds
     }
 
     /// Tells the overlay where the photo is now.
@@ -364,11 +371,13 @@ final class ZoomScrollView: NSScrollView {
         layer?.mask = mask
     }
 
-    /// Clicks right of the visible part go to the view underneath.
+    /// Clicks right of the visible part go to the view underneath. With a tool over the photo,
+    /// every click and drag goes to the tool, never to panning the photo underneath.
     override func hitTest(_ point: NSPoint) -> NSView? {
-        if let visibleWidth, let superview {
+        if let superview {
             let local = convert(point, from: superview)
-            if local.x > bounds.width * visibleWidth { return nil }
+            if let visibleWidth, local.x > bounds.width * visibleWidth { return nil }
+            if let overlayHost, bounds.contains(local) { return overlayHost.hitTest(local) ?? overlayHost }
         }
         return super.hitTest(point)
     }
