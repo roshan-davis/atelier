@@ -362,15 +362,23 @@ final class LibraryModel: ObservableObject {
     }
 
     /// Each photo's zoom and visible center when it was left, for "Return to its last zoom".
-    /// Kept until quit.
-    private var zoomByPhoto: [Int64: (level: ZoomLevel, center: CGPoint?)] = [:]
+    /// Saved across launches (see `savePhotoZooms`).
+    private var zoomByPhoto: [Int64: (level: ZoomLevel, center: CGPoint?)] = LibraryModel.loadPhotoZooms()
 
     private func zoomForNextPhoto(leaving previous: Int64?) {
-        // The first photo after launch keeps the zoom the session restored.
-        guard let previous else { return }
+        let mode = ZoomOnPhotoChange.current
+        guard let previous else {
+            // The first photo after launch: the session restored the zoom; with "Return to its
+            // last zoom" the photo's own zoom and position come back too.
+            if mode == .remember, let saved = focusedID.flatMap({ zoomByPhoto[$0] }) {
+                zoomState.pendingCenter = saved.center
+                if zoom != saved.level { zoom = saved.level }
+            }
+            return
+        }
         let center = zoomState.currentCenter?()
         let next: ZoomLevel
-        switch ZoomOnPhotoChange.current {
+        switch mode {
         case .keep:
             // Same zoom on the same spot of the next photo, as Lightroom does for checking
             // focus across a burst.
@@ -381,11 +389,65 @@ final class LibraryModel: ObservableObject {
             zoomState.pendingCenter = nil
         case .remember:
             zoomByPhoto[previous] = (zoom, center)
+            savePhotoZooms()
             let saved = focusedID.flatMap { zoomByPhoto[$0] }
             next = saved?.level ?? ZoomOnPhotoChange.resetLevel
             zoomState.pendingCenter = saved?.center
         }
         if zoom != next { zoom = next }
+    }
+
+    private static let photoZoomsKey = "zoom.byPhoto"
+    /// Photos remembered at most; the ones zoomed longest ago are dropped first.
+    private static let photoZoomsLimit = 2000
+
+    /// Records the open photo's zoom too, as the app quits.
+    func rememberCurrentPhotoZoom() {
+        guard ZoomOnPhotoChange.current == .remember, let id = focusedID, mode != .grid else { return }
+        // No photo view yet (still loading): keep what was saved.
+        guard let center = zoomState.currentCenter?() else { return }
+        zoomByPhoto[id] = (zoom, center)
+        savePhotoZooms()
+    }
+
+    /// Stored as [asset id: [kind (0 Fit, 1 Fill, 2 percent), percent, center x, center y, time]],
+    /// with -1 for no center.
+    private func savePhotoZooms() {
+        var stored = UserDefaults.standard.dictionary(forKey: Self.photoZoomsKey) as? [String: [Double]] ?? [:]
+        let now = Date().timeIntervalSinceReferenceDate
+        for (id, entry) in zoomByPhoto {
+            var kind = 0.0, percent = 0.0
+            switch entry.level {
+            case .fit: break
+            case .fill: kind = 1
+            case .percent(let value): kind = 2; percent = value
+            }
+            let center = entry.center.map { [Double($0.x), Double($0.y)] } ?? [-1, -1]
+            let row = [kind, percent] + center
+            if let old = stored[String(id)], Array(old.prefix(4)) == row { continue }
+            stored[String(id)] = row + [now]
+        }
+        if stored.count > Self.photoZoomsLimit {
+            let oldest = stored.sorted { ($0.value.last ?? 0) < ($1.value.last ?? 0) }
+                .prefix(stored.count - Self.photoZoomsLimit).map(\.key)
+            for key in oldest {
+                stored[key] = nil
+                if let id = Int64(key) { zoomByPhoto[id] = nil }
+            }
+        }
+        UserDefaults.standard.set(stored, forKey: Self.photoZoomsKey)
+    }
+
+    nonisolated private static func loadPhotoZooms() -> [Int64: (level: ZoomLevel, center: CGPoint?)] {
+        guard let stored = UserDefaults.standard.dictionary(forKey: photoZoomsKey) as? [String: [Double]] else { return [:] }
+        var zooms: [Int64: (level: ZoomLevel, center: CGPoint?)] = [:]
+        for (key, row) in stored {
+            guard let id = Int64(key), row.count >= 4 else { continue }
+            let level: ZoomLevel = row[0] == 1 ? .fill : row[0] == 2 && row[1] > 0 ? .percent(row[1]) : .fit
+            let center = row[2] >= 0 && row[3] >= 0 ? CGPoint(x: row[2], y: row[3]) : nil
+            zooms[id] = (level, center)
+        }
+        return zooms
     }
 
     /// Settings > Develop: the zoom a click or Z goes to (Lightroom's 1:1 by default).
