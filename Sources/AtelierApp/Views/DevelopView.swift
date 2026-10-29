@@ -28,8 +28,6 @@ struct DevelopImageView: View {
                                        })
                     } else if develop.isGuiding {
                         GuidedUprightView(develop: develop, image: image)
-                    } else if develop.isPickingWhiteBalance {
-                        WhiteBalancePickerView(develop: develop, image: image)
                     } else if develop.showingBefore || develop.compareMode == .off {
                         ZoomableImageView(image: develop.displayImage ?? image,
                                           pixelSize: pixelSize,
@@ -37,10 +35,8 @@ struct DevelopImageView: View {
                                           onReport: onZoomReport,
                                           menu: { model.photoMenu(includeZoom: true) },
                                           onPick: photoPick)
-                        if develop.isPickingFringe {
-                            FringePickerHint(develop: develop)
-                        } else if develop.isPickingGradeColor {
-                            GradePickerHint(develop: develop)
+                        if let picker = develop.picker {
+                            PickerHint(text: develop.pickerMessage ?? picker.hint, isWarning: develop.pickerMessage != nil)
                         }
                     } else if develop.compareMode == .sideBySide {
                         // Both panes share the zoom and stay on the same spot, as in Lightroom.
@@ -134,9 +130,12 @@ struct DevelopImageView: View {
 
     /// What a click on the photo does while a color picker is out.
     private var photoPick: ((CGPoint) -> Void)? {
-        if develop.isPickingFringe { return { point in develop.pickFringe(at: point) } }
-        if develop.isPickingGradeColor { return { point in develop.pickGradeColor(at: point) } }
-        return nil
+        switch develop.picker {
+        case .whiteBalance: return { point in develop.findWhiteBalance(at: point) }
+        case .fringe: return { point in develop.pickFringe(at: point) }
+        case .gradeColor: return { point in develop.pickGradeColor(at: point) }
+        case nil: return nil
+        }
     }
 
     private func onZoomReport(_ report: ZoomReport) {
@@ -181,6 +180,50 @@ struct DevelopImageView: View {
         .labelsHidden()
         .fixedSize()
         .help("Compare with the original: side by side, or drag a slider across the photo (Y)")
+    }
+}
+
+/// What to click while a color picker is out, at the top of the photo; every picker uses it.
+private struct PickerHint: View {
+    let text: String
+    var isWarning = false
+
+    var body: some View {
+        Text(text)
+            .font(.callout)
+            .foregroundStyle(isWarning ? Color.orange : Color.primary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(.regularMaterial, in: Capsule())
+            .frame(maxWidth: .infinity)
+            .padding(.top, 10)
+            .allowsHitTesting(false)
+    }
+}
+
+/// The eyedropper button that takes a color picker out or puts it away; every picker uses it.
+struct PickerButton: View {
+    @ObservedObject var develop: DevelopController
+    let kind: DevelopController.PhotoPicker
+    let help: String
+    /// Runs before the picker comes out, to set what it picks for.
+    var willPick: () -> Void = {}
+
+    var body: some View {
+        Button {
+            if develop.picker == kind {
+                develop.picker = nil
+            } else {
+                willPick()
+                develop.picker = kind
+            }
+        } label: {
+            Image(systemName: "eyedropper")
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(develop.picker == kind ? Color.accentColor : Color.secondary)
+        .disabled(develop.assetID == nil)
+        .help(help)
     }
 }
 

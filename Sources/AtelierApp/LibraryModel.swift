@@ -777,16 +777,8 @@ final class LibraryModel: ObservableObject {
         guard let window = NSApp.keyWindow, window === mainWindow, window.attachedSheet == nil else { return false }
         if window.firstResponder is NSText { return false }
 
-        if mode == .develop, develop.isPickingWhiteBalance, event.keyCode == 53 {  // escape
-            develop.isPickingWhiteBalance = false
-            return true
-        }
-        if mode == .develop, develop.isPickingFringe, event.keyCode == 53 {  // escape
-            develop.isPickingFringe = false
-            return true
-        }
-        if mode == .develop, develop.isPickingGradeColor, event.keyCode == 53 {  // escape
-            develop.isPickingGradeColor = false
+        if mode == .develop, develop.picker != nil, event.keyCode == 53 {  // escape puts any color picker away
+            develop.picker = nil
             return true
         }
         // Arrow keys over a Color Grading wheel nudge it (Shift for bigger steps) instead of

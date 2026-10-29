@@ -43,12 +43,27 @@ final class DevelopController: ObservableObject {
     @Published private(set) var asShotTemperature: Double = 5500
     /// The camera's tint, which the stored Tint is relative to; shown added, as Lightroom does.
     @Published private(set) var asShotTint: Double = 0
-    /// The White Balance Selector is out: the next click on the photo makes that spot neutral.
-    @Published var isPickingWhiteBalance = false {
+    /// The color pickers (eyedroppers) that act on a click on the photo, as in Lightroom: the
+    /// White Balance Selector, Defringe's Fringe Color Selector and Color Grading's color picker.
+    /// One is out at a time; each works on the same zoomable photo with a hint at the top, and
+    /// Esc or a second click on its button puts it away.
+    enum PhotoPicker {
+        case whiteBalance, fringe, gradeColor
+
+        var hint: String {
+            switch self {
+            case .whiteBalance: return "Click something that should be neutral gray or white. Esc to cancel."
+            case .fringe: return "Click a purple or green fringe. Zoom in to see it clearly. Esc to cancel."
+            case .gradeColor: return "Click a spot whose color cast should turn neutral. Esc to cancel."
+            }
+        }
+    }
+
+    @Published var picker: PhotoPicker? {
         didSet {
-            guard isPickingWhiteBalance, !oldValue else { return }
-            isPickingFringe = false
-            isPickingGradeColor = false
+            guard picker != oldValue else { return }
+            pickerMessage = nil
+            guard picker != nil else { return }
             isCropping = false
             isAIOpen = false
             isMasking = false
@@ -57,48 +72,35 @@ final class DevelopController: ObservableObject {
             compareMode = .off
         }
     }
+    /// Why the last click with the picker that is out set nothing.
+    @Published private(set) var pickerMessage: String?
+
+    /// The White Balance Selector is out: the next click on the photo makes that spot neutral.
+    var isPickingWhiteBalance: Bool {
+        get { picker == .whiteBalance }
+        set { setPicker(.whiteBalance, newValue) }
+    }
+    /// Lens Corrections > Defringe's Fringe Color Selector is out: a click on a purple or green
+    /// fringe sets that color's Hue range and Amount.
+    var isPickingFringe: Bool {
+        get { picker == .fringe }
+        set { setPicker(.fringe, newValue) }
+    }
+    /// Color Grading's color picker is out: a click on the photo sets a wheel so that spot's color
+    /// cast turns neutral.
+    var isPickingGradeColor: Bool {
+        get { picker == .gradeColor }
+        set { setPicker(.gradeColor, newValue) }
+    }
+
+    private func setPicker(_ kind: PhotoPicker, _ out: Bool) {
+        if out { picker = kind } else if picker == kind { picker = nil }
+    }
+
     /// Auto or the White Balance Selector is measuring the photo.
     @Published private(set) var isFindingWhiteBalance = false
-    /// Lens Corrections > Defringe's Fringe Color Selector is out: a click on a purple or green
-    /// fringe sets that color's Hue range and Amount. The photo still zooms and pans.
-    @Published var isPickingFringe = false {
-        didSet {
-            guard isPickingFringe != oldValue else { return }
-            fringeMessage = nil
-            guard isPickingFringe else { return }
-            isPickingWhiteBalance = false
-            isPickingGradeColor = false
-            isCropping = false
-            isAIOpen = false
-            isMasking = false
-            isGuiding = false
-            showingBefore = false
-            compareMode = .off
-        }
-    }
-    /// Why the last click with the Fringe Color Selector set nothing.
-    @Published private(set) var fringeMessage: String?
-    /// Color Grading's color picker is out: a click on the photo sets a wheel so that spot's color
-    /// cast turns neutral. The photo still zooms and pans.
-    @Published var isPickingGradeColor = false {
-        didSet {
-            guard isPickingGradeColor != oldValue else { return }
-            gradeColorMessage = nil
-            guard isPickingGradeColor else { return }
-            isPickingWhiteBalance = false
-            isPickingFringe = false
-            isCropping = false
-            isAIOpen = false
-            isMasking = false
-            isGuiding = false
-            showingBefore = false
-            compareMode = .off
-        }
-    }
     /// The wheel the color picker sets; nil picks Shadows, Midtones or Highlights by the spot's tone.
     @Published var gradePickRegion: DevelopSettings.GradeRegion?
-    /// Why the last click with Color Grading's color picker set nothing.
-    @Published private(set) var gradeColorMessage: String?
     @Published var showingBefore = false {
         didSet { if showingBefore != oldValue { scheduleRender() } }
     }
@@ -141,9 +143,7 @@ final class DevelopController: ObservableObject {
                 isAIOpen = false
                 isMasking = false
                 isGuiding = false
-                isPickingWhiteBalance = false
-                isPickingFringe = false
-                isPickingGradeColor = false
+                picker = nil
             } else {
                 showCropOfWholeImage()
             }
@@ -178,9 +178,7 @@ final class DevelopController: ObservableObject {
             isCropping = false
             isMasking = false
             isGuiding = false
-            isPickingWhiteBalance = false
-            isPickingFringe = false
-            isPickingGradeColor = false
+            picker = nil
             showingBefore = false
             compareMode = .off
         }
@@ -194,9 +192,7 @@ final class DevelopController: ObservableObject {
                 isCropping = false
                 isAIOpen = false
                 isGuiding = false
-                isPickingWhiteBalance = false
-                isPickingFringe = false
-                isPickingGradeColor = false
+                picker = nil
                 showingBefore = false
                 compareMode = .off
                 if selectedMaskID == nil { selectedMaskID = settings.masks.last?.id }
@@ -211,9 +207,7 @@ final class DevelopController: ObservableObject {
         didSet {
             guard isGuiding != oldValue else { return }
             if isGuiding {
-                isPickingWhiteBalance = false
-                isPickingFringe = false
-                isPickingGradeColor = false
+                picker = nil
                 isCropping = false
                 isAIOpen = false
                 isMasking = false
@@ -409,9 +403,7 @@ final class DevelopController: ObservableObject {
         showingBefore = false
         isCropping = false
         isGuiding = false
-        isPickingWhiteBalance = false
-        isPickingFringe = false
-        isPickingGradeColor = false
+        picker = nil
         uprightMessage = nil
         sourceSize = nil
         selectedMaskID = nil
@@ -720,7 +712,7 @@ final class DevelopController: ObservableObject {
                 MainActor.assumeIsolated {
                     guard self.assetID == assetID, self.isPickingGradeColor else { return }
                     guard let pick else {
-                        self.gradeColorMessage = sample == nil || region == nil
+                        self.pickerMessage = sample == nil || region == nil
                             ? "Cannot read the color there. Click another spot."
                             : "That spot is hardly in the \(region!.rawValue). Click another spot, or use the 3-Way view."
                         return
@@ -874,7 +866,7 @@ final class DevelopController: ObservableObject {
                 MainActor.assumeIsolated {
                     guard self.assetID == assetID, self.isPickingFringe else { return }
                     guard let pick = Defringe.pick(colors, settings: self.settings) else {
-                        self.fringeMessage = "Cannot set the purple or green fringe color. Click on a purple or green fringe."
+                        self.pickerMessage = "Cannot set the purple or green fringe color. Click on a purple or green fringe."
                         return
                     }
                     var updated = self.settings

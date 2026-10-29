@@ -475,21 +475,8 @@ struct DefringeGroup: View {
         HStack(alignment: .lastTextBaseline) {
             GroupHeading(title: "Defringe")
             Spacer()
-            Button {
-                develop.isPickingFringe.toggle()
-            } label: {
-                Image(systemName: "eyedropper")
-            }
-            .buttonStyle(.borderless)
-            .foregroundStyle(develop.isPickingFringe ? Color.accentColor : Color.secondary)
-            .disabled(develop.assetID == nil)
-            .help("Fringe Color Selector: zoom in, then click a purple or green fringe to set its Hue range and Amount")
-        }
-        if develop.isPickingFringe || develop.fringeMessage != nil {
-            Text(develop.fringeMessage ?? "Click a purple or green fringe in the photo. Zoom in to see fringes; Esc to cancel.")
-                .font(.caption)
-                .foregroundStyle(develop.fringeMessage == nil ? Color.secondary : Color.orange)
-                .fixedSize(horizontal: false, vertical: true)
+            PickerButton(develop: develop, kind: .fringe,
+                         help: "Fringe Color Selector: zoom in, then click a purple or green fringe to set its Hue range and Amount")
         }
         ParameterSlider(parameter: .lensDefringePurpleAmount, develop: develop)
         HueRangeRow(color: .purple, develop: develop)
@@ -618,21 +605,5 @@ struct HueRangeSlider: View {
         if min(toLow, toHigh) <= 7 { return toLow <= toHigh ? .low : .high }
         if x > lowX, x < highX { return .both(startLow: low, startHigh: high, startX: x) }
         return toLow <= toHigh ? .low : .high
-    }
-}
-
-/// Over the photo while the Fringe Color Selector is out.
-struct FringePickerHint: View {
-    @ObservedObject var develop: DevelopController
-
-    var body: some View {
-        Text(develop.fringeMessage ?? "Click a purple or green fringe. Zoom in to see it clearly. Esc to cancel.")
-            .font(.callout)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(.regularMaterial, in: Capsule())
-            .frame(maxWidth: .infinity)
-            .padding(.top, 10)
-            .allowsHitTesting(false)
     }
 }
