@@ -266,6 +266,8 @@ final class DevelopController: ObservableObject {
     private var dirty = false
     private let queue = DispatchQueue(label: "atelier.develop", qos: .userInteractive)
     var onPreviewsUpdated: ((Int64) -> Void)?
+    /// Unedited RAW files whose preview was replaced by a render this launch.
+    private var developedPreviews = Set<Int64>()
 
     init(catalog: Catalog, previews: PreviewCache) {
         self.catalog = catalog
@@ -345,6 +347,14 @@ final class DevelopController: ObservableObject {
                     self.isRAW = session.isRAW
                     self.focalLength35 = session.focalLength35
                     self.scheduleRender()
+                    // An unedited RAW's cached preview is the camera's embedded JPEG, which has no
+                    // lens corrections, so it is framed a little wider than the render and the
+                    // photo jumped when the render replaced it. Store the render as the preview
+                    // (once per photo per launch) so the next visit opens on the same framing.
+                    if session.isRAW, session.lensCorrectionSupported, self.settings.isNeutral,
+                       self.developedPreviews.insert(assetID).inserted {
+                        self.storePreviews(session: session, settings: self.settings, assetID: assetID)
+                    }
                     if self.compareMode != .off { self.renderBeforeIfNeeded() }
                 }
             }
@@ -1138,15 +1148,21 @@ final class DevelopController: ObservableObject {
             return
         }
         if let session {
-            let previews = self.previews
-            queue.async {
-                if let cgImage = session.render(settings) {
-                    try? previews.store(cgImage, for: assetID, size: .preview)
-                    try? previews.store(cgImage, for: assetID, size: .thumbnail)
-                }
-                DispatchQueue.main.async {
-                    MainActor.assumeIsolated { self.onPreviewsUpdated?(assetID) }
-                }
+            storePreviews(session: session, settings: settings, assetID: assetID)
+        }
+    }
+
+    /// Renders `settings` in the background and stores it as the photo's grid thumbnail and
+    /// loupe preview.
+    private func storePreviews(session: DevelopSession, settings: DevelopSettings, assetID: Int64) {
+        let previews = self.previews
+        queue.async {
+            if let cgImage = session.render(settings) {
+                try? previews.store(cgImage, for: assetID, size: .preview)
+                try? previews.store(cgImage, for: assetID, size: .thumbnail)
+            }
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated { self.onPreviewsUpdated?(assetID) }
             }
         }
     }
