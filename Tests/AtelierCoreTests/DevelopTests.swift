@@ -73,6 +73,24 @@ final class DevelopTests: XCTestCase {
         XCTAssertLessThan(dark, neutral, "neutral \(neutral), contrast/blacks \(dark)")
     }
 
+    /// +Exposure on a JPEG rolls bright tones off toward white instead of clipping them.
+    func testExposureRollsOffHighlightsOnJPEG() throws {
+        XCTAssertTrue(ExposureRolloff.kernelAvailable)
+        XCTAssertEqual(ExposureRolloff.shoulder(0.3), 0.3)
+        XCTAssertLessThan(ExposureRolloff.shoulder(5), 1)
+        XCTAssertGreaterThan(ExposureRolloff.shoulder(1.2), ExposureRolloff.shoulder(1.0))
+
+        let file = workDir.appendingPathComponent("bright.jpg")
+        try makeJPEG(at: file, gray: 0.8)
+        let session = try XCTUnwrap(DevelopRenderer.shared.session(for: file, maxPixelSize: 64))
+        let neutral = try centerLuma(XCTUnwrap(session.render(.neutral)))
+        var brighter = DevelopSettings()
+        brighter.exposure = 1
+        let bright = try centerLuma(XCTUnwrap(session.render(brighter)))
+        XCTAssertGreaterThan(bright, neutral + 0.03)
+        XCTAssertLessThan(bright, 0.99, "not clipped to white")
+    }
+
     func testToneCurveIsMonotoneAndContrastDarkensLowMidtones() {
         var settings = DevelopSettings()
         settings.contrast = 100
@@ -113,17 +131,13 @@ final class DevelopTests: XCTestCase {
         let vignetted = try XCTUnwrap(session.render(vignette))
         XCTAssertLessThan(try luma(vignetted, x: 1, y: 1), try luma(neutral, x: 1, y: 1) - 0.05, "corners darken")
 
-        var dehaze = DevelopSettings()
-        dehaze.dehaze = 100
-        XCTAssertNotEqual(try centerLuma(XCTUnwrap(session.render(dehaze))), try centerLuma(neutral))
-
         var grain = DevelopSettings()
         grain.grain = 100
         let grainy = try XCTUnwrap(session.render(grain))
         let values = try (0..<16).map { try luma(grainy, x: 8 + $0 * 3, y: 30) }
         XCTAssertGreaterThan(Set(values).count, 3, "grain varies pixel to pixel")
 
-        for parameter in [DevelopSettings.Parameter.clarity, .texture, .sharpening, .luminanceNoise, .colorNoise] {
+        for parameter in [DevelopSettings.Parameter.dehaze, .clarity, .texture, .sharpening, .luminanceNoise, .colorNoise] {
             var settings = DevelopSettings()
             settings[parameter] = parameter.range.upperBound
             XCTAssertNotNil(session.render(settings), "\(parameter) renders")

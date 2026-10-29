@@ -5,8 +5,9 @@ import ImageIO
 import UniformTypeIdentifiers
 
 /// Renders develop settings on the GPU with Core Image, following the PRD pipeline order:
-/// RAW decode with white balance and exposure, then highlights and shadows, tone (contrast,
-/// whites, blacks) in a perceptual space, then color (vibrance, saturation).
+/// RAW decode with white balance and exposure, geometry, then highlights and shadows and the
+/// tone curve in a perceptual space, presence (dehaze, clarity, texture), color, detail,
+/// masks and effects.
 public final class DevelopRenderer: @unchecked Sendable {
     public static let shared = DevelopRenderer()
 
@@ -87,22 +88,18 @@ public final class DevelopRenderer: @unchecked Sendable {
         if case .fullSaturation(let region) = preview { settings[region.saturation] = 100 }
         var image = input
         let extent = input.extent
-        let longEdge = Double(max(extent.width, extent.height))
 
-        // Highlights and shadows. CIHighlightShadowAdjust only recovers highlights, so positive
-        // highlights are handled by the tone curve below.
-        if settings.highlights < 0 || settings.shadows != 0 {
-            let filter = CIFilter.highlightShadowAdjust()
-            filter.inputImage = image
-            filter.highlightAmount = Float(1 + min(0, settings.highlights) / 100)
-            filter.shadowAmount = Float(settings.shadows / 100)
-            filter.radius = 0
-            image = filter.outputImage ?? image
+        // Highlights and Shadows: local, judged by an edge-aware base (see LocalContrast).
+        image = LocalContrast.toneRegions(image, highlights: settings.highlights / 100, shadows: settings.shadows / 100,
+                                          scale: scale)
+
+        // Tone curve, applied in sRGB-encoded values so contrast behaves perceptually. Basic tone,
+        // the region sliders and the RGB curve keep each color's hue, as Lightroom does; the
+        // Red, Green and Blue curves then work on their own channel, as color curves should.
+        if let lut = masterCurveLUT(settings) {
+            image = ToneCurve.apply(lut, to: image)
         }
-
-        // Tone curve, applied in sRGB-encoded values so contrast behaves perceptually.
-        // CIColorCurves names its color space explicitly, so no gamma round trip is needed.
-        if let lut = toneCurveLUT(settings) {
+        if let lut = channelCurvesLUT(settings) {
             let filter = CIFilter.colorCurves()
             filter.inputImage = image
             filter.curvesData = lut.withUnsafeBufferPointer { Data(buffer: $0) }
@@ -114,13 +111,12 @@ public final class DevelopRenderer: @unchecked Sendable {
         if settings.dehaze != 0 {
             image = dehaze(image, amount: settings.dehaze / 100)
         }
-        // Clarity works on midtone local contrast with a wide radius, texture on fine detail.
+        // Clarity works on wide areas, weighted to the midtones; Texture on medium-sized detail.
         if settings.clarity != 0 {
-            image = localContrast(image, amount: settings.clarity / 100 * 0.6, radius: longEdge * 0.012, extent: extent)
+            image = LocalContrast.apply(image, amount: settings.clarity / 100, kind: LocalContrast.clarity, scale: scale)
         }
         if settings.texture != 0 {
-            image = localContrast(image, amount: settings.texture / 100 * 0.5, radius: max(1, longEdge * 0.003),
-                                  extent: extent)
+            image = LocalContrast.apply(image, amount: settings.texture / 100, kind: LocalContrast.texture, scale: scale)
         }
 
         // In Black & White the B&W Mix decides the grays, so vibrance and saturation do nothing.
@@ -225,46 +221,9 @@ public final class DevelopRenderer: @unchecked Sendable {
         return image
     }
 
-    /// Removes (positive) or adds (negative) a flat veil of haze, then restores saturation.
+    /// Removes (positive) or adds (negative) haze; see `Dehaze`.
     static func dehaze(_ image: CIImage, amount: Double) -> CIImage {
-        let airlight = 0.18
-        let gain: Double, bias: Double
-        if amount > 0 {
-            let k = 0.35 * amount
-            gain = 1 / (1 - k)
-            bias = -k * airlight / (1 - k)
-        } else {
-            let k = 0.35 * -amount
-            gain = 1 - k
-            bias = k * airlight
-        }
-        let matrix = CIFilter.colorMatrix()
-        matrix.inputImage = image
-        matrix.rVector = CIVector(x: gain, y: 0, z: 0, w: 0)
-        matrix.gVector = CIVector(x: 0, y: gain, z: 0, w: 0)
-        matrix.bVector = CIVector(x: 0, y: 0, z: gain, w: 0)
-        matrix.aVector = CIVector(x: 0, y: 0, z: 0, w: 1)
-        matrix.biasVector = CIVector(x: bias, y: bias, z: bias, w: 0)
-        let color = CIFilter.colorControls()
-        color.inputImage = matrix.outputImage
-        color.saturation = Float(1 + 0.25 * amount)
-        color.brightness = 0
-        color.contrast = 1
-        return color.outputImage ?? image
-    }
-
-    /// Unsharp mask for positive amounts, a blend toward a blurred copy for negative ones.
-    static func localContrast(_ image: CIImage, amount: Double, radius: Double, extent: CGRect) -> CIImage {
-        let source = image.clampedToExtent()
-        if amount > 0 {
-            let filter = CIFilter.unsharpMask()
-            filter.inputImage = source
-            filter.radius = Float(radius)
-            filter.intensity = Float(amount)
-            return filter.outputImage?.cropped(to: extent) ?? image
-        }
-        let blurred = source.applyingGaussianBlur(sigma: radius / 2).cropped(to: extent)
-        return mix(image, blurred, amount: min(1, -amount * 1.2))
+        Dehaze.apply(image, amount: amount)
     }
 
     /// Sharpening on luminance at Amount (0...150) and Radius. Detail below its default of 25
@@ -301,15 +260,14 @@ public final class DevelopRenderer: @unchecked Sendable {
     /// Control points of the tone curve in sRGB-encoded values, or nil when it is the identity.
     public static func toneCurvePoints(_ settings: DevelopSettings) -> [CGPoint]? {
         let c = settings.contrast / 100
-        let h = max(0, settings.highlights) / 100
         let w = settings.whites / 100
         let b = settings.blacks / 100
-        guard c != 0 || h != 0 || w != 0 || b != 0 else { return nil }
+        guard c != 0 || w != 0 || b != 0 else { return nil }
         return [
             CGPoint(x: max(0, -b) * 0.1, y: max(0, b) * 0.1),
             CGPoint(x: 0.25, y: 0.25 - c * 0.08),
             CGPoint(x: 0.5, y: 0.5),
-            CGPoint(x: 0.75, y: min(1, 0.75 + c * 0.08 + h * 0.08)),
+            CGPoint(x: 0.75, y: min(1, 0.75 + c * 0.08)),
             CGPoint(x: 1 - max(0, w) * 0.1, y: 1 - max(0, -w) * 0.1),
         ]
     }
@@ -342,21 +300,34 @@ public final class DevelopRenderer: @unchecked Sendable {
         return min(1, max(0, y))
     }
 
-    /// The tone curve sampled as RGB triples for CIColorCurves: Basic and region tone (never
-    /// decreasing, so tones keep their order), then the RGB point curve, then each channel's.
-    static func toneCurveLUT(_ settings: DevelopSettings, samples: Int = 1024) -> [Float]? {
-        guard hasToneCurve(settings) else { return nil }
+    /// Basic and region tone (never decreasing, so tones keep their order), then the RGB point
+    /// curve, sampled from 0 to 1; nil when it is a straight line.
+    static func masterCurveLUT(_ settings: DevelopSettings, samples: Int = 1024) -> [Float]? {
         let master = settings.points(for: .rgb)
-        let channels = [settings.points(for: .red), settings.points(for: .green), settings.points(for: .blue)]
+        guard toneCurvePoints(settings) != nil || curveRegions.contains(where: { settings[$0.0] != 0 })
+                || master != DevelopSettings.CurvePoint.identity else { return nil }
         var lut = [Float]()
-        lut.reserveCapacity(samples * 3)
+        lut.reserveCapacity(samples)
         var previous = 0.0
         for i in 0..<samples {
             let base = max(previous, toneCurveValue(settings, at: Double(i) / Double(samples - 1)))
             previous = base
-            let y = pointCurveValue(master, at: base)
+            lut.append(Float(pointCurveValue(master, at: base)))
+        }
+        return lut
+    }
+
+    /// The Red, Green and Blue point curves sampled as RGB triples for CIColorCurves; nil when
+    /// all three are straight lines.
+    static func channelCurvesLUT(_ settings: DevelopSettings, samples: Int = 1024) -> [Float]? {
+        let channels = [settings.points(for: .red), settings.points(for: .green), settings.points(for: .blue)]
+        guard channels.contains(where: { $0 != DevelopSettings.CurvePoint.identity }) else { return nil }
+        var lut = [Float]()
+        lut.reserveCapacity(samples * 3)
+        for i in 0..<samples {
+            let x = Double(i) / Double(samples - 1)
             for points in channels {
-                lut.append(Float(pointCurveValue(points, at: y)))
+                lut.append(Float(pointCurveValue(points, at: x)))
             }
         }
         return lut
@@ -544,6 +515,7 @@ public final class DevelopSession: @unchecked Sendable {
                 filter.inputImage = image
                 filter.ev = Float(settings.exposure)
                 image = filter.outputImage ?? image
+                if settings.exposure > 0 { image = ExposureRolloff.apply(image) }
             }
         }
         // Masks are drawn on the upright photo's frame, so start it at the origin.

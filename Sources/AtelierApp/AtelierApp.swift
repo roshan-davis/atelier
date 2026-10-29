@@ -137,6 +137,11 @@ struct AtelierApp: App {
                     .keyboardShortcut("r", modifiers: [.command, .shift])
                     .disabled(model.mode != .develop)
                 // The \ and Y keys themselves are handled by the culling key monitor.
+                Button("Auto White Balance") { model.develop.findWhiteBalance() }
+                    .keyboardShortcut("u", modifiers: [.command, .shift])
+                    .disabled(model.mode != .develop || model.develop.assetID == nil)
+                Button("White Balance Selector (W)") { model.perform(.whiteBalance) }
+                    .disabled(model.focusedID == nil)
                 Button("Crop & Straighten (R)") { model.perform(.crop) }
                     .disabled(model.focusedID == nil)
                 Button("Rotate Left") { model.rotate(clockwise: false) }
@@ -197,6 +202,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         _ = MainActor.assumeIsolated {
+            model?.rememberCurrentPhotoZoom()
             model?.saveSession()
             let keep = UserDefaults.standard.object(forKey: "backups.keep") as? Int ?? 10
             try? model?.catalog.snapshot(keep: max(1, keep))

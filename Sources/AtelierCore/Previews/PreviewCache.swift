@@ -21,7 +21,9 @@ public final class PreviewCache: Sendable {
     /// 2: RAW previews are camera matched (`CameraMatch`).
     /// 3: brush and subject masks keep their soft edges (read as raw values).
     /// 4: Lightroom-like film grain (`FilmGrain`) with Roughness.
-    public static let version = 4
+    /// 5: Dehaze with the dark channel prior (`Dehaze`) instead of a flat contrast change, and
+    ///    a hue-preserving tone curve (`ToneCurve`).
+    public static let version = 5
 
     /// Clears previews written by an older version. The old folder is moved aside at once and
     /// deleted in the background, so a large cache doesn't hold up launch.

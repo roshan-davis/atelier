@@ -67,7 +67,22 @@ struct ParameterGroups: View {
 
     var body: some View {
         ForEach(groups, id: \.0) { group in
-            GroupHeading(title: group.0)
+            if group.1.first == .exposure {
+                HStack(alignment: .lastTextBaseline) {
+                    GroupHeading(title: group.0)
+                    Spacer()
+                    if develop.isFindingAutoTone { ProgressView().controlSize(.mini) }
+                    Button("Auto") { develop.autoTone() }
+                        .controlSize(.small)
+                        .disabled(develop.assetID == nil || develop.isFindingAutoTone)
+                        .help("Sets Exposure, Highlights, Shadows, Whites and Blacks from the photo. Shift-double-click a slider's name to set just that one.")
+                }
+            } else {
+                GroupHeading(title: group.0)
+            }
+            if group.1.first == .temperature {
+                WhiteBalanceRow(develop: develop)
+            }
             ForEach(group.1, id: \.self) { parameter in
                 ParameterSlider(parameter: parameter, develop: develop)
             }

@@ -278,6 +278,8 @@ struct ImportSettings: View {
 
 private struct DevelopSettingsTab: View {
     @AppStorage("zoom.clickPercent") private var clickPercent = 100.0
+    @AppStorage(LibraryModel.ZoomOnPhotoChange.key) private var onPhotoChange = LibraryModel.ZoomOnPhotoChange.reset.rawValue
+    @AppStorage(LibraryModel.ZoomOnPhotoChange.resetLevelKey) private var resetLevel = "fit"
     @AppStorage("develop.showClipping") private var showClipping = true
     @AppStorage("develop.soloMode") private var soloMode = false
 
@@ -289,6 +291,18 @@ private struct DevelopSettingsTab: View {
                     Text("100% (1:1)").tag(100.0)
                     Text("200%").tag(200.0)
                     Text("400%").tag(400.0)
+                }
+                Picker("When you move to another photo", selection: $onPhotoChange) {
+                    Text("Open it at Fit or Fill").tag(LibraryModel.ZoomOnPhotoChange.reset.rawValue)
+                    Text("Return to its last zoom").tag(LibraryModel.ZoomOnPhotoChange.remember.rawValue)
+                    Text("Keep the same zoom, as in Lightroom").tag(LibraryModel.ZoomOnPhotoChange.keep.rawValue)
+                }
+                if onPhotoChange != LibraryModel.ZoomOnPhotoChange.keep.rawValue {
+                    Picker(onPhotoChange == LibraryModel.ZoomOnPhotoChange.reset.rawValue ? "Open at" : "Photos not zoomed yet open at",
+                           selection: $resetLevel) {
+                        Text("Fit").tag("fit")
+                        Text("Fill").tag("fill")
+                    }
                 }
             }
             Section("Panels") {
