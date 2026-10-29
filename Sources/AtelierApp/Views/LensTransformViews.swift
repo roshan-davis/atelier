@@ -188,7 +188,7 @@ struct TransformPanel: View {
             }
             Toggle("Constrain Crop", isOn: Binding(get: { develop.settings.constrainCrop },
                                                    set: { develop.setConstrainCrop($0) }))
-                .help("Enlarge the corrected photo so no empty edges show")
+                .help("Crop to the largest area with no gray edges, as in Lightroom; the crop then stays inside the photo when you adjust it")
             ParameterGroups(panel: .transform, develop: develop)
         }
         .font(.callout)

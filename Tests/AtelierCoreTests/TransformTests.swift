@@ -244,14 +244,25 @@ final class TransformTests: XCTestCase {
         XCTAssertGreaterThan(middle.0, 200)
         XCTAssertLessThan(middle.1, 40)
 
-        settings.constrainCrop = true
-        let constrained = LensGeometry(settings: settings, size: red.extent.size, focalLength35: 35).apply(to: red)
-        let constrainedImage = try XCTUnwrap(renderer.cgImage(constrained, colorSpace: DevelopRenderer.sRGB))
-        for (x, y) in [(2, 2), (297, 2), (2, 197), (297, 197)] {
-            let p = pixel(constrainedImage, x: x, y: y)
+        // Constrain Crop: the crop shrinks, keeping the photo's shape, until it holds only photo.
+        let geometry = LensGeometry(settings: settings, size: red.extent.size, focalLength35: 35)
+        let crop = DevelopSettings.Crop().fitted(imageAspect: 1.5, onPhoto: geometry.showsPhoto(at:))
+        XCTAssertLessThan(crop.width, 0.95)
+        XCTAssertEqual(crop.width, crop.height, accuracy: 1e-6)
+        XCTAssertEqual(crop.x + crop.width / 2, 0.5, accuracy: 1e-3)
+        let image = try XCTUnwrap(renderer.cgImage(DevelopRenderer.applyGeometry(crop, to: open),
+                                                   colorSpace: DevelopRenderer.sRGB))
+        for (x, y) in [(1, 1), (image.width - 2, 1), (1, image.height - 2), (image.width - 2, image.height - 2)] {
+            let p = pixel(image, x: x, y: y)
             XCTAssertGreaterThan(p.0, 200, "corner \(x),\(y) \(p)")
             XCTAssertLessThan(p.1, 40, "corner \(x),\(y) \(p)")
         }
+        // Still fits after a quarter turn and a straighten.
+        var turned = crop
+        turned.quarterTurns = 1
+        turned.angle = 3
+        let refitted = turned.fitted(imageAspect: 1 / 1.5, onPhoto: geometry.showsPhoto(at:))
+        XCTAssertTrue(refitted.fits(imageAspect: 1 / 1.5, onPhoto: geometry.showsPhoto(at:)))
     }
 
     /// Real camera files, when CI has downloaded some: whether Apple's RAW engine has lens

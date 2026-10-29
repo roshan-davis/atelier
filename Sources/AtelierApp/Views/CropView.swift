@@ -52,7 +52,7 @@ enum CropAspect: Hashable, Identifiable {
 extension Crop {
     /// Applies an aspect ratio around the crop's center, keeping its orientation, at the
     /// largest size that fits. `aspect` is landscape width / height; nil unlocks.
-    func withAspect(_ aspect: Double?, imageAspect: Double) -> Crop {
+    func withAspect(_ aspect: Double?, imageAspect: Double, onPhoto: ((CGPoint) -> Bool)? = nil) -> Crop {
         var copy = self
         guard var aspect else {
             copy.lockedAspect = nil
@@ -67,11 +67,11 @@ extension Crop {
         copy.height = size.height
         copy.x = min(max(0, cx - size.width / 2), 1 - size.width)
         copy.y = min(max(0, cy - size.height / 2), 1 - size.height)
-        return copy.fitted(imageAspect: imageAspect)
+        return copy.fitted(imageAspect: imageAspect, onPhoto: onPhoto)
     }
 
     /// Swaps the crop between landscape and portrait at the largest size that fits.
-    func switchedOrientation(imageAspect: Double) -> Crop {
+    func switchedOrientation(imageAspect: Double, onPhoto: ((CGPoint) -> Bool)? = nil) -> Crop {
         let target = 1 / (lockedAspect ?? (width * imageAspect) / height)
         let size = Crop.centered(aspect: target, imageAspect: imageAspect)
         var copy = self
@@ -81,7 +81,7 @@ extension Crop {
         copy.x = min(max(0, cx - size.width / 2), 1 - size.width)
         copy.y = min(max(0, cy - size.height / 2), 1 - size.height)
         if lockedAspect != nil { copy.lockedAspect = target }
-        return copy.fitted(imageAspect: imageAspect)
+        return copy.fitted(imageAspect: imageAspect, onPhoto: onPhoto)
     }
 
     /// A quarter turn; the crop frame turns with the photo.
@@ -115,12 +115,12 @@ extension Crop {
     }
 
     /// The crop between `self` and `target` closest to `target` that stays on the photo.
-    func constrained(toward target: Crop, imageAspect: Double) -> Crop {
-        if target.fits(imageAspect: imageAspect) { return target }
+    func constrained(toward target: Crop, imageAspect: Double, onPhoto: ((CGPoint) -> Bool)? = nil) -> Crop {
+        if target.fits(imageAspect: imageAspect, onPhoto: onPhoto) { return target }
         var low = 0.0, high = 1.0
         for _ in 0..<24 {
             let t = (low + high) / 2
-            if interpolated(to: target, t).fits(imageAspect: imageAspect) { low = t } else { high = t }
+            if interpolated(to: target, t).fits(imageAspect: imageAspect, onPhoto: onPhoto) { low = t } else { high = t }
         }
         return interpolated(to: target, low)
     }
@@ -322,7 +322,7 @@ struct CropEditorView: View {
             var angle = startAngle + Double(a1 - a0) * 180 / .pi
             angle = min(45, max(-45, (angle * 10).rounded() / 10))
             target.angle = angle
-            develop.setCrop(target.fitted(imageAspect: imageAspect))
+            develop.setCrop(target.fitted(imageAspect: imageAspect, onPhoto: develop.cropBounds))
             return
         case .move:
             target.x = min(max(0, start.x + dx), 1 - start.width)
@@ -330,7 +330,7 @@ struct CropEditorView: View {
         default:
             target = resized(start, handle: handle, dx: dx, dy: dy, imageAspect: imageAspect)
         }
-        develop.setCrop(start.constrained(toward: target, imageAspect: imageAspect))
+        develop.setCrop(start.constrained(toward: target, imageAspect: imageAspect, onPhoto: develop.cropBounds))
     }
 
     private func resized(_ start: Crop, handle: Handle, dx: Double, dy: Double, imageAspect: Double) -> Crop {
@@ -397,14 +397,15 @@ struct CropPanel: View {
                 Picker("Aspect", selection: Binding(
                     get: { CropAspect.matching(crop.lockedAspect, imageAspect: imageAspect) },
                     set: { aspect in
-                        develop.setCrop(crop.withAspect(aspect.value(imageAspect: imageAspect), imageAspect: imageAspect))
+                        develop.setCrop(crop.withAspect(aspect.value(imageAspect: imageAspect), imageAspect: imageAspect,
+                                                        onPhoto: develop.cropBounds))
                     })) {
                     ForEach(CropAspect.presets) { Text($0.label).tag($0) }
                 }
                 .labelsHidden()
                 .frame(maxWidth: .infinity)
                 Button {
-                    develop.setCrop(crop.switchedOrientation(imageAspect: imageAspect))
+                    develop.setCrop(crop.switchedOrientation(imageAspect: imageAspect, onPhoto: develop.cropBounds))
                 } label: {
                     Image(systemName: "rectangle.portrait.rotate")
                 }

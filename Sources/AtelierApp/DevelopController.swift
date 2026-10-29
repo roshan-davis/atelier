@@ -390,6 +390,11 @@ final class DevelopController: ObservableObject {
                     self.lensCorrectionSupported = session.lensCorrectionSupported
                     self.isRAW = session.isRAW
                     self.focalLength35 = session.focalLength35
+                    // Photos saved when Constrain Crop enlarged the photo instead of cropping it.
+                    if self.constrainCropIfNeeded() {
+                        self.dirty = true
+                        self.scheduleSave()
+                    }
                     self.scheduleRender()
                     // An unedited RAW's cached preview is the camera's embedded JPEG, which has no
                     // lens corrections, so it is framed a little wider than the render and the
@@ -812,6 +817,25 @@ final class DevelopController: ObservableObject {
                             focalLength35: focalLength35)
     }
 
+    /// Constrain Crop's test for the crop tool: whether a point on the upright, uncropped photo
+    /// (0...1 from the top left) shows the photo rather than the gray fill. nil when it is off.
+    var cropBounds: ((CGPoint) -> Bool)? {
+        guard settings.constrainCrop, let sourceSize else { return nil }
+        let geometry = LensGeometry(settings: settings, size: sourceSize, focalLength35: focalLength35)
+        return { geometry.showsPhoto(at: $0) }
+    }
+
+    /// Constrain Crop, as in Lightroom: shrinks the crop (keeping its shape and center where it
+    /// can) until no gray edge shows. Returns whether the crop changed.
+    @discardableResult
+    private func constrainCropIfNeeded() -> Bool {
+        guard let bounds = cropBounds else { return false }
+        let fitted = crop.fitted(imageAspect: orientedAspect, onPhoto: bounds)
+        guard fitted != crop else { return false }
+        settings.crop = fitted
+        return true
+    }
+
     /// What the Guided tool shows: the whole corrected photo, uncropped and zoomed out as far as
     /// it needs, so no guide is pushed out of view. The edit itself is unchanged.
     private func guidedViewSettings(_ settings: DevelopSettings) -> DevelopSettings {
@@ -883,6 +907,7 @@ final class DevelopController: ObservableObject {
     /// in the history) saves without adding a step.
     private func changed(step: String?) {
         if !settingPresetAmount { presetAmount = nil }
+        constrainCropIfNeeded()
         dirty = true
         if let step { pendingStep = step }
         scheduleRender()

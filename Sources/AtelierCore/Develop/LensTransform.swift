@@ -87,7 +87,6 @@ extension DevelopSettings {
         var key = DevelopSettings()
         key.lensProfileCorrections = lensProfileCorrections
         key.upright = upright
-        key.constrainCrop = constrainCrop
         key.showsWholePhoto = showsWholePhoto
         for parameter in Parameter.allCases
         where (parameter.panel == .lensCorrections && !parameter.isDefringe) || parameter.panel == .transform {
@@ -98,7 +97,7 @@ extension DevelopSettings {
 
     /// Whether the Lens Corrections or Transform panels change the photo's shape.
     public var hasLensGeometry: Bool {
-        upright != nil || self[.lensDistortion] != 0 || constrainCrop
+        upright != nil || self[.lensDistortion] != 0
             || Parameter.allCases.contains { $0.panel == .transform && self[$0] != $0.defaultValue }
     }
 }
@@ -112,7 +111,7 @@ public struct LensGeometry: Sendable {
     /// Radial distortion: the corrected photo at radius r samples the source at r(1 + k r²/R²),
     /// R being half the diagonal.
     public let distortion: Double
-    /// Corrected photo to output, including Constrain Crop's enlargement.
+    /// Corrected photo to output.
     public let matrix: Matrix3
     public let inverse: Matrix3
 
@@ -137,9 +136,6 @@ public struct LensGeometry: Sendable {
         if settings.showsWholePhoto {
             let shrink = Self.wholeScale(matrix: matrix, halfWidth: halfWidth, halfHeight: halfHeight)
             matrix = Matrix3.scale(shrink, shrink) * matrix
-        } else if settings.constrainCrop {
-            let grow = Self.fillScale(matrix: matrix, distortion: distortion, halfWidth: halfWidth, halfHeight: halfHeight)
-            matrix = Matrix3.scale(grow, grow) * matrix
         }
         self.matrix = matrix
         inverse = matrix.inverted ?? .identity
@@ -195,34 +191,11 @@ public struct LensGeometry: Sendable {
         return reach > 1 ? 1 / min(reach * 1.03, 5) : 1
     }
 
-    /// The smallest enlargement (at least 1) that keeps every output edge point on the photo.
-    static func fillScale(matrix: Matrix3, distortion: Double, halfWidth: Double, halfHeight: Double) -> Double {
-        guard let inverse = matrix.inverted else { return 1 }
-        let diagonal2 = halfWidth * halfWidth + halfHeight * halfHeight
-        var edge: [SIMD2<Double>] = []
-        let steps = 12
-        for i in 0...steps {
-            let t = Double(i) / Double(steps) * 2 - 1
-            edge.append(SIMD2(t * halfWidth, -halfHeight))
-            edge.append(SIMD2(t * halfWidth, halfHeight))
-            edge.append(SIMD2(-halfWidth, t * halfHeight))
-            edge.append(SIMD2(halfWidth, t * halfHeight))
-        }
-        func fits(_ scale: Double) -> Bool {
-            edge.allSatisfy { point in
-                var p = inverse.apply(point / scale)
-                p *= 1 + distortion * (p.x * p.x + p.y * p.y) / diagonal2
-                return abs(p.x) <= halfWidth * 1.0005 && abs(p.y) <= halfHeight * 1.0005
-            }
-        }
-        if fits(1) { return 1 }
-        var low = 1.0, high = 6.0
-        guard fits(high) else { return high }
-        for _ in 0..<40 {
-            let mid = (low + high) / 2
-            if fits(mid) { high = mid } else { low = mid }
-        }
-        return high
+    /// Whether an output point (0...1 from the top left) shows the photo rather than the gray
+    /// fill the correction leaves, for Constrain Crop.
+    public func showsPhoto(at point: CGPoint) -> Bool {
+        let p = sample(centered(point))
+        return abs(p.x) <= halfWidth * 1.0005 && abs(p.y) <= halfHeight * 1.0005
     }
 
     // MARK: Rendering
