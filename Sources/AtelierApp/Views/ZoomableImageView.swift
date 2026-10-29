@@ -113,6 +113,9 @@ struct ZoomableImageView: NSViewRepresentable {
     /// Set while a picker is out (the Fringe Color Selector): a click reports the point
     /// (0...1 across and down the photo) instead of zooming; dragging still pans.
     var onPick: ((CGPoint) -> Void)? = nil
+    /// A tool drawn over the photo (Masking), given where the photo is as it zooms and scrolls.
+    /// It stays the same size on screen; scroll and pinch on it still zoom and pan the photo.
+    var overlay: ((PhotoFrame) -> AnyView)? = nil
 
     func makeNSView(context: Context) -> ZoomScrollView {
         let view = ZoomScrollView()
@@ -145,11 +148,27 @@ struct ZoomableImageView: NSViewRepresentable {
             view.pendingCenter = center
             zoom.restoreCenter = nil
         }
+        view.isUpdating = true
         view.setImage(image, pixelSize: pixelSize)
         view.setDimmed(dimmed)
         view.apply(zoom.level)
         view.applyPendingCenter()
+        view.setOverlay(overlay?(view.photoFrame))
+        view.isUpdating = false
+        // Published after this update, not during it.
+        DispatchQueue.main.async { [weak view] in MainActor.assumeIsolated { view?.updatePhotoFrame() } }
     }
+}
+
+/// Where the photo sits in a photo view, in the view's own top-left coordinates, for a tool
+/// drawn over it. Kept by the photo view as it zooms and scrolls.
+@MainActor
+final class PhotoFrame: ObservableObject {
+    @Published fileprivate(set) var rect = CGRect.zero
+    /// Zoomed in far enough that dragging moves around the photo.
+    fileprivate(set) var canPan = false
+    /// Moves the photo with a drag of this many points (y down).
+    fileprivate(set) var pan: ((CGSize) -> Void)?
 }
 
 final class ZoomScrollView: NSScrollView {
@@ -182,6 +201,10 @@ final class ZoomScrollView: NSScrollView {
     }
     /// Set while following another view, so the move isn't sent back to it.
     private var following = false
+    /// Set while SwiftUI updates this view, when the photo frame mustn't be published.
+    var isUpdating = false
+    let photoFrame = PhotoFrame()
+    private var overlayHost: OverlayHostingView?
 
     init() {
         super.init(frame: .zero)
@@ -202,6 +225,37 @@ final class ZoomScrollView: NSScrollView {
         contentView.postsBoundsChangedNotifications = true
         NotificationCenter.default.addObserver(self, selector: #selector(visibleDidChange),
                                                name: NSView.boundsDidChangeNotification, object: contentView)
+        photoFrame.pan = { [weak self] delta in self?.pan(by: NSPoint(x: delta.width, y: -delta.height)) }
+    }
+
+    // MARK: Overlay
+
+    /// Shows `view` over the photo, or removes the overlay. Scroll and pinch on the overlay are
+    /// handed to this view, so the photo zooms and pans under any tool the same way.
+    func setOverlay(_ view: AnyView?) {
+        guard let view else {
+            overlayHost?.removeFromSuperview()
+            overlayHost = nil
+            return
+        }
+        if let overlayHost {
+            overlayHost.rootView = view
+        } else {
+            let host = OverlayHostingView(rootView: view)
+            host.scrollView = self
+            host.frame = bounds
+            host.autoresizingMask = [.width, .height]
+            addSubview(host, positioned: .above, relativeTo: nil)
+            overlayHost = host
+        }
+    }
+
+    /// Tells the overlay where the photo is now.
+    func updatePhotoFrame() {
+        guard let overlayHost, !isUpdating else { return }
+        let rect = documentSize.width > 0 ? overlayHost.convert(canvas.bounds, from: canvas) : .zero
+        photoFrame.canPan = canPan
+        if photoFrame.rect != rect { photoFrame.rect = rect }
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
@@ -256,6 +310,7 @@ final class ZoomScrollView: NSScrollView {
     @objc private func visibleDidChange() {
         reportVisible()
         leadPeers()
+        updatePhotoFrame()
     }
 
     // MARK: Compare panes
@@ -422,12 +477,14 @@ final class ZoomScrollView: NSScrollView {
         updateMask()
         report()
         reportVisible()
+        updatePhotoFrame()
     }
 
     @objc private func didEndMagnify() {
         level = .percent(Double(magnification * 100))
         onZoomChange?(level)
         report()
+        updatePhotoFrame()
     }
 
     override func scrollWheel(with event: NSEvent) {
@@ -463,6 +520,20 @@ final class ZoomScrollView: NSScrollView {
         origin.y += delta.y / magnification
         contentView.scroll(to: contentView.constrainBoundsRect(NSRect(origin: origin, size: contentView.bounds.size)).origin)
         reflectScrolledClipView(contentView)
+    }
+}
+
+/// A tool's SwiftUI overlay over the photo. It takes clicks and drags; scrolling and pinching
+/// go to the photo view underneath.
+final class OverlayHostingView: NSHostingView<AnyView> {
+    weak var scrollView: ZoomScrollView?
+
+    override func scrollWheel(with event: NSEvent) {
+        if let scrollView { scrollView.scrollWheel(with: event) } else { super.scrollWheel(with: event) }
+    }
+
+    override func magnify(with event: NSEvent) {
+        if let scrollView { scrollView.magnify(with: event) } else { super.magnify(with: event) }
     }
 }
 
