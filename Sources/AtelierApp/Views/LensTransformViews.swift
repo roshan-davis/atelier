@@ -171,12 +171,14 @@ struct TransformPanel: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             if develop.isGuiding {
-                Text("Drag along edges that should be vertical or horizontal. The photo straightens once there are two guides; draw up to four. Drag a guide's end to move it; click a guide and press Delete to remove it. If the correction pushes part of the photo out of the frame, lower Scale or ⌘⌥-drag the photo.")
+                Text("Drag along edges that should be vertical or horizontal. The photo straightens once there are two guides; draw up to four. Drag a guide's end to move it; click a guide and press Delete to remove it. If the correction pushes part of the photo out of the frame, turn on Show Whole Photo to see it, or lower Scale or ⌘⌥-drag the photo to bring it back.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 Toggle("Show Loupe", isOn: $showLoupe)
                     .help("Magnify the photo around the pointer while you place a guide (O)")
+                Toggle("Show Whole Photo", isOn: $develop.guidedShowsWholePhoto)
+                    .help("Zoom out to the whole corrected photo, uncropped, so guides the correction pushed out of the frame show. Changes only the view.")
                 HStack {
                     Button("Clear Guides") { develop.setGuides([]) }
                         .disabled(develop.settings.upright?.guides.isEmpty ?? true)
