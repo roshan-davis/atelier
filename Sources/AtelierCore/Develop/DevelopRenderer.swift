@@ -225,32 +225,9 @@ public final class DevelopRenderer: @unchecked Sendable {
         return image
     }
 
-    /// Removes (positive) or adds (negative) a flat veil of haze, then restores saturation.
+    /// Removes (positive) or adds (negative) haze; see `Dehaze`.
     static func dehaze(_ image: CIImage, amount: Double) -> CIImage {
-        let airlight = 0.18
-        let gain: Double, bias: Double
-        if amount > 0 {
-            let k = 0.35 * amount
-            gain = 1 / (1 - k)
-            bias = -k * airlight / (1 - k)
-        } else {
-            let k = 0.35 * -amount
-            gain = 1 - k
-            bias = k * airlight
-        }
-        let matrix = CIFilter.colorMatrix()
-        matrix.inputImage = image
-        matrix.rVector = CIVector(x: gain, y: 0, z: 0, w: 0)
-        matrix.gVector = CIVector(x: 0, y: gain, z: 0, w: 0)
-        matrix.bVector = CIVector(x: 0, y: 0, z: gain, w: 0)
-        matrix.aVector = CIVector(x: 0, y: 0, z: 0, w: 1)
-        matrix.biasVector = CIVector(x: bias, y: bias, z: bias, w: 0)
-        let color = CIFilter.colorControls()
-        color.inputImage = matrix.outputImage
-        color.saturation = Float(1 + 0.25 * amount)
-        color.brightness = 0
-        color.contrast = 1
-        return color.outputImage ?? image
+        Dehaze.apply(image, amount: amount)
     }
 
     /// Unsharp mask for positive amounts, a blend toward a blurred copy for negative ones.

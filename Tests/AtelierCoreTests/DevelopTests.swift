@@ -113,17 +113,13 @@ final class DevelopTests: XCTestCase {
         let vignetted = try XCTUnwrap(session.render(vignette))
         XCTAssertLessThan(try luma(vignetted, x: 1, y: 1), try luma(neutral, x: 1, y: 1) - 0.05, "corners darken")
 
-        var dehaze = DevelopSettings()
-        dehaze.dehaze = 100
-        XCTAssertNotEqual(try centerLuma(XCTUnwrap(session.render(dehaze))), try centerLuma(neutral))
-
         var grain = DevelopSettings()
         grain.grain = 100
         let grainy = try XCTUnwrap(session.render(grain))
         let values = try (0..<16).map { try luma(grainy, x: 8 + $0 * 3, y: 30) }
         XCTAssertGreaterThan(Set(values).count, 3, "grain varies pixel to pixel")
 
-        for parameter in [DevelopSettings.Parameter.clarity, .texture, .sharpening, .luminanceNoise, .colorNoise] {
+        for parameter in [DevelopSettings.Parameter.dehaze, .clarity, .texture, .sharpening, .luminanceNoise, .colorNoise] {
             var settings = DevelopSettings()
             settings[parameter] = parameter.range.upperBound
             XCTAssertNotNil(session.render(settings), "\(parameter) renders")
