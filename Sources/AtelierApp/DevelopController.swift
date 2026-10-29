@@ -44,6 +44,7 @@ final class DevelopController: ObservableObject {
     @Published var isPickingWhiteBalance = false {
         didSet {
             guard isPickingWhiteBalance, !oldValue else { return }
+            isPickingFringe = false
             isCropping = false
             isAIOpen = false
             isMasking = false
@@ -54,6 +55,24 @@ final class DevelopController: ObservableObject {
     }
     /// Auto or the White Balance Selector is measuring the photo.
     @Published private(set) var isFindingWhiteBalance = false
+    /// Lens Corrections > Defringe's Fringe Color Selector is out: a click on a purple or green
+    /// fringe sets that color's Hue range and Amount. The photo still zooms and pans.
+    @Published var isPickingFringe = false {
+        didSet {
+            guard isPickingFringe != oldValue else { return }
+            fringeMessage = nil
+            guard isPickingFringe else { return }
+            isPickingWhiteBalance = false
+            isCropping = false
+            isAIOpen = false
+            isMasking = false
+            isGuiding = false
+            showingBefore = false
+            compareMode = .off
+        }
+    }
+    /// Why the last click with the Fringe Color Selector set nothing.
+    @Published private(set) var fringeMessage: String?
     @Published var showingBefore = false {
         didSet { if showingBefore != oldValue { scheduleRender() } }
     }
@@ -94,6 +113,7 @@ final class DevelopController: ObservableObject {
                 isMasking = false
                 isGuiding = false
                 isPickingWhiteBalance = false
+                isPickingFringe = false
             }
             scheduleRender()
         }
@@ -106,6 +126,7 @@ final class DevelopController: ObservableObject {
             isMasking = false
             isGuiding = false
             isPickingWhiteBalance = false
+            isPickingFringe = false
             showingBefore = false
             compareMode = .off
         }
@@ -120,6 +141,7 @@ final class DevelopController: ObservableObject {
                 isAIOpen = false
                 isGuiding = false
                 isPickingWhiteBalance = false
+                isPickingFringe = false
                 showingBefore = false
                 compareMode = .off
                 if selectedMaskID == nil { selectedMaskID = settings.masks.last?.id }
@@ -135,6 +157,7 @@ final class DevelopController: ObservableObject {
             guard isGuiding != oldValue else { return }
             if isGuiding {
                 isPickingWhiteBalance = false
+                isPickingFringe = false
                 isCropping = false
                 isAIOpen = false
                 isMasking = false
@@ -319,6 +342,7 @@ final class DevelopController: ObservableObject {
         isCropping = false
         isGuiding = false
         isPickingWhiteBalance = false
+        isPickingFringe = false
         uprightMessage = nil
         sourceSize = nil
         selectedMaskID = nil
@@ -537,7 +561,7 @@ final class DevelopController: ObservableObject {
     func set(_ parameter: DevelopSettings.Parameter, to value: Double) {
         guard assetID != nil else { return }
         settings[parameter] = value
-        if parameter.panel == .lensCorrections || parameter.panel == .transform { beforeImage = nil }
+        if (parameter.panel == .lensCorrections && !parameter.isDefringe) || parameter.panel == .transform { beforeImage = nil }
         let shown = parameter == .tint ? asShotTint + settings[parameter] : settings[parameter]
         changed(step: Self.stepName(parameter, value: shown))
         if beforeImage == nil, compareMode != .off { renderBeforeIfNeeded() }
@@ -568,6 +592,7 @@ final class DevelopController: ObservableObject {
             for channel in DevelopSettings.CurveChannel.allCases { settings.setPoints([], for: channel) }
         case .lensCorrections:
             settings.lensProfileCorrections = true
+            settings.removeChromaticAberration = false
         case .transform:
             settings.upright = nil
             settings.constrainCrop = false
@@ -590,7 +615,7 @@ final class DevelopController: ObservableObject {
         switch panel {
         case .basic where settings.profile != .cameraMatching || settings.monochrome: return true
         case .toneCurve where settings.hasPointCurve: return true
-        case .lensCorrections where !settings.lensProfileCorrections: return true
+        case .lensCorrections where !settings.lensProfileCorrections || settings.removeChromaticAberration: return true
         case .transform where settings.upright != nil || settings.constrainCrop: return true
         default: break
         }
@@ -636,6 +661,56 @@ final class DevelopController: ObservableObject {
         guard assetID != nil, on != settings.lensProfileCorrections else { return }
         settings.lensProfileCorrections = on
         shapeChanged(step: on ? "Enable Profile Corrections" : "Disable Profile Corrections")
+    }
+
+    /// Lens Corrections > Remove Chromatic Aberration.
+    func setRemoveChromaticAberration(_ on: Bool) {
+        guard assetID != nil, on != settings.removeChromaticAberration else { return }
+        settings.removeChromaticAberration = on
+        changed(step: on ? "Remove Chromatic Aberration" : "Chromatic Aberration: Off")
+    }
+
+    /// A Defringe Hue range. `moving` is the end being dragged; nil moves the whole range.
+    func setHueRange(_ color: DevelopSettings.FringeColor, low: Double, high: Double,
+                     moving: DevelopSettings.Parameter? = nil) {
+        guard assetID != nil else { return }
+        var updated = settings
+        updated.setHueRange(color, low: low.rounded(), high: high.rounded(), moving: moving)
+        guard updated != settings else { return }
+        settings = updated
+        changed(step: "Defringe \(color.title) Hue \(Int(settings[color.hueLow]))/\(Int(settings[color.hueHigh]))")
+    }
+
+    func resetHueRange(_ color: DevelopSettings.FringeColor) {
+        setHueRange(color, low: color.hueLow.defaultValue, high: color.hueHigh.defaultValue)
+    }
+
+    /// A click with the Fringe Color Selector at `point` (0...1 from the top left of the
+    /// cropped photo). Measures the sharpest render on screen, so zooming in first helps.
+    func pickFringe(at point: CGPoint) {
+        let sharp = wantsFullResolution ? fullSession : nil
+        guard let session = sharp ?? self.session, let assetID else { return }
+        let settings = self.settings
+        let pickQueue = sharp != nil ? fullQueue : queue
+        pickQueue.async {
+            let colors = session.fringeColors(at: point, settings: settings)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard self.assetID == assetID, self.isPickingFringe else { return }
+                    guard let pick = Defringe.pick(colors, settings: self.settings) else {
+                        self.fringeMessage = "Cannot set the purple or green fringe color. Click on a purple or green fringe."
+                        return
+                    }
+                    var updated = self.settings
+                    updated.setHueRange(pick.color, low: pick.hueLow, high: pick.hueHigh)
+                    updated[pick.color.amount] = pick.amount
+                    self.isPickingFringe = false
+                    guard updated != self.settings else { return }
+                    self.settings = updated
+                    self.changed(step: "Defringe: \(pick.color.title) Fringe Color")
+                }
+            }
+        }
     }
 
     func setConstrainCrop(_ on: Bool) {

@@ -67,6 +67,17 @@ struct ParameterGroups: View {
 
     var body: some View {
         ForEach(groups, id: \.0) { group in
+            if group.1.first?.isDefringe == true {
+                DefringeGroup(develop: develop)
+            } else {
+                sliders(group)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func sliders(_ group: (String, [DevelopSettings.Parameter])) -> some View {
+        Group {
             if group.1.first == .exposure {
                 HStack(alignment: .lastTextBaseline) {
                     GroupHeading(title: group.0)
@@ -90,13 +101,19 @@ struct ParameterGroups: View {
     }
 }
 
-/// Lens Corrections: the RAW engine's profile corrections, then manual distortion and vignetting.
+/// Lens Corrections: chromatic aberration and the RAW engine's profile corrections, then manual
+/// distortion, Defringe and vignetting.
 struct LensCorrectionsPanel: View {
     @ObservedObject var develop: DevelopController
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
             GroupHeading(title: "Profile")
+            Toggle("Remove Chromatic Aberration", isOn: Binding(
+                get: { develop.settings.removeChromaticAberration },
+                set: { develop.setRemoveChromaticAberration($0) }))
+                .disabled(develop.assetID == nil)
+                .help("Lines up the red and blue channels with green, measured from this photo, so red-cyan and blue-yellow edges toward the corners go away")
             Toggle("Enable Profile Corrections", isOn: Binding(
                 get: { develop.lensCorrectionSupported && develop.settings.lensProfileCorrections },
                 set: { develop.setLensProfileCorrections($0) }))
@@ -353,5 +370,176 @@ struct GuidedUprightView: View {
         guard length2 > 0 else { return distance(p, line.0) }
         let t = min(1, max(0, ((p.x - line.0.x) * dx + (p.y - line.0.y) * dy) / length2))
         return distance(p, CGPoint(x: line.0.x + t * dx, y: line.0.y + t * dy))
+    }
+}
+
+/// Lens Corrections > Defringe, as in Lightroom: the Fringe Color Selector, then an Amount and
+/// a Hue range for purple and for green fringes.
+struct DefringeGroup: View {
+    @ObservedObject var develop: DevelopController
+
+    var body: some View {
+        HStack(alignment: .lastTextBaseline) {
+            GroupHeading(title: "Defringe")
+            Spacer()
+            Button {
+                develop.isPickingFringe.toggle()
+            } label: {
+                Image(systemName: "eyedropper")
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(develop.isPickingFringe ? Color.accentColor : Color.secondary)
+            .disabled(develop.assetID == nil)
+            .help("Fringe Color Selector: zoom in, then click a purple or green fringe to set its Hue range and Amount")
+        }
+        if develop.isPickingFringe || develop.fringeMessage != nil {
+            Text(develop.fringeMessage ?? "Click a purple or green fringe in the photo. Zoom in to see fringes; Esc to cancel.")
+                .font(.caption)
+                .foregroundStyle(develop.fringeMessage == nil ? Color.secondary : Color.orange)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        ParameterSlider(parameter: .lensDefringePurpleAmount, develop: develop)
+        HueRangeRow(color: .purple, develop: develop)
+        ParameterSlider(parameter: .lensDefringeGreenAmount, develop: develop)
+        HueRangeRow(color: .green, develop: develop)
+    }
+}
+
+/// A Defringe Hue range: two ends on a strip of the colors it can cover.
+struct HueRangeRow: View {
+    let color: DevelopSettings.FringeColor
+    @ObservedObject var develop: DevelopController
+
+    var body: some View {
+        let low = develop.settings[color.hueLow], high = develop.settings[color.hueHigh]
+        HStack(spacing: 8) {
+            Text(color.hueLow.label)
+                .lineLimit(1)
+                .frame(width: 78, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) { develop.resetHueRange(color) }
+                .help("Double-click to reset")
+            HueRangeSlider(color: color, low: low, high: high,
+                           onChange: { newLow, newHigh, moving in
+                               develop.setHueRange(color, low: newLow, high: newHigh, moving: moving)
+                           },
+                           onOption: { held in develop.sliderPreview = held ? .defringeHue(color) : nil })
+                .help("Drag an end to widen or narrow the range, or between the ends to move it. "
+                      + SliderPreview.defringeHue(color).hint)
+            Text("\(Int(low.rounded()))/\(Int(high.rounded()))")
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .foregroundStyle(low == color.hueLow.defaultValue && high == color.hueHigh.defaultValue
+                                 ? Color.secondary : Color.primary)
+                .frame(width: 44, alignment: .trailing)
+        }
+        .font(.callout)
+        .frame(height: 20)
+    }
+}
+
+/// Lightroom's two-ended hue slider: the track shows the slider's colors, dimmed outside the
+/// range. Dragging an end moves it, dragging between the ends moves both, and the ends stay at
+/// least `DevelopSettings.minimumHueSpan` apart.
+struct HueRangeSlider: View {
+    let color: DevelopSettings.FringeColor
+    let low: Double
+    let high: Double
+    /// New low and high, and the end being dragged (nil when both move).
+    let onChange: (Double, Double, DevelopSettings.Parameter?) -> Void
+    var onOption: ((Bool) -> Void)?
+
+    private enum Grab {
+        case low, high
+        case both(startLow: Double, startHigh: Double, startX: CGFloat)
+    }
+
+    @State private var grab: Grab?
+
+    private var colors: [Color] {
+        stride(from: 0.0, through: 100, by: 20).map {
+            Color(hue: color.degrees($0).truncatingRemainder(dividingBy: 360) / 360, saturation: 0.75, brightness: 0.95)
+        }
+    }
+
+    var body: some View {
+        GeometryReader { geometry in
+            let width = geometry.size.width
+            let midY = geometry.size.height / 2
+            let lowX = low / 100 * width, highX = high / 100 * width
+            ZStack(alignment: .topLeading) {
+                Capsule()
+                    .fill(LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing))
+                    .frame(width: width, height: 5)
+                    .offset(y: midY - 2.5)
+                // Dim the colors outside the range.
+                Rectangle()
+                    .fill(Color.black.opacity(0.55))
+                    .frame(width: max(0, lowX), height: 5)
+                    .offset(y: midY - 2.5)
+                Rectangle()
+                    .fill(Color.black.opacity(0.55))
+                    .frame(width: max(0, width - highX), height: 5)
+                    .offset(x: highX, y: midY - 2.5)
+                ForEach([lowX, highX], id: \.self) { x in
+                    Circle()
+                        .fill(Color.white)
+                        .overlay(Circle().stroke(Color.black.opacity(0.25), lineWidth: 0.5))
+                        .shadow(color: .black.opacity(0.3), radius: 1, y: 0.5)
+                        .frame(width: 11, height: 11)
+                        .offset(x: x - 5.5, y: midY - 5.5)
+                }
+            }
+            .contentShape(Rectangle())
+            .gesture(DragGesture(minimumDistance: 0)
+                .onChanged { drag in
+                    onOption?(NSEvent.modifierFlags.contains(.option))
+                    guard width > 0 else { return }
+                    let value = min(100, max(0, Double(drag.location.x / width) * 100))
+                    let current = grab ?? startGrab(at: drag.startLocation.x, width: width)
+                    grab = current
+                    switch current {
+                    // An end stops at the minimum span rather than pushing the other.
+                    case .low: onChange(min(value, high - DevelopSettings.minimumHueSpan), high, color.hueLow)
+                    case .high: onChange(low, max(value, low + DevelopSettings.minimumHueSpan), color.hueHigh)
+                    case .both(let startLow, let startHigh, let startX):
+                        let span = startHigh - startLow
+                        let shift = Double((drag.location.x - startX) / width) * 100
+                        let newLow = min(100 - span, max(0, startLow + shift))
+                        onChange(newLow, newLow + span, nil)
+                    }
+                }
+                .onEnded { _ in
+                    grab = nil
+                    onOption?(false)
+                })
+        }
+        .frame(height: 16)
+    }
+
+    /// An end when the drag starts on or outside it (the nearer one), both between them.
+    private func startGrab(at x: CGFloat, width: CGFloat) -> Grab {
+        let lowX = low / 100 * width, highX = high / 100 * width
+        let toLow = abs(x - lowX), toHigh = abs(x - highX)
+        if min(toLow, toHigh) <= 7 { return toLow <= toHigh ? .low : .high }
+        if x > lowX, x < highX { return .both(startLow: low, startHigh: high, startX: x) }
+        return toLow <= toHigh ? .low : .high
+    }
+}
+
+/// Over the photo while the Fringe Color Selector is out.
+struct FringePickerHint: View {
+    @ObservedObject var develop: DevelopController
+
+    var body: some View {
+        Text(develop.fringeMessage ?? "Click a purple or green fringe. Zoom in to see it clearly. Esc to cancel.")
+            .font(.callout)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(.regularMaterial, in: Capsule())
+            .frame(maxWidth: .infinity)
+            .padding(.top, 10)
+            .allowsHitTesting(false)
     }
 }

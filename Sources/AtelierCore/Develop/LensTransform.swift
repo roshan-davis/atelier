@@ -64,12 +64,14 @@ extension DevelopSettings {
     }
 
     /// The settings that decide the corrected photo's shape, for caching what depends on it.
+    /// Chromatic aberration and Defringe change colors, not the shape, so they are left out.
     public var lensGeometryKey: DevelopSettings {
         var key = DevelopSettings()
         key.lensProfileCorrections = lensProfileCorrections
         key.upright = upright
         key.constrainCrop = constrainCrop
-        for parameter in Parameter.allCases where parameter.panel == .lensCorrections || parameter.panel == .transform {
+        for parameter in Parameter.allCases
+        where (parameter.panel == .lensCorrections && !parameter.isDefringe) || parameter.panel == .transform {
             key[parameter] = self[parameter]
         }
         return key

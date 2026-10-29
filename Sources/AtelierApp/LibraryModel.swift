@@ -777,6 +777,10 @@ final class LibraryModel: ObservableObject {
             develop.isPickingWhiteBalance = false
             return true
         }
+        if mode == .develop, develop.isPickingFringe, event.keyCode == 53 {  // escape
+            develop.isPickingFringe = false
+            return true
+        }
         if mode == .develop, handleTransformKey(event) { return true }
         if mode == .develop, handleMaskingKey(event) { return true }
 

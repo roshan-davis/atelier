@@ -69,7 +69,8 @@ public struct DevelopPreset: Codable, Hashable, Sendable, Identifiable {
             case .treatment: return settings.monochrome || parametersChanged
             case .whiteBalance: return settings.temperature != nil || parametersChanged
             case .toneCurve: return settings.hasPointCurve || parametersChanged
-            case .lensCorrections: return !settings.lensProfileCorrections || parametersChanged
+            case .lensCorrections:
+                return !settings.lensProfileCorrections || settings.removeChromaticAberration || parametersChanged
             case .transform: return settings.upright != nil || settings.constrainCrop || parametersChanged
             case .crop: return settings.crop != nil
             case .masks: return !settings.masks.isEmpty
@@ -158,6 +159,7 @@ public struct DevelopPreset: Codable, Hashable, Sendable, Identifiable {
                 result.monochrome = settings.monochrome
             case .lensCorrections:
                 result.lensProfileCorrections = settings.lensProfileCorrections
+                result.removeChromaticAberration = settings.removeChromaticAberration
             case .transform:
                 result.upright = settings.upright
                 result.constrainCrop = settings.constrainCrop
