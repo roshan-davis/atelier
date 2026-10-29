@@ -40,8 +40,12 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
     public var removeChromaticAberration = false
     /// Transform > Upright; nil is Off.
     public var upright: Upright?
-    /// Transform > Constrain Crop: enlarge the corrected photo so no empty edges show.
+    /// Transform > Constrain Crop: keep the crop inside the corrected photo, so no empty (gray)
+    /// edges show. The crop itself is changed, as in Lightroom; see `LensGeometry.showsPhoto`.
     public var constrainCrop = false
+    /// View only, never saved: shrink the corrected photo so all of it shows, for the Guided
+    /// tool's Show Whole Photo (Lightroom cuts off what the correction pushes out of the frame).
+    public var showsWholePhoto = false
     /// Basic > Treatment: Black & White turns the photo gray through the B&W Mix sliders.
     public var monochrome = false
 
@@ -542,11 +546,26 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         }
 
         /// Whether every corner of the crop lies on the photo once it is straightened.
-        /// `imageAspect` is the turned photo's width / height.
-        public func fits(imageAspect: Double) -> Bool {
-            corners(imageAspect: imageAspect).allSatisfy { point in
+        /// `imageAspect` is the turned photo's width / height. With `onPhoto` (Constrain Crop),
+        /// every point along the crop's edges must also pass it; it takes a point on the upright,
+        /// uncropped photo, 0...1 from the top left.
+        public func fits(imageAspect: Double, onPhoto: ((CGPoint) -> Bool)? = nil) -> Bool {
+            let inside = corners(imageAspect: imageAspect).allSatisfy { point in
                 point.x >= -1e-6 && point.x <= imageAspect + 1e-6 && point.y >= -1e-6 && point.y <= 1 + 1e-6
             }
+            guard inside, let onPhoto else { return inside }
+            let turned = CGSize(width: imageAspect, height: 1)
+            let upright = quarterTurns % 2 == 1 ? CGSize(width: 1, height: imageAspect) : turned
+            let steps = 8
+            for i in 0...steps {
+                let t = Double(i) / Double(steps)
+                for (u, v) in [(t, 0.0), (t, 1.0), (0.0, t), (1.0, t)] {
+                    let output = CGPoint(x: u * width * imageAspect, y: v * height)
+                    let p = sourcePoint(fromOutput: output, sourceSize: upright)
+                    if !onPhoto(CGPoint(x: p.x / upright.width, y: p.y / upright.height)) { return false }
+                }
+            }
+            return true
         }
 
         /// The crop's corners mapped back onto the unrotated photo, in units of its height.
@@ -565,10 +584,10 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
 
         /// The largest version of this crop, shrunk about its center (and moved toward the
         /// photo's center if needed), that stays on the straightened photo.
-        public func fitted(imageAspect: Double) -> Crop {
-            if fits(imageAspect: imageAspect) { return self }
+        public func fitted(imageAspect: Double, onPhoto: ((CGPoint) -> Bool)? = nil) -> Crop {
+            if fits(imageAspect: imageAspect, onPhoto: onPhoto) { return self }
             var moved = self
-            if !moved.scaled(by: 0.001).fits(imageAspect: imageAspect) {
+            if !moved.scaled(by: 0.001).fits(imageAspect: imageAspect, onPhoto: onPhoto) {
                 // Slide the center toward the photo's center until a tiny crop fits there.
                 var low = 0.0, high = 1.0
                 let cx = x + width / 2, cy = y + height / 2
@@ -577,7 +596,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
                     var candidate = self
                     candidate.x = cx + (0.5 - cx) * t - width / 2
                     candidate.y = cy + (0.5 - cy) * t - height / 2
-                    if candidate.scaled(by: 0.001).fits(imageAspect: imageAspect) { high = t } else { low = t }
+                    if candidate.scaled(by: 0.001).fits(imageAspect: imageAspect, onPhoto: onPhoto) { high = t } else { low = t }
                 }
                 moved.x = cx + (0.5 - cx) * high - width / 2
                 moved.y = cy + (0.5 - cy) * high - height / 2
@@ -585,9 +604,54 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             var low = 0.0, high = 1.0
             for _ in 0..<30 {
                 let scale = (low + high) / 2
-                if moved.scaled(by: scale).fits(imageAspect: imageAspect) { low = scale } else { high = scale }
+                if moved.scaled(by: scale).fits(imageAspect: imageAspect, onPhoto: onPhoto) { low = scale } else { high = scale }
             }
             return moved.scaled(by: low)
+        }
+
+        /// Constrain Crop: the largest crop of this one's shape and straighten angle that passes
+        /// `onPhoto` (see `fits`). Its position is searched as well as its size, since a
+        /// perspective correction leaves an uneven shape (a keystone fix is wider at one end),
+        /// so centering it would waste photo.
+        public func largest(imageAspect: Double, onPhoto: @escaping (CGPoint) -> Bool) -> Crop {
+            let full = Crop.centered(aspect: width * imageAspect / height, imageAspect: imageAspect)
+            func candidate(_ cx: Double, _ cy: Double, _ scale: Double) -> Crop {
+                var copy = self
+                copy.width = full.width * scale
+                copy.height = full.height * scale
+                copy.x = cx - copy.width / 2
+                copy.y = cy - copy.height / 2
+                return copy
+            }
+            func largestScale(_ cx: Double, _ cy: Double) -> Double {
+                guard candidate(cx, cy, 0.001).fits(imageAspect: imageAspect, onPhoto: onPhoto) else { return 0 }
+                var low = 0.001, high = 1.0
+                for _ in 0..<24 {
+                    let mid = (low + high) / 2
+                    if candidate(cx, cy, mid).fits(imageAspect: imageAspect, onPhoto: onPhoto) { low = mid } else { high = mid }
+                }
+                return low
+            }
+            // From the photo's center, move while the crop can grow.
+            var cx = 0.5, cy = 0.5
+            var best = largestScale(cx, cy)
+            guard best > 0 else { return fitted(imageAspect: imageAspect, onPhoto: onPhoto) }
+            var step = 0.1
+            while step > 0.0002 {
+                var improved = false
+                for (dx, dy) in [(step, 0.0), (-step, 0.0), (0.0, step), (0.0, -step)] {
+                    let scale = largestScale(cx + dx, cy + dy)
+                    if scale > best + 1e-9 {
+                        best = scale
+                        cx += dx
+                        cy += dy
+                        improved = true
+                        break
+                    }
+                }
+                if !improved { step /= 2 }
+            }
+            return candidate(cx, cy, best)
         }
 
         /// Scaled about its center.
