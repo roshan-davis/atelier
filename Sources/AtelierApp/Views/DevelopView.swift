@@ -752,15 +752,8 @@ struct PanelSection<Content: View>: View {
     var body: some View {
         VStack(spacing: 0) {
             SectionBand(title: title, isExpanded: $isExpanded, isModified: isModified) { hovering in
+                // The switch sits last, so it stays in one column whether or not a reset shows.
                 HStack(spacing: 4) {
-                    if let isOn {
-                        Toggle(title, isOn: isOn)
-                            .toggleStyle(.switch)
-                            .controlSize(.mini)
-                            .labelsHidden()
-                            .help(isOn.wrappedValue ? "Turn \(title) off to compare; its settings are kept"
-                                                    : "Turn \(title) back on")
-                    }
                     if isModified, let reset {
                         Button(action: reset) {
                             Image(systemName: "arrow.uturn.backward")
@@ -768,6 +761,14 @@ struct PanelSection<Content: View>: View {
                         .buttonStyle(SidebarIconButtonStyle())
                         .opacity(hovering ? 1 : 0.6)
                         .help("Reset \(title)")
+                    }
+                    if let isOn {
+                        Toggle(title, isOn: isOn)
+                            .toggleStyle(.switch)
+                            .controlSize(.mini)
+                            .labelsHidden()
+                            .help(isOn.wrappedValue ? "Turn \(title) off to compare; its settings are kept"
+                                                    : "Turn \(title) back on")
                     }
                 }
             }
