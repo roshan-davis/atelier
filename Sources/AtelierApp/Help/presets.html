@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Presets · Atelier Help</title>
+<link rel="stylesheet" href="assets/help.css">
+<script src="assets/toc.js" defer></script>
+<script src="assets/help.js" defer></script>
+</head>
+<body>
+<main class="page">
+
+<div class="eyebrow">Tool</div>
+<h1>Presets</h1>
+<p class="lede">A preset is a saved set of slider values. Apply a look in one click, save your own, and use them on many photos at once.</p>
+
+<div class="chips"><a href="#apply">Preview and apply</a><a href="#amount">Amount</a><a href="#create">Create a preset</a><a href="#manage">Manage presets and groups</a><a href="#built-in">Built-in packs</a><a href="#many">Many photos at once</a></div>
+
+<h2 id="apply">Preview and apply</h2>
+<figure>
+  <div class="pins pinned">
+  <div class="panel">
+    <div class="row" style="padding:7px 12px;background:#333;font-size:11px;font-weight:700;letter-spacing:.05em;color:#aaa" data-pin="1"><span style="flex:1">PRESETS</span><span>＋</span><span style="margin-left:10px">⇕</span></div>
+    <div class="pb">
+      <div class="row" style="background:#1f1f1f;border-radius:5px;padding:0 8px;color:#777" data-pin="2">Search Presets</div>
+      <div class="row" data-pin="3"><span style="flex:1">› User Presets</span><span style="color:var(--app-text-2)">3</span></div>
+      <div class="row"><span style="flex:1">› Atelier</span><span style="color:var(--app-text-2)">5</span></div>
+      <div class="row"><span style="flex:1">⌄ Film</span><span style="color:var(--app-text-2)">6</span></div>
+      <div class="row" style="padding-left:18px"><span style="flex:1">Portrait 400</span><span style="color:var(--app-text-2);font-size:10px">🔒</span></div>
+      <div class="row" style="padding-left:18px;background:rgba(10,132,255,.3);border-radius:4px" data-pin="4" data-pin-side="right"><span style="flex:1">Gold 200</span><span style="color:var(--app-text-2);font-size:10px">🔒</span></div>
+      <div class="row" style="padding-left:18px"><span style="flex:1">Vivid Slide</span><span style="color:var(--app-text-2);font-size:10px">🔒</span></div>
+      <div class="row"><span style="flex:1">› Black &amp; White</span><span style="color:var(--app-text-2)">6</span></div>
+    </div>
+  </div>
+  </div>
+</figure>
+<ol class="legend">
+  <li>The Presets section in Develop's left column. <b>＋</b> creates a preset; <b>⇕</b> collapses every group.</li>
+  <li><b>Search</b> filters every group by name.</li>
+  <li><b>Groups</b>: yours first, then the built-in packs. Click a group to open or close it. Built-in presets show a lock.</li>
+  <li><b>Rest the pointer</b> on a preset to see it on your photo in the <a href="develop.html#navigator">Navigator</a>. <b>Click</b> to apply it.</li>
+</ol>
+<p>Applying is one history step (Preset: Gold 200), so <kbd>⌘Z</kbd> undoes it. A preset only changes the settings it includes; everything else on the photo stays as it was.</p>
+
+<h2 id="amount">Amount</h2>
+<p>After you click a preset, an <b>Amount</b> slider appears at the top of the Presets section. Drag it from 0 to 200% to use the look more gently or more strongly. It updates the same history step, and goes away when you edit another setting or open another photo. Double-click it to go back to 100%.</p>
+
+<h2 id="create">Create a preset</h2>
+<ol class="steps">
+  <li>Edit a photo until you like it.</li>
+  <li>Click <b>＋</b> in the Presets header, or <span class="path">Develop › New Preset…</span> (<kbd>⇧⌘N</kbd>).</li>
+  <li>Type a <b>Preset Name</b> and pick a <b>Group</b> (or <span class="path">New Group…</span>). Leave it as User Presets if you're not sure.</li>
+  <li>Tick the <b>settings</b> the preset should carry. A setting still at its default shows “(no change)”.</li>
+  <li>Click <b>Create</b>.</li>
+</ol>
+<div class="note"><p><span class="label">What's unticked to start.</span> Profile, White Balance, Lens Corrections, Transform, Crop and Masks depend on the photo, so they start unticked, as in Lightroom. The dialog remembers your last choice.</p></div>
+
+<h2 id="manage">Manage presets and groups</h2>
+<dl class="defs">
+  <dt>Right-click your preset</dt><dd>Apply · Update with Current Settings… · Rename… · Move to Group · Duplicate · Show in Finder · Delete…</dd>
+  <dt>Right-click a built-in preset</dt><dd>Apply · Duplicate to User Presets (to start from it and change it)</dd>
+  <dt>Right-click your group</dt><dd>Create Preset in This Group… · Rename Group… · Delete Group…</dd>
+  <dt>Right-click a built-in pack</dt><dd>Hide Group. <span class="path">Develop › Manage Presets…</span> shows or hides each pack.</dd>
+</dl>
+<p>Photos that used a deleted preset keep their settings. Your presets are kept in one file shared by every catalog: <code>~/Library/Application Support/Atelier/Presets.json</code>.</p>
+
+<h2 id="built-in">Built-in packs</h2>
+<p>Six packs of looks, made only from Atelier's own sliders, so they work on RAW, JPEG and HEIC alike. They never touch your exposure, sharpening, white balance, crop or masks.</p>
+<div class="looks">
+  <figure><img src="images/preset-none.jpg" alt=""><figcaption>No preset<small>The photo as edited</small></figcaption></figure>
+  <figure><img src="images/preset-portrait-400.jpg" alt=""><figcaption>Portrait 400<small>Film · soft, warm, gentle grain</small></figcaption></figure>
+  <figure><img src="images/preset-vivid-slide.jpg" alt=""><figcaption>Vivid Slide<small>Film · contrast and deep color</small></figcaption></figure>
+  <figure><img src="images/preset-golden-hour.jpg" alt=""><figcaption>Golden Hour<small>Landscape · warm light</small></figcaption></figure>
+  <figure><img src="images/preset-faded-matte.jpg" alt=""><figcaption>Faded Matte<small>Vintage &amp; Matte</small></figcaption></figure>
+  <figure><img src="images/preset-teal-orange.jpg" alt=""><figcaption>Teal &amp; Orange<small>Cinematic</small></figcaption></figure>
+  <figure><img src="images/preset-noir.jpg" alt=""><figcaption>Noir<small>Cinematic · deep B&amp;W, vignette</small></figcaption></figure>
+</div>
+<dl class="defs">
+  <dt>Atelier</dt><dd>Clean Product, Punchy, Soft Matte, Warm Film, Black &amp; White</dd>
+  <dt>Film</dt><dd>Portrait 400, Gold 200, Vivid Slide, Tungsten 800T, Expired, Instant</dd>
+  <dt>Black &amp; White</dt><dd>Neutral, High Contrast, Soft Matte B&amp;W, Push 400, Selenium, Sepia</dd>
+  <dt>Portrait</dt><dd>Natural Skin, Soft Glow, Warm Portrait, Clean Studio, Moody Portrait</dd>
+  <dt>Landscape</dt><dd>Vivid Landscape, Golden Hour, Blue Hour, Deep Greens, Haze Cut</dd>
+  <dt>Vintage &amp; Matte</dt><dd>Faded Matte, Seventies, Washed Teal, Cross Process, Dusty Pastel</dd>
+  <dt>Cinematic</dt><dd>Teal &amp; Orange, Bleach Bypass, Noir, Night City, Warm Drama</dd>
+</dl>
+<p class="muted" style="color:var(--text-3);font-size:13px">The pictures above approximate each look. Hover a preset in Atelier to see it exactly on your own photo.</p>
+
+<h2 id="many">Many photos at once</h2>
+<ul>
+  <li><b>Right-click</b> photos (grid, filmstrip, loupe or Develop) › <span class="path">Apply Develop Preset</span> › a group › a preset. It applies to the whole selection at 100%.</li>
+  <li><b>While importing:</b> the Import dialog's <span class="path">Apply During Import</span> picks a preset for every new photo.</li>
+  <li><b>Copy and paste</b> settings between photos: see <a href="develop.html#copy-paste">Develop basics</a>.</li>
+</ul>
+
+<div class="see-also">See also: <a href="match-look.html">Match Look</a> · <a href="import.html">Import photos</a></div>
+
+</main>
+</body>
+</html>

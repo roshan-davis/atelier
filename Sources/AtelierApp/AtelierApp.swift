@@ -124,6 +124,8 @@ struct AtelierApp: App {
                 }
             }
             CommandGroup(replacing: .help) {
+                Button("Atelier Help") { HelpWindow.shared.show() }
+                    .keyboardShortcut("?", modifiers: [.command])
                 Button("Keyboard Shortcuts") { model.showingShortcuts = true }
                     .keyboardShortcut("/", modifiers: [.command])
             }

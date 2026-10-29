@@ -26,6 +26,7 @@ Agents working in this repo follow [AGENTS.md](AGENTS.md).
 - Edit In external apps through the Processor contract; edited files come back stacked with the original.
 - Experimental AI tools through a headless ComfyUI server (Remove Object, Replace Background, Upscale), set up in Settings > AI. Nothing is bundled.
 - Themes: System, Light, Dark, Graphite, Darkroom, Neutral Gray (Settings > Appearance).
+- Atelier Help (Help > Atelier Help, ⌘?): every tool explained with drawn controls and interactive before/after pictures, in `Sources/AtelierApp/Help`. The pages also open in a browser.
 
 ## Run in Xcode
 

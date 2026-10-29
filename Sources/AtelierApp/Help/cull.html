@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cull · Atelier Help</title>
+<link rel="stylesheet" href="assets/help.css">
+<script src="assets/toc.js" defer></script>
+<script src="assets/help.js" defer></script>
+</head>
+<body>
+<main class="page">
+
+<div class="eyebrow">Library</div>
+<h1>Cull: pick the keepers</h1>
+<p class="lede">Atelier groups bursts and repeated shots of the same scene, suggests the best of each group, and lets you keep or drop shots with single keys.</p>
+
+<h2 id="start">Start culling</h2>
+<dl class="defs">
+  <dt>Before importing</dt><dd>Tick <b>Cull before importing</b> in the <a href="import.html">Import dialog</a>; the button becomes <b>Continue to Culling…</b>. Only keepers go into the import entry. The rest are still cataloged, flagged Rejected, so you can look again later.</dd>
+  <dt>After importing</dt><dd>Right-click an import in the sidebar › <span class="path">Cull…</span>, or <span class="path">Library › Cull Import…</span>. Keepers are flagged Picked and the rest Rejected; nothing is removed.</dd>
+</dl>
+
+<h2 id="view">The Cull view</h2>
+<figure>
+  <div class="pins">
+  <div class="window" style="font-size:11px">
+    <div class="filter" style="height:34px;gap:10px" data-pin="1">
+      <span>Match</span><span class="mini-seg"><span>Same Frame</span><span class="sel">Similar Shots</span></span>
+      <span style="flex:1"></span><span>Grouping</span><span style="color:#999">Tight</span>
+      <span style="width:90px;height:3px;background:#5a5a5a;border-radius:2px;position:relative"><i style="position:absolute;left:55%;top:-4px;width:11px;height:11px;border-radius:50%;background:#fff"></i></span><span style="color:#999">Loose</span>
+    </div>
+    <div class="body" style="grid-template-columns: 1fr 1fr;height:330px">
+      <div class="side" style="background:#232323;padding:10px;display:flex;flex-direction:column;gap:10px">
+        <div data-pin="2"><div style="color:#aaa;margin-bottom:4px">Similar shots · 4 photos</div>
+          <div style="display:flex;gap:5px">
+            <div style="position:relative;width:24%"><img src="images/thumbs/eagle.jpg" alt="" style="border-radius:3px;outline:2px solid #0a84ff"><span style="position:absolute;right:3px;top:2px;color:#fff;background:#0a84ff;border-radius:50%;width:14px;height:14px;font-size:9px;text-align:center;line-height:14px">✓</span></div>
+            <img src="images/thumbs/eagle-soft.jpg" alt="" style="width:24%;border-radius:3px;opacity:.45">
+            <img src="images/thumbs/eagle-dark.jpg" alt="" style="width:24%;border-radius:3px;opacity:.45">
+            <img src="images/thumbs/eagle-wide.jpg" alt="" style="width:24%;border-radius:3px;opacity:.45">
+          </div></div>
+        <div><div style="color:#aaa;margin-bottom:4px">Same frame · 2 photos</div>
+          <div style="display:flex;gap:5px">
+            <div style="position:relative;width:24%"><img src="images/thumbs/forest.jpg" alt="" style="border-radius:3px"><span style="position:absolute;right:3px;top:2px;color:#fff;background:#0a84ff;border-radius:50%;width:14px;height:14px;font-size:9px;text-align:center;line-height:14px">✓</span></div>
+            <img src="images/thumbs/forest-warm.jpg" alt="" style="width:24%;border-radius:3px;opacity:.45">
+          </div></div>
+        <div><div style="color:#aaa;margin-bottom:4px">Single shots</div>
+          <div style="display:flex;gap:5px"><img src="images/thumbs/paint.jpg" alt="" style="width:16%;border-radius:3px"><img src="images/thumbs/fern.jpg" alt="" style="width:24%;border-radius:3px"></div></div>
+      </div>
+      <div class="photo" style="flex-direction:column;gap:6px" data-pin="3" data-pin-side="right">
+        <img src="images/thumbs/eagle.jpg" alt="" style="max-height:220px">
+        <div style="display:flex;gap:6px"><span class="badge" style="background:#0a84ff">Suggested</span><span class="badge">Keep</span></div>
+        <div style="color:#aaa">Sharpness 100% of the group's best · Face quality —</div>
+      </div>
+    </div>
+    <div class="bar" style="height:34px" data-pin="4"><span>Click to look · Space or double-click keeps or drops · P keep · X drop · arrows move</span><span><span class="tb-btn">Cancel</span> <span class="tb-btn" style="background:#0a84ff;color:#fff">Import 5 Photos</span></span></div>
+  </div>
+  </div>
+</figure>
+<ol class="legend">
+  <li><b>Match</b> and <b>Grouping</b> at the top. <b>Same Frame</b> groups only shots framed alike (someone blinked, moved slightly). <b>Similar Shots</b> (the default) also groups the same scene reframed or zoomed a little. The <b>Grouping</b> slider, from Tight to Loose, regroups instantly.</li>
+  <li><b>Groups</b> as rows. Keepers have a check; dropped shots are dimmed. Single shots are listed last and kept.</li>
+  <li>The focused photo, large, with its <b>sharpness</b> and, when there are faces, <b>face quality</b> (eyes open, in focus). Atelier marks the best one <b>Suggested</b> and starts it as the keeper.</li>
+  <li>Keys, and <b>Cancel</b> and <b>Import N Photos</b> (or <b>Done</b> when culling an import).</li>
+</ol>
+
+<h2 id="keys">Keys</h2>
+<table class="keys">
+  <tr><td><kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd></td><td>Move between photos and groups.</td></tr>
+  <tr><td><kbd>P</kbd></td><td>Keep.</td></tr>
+  <tr><td><kbd>X</kbd></td><td>Drop.</td></tr>
+  <tr><td><kbd>Space</kbd> or double-click</td><td>Switch between keep and drop.</td></tr>
+  <tr><td><kbd>Return</kbd></td><td>Finish.</td></tr>
+  <tr><td><kbd>Esc</kbd></td><td>Cancel.</td></tr>
+</table>
+<p>A group can keep several shots. A RAW+JPEG pair counts as one shot: keeping or dropping it applies to both.</p>
+
+<h2 id="review">Look at a group again</h2>
+<p>Every photo culled with others shows <span class="badge">◫ 4</span> (the group's size) in the grid. Select it and choose <span class="path">Photo › Show Cull Group</span> (<kbd>⇧⌘G</kbd>), or right-click › <span class="path">Show Cull Group</span>, to see the keeper next to every shot it beat, and change your mind.</p>
+
+<div class="see-also">See also: <a href="import.html">Import photos</a> · <a href="library.html#rate">Ratings and flags</a></div>
+
+</main>
+</body>
+</html>

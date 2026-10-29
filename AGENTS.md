@@ -22,6 +22,11 @@ Atelier is Rosh's personal Lightroom-style photo catalog and editor.
 - **Cursors:** never set an `NSCursor` in a view. Name the shape with `.cursor(_:)` (SwiftUI) or `Cursors.shared` (AppKit), from `Sources/AtelierApp/Cursors.swift`; for a tool with handles, work the shape out from the same hit test its drag uses. Add a `CursorShape` case if one is missing. PRD UX principle 11.
 - **Deletes:** every delete calls `DeleteFeedback.play(.trash)` (files to the Trash) or `.remove` (anything else) once it succeeds. PRD UX principle 12.
 - **Preview cache:** when the way previews are rendered changes, bump `PreviewCache.version` in `Sources/AtelierCore/Previews/PreviewCache.swift` (and note why in its comment) so old previews are rebuilt.
+- **Help:** Atelier Help (`Sources/AtelierApp/Help`, opened with Help > Atelier Help, ⌘?) documents every tool with drawn controls and before/after pictures. A PR that adds or changes a feature or control updates its help page in the same PR:
+  - Edit the page's HTML (or add a page and list it in `GROUPS` in `Scripts/help/build_help_index.py`). Give each h2/h3 an `id`.
+  - New or changed before/after pictures come from `Scripts/help/make_help_images.py`; add a pair there and run it.
+  - Run `python3 Scripts/help/build_help_index.py`. It rebuilds the search index and must report no problems (missing pictures, broken links).
+  - Open the page in a browser (or with Playwright) and look at it before saying it's done.
 
 ## Git workflow
 

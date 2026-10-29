@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Develop basics · Atelier Help</title>
+<link rel="stylesheet" href="assets/help.css">
+<script src="assets/toc.js" defer></script>
+<script src="images/histogram.js" defer></script>
+<script src="assets/help.js" defer></script>
+</head>
+<body>
+<main class="page">
+
+<div class="eyebrow">Develop</div>
+<h1>Develop basics</h1>
+<p class="lede">Develop is where you edit a photo. Every change is a setting stored in the catalog, rendered live from the original: the original file is never changed, and every step can be undone.</p>
+
+<div class="chips">
+  <a href="#layout">The Develop view</a><a href="#zoom">Zoom and move around</a><a href="#navigator">Navigator</a>
+  <a href="#before-after">Before and after</a><a href="#panels">Panels</a><a href="#history">History and undo</a>
+  <a href="#snapshots">Snapshots</a><a href="#copy-paste">Copy and paste settings</a><a href="#histogram">Histogram</a>
+</div>
+
+<h2 id="layout">The Develop view</h2>
+<p>Select a photo and press <kbd>D</kbd>, click <b>Develop</b> in the toolbar, or right-click a photo › <span class="path">Edit in Develop</span>.</p>
+<figure>
+  <div class="pins">
+  <div class="window">
+    <div class="titlebar"><span class="lights"><i></i><i></i><i></i></span><span style="flex:1"></span>
+      <span class="tb-btn">Import</span><span class="tb-btn">Export</span>
+      <span class="tb-seg"><span>Grid</span><span>Loupe</span><span class="sel">Develop</span></span><span style="flex:1"></span></div>
+    <div class="body" style="grid-template-columns: 22% 1fr 27%">
+      <div class="side">
+        <div class="sec" data-pin-side="left" data-pin="1">Navigator</div>
+        <img src="images/redwoods.jpg" alt="" style="border-radius:3px;margin:0 4px 6px;width:calc(100% - 8px)">
+        <div class="sec" data-pin-side="left" data-pin="2">Presets</div>
+        <div class="item">› Atelier<small>5</small></div><div class="item">› Film<small>6</small></div><div class="item">› Black &amp; White<small>6</small></div>
+        <div class="sec">Snapshots</div>
+        <div class="item"><span>Warm version</span></div>
+        <div class="sec" data-pin-side="left" data-pin="3">History</div>
+        <div class="item sel">Exposure +0.45</div><div class="item">Profile: Camera Matching</div><div class="item">Import</div>
+      </div>
+      <div class="main">
+        <div class="photo"><img src="images/redwoods.jpg" alt="The photo being edited" data-pin="4" data-pin-side="center"></div>
+        <div class="bar" data-pin="5"><span>Before and After <span class="mini-seg"><span class="sel">Off</span><span>Side by Side</span><span>Slider</span></span></span>
+          <span class="mini-seg"><span class="sel">Fit</span><span>Fill</span><span>100%</span><span>200%</span></span></div>
+      </div>
+      <div class="right">
+        <div class="h">Histogram</div>
+        <canvas class="histogram" style="width:100%;height:46px;background:#000;border-radius:3px"></canvas>
+        <div style="display:flex;gap:12px;margin:6px 0;color:#ddd" data-pin="6" data-pin-side="right">▭ ◌ ✧</div>
+        <div class="h" data-pin="7" data-pin-side="right">⌄ Basic</div>
+        <div class="kv">Exposure<b>+0.45</b></div><div class="kv">Contrast<b>+20</b></div><div class="kv">Highlights<b>−45</b></div>
+        <div class="h" style="margin-top:8px">› Tone Curve</div><div class="h">› HSL / Color</div><div class="h">› Color Grading</div><div class="h">› Detail</div>
+      </div>
+    </div>
+    <div class="strip" data-pin="8"><span class="hdr" style="left:40px">All Photographs · 5 photos · 1 of 5 · NZ6_9144.NEF</span>
+      <img class="sel" src="images/thumbs/forest.jpg" alt=""><img src="images/thumbs/eagle.jpg" alt=""><img src="images/thumbs/paint.jpg" alt=""><img src="images/thumbs/logs.jpg" alt=""><img src="images/thumbs/fern.jpg" alt="">
+      <span class="strip-tab">⌄</span></div>
+  </div>
+  </div>
+</figure>
+<ol class="legend">
+  <li><a href="#navigator">Navigator</a>: the whole photo; shows where you are when zoomed and previews presets.</li>
+  <li><a href="presets.html">Presets</a> and Snapshots. Click a section's header band to fold it.</li>
+  <li><a href="#history">History</a>: every change you made, newest first.</li>
+  <li>The photo, rendered live.</li>
+  <li><a href="#before-after">Before and After</a> and the <a href="#zoom">zoom</a> buttons.</li>
+  <li>The tool strip: <a href="crop.html">Crop &amp; Straighten</a>, <a href="masking.html">Masking</a> and <a href="ai.html">AI</a>.</li>
+  <li>The adjustment <a href="#panels">panels</a>, from Basic to Effects.</li>
+  <li>The Filmstrip: the other photos in the list. Arrow keys move between them.</li>
+</ol>
+
+<h2 id="zoom">Zoom and move around</h2>
+<table class="keys">
+  <tr><td>Double-click the photo, or <kbd>Z</kbd></td><td>Switch between Fit and 100% at the spot you clicked. A single click does nothing, so a stray click never loses your zoom.</td></tr>
+  <tr><td>Fit · Fill · 100% · 200%</td><td>The buttons under the photo. Fit shows the whole photo; Fill fills the space.</td></tr>
+  <tr><td>Pinch, or <kbd>⌥</kbd>/<kbd>⌘</kbd> + scroll</td><td>Zoom freely, around the pointer.</td></tr>
+  <tr><td>Drag, scroll, or hold <kbd>Space</kbd> and drag</td><td>Move around while zoomed.</td></tr>
+  <tr><td><kbd>⌘=</kbd> · <kbd>⌘-</kbd> · <kbd>⌘0</kbd> · <kbd>⌥⌘1</kbd></td><td>Zoom in, zoom out, Fit, 100% (<span class="path">View</span> menu).</td></tr>
+</table>
+<p>The zoom and the spot you're looking at stay put when you open a tool (Crop, Masking, Guided Upright, the color pickers) and come back. <span class="path">Atelier › Settings… › Develop</span> chooses what a double-click zooms to (50% to 400%) and what happens when you move to another photo: open it at Fit or Fill, return to where you left that photo, or keep the same zoom as in Lightroom.</p>
+
+<h2 id="navigator">Navigator</h2>
+<p>The small photo at the top of the left column. When you're zoomed in, a white rectangle shows the part in view.</p>
+<ul>
+  <li>Drag the rectangle to move around the photo.</li>
+  <li>Click anywhere else in the Navigator to jump there. At Fit, a click zooms in on that spot.</li>
+  <li>Rest the pointer on a preset to preview it here, without changing the photo.</li>
+</ul>
+
+<h2 id="before-after">Before and after</h2>
+<p>Compare your edit with the original.</p>
+<dl class="defs">
+  <dt><kbd>\</kbd></dt><dd>Show the original until you press it again (the <b>Before</b> button under the panels does the same).</dd>
+  <dt>Side by Side</dt><dd>Before on the left, after on the right. Both zoom and pan together.</dd>
+  <dt>Slider</dt><dd>One photo with a divider: original on the left, your edit on the right. Drag the divider to compare; drag the photo to move around when zoomed.</dd>
+  <dt><kbd>Y</kbd></dt><dd>Step through Off, Side by Side and Slider.</dd>
+</dl>
+<figure>
+  <div class="frame compare" data-before="redwoods-flat.jpg" data-after="redwoods.jpg" data-at="0.42"></div>
+  <figcaption><b>Like this.</b> The Slider view works like this picture: drag across it.</figcaption>
+</figure>
+<p>A compare view opens at Fit. Going back to Off returns you to the zoom you had.</p>
+
+<h2 id="panels">Panels</h2>
+<ul>
+  <li><b>Click a header band</b> to open or fold a panel. Atelier remembers which are open. The left column's sections (Navigator, Presets, Snapshots, History) work the same way.</li>
+  <li><b>A blue dot</b> next to the name means the panel has edits; <b>↺</b> resets just that panel.</li>
+  <li><b>The on/off switch</b> (every panel but Basic) turns the whole panel off to compare, keeping its settings. While it's off the controls are dimmed but still work: moving one turns the panel back on. Exports and presets follow the switch.</li>
+  <li><b>Right-click a header</b> for <span class="path">Solo Mode</span> (opening one panel closes the others), <span class="path">Expand All Panels</span>, <span class="path">Collapse All Panels</span> and that panel's Help page.</li>
+  <li><b>Drag the panel's left edge</b> to make the column wider or narrower.</li>
+</ul>
+<h3 id="group-reset">Reset a group</h3>
+<p>Double-click a group heading inside a panel (White Balance, Tone, Presence, Region, Sharpening, Grain…) to reset just those sliders. Or hold <kbd>⌥</kbd>: the heading reads “Reset Tone” and one click resets it, as in Lightroom.</p>
+<h3 id="sliders">Sliders</h3>
+<div class="pins pinned">
+  <div class="panel">
+    <div class="pb">
+      <div class="sl" data-pin="1" data-name="Exposure" data-value="+0.60" data-at="0.56" data-def="0.5"></div>
+      <div class="sl" data-pin="2" data-pin-side="right" data-name="Highlights" data-value="−45" data-at="0.275" data-def="0.5"></div>
+      <div class="sl" data-name="Temp" data-value="6500 K" data-at="0.42" data-def="0.35" data-gradient="temp"></div>
+    </div>
+  </div>
+</div>
+<ol class="legend">
+  <li>Double-click a slider's <b>name</b> to reset it. Shift-double-click a Tone slider's name to set it automatically.</li>
+  <li>Click the <b>value</b> to type a number; Return sets it, Esc cancels. Bold means changed.</li>
+</ol>
+<p>Every slider in Atelier works this way, in Masking, Crop and the AI brush too.</p>
+<p>The small tick on the track is the default; the blue fill is your change. Colored tracks (Temp, Tint, Vibrance, HSL) show which way each end goes. Hold <kbd>⌥</kbd> while dragging many sliders to see what they affect: see <a href="basic.html#option-drag">⌥-drag views</a>.</p>
+
+<h3 id="color-pickers">Color pickers</h3>
+<p>The White Balance Selector, Defringe's Fringe Color Selector and Color Grading's color picker all work the same way: click the eyedropper, then click the photo. A hint at the top of the photo says what to click (in orange if the click didn't set anything, with the reason). You can still zoom and move around while it's out, only one is out at a time, and <kbd>Esc</kbd> puts it away.</p>
+
+<h2 id="history">History and undo</h2>
+<p>Every change is a named step in <b>History</b> (Exposure +0.45, Straighten 4.0°, Preset: Punchy). History is kept with the photo, forever.</p>
+<ul>
+  <li><kbd>⌘Z</kbd> undoes and <kbd>⇧⌘Z</kbd> redoes, one step at a time.</li>
+  <li>Click a step to go back to it. A new change from there replaces the steps after it.</li>
+  <li>The ✕ in the History header clears the list but keeps the current look.</li>
+</ul>
+
+<h2 id="snapshots">Snapshots</h2>
+<p>Save a look you like by name, keep editing, and come back to it.</p>
+<ol class="steps">
+  <li>Click <b>+</b> in the Snapshots header and type a name.</li>
+  <li>Click a snapshot to apply it again (that's a history step too).</li>
+  <li>Right-click a snapshot to <span class="path">Update with Current Settings</span>, <span class="path">Rename…</span> or <span class="path">Delete</span>.</li>
+</ol>
+<div class="tip"><p><span class="label">Two versions side by side in the grid?</span> Use a <a href="photos.html#virtual-copies">virtual copy</a> instead: each copy has its own edits.</p></div>
+
+<h2 id="copy-paste">Copy, paste and reset</h2>
+<table class="keys">
+  <tr><td><kbd>⇧⌘C</kbd> or <b>Copy</b></td><td>Copy this photo's settings.</td></tr>
+  <tr><td><kbd>⇧⌘V</kbd> or <b>Paste</b></td><td>Paste them onto the selected photos. Right-click › <span class="path">Develop Settings</span> works on the whole selection.</td></tr>
+  <tr><td><kbd>⇧⌘R</kbd> or <b>Reset</b></td><td>Clear every edit on this photo (one undoable step).</td></tr>
+</table>
+
+<h2 id="histogram">Histogram</h2>
+<p>The graph at the top of the right column shows how much of the photo is at each brightness, from black on the left to white on the right, for red, green and blue. It's drawn from the edited photo and updates as you work.</p>
+<figure>
+  <div class="panel narrow" style="margin:0 auto">
+    <div class="ph"><span class="chev">›</span>Histogram</div>
+    <div class="pb"><canvas class="histogram" style="width:100%;height:90px;background:rgba(0,0,0,.85);border-radius:4px"></canvas>
+      <div class="row" style="justify-content:space-between;font-size:11px;color:#f5a623"><span>⚠ Shadows clipped 0.8%</span><span></span></div></div>
+  </div>
+  <figcaption>When more than half a percent of the photo is pure black or pure white, an orange warning says how much. Turn the warnings off in <span class="path">Settings › Develop</span>.</figcaption>
+</figure>
+
+<div class="see-also">Next: <a href="basic.html">Basic</a> · <a href="crop.html">Crop &amp; Straighten</a> · <a href="masking.html">Masking</a></div>
+
+</main>
+</body>
+</html>

@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crop &amp; Straighten · Atelier Help</title>
+<link rel="stylesheet" href="assets/help.css">
+<script src="assets/toc.js" defer></script>
+<script src="assets/help.js" defer></script>
+</head>
+<body>
+<main class="page">
+
+<div class="eyebrow">Tool</div>
+<h1>Crop &amp; Straighten</h1>
+<p class="lede">Trim the edges, change the shape, level a horizon, rotate or flip. Nothing is cut from the original; you can change the crop any time.</p>
+
+<div class="chips"><a href="#open">Open the tool</a><a href="#on-photo">On the photo</a><a href="#panel">The Crop panel</a><a href="#straighten">Straighten</a></div>
+
+<h2 id="open">Open the tool</h2>
+<p>In Develop, press <kbd>R</kbd> or click the crop button (the first icon under the histogram). Press <kbd>R</kbd>, <kbd>Return</kbd> or click <b>Done</b> to close it. While it's open you see the whole photo with the crop on top.</p>
+
+<h2 id="on-photo">On the photo</h2>
+<figure>
+  <div class="frame" style="position:relative;background:#1f1f1f">
+    <img src="images/redwoods.jpg" alt="The crop frame on the photo" style="opacity:.98">
+    <div class="overlay"><svg viewBox="0 0 960 639" preserveAspectRatio="none">
+      <path fill="#000" fill-opacity=".55" fill-rule="evenodd" d="M0 0H960V639H0Z M150 70H810V570H150Z"/>
+      <g stroke="#fff" stroke-opacity=".55" stroke-width="1"><path d="M370 70V570M590 70V570M150 236.7H810M150 403.3H810"/></g>
+      <rect x="150" y="70" width="660" height="500" fill="none" stroke="#fff" stroke-width="2"/>
+      <g stroke="#fff" stroke-width="5" fill="none" stroke-linecap="square">
+        <path d="M150 105V70H185M775 70H810V105M810 535V570H775M185 570H150V535"/>
+        <path d="M465 70H495M465 570H495M150 305V335M810 305V335"/>
+      </g>
+      <path d="M875 600 a40 40 0 0 0 40 -40" stroke="#fff" stroke-width="3" fill="none"/><path d="M908 552l7 8 8-7" stroke="#fff" stroke-width="3" fill="none"/>
+    </svg></div>
+    <span class="pin" style="left:15.6%;top:11%">1</span>
+    <span class="pin" style="left:51.5%;top:11%">2</span>
+    <span class="pin" style="left:50%;top:48%">3</span>
+    <span class="pin" style="left:93%;top:87%">4</span>
+  </div>
+</figure>
+<ol class="legend">
+  <li><b>Corners</b>: drag to resize from that corner. The pointer turns into a diagonal arrow.</li>
+  <li><b>Edges</b>: drag to move one side.</li>
+  <li><b>Inside</b>: drag to move the crop (the pointer is a hand). A rule-of-thirds grid helps you place the subject.</li>
+  <li><b>Outside</b>: drag to straighten (the pointer is a curved arrow). A finer grid appears while you rotate.</li>
+</ol>
+
+<h2 id="panel">The Crop panel</h2>
+<figure>
+  <div class="pins pinned">
+  <div class="panel">
+    <div class="ph"><span class="chev">›</span>Crop &amp; Straighten<span class="dot"></span><span class="grow"></span><span class="reset">↺</span></div>
+    <div class="pb">
+      <div class="muted">Drag a corner or edge to crop, inside to move, outside to straighten.</div>
+      <div class="row" data-pin="1"><span class="name">Aspect</span><span class="popup">Original</span><span class="icon" style="width:24px" data-pin="2" data-pin-side="right">⇄</span><span class="icon" style="width:24px">🔒</span></div>
+      <div class="sl" data-pin="3" data-name="Angle" data-value="4.0°" data-at="0.544" data-def="0.5"></div>
+      <div class="row" data-pin="4"><span class="icon" style="width:26px">↺</span><span class="icon" style="width:26px">↻</span><span class="icon" style="width:26px">⇋</span><span class="icon" style="width:26px">⇵</span><span class="grow" style="flex:1"></span><span class="btn">Reset</span><span class="btn on">Done</span></div>
+    </div>
+  </div>
+  </div>
+</figure>
+<ol class="legend">
+  <li><b>Aspect</b>: Original, 1 × 1, 4 × 5 / 8 × 10, 5 × 7, 2 × 3, 3 × 4, 16 × 10, 16 × 9 or Free. The lock keeps the shape while you drag; unlock it to drag freely.</li>
+  <li><b>⇄</b> switches between landscape and portrait (or press <kbd>X</kbd> while cropping).</li>
+  <li><b>Angle</b>: straighten from −45° to 45°. Double-click the name to reset.</li>
+  <li>Rotate left (<kbd>⌘[</kbd>), rotate right (<kbd>⌘]</kbd>), flip horizontal, flip vertical. <b>Reset</b> removes the crop, straightening, rotations and flips.</li>
+</ol>
+
+<h2 id="straighten">Straighten</h2>
+<p>Drag outside the crop, or use the Angle slider. The photo turns smoothly under the frame, and the frame shrinks so it never shows past the photo's edge.</p>
+<figure>
+  <div class="frame compare" data-before="straighten-before.jpg" data-after="redwoods.jpg" data-labels="Tilted|Straightened 4°"></div>
+</figure>
+<div class="tip"><p><span class="label">Perspective, not just tilt?</span> If verticals lean toward each other, use <a href="transform.html">Transform › Upright</a> instead of rotating.</p></div>
+<p>The crop applies everywhere: previews, the grid, exports, Edit In and AI. <a href="masking.html">Masks</a> stay on the same spot of the photo when you change the crop.</p>
+
+<div class="see-also">See also: <a href="transform.html">Transform</a> · <a href="develop.html#zoom">Zoom</a></div>
+
+</main>
+</body>
+</html>

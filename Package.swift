@@ -19,7 +19,7 @@ let package = Package(
         .executableTarget(
             name: "AtelierApp",
             dependencies: ["AtelierCore", .product(name: "GRDB", package: "GRDB.swift")],
-            resources: [.process("Resources")]
+            resources: [.process("Resources"), .copy("Help")]
         ),
         .testTarget(
             name: "AtelierCoreTests",

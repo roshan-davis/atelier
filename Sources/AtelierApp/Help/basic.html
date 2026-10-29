@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Basic · Atelier Help</title>
+<link rel="stylesheet" href="assets/help.css">
+<script src="assets/toc.js" defer></script>
+<script src="assets/help.js" defer></script>
+</head>
+<body>
+<main class="page">
+
+<div class="eyebrow">Develop panel</div>
+<h1>Basic</h1>
+<p class="lede">The panel you'll use on almost every photo: color or black and white, the starting look, white balance, brightness and contrast, and the presence sliders that add depth and color.</p>
+
+<div class="chips">
+  <a href="#treatment">Treatment</a><a href="#profile">Profile</a><a href="#white-balance">White Balance</a>
+  <a href="#exposure">Exposure</a><a href="#contrast">Contrast</a><a href="#highlights-shadows">Highlights &amp; Shadows</a>
+  <a href="#whites-blacks">Whites &amp; Blacks</a><a href="#auto">Auto</a><a href="#texture-clarity">Texture &amp; Clarity</a>
+  <a href="#dehaze">Dehaze</a><a href="#vibrance-saturation">Vibrance &amp; Saturation</a><a href="#option-drag">⌥-drag views</a>
+</div>
+
+<figure>
+  <div class="pins pinned">
+  <div class="panel">
+    <div class="ph" data-pin="7" data-pin-side="right"><span class="chev">›</span>Basic<span class="dot"></span><span class="grow"></span><span class="reset">↺</span></div>
+    <div class="pb">
+      <div class="row" data-pin="1"><span class="name">Treatment</span><span class="seg"><span class="sel">Color</span><span>Black &amp; White</span></span></div>
+      <div class="row" data-pin="2"><span class="name">Profile</span><span class="popup">Camera Matching</span></div>
+      <div class="gh">White Balance</div>
+      <div class="row" data-pin="3"><span class="name">WB</span><span class="popup">As Shot</span><span style="color:var(--app-text-2)">✎</span></div>
+      <div class="sl" data-name="Temp" data-value="5650 K" data-at="0.36" data-def="0.35" data-gradient="temp"></div>
+      <div class="sl" data-name="Tint" data-value="+8" data-at="0.53" data-def="0.5" data-gradient="tint"></div>
+      <div class="row"><span class="gh" style="flex:1;margin:0">Tone</span><span class="btn">Auto</span></div>
+      <div class="sl" data-pin="4" data-name="Exposure" data-value="+0.45" data-at="0.545" data-def="0.5"></div>
+      <div class="sl" data-name="Contrast" data-value="+20" data-at="0.6" data-def="0.5"></div>
+      <div class="sl" data-pin="5" data-pin-side="right" data-name="Highlights" data-value="−45" data-at="0.275" data-def="0.5"></div>
+      <div class="sl" data-name="Shadows" data-value="+30" data-at="0.65" data-def="0.5"></div>
+      <div class="sl" data-name="Whites" data-value="0" data-at="0.5" data-def="0.5"></div>
+      <div class="sl" data-name="Blacks" data-value="−10" data-at="0.45" data-def="0.5"></div>
+      <div class="gh" data-pin="6">Presence</div>
+      <div class="sl" data-name="Texture" data-value="0" data-at="0.5"></div>
+      <div class="sl" data-name="Clarity" data-value="+15" data-at="0.575"></div>
+      <div class="sl" data-name="Dehaze" data-value="0" data-at="0.5"></div>
+      <div class="sl" data-name="Vibrance" data-value="+20" data-at="0.6" data-gradient="sat"></div>
+      <div class="sl" data-name="Saturation" data-value="0" data-at="0.5" data-gradient="sat"></div>
+    </div>
+  </div>
+  </div>
+</figure>
+<ol class="legend">
+  <li><a href="#treatment">Treatment</a>: Color or Black &amp; White (<kbd>V</kbd>).</li>
+  <li><a href="#profile">Profile</a>: the starting look the sliders build on.</li>
+  <li><a href="#white-balance">White Balance</a>: the WB menu, the eyedropper, Temp and Tint.</li>
+  <li><a href="#exposure">Tone</a>: brightness, contrast and the four range sliders, with <a href="#auto">Auto</a>.</li>
+  <li>A changed slider shows its change filled in blue from the small mark (the default) and its value in bold.</li>
+  <li><a href="#texture-clarity">Presence</a>: Texture, Clarity, Dehaze, Vibrance and Saturation.</li>
+  <li>The dot means this panel has edits. Click <span class="path">↺</span> to reset just this panel. Basic is the one panel without an on/off switch.</li>
+</ol>
+
+<div class="tip"><p><span class="label">Every slider works the same way.</span> Drag the knob, or click the number on the right and type a value. Double-click the slider's name to reset it. Double-click a group heading (Tone, Presence) to reset the group. Click a panel's header to fold it away; right-click a header for <span class="path">Solo Mode</span>, which keeps one panel open at a time.</p></div>
+
+<h2 id="treatment">Treatment: Color or Black &amp; White</h2>
+<p>Switches the photo between color and black and white. In Black &amp; White, the <a href="hsl.html#bw-mix">B&amp;W Mix</a> replaces HSL, so you can choose how bright each color becomes in gray. Press <kbd>V</kbd> to switch.</p>
+<figure>
+  <div class="frame compare" data-before="treatment-before.jpg" data-after="treatment-after.jpg" data-labels="Color|Black &amp; White" style="max-width: 420px; margin: 0 auto"></div>
+  <figcaption>Drag across the picture to compare. Color Grading still works in Black &amp; White, so you can tone the gray (Sepia, Selenium).</figcaption>
+</figure>
+
+<h2 id="profile">Profile</h2>
+<p>The look your photo starts from, under every slider. Only RAW files have a choice; for JPEG and HEIC the menu is dimmed.</p>
+<dl class="defs">
+  <dt>Camera Matching</dt><dd>The default. Matches the preview your camera saved in the RAW file, including its Picture Control and Active D-Lighting, so the photo looks like it did on the camera's screen.</dd>
+  <dt>Apple Neutral</dt><dd>Apple's plain RAW render: flatter, with more room in the highlights. A good start for heavy edits.</dd>
+</dl>
+<figure>
+  <div class="frame compare" data-before="redwoods.jpg" data-after="profile-after.jpg" data-labels="Camera Matching|Apple Neutral"></div>
+</figure>
+
+<h2 id="white-balance">White Balance</h2>
+<p>Makes whites white. Fix it first: every color after it depends on it.</p>
+<h3 id="wb-menu">The WB menu</h3>
+<dl class="defs">
+  <dt>As Shot</dt><dd>What the camera chose.</dd>
+  <dt>Auto</dt><dd>Atelier makes the photo's nearly gray colors neutral. Also <span class="path">Develop › Auto White Balance</span> (<kbd>⇧⌘U</kbd>).</dd>
+  <dt>Daylight, Cloudy, Shade, Tungsten, Fluorescent, Flash</dt><dd>Lightroom's presets for that light (RAW files only).</dd>
+  <dt>Custom</dt><dd>Shown once you move Temp or Tint yourself.</dd>
+</dl>
+<h3 id="wb-selector">White Balance Selector</h3>
+<ol class="steps">
+  <li>Click the eyedropper next to the WB menu, or press <kbd>W</kbd>. The pointer becomes an eyedropper.</li>
+  <li>Click something in the photo that should be neutral gray or white: a cloud, a gray rock, a white shirt.</li>
+  <li>Temp and Tint are set so that spot has no color cast, and the eyedropper goes away. <kbd>Esc</kbd> cancels.</li>
+</ol>
+<figure>
+  <div class="frame compare" data-before="white-balance-before.jpg" data-after="redwoods-flat.jpg" data-labels="Too warm|After one click"></div>
+</figure>
+<h3 id="temp-tint">Temp and Tint</h3>
+<p><b>Temp</b> runs from blue to yellow and <b>Tint</b> from green to magenta; the colored tracks show which way is which. For RAW files Temp is in Kelvin (2,000 to 50,000 K). JPEG, HEIC and TIFF files have no real Kelvin, so Temp and Tint go from −100 to +100, with 0 as shot.</p>
+<figure>
+  <div class="frame scrub" data-name="Temp" data-frames="temp-0.jpg,temp-1.jpg,temp-2.jpg,temp-3.jpg,temp-4.jpg"
+       data-values="3800 K,4600 K,5500 K,6600 K,8200 K" data-gradient="temp" data-hint="Drag: cooler ← → warmer"></div>
+  <figcaption><b>Try it.</b> Drag the slider. Moving right makes the photo warmer.</figcaption>
+</figure>
+<figure>
+  <div class="frame compare" data-before="tint-before.jpg" data-after="redwoods-flat.jpg" data-labels="Magenta cast|Tint corrected"></div>
+</figure>
+<div class="tip"><p><span class="label">Shortcut.</span> Shift-double-click the name <b>Temp</b> or <b>Tint</b> for Auto white balance.</p></div>
+
+<h2 id="exposure">Exposure</h2>
+<p>Overall brightness, in stops: +1.00 is twice as bright. On JPEG, HEIC and TIFF files the brightest tones roll off softly toward white instead of clipping.</p>
+<figure>
+  <div class="frame scrub" data-name="Exposure" data-frames="exposure-0.jpg,exposure-1.jpg,exposure-2.jpg,exposure-3.jpg,exposure-4.jpg"
+       data-values="−1.50,−0.75,0.00,+0.75,+1.50" data-hint="Drag: darker ← → brighter"></div>
+  <figcaption><b>Try it.</b> Set the brightness of the subject first; fix the brightest and darkest parts with Highlights and Shadows after.</figcaption>
+</figure>
+
+<h2 id="contrast">Contrast</h2>
+<p>Moves bright tones up and dark tones down (or together, when negative). Each color keeps its hue: an orange gets brighter or darker but never turns red or yellow.</p>
+<figure>
+  <div class="frame compare" data-before="redwoods-flat.jpg" data-after="contrast-after.jpg" data-labels="Contrast 0|Contrast +45"></div>
+</figure>
+
+<h2 id="highlights-shadows">Highlights and Shadows</h2>
+<p>Recover a bright sky or open up dark areas without touching the rest. They work on whole areas, not single pixels, so a sky or a shadow moves together and its detail stays.</p>
+<div class="duo">
+  <figure>
+    <div class="frame compare" data-before="redwoods-flat.jpg" data-after="highlights-after.jpg" data-labels="Before|Highlights −90"></div>
+    <figcaption><b>Highlights</b> below 0 brings back the bright light rays.</figcaption>
+  </figure>
+  <figure>
+    <div class="frame compare" data-before="redwoods-flat.jpg" data-after="shadows-after.jpg" data-labels="Before|Shadows +90"></div>
+    <figcaption><b>Shadows</b> above 0 opens up the dark logs and trunks.</figcaption>
+  </figure>
+</div>
+
+<h2 id="whites-blacks">Whites and Blacks</h2>
+<p>Set the very brightest and darkest points. Whites up and Blacks down give a photo a full range from black to white; watch the histogram's clipping warnings, or hold <kbd>⌥</kbd> while dragging (see <a href="#option-drag">⌥-drag views</a>).</p>
+<figure>
+  <div class="frame compare" data-before="redwoods-flat.jpg" data-after="whites-blacks-after.jpg" data-labels="Before|Whites +50, Blacks −60"></div>
+</figure>
+
+<h2 id="auto">Auto</h2>
+<p>The <b>Auto</b> button next to the Tone heading sets Exposure, Highlights, Shadows, Whites and Blacks from the photo. Contrast is left alone. It's one history step (Auto Tone), so <kbd>⌘Z</kbd> undoes it.</p>
+<figure>
+  <div class="frame compare" data-before="auto-tone-before.jpg" data-after="redwoods.jpg" data-labels="Before|Auto"></div>
+</figure>
+<div class="tip"><p><span class="label">Just one slider.</span> Shift-double-click a Tone slider's name to set only that slider automatically.</p></div>
+
+<h2 id="texture-clarity">Texture and Clarity</h2>
+<p>Both add or soften local contrast, on brightness only, so colors don't shift. Negative values smooth without blurring edges.</p>
+<dl class="defs">
+  <dt>Texture</dt><dd>Medium-sized detail: feathers, skin, bark, foliage. Positive brings it out; negative softens skin.</dd>
+  <dt>Clarity</dt><dd>Wider areas, mostly in the midtones: adds punch and depth. Negative gives a soft glow.</dd>
+</dl>
+<div class="duo">
+  <figure>
+    <div class="frame compare" data-before="texture-before.jpg" data-after="texture-after.jpg" data-labels="Before|Texture +90"></div>
+    <figcaption>Texture brings out each feather.</figcaption>
+  </figure>
+  <figure>
+    <div class="frame compare" data-before="redwoods-flat.jpg" data-after="clarity-after.jpg" data-labels="Before|Clarity +70"></div>
+    <figcaption>Clarity adds depth to the whole scene.</figcaption>
+  </figure>
+</div>
+
+<h2 id="dehaze">Dehaze</h2>
+<p>Removes haze, fog and mist (positive) or adds them (negative). It estimates how much haze lies over each area, so clear dark areas and the sky barely change.</p>
+<figure>
+  <div class="frame compare" data-before="dehaze-before.jpg" data-after="redwoods.jpg" data-labels="Hazy|Dehaze +60"></div>
+</figure>
+
+<h2 id="vibrance-saturation">Vibrance and Saturation</h2>
+<p><b>Saturation</b> makes every color stronger by the same amount. <b>Vibrance</b> boosts muted colors most and leaves already strong ones alone, so it's gentler on skin and less likely to look garish. In Black &amp; White neither has any effect.</p>
+<div class="trio">
+  <figure><div class="pic"><img src="images/redwoods-flat.jpg" alt="Before"><span class="tag">Before</span></div></figure>
+  <figure><div class="pic"><img src="images/vibrance.jpg" alt="Vibrance +60"><span class="tag">Vibrance +60</span></div></figure>
+  <figure><div class="pic"><img src="images/saturation.jpg" alt="Saturation +60"><span class="tag">Saturation +60</span></div></figure>
+</div>
+
+<h2 id="option-drag">⌥-drag views: see what a slider does</h2>
+<p>Hold <kbd>⌥</kbd> while you press or drag these sliders. The photo is replaced by a view that shows exactly what the slider is changing, until you let go.</p>
+<dl class="defs">
+  <dt>Exposure, Highlights, Whites</dt><dd>Black, with clipped highlights shown in the color of the channel that clips (white where all three clip). Drag until only what should be pure white shows.</dd>
+  <dt>Shadows, Blacks</dt><dd>White, with clipped shadows shown (black where all three clip).</dd>
+</dl>
+<p>Detail, Color Grading and Defringe have ⌥ views too; each slider's tooltip says what it shows.</p>
+
+<div class="see-also">See also: <a href="develop.html">Develop basics</a> · <a href="tone-curve.html">Tone Curve</a> · <a href="hsl.html">HSL / Color and B&amp;W</a> · <a href="presets.html">Presets</a></div>
+
+</main>
+</body>
+</html>

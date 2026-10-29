@@ -257,6 +257,18 @@ Rosh asked for Atelier to reopen where they left off instead of always on the gr
 - **Grid scroll position** is also kept while switching views in one session: going from Loupe or Develop back to Grid returns to the same place, scrolling only if the focused photo is off screen.
 - **Not restored:** open dialogs (Import, Export, Cull, Match Look), which start fresh. Atelier reopens on the import being culled; an unfinished Cull's picks are not kept, so Library > Cull Import… starts it again (keeping an unfinished Cull is a possible later addition). More than 1,000 selected photos restores only the focused one.
 
+### Atelier Help (decided Oct 29, 2026)
+
+Rosh asked for documentation of every usage of every tool: proper, modern help that people can understand, with pictures of the controls and their effect rather than wordy paragraphs.
+
+- **Where:** inside the app. Help > Atelier Help (⌘?) opens a Help window; right-clicking a Develop panel's header (or Crop, Masking, AI) offers "<Panel> Help", which opens that page. Help > Keyboard Shortcuts (⌘/) stays. The pages are plain HTML in `Sources/AtelierApp/Help`, bundled with the app (works offline), and open the same in any browser, so a web copy can be published from the same files later.
+- **What each page has:** a one-line summary, a drawing of the panel or tool as it looks in the app (Graphite theme) with numbered callouts and a legend, then a short section per control: what it does, its range, and a before/after picture on a real photo that you drag across to compare. Exposure and Temp have a drawn slider that drives the picture. Steps are numbered, keys are shown as keys, menu paths in bold, and "Beyond Lightroom" notes mark where Atelier goes further.
+- **Pages:** Welcome, The Atelier window, Keyboard shortcuts; Import, Organize and find, Cull, Virtual copies/stacks/removing; Develop basics, Basic, Tone Curve, HSL / Color and B&W, Color Grading, Detail, Lens Corrections, Transform, Effects; Crop & Straighten, Masking, Presets, Match Look, AI tools; Export, Edit In; Settings.
+- **Search:** a field at the top of the sidebar (⌘F or /) searches every section's title and text and jumps to the section.
+- **Pictures:** the before/after pictures are made from the splash photos by `Scripts/help/make_help_images.py`, which approximates each control's effect, because CI can't currently render the app. When it can, they can be swapped for real renders under the same file names. Control drawings are HTML and CSS, so they stay sharp and follow light and dark mode around them.
+- **Kept current:** AGENTS.md requires every feature PR to update its help page, and `Scripts/help/build_help_index.py` rebuilds the search index and fails on missing pictures or broken links.
+- **Later:** a published web copy; real app renders for the pictures; "?" buttons in dialogs.
+
 ## Scope by release
 
 The MVP proves the catalog, a usable develop module and one AI backend. Full develop parity and the plugin system come in v1.
@@ -378,7 +390,7 @@ Atelier > Settings… (⌘,) has these tabs:
 - **Metadata:** automatically write ratings, flags, labels, keywords, title and caption to XMP sidecars as they change.
 - **Keyboard:** every single-key command with its key (Lightroom's by default: 0–5 rating, 6–9 labels, P/X/U flags, G/E/D views, \ before, Y before/after, Z zoom). Click a key and press a new one; a key moves from any action that had it; Delete removes it, Esc cancels; Restore Defaults. Single-key commands only act in the library window, never while typing or in Settings.
 
-Help > Keyboard Shortcuts (⌘/) lists all single-key commands with their current keys plus the menu shortcuts, with a link to change keys.
+Help > Keyboard Shortcuts (⌘/) lists all single-key commands with their current keys plus the menu shortcuts, with a link to change keys. Help > Atelier Help (⌘?) opens the help pages (see Atelier Help).
 
 ### Export dialog
 
