@@ -20,7 +20,8 @@ public final class PreviewCache: Sendable {
     /// Bumped when the way previews are rendered changes, so old ones are rebuilt.
     /// 2: RAW previews are camera matched (`CameraMatch`).
     /// 3: brush and subject masks keep their soft edges (read as raw values).
-    public static let version = 3
+    /// 4: Lightroom-like film grain (`FilmGrain`) with Roughness.
+    public static let version = 4
 
     /// Clears previews written by an older version. The old folder is moved aside at once and
     /// deleted in the background, so a large cache doesn't hold up launch.

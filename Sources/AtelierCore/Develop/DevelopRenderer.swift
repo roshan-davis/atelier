@@ -210,8 +210,8 @@ public final class DevelopRenderer: @unchecked Sendable {
             image = filter.outputImage?.cropped(to: extent) ?? image
         }
         if settings.grain > 0 {
-            image = addGrain(image, amount: settings.grain / 100, size: settings.grainSize / 100, scale: scale,
-                             extent: extent)
+            image = FilmGrain.apply(image, amount: settings.grain / 100, size: settings.grainSize / 100,
+                                    roughness: settings.grainRoughness / 100, scale: scale, extent: extent)
         }
         if let overlay, let mask = settings.masks.first(where: { $0.id == overlay }) {
             image = self.overlay(mask, on: image, base: beforeMasks, provider: masks)
@@ -296,27 +296,6 @@ public final class DevelopRenderer: @unchecked Sendable {
         filter.targetImage = other
         filter.time = Float(amount)
         return filter.outputImage ?? image
-    }
-
-    /// Film-like monochrome grain, multiplied in so blacks stay black.
-    static func addGrain(_ image: CIImage, amount: Double, size: Double, scale: Double, extent: CGRect) -> CIImage {
-        guard let noise = CIFilter.randomGenerator().outputImage else { return image }
-        let grainScale = max(0.5, (1 + size * 3) * scale)
-        let strength = amount * 0.35
-        let matrix = CIFilter.colorMatrix()
-        matrix.inputImage = noise
-            .transformed(by: CGAffineTransform(scaleX: grainScale, y: grainScale))
-            .transformed(by: CGAffineTransform(translationX: extent.minX, y: extent.minY))
-        matrix.rVector = CIVector(x: strength, y: 0, z: 0, w: 0)
-        matrix.gVector = CIVector(x: strength, y: 0, z: 0, w: 0)
-        matrix.bVector = CIVector(x: strength, y: 0, z: 0, w: 0)
-        matrix.aVector = CIVector(x: 0, y: 0, z: 0, w: 0)
-        matrix.biasVector = CIVector(x: 1 - strength / 2, y: 1 - strength / 2, z: 1 - strength / 2, w: 1)
-        guard let grain = matrix.outputImage?.cropped(to: extent) else { return image }
-        let multiply = CIFilter.multiplyCompositing()
-        multiply.inputImage = grain
-        multiply.backgroundImage = image
-        return multiply.outputImage?.cropped(to: extent) ?? image
     }
 
     /// Control points of the tone curve in sRGB-encoded values, or nil when it is the identity.
