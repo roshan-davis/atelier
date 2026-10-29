@@ -56,20 +56,20 @@ Every feature follows these rules. A feature is not done until it meets them.
 8. **Keyboard first for repeated work.** Culling, rating, flagging, labels and view switching all have single-key shortcuts; every command is in a menu.
 9. **Sensible defaults, remembered choices.** Names default to the folder or event, the last import mode and library folder are remembered, and Atelier reopens on the view, photo and filter you left (see Restore last session).
 10. **Switching modes keeps your place.** Opening a tool (Crop, Masking, AI, Guided Upright, the white balance picker, Loupe and Develop) and coming back keeps the zoom and the spot you were zoomed in on; a crop moves the spot with the photo. This is one shared view state that every mode reads and writes, not something each tool saves for itself. (Rosh, Oct 29, 2026.)
-10. **Plain language.** Labels describe what happens to the user's photos ("Leave files where they are", "Copy into my library folder"), not internal terms.
+11. **Plain language.** Labels describe what happens to the user's photos ("Leave files where they are", "Copy into my library folder"), not internal terms.
 
 ### Import flow
 
-1. File > Import Photos (Shift-Cmd-I), the toolbar button, or dropping folders or photos on the window opens the Import dialog.
-2. The dialog has four parts, top to bottom:
+12. File > Import Photos (Shift-Cmd-I), the toolbar button, or dropping folders or photos on the window opens the Import dialog.
+13. The dialog has four parts, top to bottom:
    - **Photos:** a drop zone with "Choose Folders or Photos…". Each chosen source shows its photo count and can be removed. "Add More…" adds sources.
    - **Import into:** a new import entry (named after the first folder by default) or an existing one.
    - **Files:** leave files where they are, or copy them into the library folder (dated folders, hash-verified).
    - **Keywords:** optional, applied to every photo.
    - **Culling:** optional "Cull before importing" (see Culling).
-3. The Import button reads "Import N Photos" and is disabled until at least one photo is found.
-4. After Import, the dialog closes, the import entry is selected, photos appear as they are cataloged, and the status bar shows progress with Cancel.
-5. When done, the status bar summarizes imported, already-in-catalog and unreadable files, with "Show Problems" listing any failures.
+14. The Import button reads "Import N Photos" and is disabled until at least one photo is found.
+15. After Import, the dialog closes, the import entry is selected, photos appear as they are cataloged, and the status bar shows progress with Cancel.
+16. When done, the status bar summarizes imported, already-in-catalog and unreadable files, with "Show Problems" listing any failures.
 
 ### Culling (decided Oct 26, 2026)
 
