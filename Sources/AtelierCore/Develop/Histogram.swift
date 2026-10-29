@@ -14,14 +14,15 @@ public struct Histogram: Sendable, Hashable {
     public var shadowClipping: Double
     public var highlightClipping: Double
 
-    /// Samples a downscaled copy, so this is cheap enough to run after every render.
+    /// Samples a downscaled copy, so this is cheap enough to run after every render. Transparent
+    /// pixels (the crop tool's empty corners around a straightened photo) are left out.
     public init?(image: CGImage, sampleSize: Int = 256) {
         let scale = min(1, Double(sampleSize) / Double(max(image.width, image.height)))
         let width = max(1, Int(Double(image.width) * scale))
         let height = max(1, Int(Double(image.height) * scale))
         guard let space = CGColorSpace(name: CGColorSpace.sRGB),
               let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
-                                      space: space, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue),
+                                      space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
               let data = context.data else { return nil }
         context.interpolationQuality = .medium
         context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
@@ -31,8 +32,13 @@ public struct Histogram: Sendable, Hashable {
         var g = r, b = r, l = r
         var lowClipped = 0, highClipped = 0
         let shift = 256 / Self.binCount
+        var counted = 0
         for i in 0..<(width * height) {
-            let red = Int(pixels[i * 4]), green = Int(pixels[i * 4 + 1]), blue = Int(pixels[i * 4 + 2])
+            let alpha = Int(pixels[i * 4 + 3])
+            guard alpha > 0 else { continue }
+            counted += 1
+            func straight(_ value: UInt8) -> Int { alpha == 255 ? Int(value) : min(255, Int(value) * 255 / alpha) }
+            let red = straight(pixels[i * 4]), green = straight(pixels[i * 4 + 1]), blue = straight(pixels[i * 4 + 2])
             r[red / shift] += 1
             g[green / shift] += 1
             b[blue / shift] += 1
@@ -48,7 +54,7 @@ public struct Histogram: Sendable, Hashable {
         green = normalized(g)
         blue = normalized(b)
         luminance = normalized(l)
-        let total = Double(width * height)
+        let total = Double(max(1, counted))
         shadowClipping = Double(lowClipped) / total
         highlightClipping = Double(highClipped) / total
     }

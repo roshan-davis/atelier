@@ -88,6 +88,16 @@ struct DevelopImageView: View {
         }
         .onAppear { develop.open(model.focusedID) }
         .onChange(of: develop.compareMode) { old, new in compareModeChanged(from: old, to: new) }
+        .onChange(of: CropOfPhoto(assetID: develop.assetID, crop: develop.crop)) { old, new in
+            // The zoomed spot follows the photo through a crop (the crop tool, undo, a preset).
+            guard old.assetID == new.assetID, let size = develop.sourceSize else { return }
+            model.zoomState.viewport.recrop(from: old.crop, to: new.crop, sourceSize: size)
+        }
+    }
+
+    private struct CropOfPhoto: Equatable {
+        var assetID: Int64?
+        var crop: DevelopSettings.Crop
     }
 
     /// The zoom and spot from before a compare view opened, brought back when it closes.

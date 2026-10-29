@@ -1,5 +1,6 @@
 import AppKit
 import AtelierCore
+import CoreImage
 import Foundation
 
 /// How the Develop view shows the photo before edits next to the edited one.
@@ -35,6 +36,8 @@ final class DevelopController: ObservableObject {
     @Published private(set) var assetID: Int64?
     @Published private(set) var settings = DevelopSettings()
     @Published private(set) var image: NSImage?
+    /// `image` is the whole, uncropped photo (rendered for the crop tool) rather than the crop.
+    @Published private(set) var imageIsWhole = false
     @Published private(set) var isLoading = false
     @Published private(set) var errorMessage: String?
     @Published private(set) var asShotTemperature: Double = 5500
@@ -103,7 +106,8 @@ final class DevelopController: ObservableObject {
         didSet { if sliderPreview != oldValue { scheduleRender() } }
     }
 
-    /// The crop tool is open: the photo renders whole (turned and straightened) under the crop frame.
+    /// The crop tool is open: the photo renders whole and turned, but not straightened, under the
+    /// crop frame; the crop view turns it by the angle so straightening is instant.
     @Published var isCropping = false {
         didSet {
             guard isCropping != oldValue else { return }
@@ -114,10 +118,33 @@ final class DevelopController: ObservableObject {
                 isGuiding = false
                 isPickingWhiteBalance = false
                 isPickingFringe = false
+            } else {
+                showCropOfWholeImage()
             }
             scheduleRender()
         }
     }
+
+    private static let cropContext = CIContext()
+
+    /// On closing the crop tool, cuts the whole photo still showing to the new crop at once, so
+    /// the main view never flashes the uncropped photo before the cropped render lands.
+    private func showCropOfWholeImage() {
+        guard imageIsWhole, let crop = settings.crop,
+              let whole = image?.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
+        // The crop tool's image is already turned and flipped, but not straightened.
+        var cut = crop
+        cut.quarterTurns = 0
+        cut.flipHorizontal = false
+        cut.flipVertical = false
+        let cropped = DevelopRenderer.applyGeometry(cut, to: CIImage(cgImage: whole))
+        guard let cgImage = Self.cropContext.createCGImage(cropped, from: cropped.extent.integral, format: .RGBA8,
+                                                           colorSpace: whole.colorSpace ?? DevelopRenderer.displaySpace)
+        else { return }
+        image = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+        imageIsWhole = false
+    }
+
     /// The AI tool is open: the photo shows under the AI brush and the AI panel replaces Crop.
     @Published var isAIOpen = false {
         didSet {
@@ -339,6 +366,7 @@ final class DevelopController: ObservableObject {
         self.assetID = assetID
         session = nil
         image = nil
+        imageIsWhole = false
         beforeImage = nil
         histogram = nil
         fullImage = nil
@@ -1275,6 +1303,10 @@ final class DevelopController: ObservableObject {
         var settings = showingBefore ? beforeSettings : self.settings
         if isGuiding { settings = guidedViewSettings(settings) }
         let cropping = !isCropping
+        if isCropping, var crop = settings.crop {
+            crop.angle = 0
+            settings.crop = crop
+        }
         let assetID = self.assetID
         let overlay = isMasking && showMaskOverlay ? selectedMaskID : nil
         let preview = showingBefore ? nil : sliderPreview
@@ -1285,8 +1317,11 @@ final class DevelopController: ObservableObject {
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     self.rendering = false
-                    if self.assetID == assetID, let cgImage {
+                    // A render started before the crop tool opened or closed has the wrong shape; the
+                    // next render replaces it.
+                    if self.assetID == assetID, cropping != self.isCropping, let cgImage {
                         self.image = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+                        self.imageIsWhole = !cropping
                         if let histogram { self.histogram = histogram }
                     }
                     if self.needsRender {

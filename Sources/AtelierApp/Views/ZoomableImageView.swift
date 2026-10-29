@@ -1,4 +1,5 @@
 import AppKit
+import AtelierCore
 import SwiftUI
 
 /// Zoom for loupe and develop. 100% shows one pixel of the full-size photo per screen pixel.
@@ -28,7 +29,9 @@ struct ZoomReport: Equatable {
 /// zoom change redraws only the photo and the zoom bar, not the whole window.
 @MainActor
 final class ZoomState: ObservableObject {
-    @Published var level: ZoomLevel = .fit
+    @Published var level: ZoomLevel = .fit {
+        didSet { if level == .fit { viewport.forgetCenter() } }
+    }
     @Published var report = ZoomReport()
     /// Where the next photo should be centered (0...1 across and down the photo), for the
     /// settings that bring back a zoomed photo's position. The photo view takes it.
@@ -56,13 +59,34 @@ final class ZoomViewport: ObservableObject {
     /// 0...1 across and down the photo; nil when the whole photo is in view or no photo view
     /// is showing.
     @Published private(set) var visible: CGRect?
+    /// The spot of the photo (0...1 across and down it) the view is zoomed in on; nil at Fit.
+    /// The one place it lives: every photo view (Develop, Masking, the loupe) writes it as it
+    /// pans and starts from it when it appears, so switching to any mode and back keeps the
+    /// spot without each mode saving it. A crop change moves it with the photo (`recrop`).
+    private(set) var center: CGPoint?
     private var owner: ObjectIdentifier?
 
     func update(_ rect: CGRect?, from source: AnyObject) {
         owner = ObjectIdentifier(source)
+        // All of the photo in view says nothing about where to zoom in; keep the spot.
+        if let rect { center = CGPoint(x: rect.midX, y: rect.midY) }
         if let rect, let visible, abs(rect.minX - visible.minX) < 0.0005, abs(rect.minY - visible.minY) < 0.0005,
            abs(rect.width - visible.width) < 0.0005, abs(rect.height - visible.height) < 0.0005 { return }
         if rect != visible { visible = rect }
+    }
+
+    func forgetCenter() { center = nil }
+
+    /// Moves the spot with the photo when its crop changes from `old` to `new`, so the same
+    /// part of the photo stays in view. `sourceSize` is the upright, uncropped photo's size.
+    func recrop(from old: DevelopSettings.Crop, to new: DevelopSettings.Crop, sourceSize: CGSize) {
+        guard let center, old != new else { return }
+        let oldSize = old.outputSize(sourceSize), newSize = new.outputSize(sourceSize)
+        guard oldSize.width > 0, oldSize.height > 0, newSize.width > 0, newSize.height > 0 else { return }
+        let source = old.sourcePoint(fromOutput: CGPoint(x: center.x * oldSize.width, y: center.y * oldSize.height),
+                                     sourceSize: sourceSize)
+        let point = new.outputPoint(fromSource: source, sourceSize: sourceSize)
+        self.center = CGPoint(x: min(1, max(0, point.x / newSize.width)), y: min(1, max(0, point.y / newSize.height)))
     }
 
     /// Clears the rectangle when `source` was the last photo view to report, so a view that
@@ -91,7 +115,10 @@ struct ZoomableImageView: NSViewRepresentable {
     var onPick: ((CGPoint) -> Void)? = nil
 
     func makeNSView(context: Context) -> ZoomScrollView {
-        ZoomScrollView()
+        let view = ZoomScrollView()
+        // A new photo view (back from another mode) starts on the spot the last one showed.
+        view.pendingCenter = zoom.viewport.center
+        return view
     }
 
     func updateNSView(_ view: ZoomScrollView, context: Context) {
@@ -293,7 +320,8 @@ final class ZoomScrollView: NSScrollView {
 
     /// Tells the Navigator what part of the photo is in view, after the current layout pass.
     private func reportVisible() {
-        guard let viewport else { return }
+        // Until the view has taken its spot, what it shows isn't where it is going.
+        guard let viewport, pendingCenter == nil else { return }
         var visible: CGRect?
         if documentSize.width > 0, documentSize.height > 0 {
             let shown = contentView.bounds.intersection(CGRect(origin: .zero, size: documentSize))

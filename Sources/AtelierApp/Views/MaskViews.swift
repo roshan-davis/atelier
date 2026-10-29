@@ -16,6 +16,18 @@ struct MaskEditorView: View {
     @ObservedObject var zoom: ZoomState
     var onReport: (ZoomReport) -> Void
 
+    init(develop: DevelopController, image: NSImage, display: NSImage, pixelSize: CGSize?, zoom: ZoomState,
+         onReport: @escaping (ZoomReport) -> Void) {
+        _develop = ObservedObject(wrappedValue: develop)
+        self.image = image
+        self.display = display
+        self.pixelSize = pixelSize
+        _zoom = ObservedObject(wrappedValue: zoom)
+        self.onReport = onReport
+        // Start on the spot the Develop view was zoomed in on.
+        _navigator = StateObject(wrappedValue: MaskNavigator(center: zoom.viewport.center))
+    }
+
     private typealias Point = DevelopSettings.MaskPoint
     private typealias Component = DevelopSettings.MaskComponent
 
@@ -41,13 +53,19 @@ struct MaskEditorView: View {
     @State private var stroke: DevelopSettings.MaskStroke?
     @State private var hover: CGPoint?
     @State private var pinchStart: CGFloat?
-    @StateObject private var navigator = MaskNavigator()
+    @StateObject private var navigator: MaskNavigator
+    @Environment(\.displayScale) private var displayScale
 
     private let accent = Color(red: 0.95, green: 0.25, blue: 0.2)
 
     var body: some View {
         GeometryReader { geometry in
-            let layout = navigator.layout(size: geometry.size, document: pixelSize ?? image.size, zoom: zoom.level)
+            // In points, as the Develop photo view measures it, so 100% (one photo pixel per
+            // screen pixel) is the same zoom in both and switching modes never changes it.
+            let pixels = pixelSize ?? image.size
+            let layout = navigator.layout(size: geometry.size, zoom: zoom.level,
+                                          document: CGSize(width: pixels.width / displayScale,
+                                                           height: pixels.height / displayScale))
             let rect = layout.rect
             let space = MaskSpace(sourceSize: develop.sourceSize ?? image.size, crop: develop.crop, rect: rect,
                                   outputSize: image.size)
@@ -863,10 +881,15 @@ final class MaskNavigator: ObservableObject {
     private var monitor: Any?
     private let padding: CGFloat = 16
 
+    init(center: CGPoint? = nil) {
+        if let center { self.center = center }
+    }
+
     var canPan: Bool { rect.width > size.width + 1 || rect.height > size.height + 1 }
 
-    /// Where the photo goes for a view of `size`; `document` is the full-size photo's pixel size.
-    func layout(size: CGSize, document: CGSize, zoom: ZoomLevel) -> Layout {
+    /// Where the photo goes for a view of `size`; `document` is the full-size photo's size in
+    /// points (its pixels over the display scale).
+    func layout(size: CGSize, zoom: ZoomLevel, document: CGSize) -> Layout {
         let document = CGSize(width: max(1, document.width), height: max(1, document.height))
         let fit = min(max(1, size.width - padding * 2) / document.width, max(1, size.height - padding * 2) / document.height)
         var magnification: CGFloat
