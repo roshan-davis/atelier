@@ -868,13 +868,20 @@ final class LibraryModel: ObservableObject {
         return true
     }
 
-    /// Guided Upright, as in Lightroom: ⇧T opens it, Delete removes the selected guide, Esc closes it.
+    /// Guided Upright, as in Lightroom: ⇧T opens it, O shows or hides the loupe, Delete removes
+    /// the selected guide, Esc closes it.
     private func handleTransformKey(_ event: NSEvent) -> Bool {
         if event.modifierFlags.contains(.shift), event.charactersIgnoringModifiers?.lowercased() == "t" {
             if develop.isGuiding { develop.isGuiding = false } else { develop.setUpright(.guided) }
             return true
         }
         guard develop.isGuiding else { return false }
+        if event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty,
+           event.charactersIgnoringModifiers?.lowercased() == "o" {
+            let key = GuidedUprightView.loupeKey
+            UserDefaults.standard.set(!(UserDefaults.standard.object(forKey: key) as? Bool ?? true), forKey: key)
+            return true
+        }
         switch event.keyCode {
         case 51, 117:  // delete, forward delete
             develop.deleteSelectedGuide()

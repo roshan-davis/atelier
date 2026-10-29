@@ -171,12 +171,12 @@ struct TransformPanel: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             if develop.isGuiding {
-                Text("Drag along edges that should be vertical or horizontal. The photo straightens once there are two guides; draw up to four. Drag a guide's end to move it; click a guide and press Delete to remove it.")
+                Text("Drag along edges that should be vertical or horizontal. The photo straightens once there are two guides; draw up to four. Drag a guide's end to move it; click a guide and press Delete to remove it. If the correction pushes part of the photo out of the frame, lower Scale or ⌘⌥-drag the photo.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 Toggle("Show Loupe", isOn: $showLoupe)
-                    .help("Magnify the photo around the pointer while you place a guide")
+                    .help("Magnify the photo around the pointer while you place a guide (O)")
                 HStack {
                     Button("Clear Guides") { develop.setGuides([]) }
                         .disabled(develop.settings.upright?.guides.isEmpty ?? true)
@@ -189,22 +189,9 @@ struct TransformPanel: View {
             Toggle("Constrain Crop", isOn: Binding(get: { develop.settings.constrainCrop },
                                                    set: { develop.setConstrainCrop($0) }))
                 .help("Crop to the largest area with no gray edges, as in Lightroom; the crop then stays inside the photo when you adjust it")
-            if develop.settings.constrainCrop {
-                Text(constrainCropLine)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
             ParameterGroups(panel: .transform, develop: develop)
         }
         .font(.callout)
-    }
-
-    private var constrainCropLine: String {
-        let crop = develop.crop
-        guard crop.hasCut else { return "No gray edges to crop." }
-        let kept = Int((crop.width * crop.height * 100).rounded())
-        return "Cropped to \(kept)% of the photo so no gray edges show. Crop & Straighten (R) adjusts it."
     }
 
     private func uprightButton(_ mode: Mode?, help: String) -> some View {
@@ -228,8 +215,10 @@ struct TransformPanel: View {
     }
 }
 
-/// Guided Upright: the whole corrected photo with the guides drawn on it. Guides are stored on
-/// the photo before the Transform, so they follow it as the correction updates.
+/// Guided Upright, as in Lightroom: the photo as edited (crop included) with the guides drawn on
+/// it. Guides are stored on the photo before the Transform, so they follow it as the correction
+/// updates; a guide end the correction pushes out of the frame comes back with Scale or a
+/// ⌘⌥-drag, which moves the photo through X and Y Offset.
 struct GuidedUprightView: View {
     @ObservedObject var develop: DevelopController
     let image: NSImage
@@ -238,6 +227,7 @@ struct GuidedUprightView: View {
         case draw(start: CGPoint)
         case moveEnd(index: Int, isStart: Bool)
         case select(index: Int?)
+        case pan(startX: Double, startY: Double)
     }
 
     @State private var action: DragAction?
@@ -262,16 +252,6 @@ struct GuidedUprightView: View {
                     .position(x: rect.midX, y: rect.midY)
                 Canvas { context, _ in
                     context.clip(to: Path(rect))
-                    if let corners = develop.guidedCropCorners {
-                        // The crop (Constrain Crop's too): dim what it cuts, outline what it keeps.
-                        var kept = Path()
-                        kept.addLines(corners.map { CGPoint(x: rect.minX + $0.x * rect.width, y: rect.minY + $0.y * rect.height) })
-                        kept.closeSubpath()
-                        var outside = Path(rect)
-                        outside.addPath(kept)
-                        context.fill(outside, with: .color(.black.opacity(0.45)), style: FillStyle(eoFill: true))
-                        context.stroke(kept, with: .color(.white.opacity(0.85)), lineWidth: 1)
-                    }
                     for (index, guide) in viewGuides(rect).enumerated() {
                         if case .moveEnd(let moving, _) = action, moving == index, draft != nil { continue }
                         drawGuide(guide, selected: develop.selectedGuide == index, in: &context)
@@ -320,19 +300,22 @@ struct GuidedUprightView: View {
     // MARK: Mapping
 
     private func viewGuides(_ rect: CGRect) -> [(CGPoint, CGPoint)] {
-        guard let geometry = develop.lensGeometry else { return [] }
-        func view(_ point: DevelopSettings.MaskPoint) -> CGPoint {
-            let output = geometry.outputPoint(fromSource: CGPoint(x: point.x, y: point.y))
+        func view(_ point: DevelopSettings.MaskPoint) -> CGPoint? {
+            guard let output = develop.guidedViewPoint(fromPhoto: CGPoint(x: point.x, y: point.y)) else { return nil }
             return CGPoint(x: rect.minX + output.x * rect.width, y: rect.minY + output.y * rect.height)
         }
-        return guides.map { (view($0.start), view($0.end)) }
+        return guides.compactMap { guide in
+            guard let a = view(guide.start), let b = view(guide.end) else { return nil }
+            return (a, b)
+        }
     }
 
     private func photoPoint(_ point: CGPoint, rect: CGRect) -> DevelopSettings.MaskPoint? {
-        guard let geometry = develop.lensGeometry, rect.width > 0, rect.height > 0 else { return nil }
+        guard rect.width > 0, rect.height > 0 else { return nil }
         let clampedX = min(max(point.x, rect.minX), rect.maxX), clampedY = min(max(point.y, rect.minY), rect.maxY)
-        let source = geometry.sourcePoint(fromOutput: CGPoint(x: (clampedX - rect.minX) / rect.width,
-                                                              y: (clampedY - rect.minY) / rect.height))
+        guard let source = develop.guidedPhotoPoint(fromView: CGPoint(x: (clampedX - rect.minX) / rect.width,
+                                                                      y: (clampedY - rect.minY) / rect.height))
+        else { return nil }
         return DevelopSettings.MaskPoint(x: Double(source.x), y: Double(source.y))
     }
 
@@ -399,6 +382,9 @@ struct GuidedUprightView: View {
     // MARK: Dragging
 
     private func beginAction(at point: CGPoint, rect: CGRect) -> DragAction {
+        if NSEvent.modifierFlags.contains([.command, .option]) {
+            return .pan(startX: develop.settings[.transformOffsetX], startY: develop.settings[.transformOffsetY])
+        }
         let lines = viewGuides(rect)
         for (index, line) in lines.enumerated() {
             if distance(point, line.0) < 9 { return .moveEnd(index: index, isStart: true) }
@@ -421,6 +407,14 @@ struct GuidedUprightView: View {
             guard lines.indices.contains(index) else { return }
             draft = isStart ? (drag.location, lines[index].1) : (lines[index].0, drag.location)
             loupePoint = drag.location
+        case .pan(let startX, let startY):
+            guard rect.width > 0, rect.height > 0 else { return }
+            var dx = Double(drag.translation.width / rect.width), dy = Double(drag.translation.height / rect.height)
+            // Shift keeps the move to one direction, as in Lightroom.
+            if NSEvent.modifierFlags.contains(.shift) {
+                if abs(dx) >= abs(dy) { dy = 0 } else { dx = 0 }
+            }
+            develop.dragTransformOffsets(from: (startX, startY), dx: dx, dy: dy)
         case .select:
             break
         }
@@ -447,6 +441,8 @@ struct GuidedUprightView: View {
             develop.selectedGuide = index
         case .select(let index):
             develop.selectedGuide = index
+        case .pan:
+            break
         }
     }
 

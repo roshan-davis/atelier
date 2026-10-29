@@ -137,21 +137,6 @@ final class TransformTests: XCTestCase {
         }
     }
 
-    func testWholePhotoViewKeepsEveryCornerInFrame() {
-        var settings = DevelopSettings()
-        settings.upright = .init(mode: .guided, pitch: 18, yaw: -12, roll: 4)
-        settings.showsWholePhoto = true
-        let geometry = LensGeometry(settings: settings, size: size, focalLength35: 24)
-        for corner in [CGPoint(x: 0, y: 0), CGPoint(x: 1, y: 0), CGPoint(x: 0, y: 1), CGPoint(x: 1, y: 1)] {
-            let output = geometry.outputPoint(fromSource: corner)
-            XCTAssertTrue((0...1).contains(output.x) && (0...1).contains(output.y), "\(corner) lands at \(output)")
-        }
-        // View only: never saved.
-        var saved = settings
-        saved.showsWholePhoto = false
-        XCTAssertEqual(try settings.encoded(), try saved.encoded())
-    }
-
     func testUprightWithoutShearStillDecodes() throws {
         // Settings saved before Guided had a slant.
         let json = #"{"mode":"guided","pitch":4,"yaw":-1,"roll":0.5,"guides":[]}"#

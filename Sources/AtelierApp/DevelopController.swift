@@ -151,7 +151,7 @@ final class DevelopController: ObservableObject {
             scheduleRender()
         }
     }
-    /// Guided Upright is open: the whole corrected photo shows, uncropped, under the guides.
+    /// Guided Upright is open: the guides are drawn on the photo as edited, crop included.
     @Published var isGuiding = false {
         didSet {
             guard isGuiding != oldValue else { return }
@@ -810,18 +810,16 @@ final class DevelopController: ObservableObject {
         setGuides(guides)
     }
 
-    /// The Transform's mapping between the corrected photo and the output, for the guides tool.
+    /// The Transform's mapping between the corrected photo and the output.
     var lensGeometry: LensGeometry? {
         guard let sourceSize else { return nil }
-        return LensGeometry(settings: isGuiding ? guidedViewSettings(settings) : settings, size: sourceSize,
-                            focalLength35: focalLength35)
+        return LensGeometry(settings: settings, size: sourceSize, focalLength35: focalLength35)
     }
 
     /// Constrain Crop's test for the crop tool: whether a point on the upright, uncropped photo
     /// (0...1 from the top left) shows the photo rather than the gray fill. nil when it is off.
     var cropBounds: ((CGPoint) -> Bool)? {
-        guard settings.constrainCrop, let sourceSize else { return nil }
-        let geometry = LensGeometry(settings: settings, size: sourceSize, focalLength35: focalLength35)
+        guard settings.constrainCrop, let geometry = lensGeometry else { return nil }
         return { geometry.showsPhoto(at: $0) }
     }
 
@@ -836,27 +834,42 @@ final class DevelopController: ObservableObject {
         return true
     }
 
-    /// The crop's corners on the Guided view (0...1 from its top left), so a crop, Constrain
-    /// Crop's included, shows there although the view is uncropped. nil without a cut.
-    var guidedCropCorners: [CGPoint]? {
-        guard let crop = settings.crop, crop.hasCut, let sourceSize, let view = lensGeometry else { return nil }
-        let normal = LensGeometry(settings: settings, size: sourceSize, focalLength35: focalLength35)
+    // The Guided tool works on the photo as edited, crop included, as in Lightroom. Guides are
+    // stored on the photo before the Transform (0...1 from the top left); the view is the
+    // cropped output (0...1 from its top left).
+
+    /// Where a point of the photo before the Transform shows in the Guided view.
+    func guidedViewPoint(fromPhoto point: CGPoint) -> CGPoint? {
+        guard let sourceSize, let geometry = lensGeometry else { return nil }
+        let corrected = geometry.outputPoint(fromSource: point)
+        let crop = self.crop
+        let output = crop.outputPoint(fromSource: CGPoint(x: corrected.x * sourceSize.width, y: corrected.y * sourceSize.height),
+                                      sourceSize: sourceSize)
         let turned = crop.orientedSize(sourceSize)
-        return [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)].map { u, v in
-            let output = CGPoint(x: u * crop.width * turned.width, y: v * crop.height * turned.height)
-            let p = crop.sourcePoint(fromOutput: output, sourceSize: sourceSize)
-            let corrected = CGPoint(x: p.x / sourceSize.width, y: p.y / sourceSize.height)
-            return view.outputPoint(fromSource: normal.sourcePoint(fromOutput: corrected))
-        }
+        return CGPoint(x: output.x / (turned.width * crop.width), y: output.y / (turned.height * crop.height))
     }
 
-    /// What the Guided tool shows: the whole corrected photo, uncropped and zoomed out as far as
-    /// it needs, so no guide is pushed out of view. The edit itself is unchanged.
-    private func guidedViewSettings(_ settings: DevelopSettings) -> DevelopSettings {
-        var view = settings
-        view.crop = nil
-        view.showsWholePhoto = true
-        return view
+    /// The photo point (before the Transform) under a point of the Guided view.
+    func guidedPhotoPoint(fromView point: CGPoint) -> CGPoint? {
+        guard let sourceSize, let geometry = lensGeometry else { return nil }
+        let crop = self.crop
+        let turned = crop.orientedSize(sourceSize)
+        let output = CGPoint(x: point.x * turned.width * crop.width, y: point.y * turned.height * crop.height)
+        let upright = crop.sourcePoint(fromOutput: output, sourceSize: sourceSize)
+        return geometry.sourcePoint(fromOutput: CGPoint(x: upright.x / sourceSize.width, y: upright.y / sourceSize.height))
+    }
+
+    /// Lightroom's ⌘⌥-drag in the Guided tool: moves the photo in its frame through X and Y
+    /// Offset, to bring back what the correction pushed out. `dx`, `dy` are fractions of the
+    /// view; `start` the offsets when the drag began.
+    func dragTransformOffsets(from start: (x: Double, y: Double), dx: Double, dy: Double) {
+        guard assetID != nil else { return }
+        let crop = self.crop
+        // 100 moves the photo half the uncropped frame.
+        settings[.transformOffsetX] = (start.x + dx * crop.width * 200).rounded()
+        settings[.transformOffsetY] = (start.y + dy * crop.height * 200).rounded()
+        beforeImage = nil
+        changed(step: "Transform Offset")
     }
 
     /// An edit that changes the photo's shape, so the Before view has to follow.
@@ -1218,7 +1231,6 @@ final class DevelopController: ObservableObject {
         }
         rendering = true
         var settings = showingBefore ? beforeSettings : self.settings
-        if isGuiding { settings = guidedViewSettings(settings) }
         let cropping = !isCropping
         let assetID = self.assetID
         let overlay = isMasking && showMaskOverlay ? selectedMaskID : nil

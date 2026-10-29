@@ -43,9 +43,6 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
     /// Transform > Constrain Crop: keep the crop inside the corrected photo, so no empty (gray)
     /// edges show. The crop itself is changed, as in Lightroom; see `LensGeometry.showsPhoto`.
     public var constrainCrop = false
-    /// View only, never saved: shrink the corrected photo so all of it shows, for the Guided
-    /// Upright tool (Lightroom cuts off what the correction pushes out of the frame).
-    public var showsWholePhoto = false
     /// Basic > Treatment: Black & White turns the photo gray through the B&W Mix sliders.
     public var monochrome = false
 
