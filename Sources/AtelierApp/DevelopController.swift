@@ -706,7 +706,10 @@ final class DevelopController: ObservableObject {
     /// The full-size photo's size after the crop, for 100% zoom. `assetSize` is the original's
     /// pixel size from the catalog.
     func croppedPixelSize(assetSize: CGSize?) -> CGSize? {
-        guard let assetSize, let sourceSize, sourceSize.width > 0, sourceSize.height > 0 else { return assetSize }
+        guard let assetSize else { return nil }
+        // Until the photo decodes, crop the catalog's size; returning it uncropped made a
+        // cropped photo's 100% zoom jump when the decoded size arrived.
+        guard let sourceSize, sourceSize.width > 0, sourceSize.height > 0 else { return crop.outputSize(assetSize) }
         let factor = max(assetSize.width, assetSize.height) / max(sourceSize.width, sourceSize.height)
         let full = CGSize(width: sourceSize.width * factor, height: sourceSize.height * factor)
         return crop.outputSize(full)
