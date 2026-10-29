@@ -40,7 +40,7 @@ struct LoupeView: View {
             Divider()
             ViewThatFits(in: .horizontal) {
                 HStack {
-                    Text("Click the photo to zoom, drag to move around")
+                    Text("Double-click the photo to zoom, drag to move around")
                         .foregroundStyle(.secondary)
                         .fixedSize()
                     Spacer(minLength: 8)

@@ -286,7 +286,7 @@ private struct DevelopSettingsTab: View {
     var body: some View {
         Form {
             Section("Zoom") {
-                Picker("Click or Z zooms to", selection: $clickPercent) {
+                Picker("Double-click or Z zooms to", selection: $clickPercent) {
                     Text("50%").tag(50.0)
                     Text("100% (1:1)").tag(100.0)
                     Text("200%").tag(200.0)

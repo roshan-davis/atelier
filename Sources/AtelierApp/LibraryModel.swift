@@ -453,7 +453,7 @@ final class LibraryModel: ObservableObject {
         return zooms
     }
 
-    /// Settings > Develop: the zoom a click or Z goes to (Lightroom's 1:1 by default).
+    /// Settings > Develop: the zoom a double-click or Z goes to (Lightroom's 1:1 by default).
     nonisolated static var clickZoomPercent: Double {
         let value = UserDefaults.standard.double(forKey: "zoom.clickPercent")
         return value > 0 ? value : 100
