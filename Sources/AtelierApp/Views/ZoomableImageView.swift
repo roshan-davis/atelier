@@ -245,6 +245,9 @@ final class ZoomScrollView: NSScrollView {
         level = newLevel
         if abs(magnification - target) > 0.0001 { magnification = target }
         scroll(toRelative: center, reporting: false)
+        // Still know the zoom here, so this pane can be dragged.
+        lastReport = ZoomReport(percent: Double(magnification * 100), fitPercent: Double(fitMagnification * 100))
+        canvas.window?.invalidateCursorRects(for: canvas)
     }
 
     /// A pane that appears or resizes after its partner takes the partner's zoom and spot.
