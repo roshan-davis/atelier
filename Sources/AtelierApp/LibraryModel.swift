@@ -75,11 +75,8 @@ final class LibraryModel: ObservableObject {
     @Published var focusedID: Int64? {
         didSet {
             guard focusedID != oldValue else { return }
-            // As in Lightroom, Fit, Fill and the fixed zooms carry over to the next photo, but a
-            // pinch to an in-between zoom goes back to Fit.
-            if case .percent(let value) = zoom, value != 100, value != 200, value != Self.clickZoomPercent {
-                zoom = .fit
-            }
+            // Every photo opens at Fit, however the last one was zoomed.
+            if zoom != .fit { zoom = .fit }
             reloadDetail()
             if mode == .develop { develop.open(focusedID) }
         }
@@ -115,7 +112,7 @@ final class LibraryModel: ObservableObject {
     private var shownImportGroup: Int64?
     /// Bumped when previews are generated so visible cells reload their images.
     @Published var previewRevision = 0
-    /// Zoom shared by loupe and develop; kept when moving between photos, as in Lightroom.
+    /// Zoom shared by loupe and develop; back to Fit when moving to another photo.
     /// Not published here: only the photo and the zoom bar watch it.
     let zoomState = ZoomState()
     var zoom: ZoomLevel {
