@@ -215,7 +215,7 @@ public struct ColorGrade {
         }
         blending = settings[.gradeBlending] / 100
         balance = settings[.gradeBalance] / 100
-        isActive = settings[.gradeDisabled] < 0.5
+        isActive = settings.isOn(.colorGrading)
             && Region.allCases.contains { settings[$0.saturation] != 0 || settings[$0.luminance] != 0 }
     }
 

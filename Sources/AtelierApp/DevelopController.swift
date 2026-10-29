@@ -43,12 +43,27 @@ final class DevelopController: ObservableObject {
     @Published private(set) var asShotTemperature: Double = 5500
     /// The camera's tint, which the stored Tint is relative to; shown added, as Lightroom does.
     @Published private(set) var asShotTint: Double = 0
-    /// The White Balance Selector is out: the next click on the photo makes that spot neutral.
-    @Published var isPickingWhiteBalance = false {
+    /// The color pickers (eyedroppers) that act on a click on the photo, as in Lightroom: the
+    /// White Balance Selector, Defringe's Fringe Color Selector and Color Grading's color picker.
+    /// One is out at a time; each works on the same zoomable photo with a hint at the top, and
+    /// Esc or a second click on its button puts it away.
+    enum PhotoPicker {
+        case whiteBalance, fringe, gradeColor
+
+        var hint: String {
+            switch self {
+            case .whiteBalance: return "Click something that should be neutral gray or white. Esc to cancel."
+            case .fringe: return "Click a purple or green fringe. Zoom in to see it clearly. Esc to cancel."
+            case .gradeColor: return "Click a spot whose color cast should turn neutral. Esc to cancel."
+            }
+        }
+    }
+
+    @Published var picker: PhotoPicker? {
         didSet {
-            guard isPickingWhiteBalance, !oldValue else { return }
-            isPickingFringe = false
-            isPickingGradeColor = false
+            guard picker != oldValue else { return }
+            pickerMessage = nil
+            guard picker != nil else { return }
             isCropping = false
             isAIOpen = false
             isMasking = false
@@ -57,48 +72,35 @@ final class DevelopController: ObservableObject {
             compareMode = .off
         }
     }
+    /// Why the last click with the picker that is out set nothing.
+    @Published private(set) var pickerMessage: String?
+
+    /// The White Balance Selector is out: the next click on the photo makes that spot neutral.
+    var isPickingWhiteBalance: Bool {
+        get { picker == .whiteBalance }
+        set { setPicker(.whiteBalance, newValue) }
+    }
+    /// Lens Corrections > Defringe's Fringe Color Selector is out: a click on a purple or green
+    /// fringe sets that color's Hue range and Amount.
+    var isPickingFringe: Bool {
+        get { picker == .fringe }
+        set { setPicker(.fringe, newValue) }
+    }
+    /// Color Grading's color picker is out: a click on the photo sets a wheel so that spot's color
+    /// cast turns neutral.
+    var isPickingGradeColor: Bool {
+        get { picker == .gradeColor }
+        set { setPicker(.gradeColor, newValue) }
+    }
+
+    private func setPicker(_ kind: PhotoPicker, _ out: Bool) {
+        if out { picker = kind } else if picker == kind { picker = nil }
+    }
+
     /// Auto or the White Balance Selector is measuring the photo.
     @Published private(set) var isFindingWhiteBalance = false
-    /// Lens Corrections > Defringe's Fringe Color Selector is out: a click on a purple or green
-    /// fringe sets that color's Hue range and Amount. The photo still zooms and pans.
-    @Published var isPickingFringe = false {
-        didSet {
-            guard isPickingFringe != oldValue else { return }
-            fringeMessage = nil
-            guard isPickingFringe else { return }
-            isPickingWhiteBalance = false
-            isPickingGradeColor = false
-            isCropping = false
-            isAIOpen = false
-            isMasking = false
-            isGuiding = false
-            showingBefore = false
-            compareMode = .off
-        }
-    }
-    /// Why the last click with the Fringe Color Selector set nothing.
-    @Published private(set) var fringeMessage: String?
-    /// Color Grading's color picker is out: a click on the photo sets a wheel so that spot's color
-    /// cast turns neutral. The photo still zooms and pans.
-    @Published var isPickingGradeColor = false {
-        didSet {
-            guard isPickingGradeColor != oldValue else { return }
-            gradeColorMessage = nil
-            guard isPickingGradeColor else { return }
-            isPickingWhiteBalance = false
-            isPickingFringe = false
-            isCropping = false
-            isAIOpen = false
-            isMasking = false
-            isGuiding = false
-            showingBefore = false
-            compareMode = .off
-        }
-    }
     /// The wheel the color picker sets; nil picks Shadows, Midtones or Highlights by the spot's tone.
     @Published var gradePickRegion: DevelopSettings.GradeRegion?
-    /// Why the last click with Color Grading's color picker set nothing.
-    @Published private(set) var gradeColorMessage: String?
     @Published var showingBefore = false {
         didSet { if showingBefore != oldValue { scheduleRender() } }
     }
@@ -141,9 +143,7 @@ final class DevelopController: ObservableObject {
                 isAIOpen = false
                 isMasking = false
                 isGuiding = false
-                isPickingWhiteBalance = false
-                isPickingFringe = false
-                isPickingGradeColor = false
+                picker = nil
             } else {
                 showCropOfWholeImage()
             }
@@ -178,9 +178,7 @@ final class DevelopController: ObservableObject {
             isCropping = false
             isMasking = false
             isGuiding = false
-            isPickingWhiteBalance = false
-            isPickingFringe = false
-            isPickingGradeColor = false
+            picker = nil
             showingBefore = false
             compareMode = .off
         }
@@ -194,9 +192,7 @@ final class DevelopController: ObservableObject {
                 isCropping = false
                 isAIOpen = false
                 isGuiding = false
-                isPickingWhiteBalance = false
-                isPickingFringe = false
-                isPickingGradeColor = false
+                picker = nil
                 showingBefore = false
                 compareMode = .off
                 if selectedMaskID == nil { selectedMaskID = settings.masks.last?.id }
@@ -211,9 +207,7 @@ final class DevelopController: ObservableObject {
         didSet {
             guard isGuiding != oldValue else { return }
             if isGuiding {
-                isPickingWhiteBalance = false
-                isPickingFringe = false
-                isPickingGradeColor = false
+                picker = nil
                 isCropping = false
                 isAIOpen = false
                 isMasking = false
@@ -409,9 +403,7 @@ final class DevelopController: ObservableObject {
         showingBefore = false
         isCropping = false
         isGuiding = false
-        isPickingWhiteBalance = false
-        isPickingFringe = false
-        isPickingGradeColor = false
+        picker = nil
         uprightMessage = nil
         sourceSize = nil
         selectedMaskID = nil
@@ -654,6 +646,25 @@ final class DevelopController: ObservableObject {
         changed(step: "Reset \(Self.parameterName(parameter))")
     }
 
+    /// A group heading's reset (Tone, Presence, Sharpening, Region, ...), as one history step.
+    func reset(group: String, parameters: [DevelopSettings.Parameter]) {
+        guard assetID != nil else { return }
+        let before = settings
+        for parameter in parameters {
+            if parameter == .temperature {
+                settings.temperature = nil
+            } else {
+                settings[parameter] = DevelopSettings.neutral[parameter]
+            }
+        }
+        guard settings != before else { return }
+        if parameters.contains(where: { ($0.panel == .lensCorrections && !$0.isDefringe) || $0.panel == .transform }) {
+            shapeChanged(step: "Reset \(group)")
+        } else {
+            changed(step: "Reset \(group)")
+        }
+    }
+
     // MARK: Color Grading
 
     /// A wheel's hue and saturation together, as one history step.
@@ -672,16 +683,6 @@ final class DevelopController: ObservableObject {
         if luminance { parameters.append(region.luminance) }
         for parameter in parameters { settings[parameter] = DevelopSettings.neutral[parameter] }
         changed(step: "Reset Color Grading \(region.rawValue)")
-    }
-
-    /// Color Grading's panel switch, as in Lightroom: off hides every wheel's effect and keeps
-    /// their settings.
-    var isColorGradingOn: Bool { settings[.gradeDisabled] < 0.5 }
-
-    func setColorGradingOn(_ on: Bool) {
-        guard assetID != nil, on != isColorGradingOn else { return }
-        settings[.gradeDisabled] = on ? 0 : 1
-        changed(step: on ? "Color Grading On" : "Color Grading Off")
     }
 
     /// One wheel's settings, for Copy and Paste in a wheel's right-click menu.
@@ -730,7 +731,7 @@ final class DevelopController: ObservableObject {
                 MainActor.assumeIsolated {
                     guard self.assetID == assetID, self.isPickingGradeColor else { return }
                     guard let pick else {
-                        self.gradeColorMessage = sample == nil || region == nil
+                        self.pickerMessage = sample == nil || region == nil
                             ? "Cannot read the color there. Click another spot."
                             : "That spot is hardly in the \(region!.rawValue). Click another spot, or use the 3-Way view."
                         return
@@ -766,6 +767,7 @@ final class DevelopController: ObservableObject {
         default:
             break
         }
+        settings.setPanel(panel, on: true)
         if panel == .lensCorrections || panel == .transform { beforeImage = nil }
         for parameter in panel.parameters {
             if parameter == .temperature {
@@ -777,7 +779,29 @@ final class DevelopController: ObservableObject {
         changed(step: "Reset \(panel.title)")
     }
 
+    // MARK: Panel switches
+
+    func isPanelOn(_ panel: DevelopSettings.Panel) -> Bool { settings.isOn(panel) }
+
+    /// A panel header's switch, as in Lightroom: off hides the panel's effect and keeps its
+    /// settings. Moving any of the panel's controls turns it back on (see `changed`).
+    func setPanelOn(_ panel: DevelopSettings.Panel, _ on: Bool) {
+        guard assetID != nil, panel.hasSwitch, on != isPanelOn(panel) else { return }
+        // Its own history step, at once, so an edit right after it is compared with the panel off.
+        commitPendingStep()
+        settings.setPanel(panel, on: on)
+        let step = "\(panel.title) \(on ? "On" : "Off")"
+        if panel == .lensCorrections || panel == .transform {
+            if !on { isGuiding = false }
+            shapeChanged(step: step)
+        } else {
+            changed(step: step)
+        }
+        commitPendingStep()
+    }
+
     func isModified(_ panel: DevelopSettings.Panel) -> Bool {
+        if !settings.isOn(panel) { return true }
         switch panel {
         case .basic where settings.profile != .cameraMatching || settings.monochrome: return true
         case .toneCurve where settings.hasPointCurve: return true
@@ -864,7 +888,7 @@ final class DevelopController: ObservableObject {
                 MainActor.assumeIsolated {
                     guard self.assetID == assetID, self.isPickingFringe else { return }
                     guard let pick = Defringe.pick(colors, settings: self.settings) else {
-                        self.fringeMessage = "Cannot set the purple or green fringe color. Click on a purple or green fringe."
+                        self.pickerMessage = "Cannot set the purple or green fringe color. Click on a purple or green fringe."
                         return
                     }
                     var updated = self.settings
@@ -1114,19 +1138,31 @@ final class DevelopController: ObservableObject {
         if let assetID, targets.contains(assetID) {
             settings = newSettings
             validateMaskSelection()
-            changed(step: step)
+            changed(step: step, replacing: true)
         }
     }
 
     /// An edit to the open photo. `step` names it in the history; nil (undo, redo, jumping
-    /// in the history) saves without adding a step.
-    private func changed(step: String?) {
+    /// in the history) saves without adding a step. `replacing` is for whole settings put in
+    /// place (a preset, a snapshot, Paste), whose panel switches stand as they come.
+    private func changed(step: String?, replacing: Bool = false) {
+        if step != nil, !replacing { turnOnEditedPanels() }
         if !settingPresetAmount { presetAmount = nil }
         constrainCropIfNeeded()
         dirty = true
         if let step { pendingStep = step }
         scheduleRender()
         scheduleSave()
+    }
+
+    /// As in Lightroom, changing anything in a panel that is off turns it back on, so an edit
+    /// never goes unseen. Compares with the last history step, so a drag turns it on once.
+    private func turnOnEditedPanels() {
+        for panel in settings.disabledPanels
+        where !committed.isOn(panel) && committed.contents(of: panel) != settings.contents(of: panel) {
+            settings.setPanel(panel, on: true)
+            if panel == .lensCorrections || panel == .transform { beforeImage = nil }
+        }
     }
 
     // MARK: Presets
@@ -1149,7 +1185,7 @@ final class DevelopController: ObservableObject {
             settings = preset.applied(to: settings)
             validateMaskSelection()
             beforeImage = nil
-            changed(step: step)
+            changed(step: step, replacing: true)
             // Saved and in the history at once, so leaving the photo right away can't lose it.
             flushSave()
             if targets.count == 1 { presetAmount = PresetAmount(preset: preset, assetID: assetID, base: base, amount: 100) }
@@ -1171,7 +1207,7 @@ final class DevelopController: ObservableObject {
             committed = settings
             changed(step: nil)
         } else {
-            changed(step: step)
+            changed(step: step, replacing: true)
         }
         settingPresetAmount = false
         presetAmount = state
@@ -1350,7 +1386,7 @@ final class DevelopController: ObservableObject {
         settings = snapshot.settings
         validateMaskSelection()
         beforeImage = nil
-        changed(step: "Snapshot: \(snapshot.name)")
+        changed(step: "Snapshot: \(snapshot.name)", replacing: true)
     }
 
     func updateSnapshot(_ id: UUID) {
