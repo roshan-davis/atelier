@@ -88,16 +88,9 @@ public final class DevelopRenderer: @unchecked Sendable {
         var image = input
         let extent = input.extent
 
-        // Highlights and shadows. CIHighlightShadowAdjust only recovers highlights, so positive
-        // highlights are handled by the tone curve below.
-        if settings.highlights < 0 || settings.shadows != 0 {
-            let filter = CIFilter.highlightShadowAdjust()
-            filter.inputImage = image
-            filter.highlightAmount = Float(1 + min(0, settings.highlights) / 100)
-            filter.shadowAmount = Float(settings.shadows / 100)
-            filter.radius = 0
-            image = filter.outputImage ?? image
-        }
+        // Highlights and Shadows: local, judged by an edge-aware base (see LocalContrast).
+        image = LocalContrast.toneRegions(image, highlights: settings.highlights / 100, shadows: settings.shadows / 100,
+                                          scale: scale)
 
         // Tone curve, applied in sRGB-encoded values so contrast behaves perceptually. Basic tone,
         // the region sliders and the RGB curve keep each color's hue, as Lightroom does; the
@@ -266,15 +259,14 @@ public final class DevelopRenderer: @unchecked Sendable {
     /// Control points of the tone curve in sRGB-encoded values, or nil when it is the identity.
     public static func toneCurvePoints(_ settings: DevelopSettings) -> [CGPoint]? {
         let c = settings.contrast / 100
-        let h = max(0, settings.highlights) / 100
         let w = settings.whites / 100
         let b = settings.blacks / 100
-        guard c != 0 || h != 0 || w != 0 || b != 0 else { return nil }
+        guard c != 0 || w != 0 || b != 0 else { return nil }
         return [
             CGPoint(x: max(0, -b) * 0.1, y: max(0, b) * 0.1),
             CGPoint(x: 0.25, y: 0.25 - c * 0.08),
             CGPoint(x: 0.5, y: 0.5),
-            CGPoint(x: 0.75, y: min(1, 0.75 + c * 0.08 + h * 0.08)),
+            CGPoint(x: 0.75, y: min(1, 0.75 + c * 0.08)),
             CGPoint(x: 1 - max(0, w) * 0.1, y: 1 - max(0, -w) * 0.1),
         ]
     }

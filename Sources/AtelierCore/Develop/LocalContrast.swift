@@ -48,6 +48,36 @@ enum LocalContrast {
                                                   kind.midtones ? 1.0 : 0.0]) ?? image
     }
 
+    /// Basic > Highlights and Shadows (each -1...1): brighten or darken the bright or dark
+    /// areas of the photo, judged by a wide edge-aware base so a whole sky or shadow moves
+    /// together and its detail rides along unchanged. Shadows centers on about 25% brightness
+    /// and Highlights on 75% (Adobe's targets: 10 to 30% and 70 to 90%); pure black and white
+    /// stay where they are. Each channel moves by the same amount in gamma-encoded values, so
+    /// lifted shadows keep their hue without their noise turning into saturated color.
+    static func toneRegions(_ image: CIImage, highlights: Double, shadows: Double, scale: Double) -> CIImage {
+        let extent = image.extent
+        guard highlights != 0 || shadows != 0, !extent.isInfinite, let kernels else { return image }
+        let radius = max(1, regionRadius * scale)
+        func pixelwise(_ name: String, _ arguments: [Any]) -> CIImage? {
+            kernels[name]?.apply(extent: extent, roiCallback: { _, rect in rect }, arguments: arguments)
+        }
+        func box(_ input: CIImage) -> CIImage {
+            let filter = CIFilter.boxBlur()
+            filter.inputImage = input.clampedToExtent()
+            filter.radius = Float(radius)
+            return filter.outputImage?.cropped(to: extent) ?? input
+        }
+        // Darkening shadows is stronger per step than lifting them, as in Lightroom, so scale it back.
+        let shadowGain = 0.22 * (shadows < 0 ? 0.7 : 1) * shadows
+        guard let moments = pixelwise("atelierLocalMoments", [image]),
+              let coefficients = pixelwise("atelierLocalCoefficients", [box(moments), regionEdge]) else { return image }
+        return pixelwise("atelierToneRegions", [image, box(coefficients), 0.22 * highlights, shadowGain]) ?? image
+    }
+
+    /// Highlights and Shadows' window radius in full-size pixels, and their edge threshold.
+    static let regionRadius = 100.0
+    static let regionEdge = 0.01
+
     static var kernelsAvailable: Bool { kernels != nil }
 
     private static let kernels: [String: CIKernel]? = {
@@ -88,8 +118,24 @@ enum LocalContrast {
                 float3 rgb = luma > 1e-4 ? color.rgb * (newLuma / luma) : color.rgb + (newLuma - luma);
                 return float4(rgb, color.a);
             }
+
+            [[stitchable]] float4 atelierToneRegions(coreimage::sampler image, coreimage::sampler coefficients,
+                                                     float highlights, float shadows, coreimage::destination dest) {
+                float2 p = dest.coord();
+                float4 color = image.sample(image.transform(p));
+                float2 ab = coefficients.sample(coefficients.transform(p)).rg;
+                float g = atelierGammaLuma(color.rgb);
+                float base = clamp(ab.x * g + ab.y, 0.0, 1.0);
+                // Bumps peaking at 25% and 75%, zero at black and white.
+                float ws = base * pow(1.0 - base, 3.0) / 0.10546875;
+                float wh = pow(base, 3.0) * (1.0 - base) / 0.10546875;
+                float shift = shadows * ws + highlights * wh;
+                float3 encoded = pow(max(color.rgb, float3(0.0)), float3(1.0 / 2.2));
+                float3 rgb = pow(max(encoded + shift, float3(0.0)), float3(2.2));
+                return float4(rgb, color.a);
+            }
             """
-        guard let built = try? CIKernel.kernels(withMetalString: source), built.count == 3 else { return nil }
+        guard let built = try? CIKernel.kernels(withMetalString: source), built.count == 4 else { return nil }
         return Dictionary(built.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
     }()
 }

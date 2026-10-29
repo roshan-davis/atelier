@@ -25,6 +25,31 @@ final class LocalContrastTests: XCTestCase {
         }
     }
 
+    func testHighlightsAndShadowsTargetTheirTones() throws {
+        func render(_ gray: Double, highlights: Double = 0, shadows: Double = 0) throws -> Double {
+            var settings = DevelopSettings()
+            settings.highlights = highlights
+            settings.shadows = shadows
+            let input = CIImage(color: CIColor(red: gray, green: gray, blue: gray)).cropped(to: CGRect(x: 0, y: 0, width: 32, height: 32))
+            let output = DevelopRenderer.applyAdjustments(settings, to: input, scale: 0.1)
+            let image = try XCTUnwrap(DevelopRenderer.shared.cgImage(output, colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!))
+            var pixel = [UInt8](repeating: 0, count: 4)
+            let context = try XCTUnwrap(CGContext(data: &pixel, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+                                                  space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                                  bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue))
+            context.draw(image, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+            return Double(pixel[1]) / 255
+        }
+        let dark = 0.04, bright = 0.55
+        XCTAssertGreaterThan(try render(dark, shadows: 100), try render(dark) + 0.1, "shadows lift dark tones")
+        XCTAssertEqual(try render(bright, shadows: 100), try render(bright), accuracy: 0.03, "and barely touch bright ones")
+        XCTAssertLessThan(try render(bright, highlights: -100), try render(bright) - 0.08, "highlights pull bright tones down")
+        XCTAssertEqual(try render(dark, highlights: -100), try render(dark), accuracy: 0.035, "and barely touch dark ones")
+        XCTAssertGreaterThan(try render(bright, highlights: 100), try render(bright) + 0.05, "+highlights brightens them")
+        XCTAssertEqual(try render(0, shadows: 100), 0, accuracy: 0.01, "black stays black")
+        XCTAssertEqual(try render(1, highlights: -100), 1, accuracy: 0.01, "white stays white")
+    }
+
     // MARK: Helpers
 
     /// Left: stripes 4 px wide between linear 0.16 and 0.24. Right: a flat dark area, then a
