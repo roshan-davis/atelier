@@ -321,6 +321,7 @@ final class DevelopController: ObservableObject {
         // Show the cached preview immediately while the editable proxy decodes.
         let cachedPreview = previews.url(for: assetID, size: .preview)
         if previews.has(.preview, for: assetID) { image = NSImage(contentsOf: cachedPreview) }
+        ZoomTrace.log("open \(assetID): cached preview \(ZoomTrace.size(image?.size))")
 
         guard let url = try? catalog.fileURL(for: assetID) else {
             errorMessage = "The original is offline. Connect its drive to edit this photo."
@@ -340,6 +341,7 @@ final class DevelopController: ObservableObject {
                     }
                     self.session = session
                     self.sourceSize = session.sourceSize
+                    ZoomTrace.log("session loaded sourceSize=\(ZoomTrace.size(session.sourceSize))")
                     self.asShotTemperature = session.asShotTemperature
                     self.asShotTint = session.asShotTint
                     self.lensName = session.lensName
@@ -1065,6 +1067,7 @@ final class DevelopController: ObservableObject {
                 MainActor.assumeIsolated {
                     self.rendering = false
                     if self.assetID == assetID, let cgImage {
+                        ZoomTrace.log("render done \(cgImage.width)x\(cgImage.height)")
                         self.image = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
                         if let histogram { self.histogram = histogram }
                     }
@@ -1099,6 +1102,7 @@ final class DevelopController: ObservableObject {
                     guard self.assetID == assetID, let session else { return }
                     self.fullSession = session
                     if let cgImage {
+                        ZoomTrace.log("full render done \(cgImage.width)x\(cgImage.height)")
                         self.fullImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
                         self.fullImageSettings = settings
                     }

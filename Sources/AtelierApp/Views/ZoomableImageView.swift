@@ -48,7 +48,8 @@ struct ZoomableImageView: NSViewRepresentable {
     var menu: () -> NSMenu?
 
     func makeNSView(context: Context) -> ZoomScrollView {
-        ZoomScrollView()
+        ZoomTrace.log("makeNSView: new ZoomScrollView")
+        return ZoomScrollView()
     }
 
     func updateNSView(_ view: ZoomScrollView, context: Context) {
@@ -60,6 +61,7 @@ struct ZoomableImageView: NSViewRepresentable {
         }
         zoom.currentCenter = { [weak view] in view?.relativeCenter }
         if let center = zoom.pendingCenter {
+            ZoomTrace.log("updateNSView takes pendingCenter \(center)")
             view.pendingCenter = center
             zoom.pendingCenter = nil
         }
@@ -108,6 +110,7 @@ final class ZoomScrollView: NSScrollView {
 
     func setImage(_ image: NSImage?, pixelSize: CGSize?) {
         canvas.setImage(image)
+        ZoomTrace.log("setImage image=\(ZoomTrace.size(image?.size)) pixelSize=\(ZoomTrace.size(pixelSize)) bounds=\(ZoomTrace.size(bounds.size)) doc=\(ZoomTrace.size(documentSize)) level=\(level) mag=\(magnification) center=\(String(describing: relativeCenter))")
         guard let image, image.size.width > 0, image.size.height > 0 else { return }
         // Keep the displayed image's aspect, at the full-size photo's long edge.
         var pixels = image.size
@@ -125,6 +128,7 @@ final class ZoomScrollView: NSScrollView {
         canvas.frame = CGRect(origin: .zero, size: size)
         applyLevel(level, anchor: nil)
         if let center { scroll(toRelative: center) }
+        ZoomTrace.log("  setImage -> doc=\(ZoomTrace.size(size)) mag=\(magnification) kept center \(String(describing: center)) now \(String(describing: relativeCenter))")
     }
 
     /// The middle of what's visible, 0...1 across and down the photo; nil before it has a size.
@@ -139,6 +143,7 @@ final class ZoomScrollView: NSScrollView {
         guard let center = pendingCenter, documentSize.width > 0, bounds.width > 0, bounds.height > 0 else { return }
         pendingCenter = nil
         scroll(toRelative: center)
+        ZoomTrace.log("applyPendingCenter \(center) -> now \(String(describing: relativeCenter)) level=\(level) mag=\(magnification)")
     }
 
     private func scroll(toRelative center: CGPoint) {
@@ -158,6 +163,7 @@ final class ZoomScrollView: NSScrollView {
 
     func apply(_ newLevel: ZoomLevel) {
         guard newLevel != level else { return }
+        ZoomTrace.log("apply level \(level) -> \(newLevel) center=\(String(describing: relativeCenter))")
         applyLevel(newLevel, anchor: nil)
     }
 
@@ -200,6 +206,7 @@ final class ZoomScrollView: NSScrollView {
     var canPan: Bool { lastReport.isZoomedPastFit || level == .fill }
 
     override func setFrameSize(_ newSize: NSSize) {
+        ZoomTrace.log("setFrameSize \(ZoomTrace.size(frame.size)) -> \(ZoomTrace.size(newSize)) level=\(level) mag=\(magnification)")
         super.setFrameSize(newSize)
         if level == .fit || level == .fill {
             magnification = magnification(for: level)
@@ -209,6 +216,7 @@ final class ZoomScrollView: NSScrollView {
     }
 
     @objc private func didEndMagnify() {
+        ZoomTrace.log("didEndMagnify mag=\(magnification)")
         level = .percent(Double(magnification * 100))
         onZoomChange?(level)
         report()
