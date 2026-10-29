@@ -9,7 +9,6 @@ struct DevelopImageView: View {
     @ObservedObject var develop: DevelopController
 
     var body: some View {
-        let _ = ZoomTrace.count("DevelopImageView body")
         VStack(spacing: 0) {
             ZStack(alignment: .topLeading) {
                 Color(nsColor: theme.surround)

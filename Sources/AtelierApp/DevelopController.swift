@@ -1,6 +1,5 @@
 import AppKit
 import AtelierCore
-import QuartzCore
 import Foundation
 
 /// How the Develop view shows the photo before edits next to the edited one.
@@ -252,7 +251,6 @@ final class DevelopController: ObservableObject {
         self.catalog = catalog
         self.previews = previews
         presets = presetStore.all()
-        ZoomTrace.watch(objectWillChange, "DevelopController changed")
     }
 
     // MARK: Opening
@@ -885,15 +883,12 @@ final class DevelopController: ObservableObject {
         let assetID = self.assetID
         let overlay = isMasking && showMaskOverlay ? selectedMaskID : nil
         let preview = showingBefore ? nil : sliderPreview
-        ZoomTrace.count("proxy render started")
-        let traceStart = CACurrentMediaTime()
         queue.async {
             let cgImage = session.render(settings, cropping: cropping, overlay: overlay, preview: preview)
             // The red overlay or an Option-drag view would skew the histogram; keep the last one while it shows.
             let histogram = overlay == nil && preview == nil ? cgImage.flatMap { Histogram(image: $0) } : nil
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
-                    ZoomTrace.count("proxy render finished", "after \(ZoomTrace.milliseconds(since: traceStart))")
                     self.rendering = false
                     if self.assetID == assetID, let cgImage {
                         self.image = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
@@ -921,14 +916,11 @@ final class DevelopController: ObservableObject {
         let settings = self.settings
         let assetID = self.assetID
         let existing = fullSession
-        ZoomTrace.count("full render started")
-        let traceStart = CACurrentMediaTime()
         fullQueue.async {
             let session = existing ?? DevelopRenderer.shared.session(for: url, maxPixelSize: nil)
             let cgImage = session?.render(settings)
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
-                    ZoomTrace.count("full render finished", "after \(ZoomTrace.milliseconds(since: traceStart))")
                     self.fullRendering = false
                     guard self.assetID == assetID, let session else { return }
                     self.fullSession = session
