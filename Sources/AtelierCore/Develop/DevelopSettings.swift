@@ -139,6 +139,10 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         get { self[.grainSize] }
         set { self[.grainSize] = newValue }
     }
+    public var grainRoughness: Double {
+        get { self[.grainRoughness] }
+        set { self[.grainRoughness] = newValue }
+    }
 
     public subscript(parameter: Parameter) -> Double {
         get {
@@ -347,7 +351,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         case lensDistortion, lensVignette, lensVignetteMidpoint
         case transformVertical, transformHorizontal, transformRotate, transformAspect, transformScale
         case transformOffsetX, transformOffsetY
-        case vignette, vignetteMidpoint, grain, grainSize
+        case vignette, vignetteMidpoint, grain, grainSize, grainRoughness
 
         public static func hsl(_ channel: HSLChannel, _ band: ColorBand) -> Parameter {
             Parameter(rawValue: channel.prefix + band.rawValue)!
@@ -376,7 +380,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             case .temperature: return 5500
             case .sharpenRadius: return 1
             case .sharpenDetail: return 25
-            case .vignetteMidpoint, .gradeBlending, .lensVignetteMidpoint: return 50
+            case .vignetteMidpoint, .gradeBlending, .lensVignetteMidpoint, .grainRoughness: return 50
             case .transformScale: return 100
             case .grainSize: return 25
             default: return 0
@@ -391,7 +395,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             case .sharpening: return 0...150
             case .sharpenRadius: return 0.5...3
             case .sharpenDetail, .sharpenMasking, .luminanceNoise, .colorNoise, .vignetteMidpoint, .grain, .grainSize, .gradeBlending,
-                 .lensVignetteMidpoint: return 0...100
+                 .lensVignetteMidpoint, .grainRoughness: return 0...100
             case .transformRotate: return -10...10
             case .transformScale: return 50...150
             case .gradeShadowsHue, .gradeMidtonesHue, .gradeHighlightsHue, .gradeGlobalHue: return 0...360
@@ -420,6 +424,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             case .colorNoise: return "Color"
             case .vignetteMidpoint: return "Midpoint"
             case .grainSize: return "Size"
+            case .grainRoughness: return "Roughness"
             case .curveHighlights: return "Highlights"
             case .curveLights: return "Lights"
             case .curveDarks: return "Darks"
@@ -444,7 +449,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             if rawValue.hasPrefix("transform") { return .transform }
             switch self {
             case .sharpening, .sharpenRadius, .sharpenDetail, .sharpenMasking, .luminanceNoise, .colorNoise: return .detail
-            case .vignette, .vignetteMidpoint, .grain, .grainSize: return .effects
+            case .vignette, .vignetteMidpoint, .grain, .grainSize, .grainRoughness: return .effects
             default: return .basic
             }
         }
@@ -461,7 +466,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             case .sharpening, .sharpenRadius, .sharpenDetail, .sharpenMasking: return "Sharpening"
             case .luminanceNoise, .colorNoise: return "Noise Reduction"
             case .vignette, .vignetteMidpoint: return "Post-Crop Vignetting"
-            case .grain, .grainSize: return "Grain"
+            case .grain, .grainSize, .grainRoughness: return "Grain"
             case .lensDistortion: return "Distortion"
             case .lensVignette, .lensVignetteMidpoint: return "Vignetting"
             case .transformVertical, .transformHorizontal, .transformRotate, .transformAspect, .transformScale,
