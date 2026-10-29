@@ -2,31 +2,34 @@ import AppKit
 import AtelierCore
 import SwiftUI
 
-/// The photo under the Masking tool: draw gradients and paint brush strokes, drag pins and
-/// handles to change them, click another mask's pin to select it. Zooms like Develop: the zoom
-/// bar, Z, pinch or ⌘-scroll; scroll, Space-drag, or a drag on empty photo moves around.
+/// The photo under the Masking tool: the same zoomable photo view as Develop, so zoom, panning
+/// and the zoomed spot are shared with every other mode, with the masks drawn and edited on
+/// top (`MaskOverlay`). Zoom with the zoom bar, Z, pinch or ⌘-scroll; scroll, Space-drag, or a
+/// drag on empty photo moves around.
 struct MaskEditorView: View {
     @ObservedObject var develop: DevelopController
     /// The live proxy; mask positions are measured against it.
     let image: NSImage
     /// The sharpest image for the current settings, drawn in the same place.
     let display: NSImage
-    /// The full-size photo's cropped size, so 100% is one photo pixel per point as elsewhere.
     let pixelSize: CGSize?
     @ObservedObject var zoom: ZoomState
     var onReport: (ZoomReport) -> Void
 
-    init(develop: DevelopController, image: NSImage, display: NSImage, pixelSize: CGSize?, zoom: ZoomState,
-         onReport: @escaping (ZoomReport) -> Void) {
-        _develop = ObservedObject(wrappedValue: develop)
-        self.image = image
-        self.display = display
-        self.pixelSize = pixelSize
-        _zoom = ObservedObject(wrappedValue: zoom)
-        self.onReport = onReport
-        // Start on the spot the Develop view was zoomed in on.
-        _navigator = StateObject(wrappedValue: MaskNavigator(center: zoom.viewport.center))
+    var body: some View {
+        ZoomableImageView(image: display, pixelSize: pixelSize, zoom: zoom, onReport: onReport, menu: { nil },
+                          overlay: { [develop, image] frame in
+                              AnyView(MaskOverlay(develop: develop, image: image, frame: frame))
+                          })
     }
+}
+
+/// Draws the masks over the photo view and turns drags into drawing, painting and handle
+/// moves. `frame` says where the photo is in the view as it zooms and scrolls.
+private struct MaskOverlay: View {
+    @ObservedObject var develop: DevelopController
+    let image: NSImage
+    @ObservedObject var frame: PhotoFrame
 
     private typealias Point = DevelopSettings.MaskPoint
     private typealias Component = DevelopSettings.MaskComponent
@@ -52,29 +55,16 @@ struct MaskEditorView: View {
     @State private var draftBox: (CGPoint, CGPoint)?
     @State private var stroke: DevelopSettings.MaskStroke?
     @State private var hover: CGPoint?
-    @State private var pinchStart: CGFloat?
-    @StateObject private var navigator: MaskNavigator
-    @Environment(\.displayScale) private var displayScale
+    @StateObject private var keys = SpaceKeyMonitor()
 
     private let accent = Color(red: 0.95, green: 0.25, blue: 0.2)
 
     var body: some View {
         GeometryReader { geometry in
-            // In points, as the Develop photo view measures it, so 100% (one photo pixel per
-            // screen pixel) is the same zoom in both and switching modes never changes it.
-            let pixels = pixelSize ?? image.size
-            let layout = navigator.layout(size: geometry.size, zoom: zoom.level,
-                                          document: CGSize(width: pixels.width / displayScale,
-                                                           height: pixels.height / displayScale))
-            let rect = layout.rect
+            let rect = frame.rect
             let space = MaskSpace(sourceSize: develop.sourceSize ?? image.size, crop: develop.crop, rect: rect,
                                   outputSize: image.size)
             ZStack(alignment: .topLeading) {
-                Image(nsImage: display)
-                    .resizable()
-                    .interpolation(.high)
-                    .frame(width: rect.width, height: rect.height)
-                    .position(x: rect.midX, y: rect.midY)
                 Canvas { context, _ in
                     context.clip(to: Path(rect))
                     drawStroke(in: &context, space: space)
@@ -94,21 +84,17 @@ struct MaskEditorView: View {
                         .allowsHitTesting(false)
                 }
             }
+            .frame(width: geometry.size.width, height: geometry.size.height)
             .clipped()
             .contentShape(Rectangle())
+            // Scroll and pinch fall through to the photo view underneath, which zooms and pans.
             .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .local)
                 .onChanged { drag in dragChanged(drag, space: space) }
                 .onEnded { drag in dragEnded(drag, space: space) })
-            .simultaneousGesture(MagnifyGesture()
-                .onChanged { value in
-                    if pinchStart == nil { pinchStart = navigator.magnification }
-                    navigator.zoom(to: (pinchStart ?? 1) * value.magnification, anchor: value.startLocation)
-                }
-                .onEnded { _ in pinchStart = nil })
             .onContinuousHover { phase in
                 if case .active(let point) = phase {
                     hover = point
-                    if navigator.spaceDown { NSCursor.openHand.set() }
+                    if keys.spaceDown { NSCursor.openHand.set() }
                     else if isPainting || develop.maskTool != nil { NSCursor.crosshair.set() }
                     else { NSCursor.arrow.set() }
                 } else {
@@ -116,21 +102,9 @@ struct MaskEditorView: View {
                     NSCursor.arrow.set()
                 }
             }
-            .onChange(of: layout.report, initial: true) { _, report in onReport(report) }
-            .onChange(of: geometry.frame(in: .global), initial: true) { _, frame in navigator.frame = frame }
-            .onChange(of: rect, initial: true) { _, rect in
-                zoom.viewport.update(navigator.visibleFraction(of: rect, in: geometry.size), from: navigator)
-            }
         }
-        .onAppear {
-            navigator.setZoom = { [zoom] level in if zoom.level != level { zoom.level = level } }
-            zoom.focus = { [weak navigator] center in navigator?.focus(on: center) }
-            navigator.install()
-        }
-        .onDisappear {
-            navigator.remove()
-            zoom.viewport.clear(from: navigator)
-        }
+        .onAppear { keys.install() }
+        .onDisappear { keys.remove() }
         .onChange(of: develop.assetID) { _, _ in
             action = nil
             stroke = nil
@@ -310,7 +284,7 @@ struct MaskEditorView: View {
         case .drawBox(let start):
             draftBox = (start, clamped(drag.location, to: space.rect))
         case .pan(let last):
-            navigator.pan(by: CGSize(width: drag.location.x - last.x, height: drag.location.y - last.y))
+            frame.pan?(CGSize(width: drag.location.x - last.x, height: drag.location.y - last.y))
             self.action = .pan(last: drag.location)
         case .paint:
             stroke?.points.append(space.maskPoint(clamped(drag.location, to: space.rect)))
@@ -404,7 +378,7 @@ struct MaskEditorView: View {
     /// Decides what a drag starting at `point` does: drawing with the current tool, a handle
     /// of the selected part, a pin, or painting into the selected brush part.
     private func beginAction(at point: CGPoint, space: MaskSpace) -> DragAction {
-        if navigator.spaceDown { return .pan(last: point) }
+        if keys.spaceDown { return .pan(last: point) }
         if let tool = develop.maskTool {
             guard space.rect.contains(point) else { return .none }
             switch tool.kind {
@@ -450,7 +424,7 @@ struct MaskEditorView: View {
         }
         if isPainting, space.rect.contains(point) { return startPainting(at: point, space: space) }
         // Zoomed in, a drag on empty photo moves around it.
-        return navigator.canPan ? .pan(last: point) : .none
+        return frame.canPan ? .pan(last: point) : .none
     }
 
     private func startPainting(at point: CGPoint, space: MaskSpace) -> DragAction {
@@ -857,100 +831,15 @@ private struct LuminanceStrip: View {
     }
 }
 
-/// Zoom and scroll position for the Masking view, plus the scroll-wheel and Space-key handling
-/// that SwiftUI gestures don't cover.
+/// Space held while masking: drags pan instead of drawing, as in Lightroom.
 @MainActor
-final class MaskNavigator: ObservableObject {
-    struct Layout {
-        var rect: CGRect
-        var report: ZoomReport
-    }
-
-    /// The fraction of the photo at the middle of the view.
-    @Published var center = CGPoint(x: 0.5, y: 0.5)
-    /// Space is held: drags pan, as in Lightroom.
-    @Published var spaceDown = false
-    /// The view's frame in the window, top-left origin, for scroll events.
-    var frame = CGRect.zero
-    var setZoom: ((ZoomLevel) -> Void)?
-    private(set) var magnification: CGFloat = 1
-    private var fit: CGFloat = 1
-    private var document = CGSize(width: 1, height: 1)
-    private var size = CGSize.zero
-    private var rect = CGRect.zero
+final class SpaceKeyMonitor: ObservableObject {
+    @Published private(set) var spaceDown = false
     private var monitor: Any?
-    private let padding: CGFloat = 16
-
-    init(center: CGPoint? = nil) {
-        if let center { self.center = center }
-    }
-
-    var canPan: Bool { rect.width > size.width + 1 || rect.height > size.height + 1 }
-
-    /// Where the photo goes for a view of `size`; `document` is the full-size photo's size in
-    /// points (its pixels over the display scale).
-    func layout(size: CGSize, zoom: ZoomLevel, document: CGSize) -> Layout {
-        let document = CGSize(width: max(1, document.width), height: max(1, document.height))
-        let fit = min(max(1, size.width - padding * 2) / document.width, max(1, size.height - padding * 2) / document.height)
-        var magnification: CGFloat
-        switch zoom {
-        case .fit: magnification = fit
-        case .fill: magnification = max(size.width / document.width, size.height / document.height)
-        case .percent(let value): magnification = CGFloat(value / 100)
-        }
-        magnification = min(16, max(fit, magnification))
-        let width = document.width * magnification, height = document.height * magnification
-        var x = (size.width - width) / 2, y = (size.height - height) / 2
-        if width > size.width { x = min(0, max(size.width - width, size.width / 2 - center.x * width)) }
-        if height > size.height { y = min(0, max(size.height - height, size.height / 2 - center.y * height)) }
-        let rect = CGRect(x: x, y: y, width: width, height: height)
-        // Remembered for the event handlers; layout runs on the main thread.
-        self.fit = fit
-        self.magnification = magnification
-        self.document = document
-        self.size = size
-        self.rect = rect
-        return Layout(rect: rect, report: ZoomReport(percent: Double(magnification * 100), fitPercent: Double(fit * 100)))
-    }
-
-    /// Zooms keeping the photo under `anchor` (view coordinates) in place.
-    func zoom(to target: CGFloat, anchor: CGPoint) {
-        guard rect.width > 0, rect.height > 0 else { return }
-        let next = min(16, max(fit, target))
-        let fraction = CGPoint(x: (anchor.x - rect.minX) / rect.width, y: (anchor.y - rect.minY) / rect.height)
-        let width = document.width * next, height = document.height * next
-        center = CGPoint(x: (size.width / 2 - anchor.x) / width + fraction.x,
-                         y: (size.height / 2 - anchor.y) / height + fraction.y)
-        setZoom?(next <= fit * 1.001 ? .fit : .percent(Double(next * 100)))
-    }
-
-    /// Centers on `point` (0...1 across and down the photo) for the Navigator, zooming in from
-    /// Fit first as the Develop photo view does.
-    func focus(on point: CGPoint) {
-        center = CGPoint(x: min(1, max(0, point.x)), y: min(1, max(0, point.y)))
-        if !canPan { setZoom?(.percent(LibraryModel.clickZoomPercent)) }
-    }
-
-    /// The part of the photo at `rect` that a view of `size` shows, 0...1 across and down the
-    /// photo; nil when all of it is in view.
-    func visibleFraction(of rect: CGRect, in size: CGSize) -> CGRect? {
-        guard rect.width > 0, rect.height > 0 else { return nil }
-        let shown = CGRect(origin: .zero, size: size).intersection(rect)
-        guard !shown.isNull else { return nil }
-        let fraction = CGRect(x: (shown.minX - rect.minX) / rect.width, y: (shown.minY - rect.minY) / rect.height,
-                              width: shown.width / rect.width, height: shown.height / rect.height)
-        return fraction.width < 0.995 || fraction.height < 0.995 ? fraction : nil
-    }
-
-    func pan(by delta: CGSize) {
-        guard rect.width > 0, rect.height > 0 else { return }
-        center = CGPoint(x: min(1, max(0, center.x - delta.width / rect.width)),
-                         y: min(1, max(0, center.y - delta.height / rect.height)))
-    }
 
     func install() {
         guard monitor == nil else { return }
-        monitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .keyDown, .keyUp]) { [weak self] event in
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { [weak self] event in
             guard let self else { return event }
             return MainActor.assumeIsolated { self.handle(event) }
         }
@@ -963,23 +852,9 @@ final class MaskNavigator: ObservableObject {
     }
 
     private func handle(_ event: NSEvent) -> NSEvent? {
-        if event.type == .keyDown || event.type == .keyUp {
-            guard event.keyCode == 49, !(event.window?.firstResponder is NSText),
-                  event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { return event }
-            spaceDown = event.type == .keyDown
-            return nil
-        }
-        guard let content = event.window?.contentView else { return event }
-        let point = CGPoint(x: event.locationInWindow.x, y: content.bounds.height - event.locationInWindow.y)
-        guard frame.contains(point) else { return event }
-        let local = CGPoint(x: point.x - frame.minX, y: point.y - frame.minY)
-        let precise = event.hasPreciseScrollingDeltas
-        if !event.modifierFlags.intersection([.command, .option]).isEmpty {
-            zoom(to: magnification * exp(event.scrollingDeltaY * (precise ? 0.01 : 0.1)), anchor: local)
-        } else {
-            let scale: CGFloat = precise ? 1 : 10
-            pan(by: CGSize(width: event.scrollingDeltaX * scale, height: event.scrollingDeltaY * scale))
-        }
+        guard event.keyCode == 49, !(event.window?.firstResponder is NSText),
+              event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { return event }
+        spaceDown = event.type == .keyDown
         return nil
     }
 }
