@@ -16,6 +16,18 @@ struct MaskEditorView: View {
     @ObservedObject var zoom: ZoomState
     var onReport: (ZoomReport) -> Void
 
+    init(develop: DevelopController, image: NSImage, display: NSImage, pixelSize: CGSize?, zoom: ZoomState,
+         onReport: @escaping (ZoomReport) -> Void) {
+        _develop = ObservedObject(wrappedValue: develop)
+        self.image = image
+        self.display = display
+        self.pixelSize = pixelSize
+        _zoom = ObservedObject(wrappedValue: zoom)
+        self.onReport = onReport
+        // Start on the spot the Develop view was zoomed in on.
+        _navigator = StateObject(wrappedValue: MaskNavigator(center: zoom.viewport.center))
+    }
+
     private typealias Point = DevelopSettings.MaskPoint
     private typealias Component = DevelopSettings.MaskComponent
 
@@ -41,7 +53,7 @@ struct MaskEditorView: View {
     @State private var stroke: DevelopSettings.MaskStroke?
     @State private var hover: CGPoint?
     @State private var pinchStart: CGFloat?
-    @StateObject private var navigator = MaskNavigator()
+    @StateObject private var navigator: MaskNavigator
 
     private let accent = Color(red: 0.95, green: 0.25, blue: 0.2)
 
@@ -105,8 +117,6 @@ struct MaskEditorView: View {
             }
         }
         .onAppear {
-            // Open on the spot the Develop view was zoomed in on.
-            if let center = zoom.viewport.lastCenter { navigator.center = center }
             navigator.setZoom = { [zoom] level in if zoom.level != level { zoom.level = level } }
             zoom.focus = { [weak navigator] center in navigator?.focus(on: center) }
             navigator.install()
@@ -864,6 +874,10 @@ final class MaskNavigator: ObservableObject {
     private var rect = CGRect.zero
     private var monitor: Any?
     private let padding: CGFloat = 16
+
+    init(center: CGPoint? = nil) {
+        if let center { self.center = center }
+    }
 
     var canPan: Bool { rect.width > size.width + 1 || rect.height > size.height + 1 }
 
