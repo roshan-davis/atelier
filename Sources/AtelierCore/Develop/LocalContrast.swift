@@ -38,7 +38,7 @@ enum LocalContrast {
         }
         func box(_ input: CIImage) -> CIImage {
             let filter = CIFilter.boxBlur()
-            filter.inputImage = input.clampedToExtent()
+            filter.inputImage = Dehaze.clamped(input)
             filter.radius = Float(radius)
             return filter.outputImage?.cropped(to: extent) ?? input
         }
@@ -63,7 +63,7 @@ enum LocalContrast {
         }
         func box(_ input: CIImage) -> CIImage {
             let filter = CIFilter.boxBlur()
-            filter.inputImage = input.clampedToExtent()
+            filter.inputImage = Dehaze.clamped(input)
             filter.radius = Float(radius)
             return filter.outputImage?.cropped(to: extent) ?? input
         }

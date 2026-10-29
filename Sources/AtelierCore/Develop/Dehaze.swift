@@ -46,13 +46,13 @@ enum Dehaze {
         }
         func minimum(_ input: CIImage) -> CIImage {
             let filter = CIFilter.morphologyMinimum()
-            filter.inputImage = input.clampedToExtent()
+            filter.inputImage = clamped(input)
             filter.radius = Float(patchRadius)
             return filter.outputImage?.cropped(to: smallExtent) ?? input
         }
         func box(_ input: CIImage) -> CIImage {
             let filter = CIFilter.boxBlur()
-            filter.inputImage = input.clampedToExtent()
+            filter.inputImage = clamped(input)
             filter.radius = Float(filterRadius)
             return filter.outputImage?.cropped(to: smallExtent) ?? input
         }
@@ -87,6 +87,13 @@ enum Dehaze {
             .transformed(by: CGAffineTransform(scaleX: 1 / s, y: 1 / s))
 
         return pixelwise("atelierDehaze", [image, coefficients] + airlight + [amount], extent: extent) ?? image
+    }
+
+    /// Edge-extends the output of one of our kernels. Rendered first, because Core Image
+    /// otherwise fuses the clamp into a runtime-built Metal kernel and drops the kernel's
+    /// arguments, which aborts the app ("Argument count mismatch for program ci_clampRect_…").
+    static func clamped(_ image: CIImage) -> CIImage {
+        image.insertingIntermediate(cache: false).clampedToExtent()
     }
 
     /// Whether the kernels built, for tests.

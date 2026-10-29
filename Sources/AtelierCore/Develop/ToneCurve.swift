@@ -14,10 +14,12 @@ enum ToneCurve {
     static func apply(_ lut: [Float], to image: CIImage) -> CIImage {
         guard lut.count >= 2, let kernel else { return image }
         let extent = image.extent
-        let pixels = lut.flatMap { [$0, $0, $0, 1] }
-        let table = CIImage(bitmapData: pixels.withUnsafeBufferPointer { Data(buffer: $0) },
-                            bytesPerRow: lut.count * 16, size: CGSize(width: lut.count, height: 1),
-                            format: .RGBAf, colorSpace: nil)
+        var pixels = [Float]()
+        pixels.reserveCapacity(lut.count * 4)
+        for value in lut { pixels += [value, value, value, 1] }
+        let data = pixels.withUnsafeBytes { Data($0) }
+        let table = CIImage(bitmapData: data, bytesPerRow: lut.count * 16,
+                            size: CGSize(width: lut.count, height: 1), format: .RGBAf, colorSpace: nil)
         guard let encoded = image.matchedFromWorkingSpace(to: DevelopRenderer.sRGB),
               let curved = kernel.apply(extent: extent, roiCallback: { index, rect in index == 1 ? table.extent : rect },
                                         arguments: [encoded, table, Float(lut.count)]) else { return image }
