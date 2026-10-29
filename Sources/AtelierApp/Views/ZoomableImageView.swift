@@ -43,7 +43,8 @@ struct ZoomableImageView: NSViewRepresentable {
     var menu: () -> NSMenu?
 
     func makeNSView(context: Context) -> ZoomScrollView {
-        ZoomScrollView()
+        ZoomTrace.log("makeNSView: new ZoomScrollView")
+        return ZoomScrollView()
     }
 
     func updateNSView(_ view: ZoomScrollView, context: Context) {
@@ -94,6 +95,7 @@ final class ZoomScrollView: NSScrollView {
 
     func setImage(_ image: NSImage?, pixelSize: CGSize?) {
         canvas.setImage(image)
+        ZoomTrace.log("setImage image=\(ZoomTrace.size(image?.size)) pixelSize=\(ZoomTrace.size(pixelSize)) bounds=\(ZoomTrace.size(bounds.size)) doc=\(ZoomTrace.size(documentSize)) level=\(level) mag=\(magnification)")
         guard let image, image.size.width > 0, image.size.height > 0 else { return }
         // Keep the displayed image's aspect, at the full-size photo's long edge.
         var pixels = image.size
@@ -107,6 +109,7 @@ final class ZoomScrollView: NSScrollView {
         documentSize = size
         canvas.frame = CGRect(origin: .zero, size: size)
         applyLevel(level, anchor: nil)
+        ZoomTrace.log("  setImage -> doc=\(ZoomTrace.size(size)) mag=\(magnification) onscreen=\(ZoomTrace.size(CGSize(width: size.width * magnification, height: size.height * magnification)))")
     }
 
     func setDimmed(_ dimmed: Bool) {
@@ -117,6 +120,7 @@ final class ZoomScrollView: NSScrollView {
 
     func apply(_ newLevel: ZoomLevel) {
         guard newLevel != level else { return }
+        ZoomTrace.log("apply level \(level) -> \(newLevel)")
         applyLevel(newLevel, anchor: nil)
     }
 
@@ -159,6 +163,7 @@ final class ZoomScrollView: NSScrollView {
     var canPan: Bool { lastReport.isZoomedPastFit || level == .fill }
 
     override func setFrameSize(_ newSize: NSSize) {
+        ZoomTrace.log("setFrameSize \(ZoomTrace.size(frame.size)) -> \(ZoomTrace.size(newSize)) level=\(level) mag=\(magnification)")
         super.setFrameSize(newSize)
         if level == .fit || level == .fill {
             magnification = magnification(for: level)
@@ -167,6 +172,7 @@ final class ZoomScrollView: NSScrollView {
     }
 
     @objc private func didEndMagnify() {
+        ZoomTrace.log("didEndMagnify mag=\(magnification)")
         level = .percent(Double(magnification * 100))
         onZoomChange?(level)
         report()

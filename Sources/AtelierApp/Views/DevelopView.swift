@@ -85,7 +85,9 @@ struct DevelopImageView: View {
 
     private var pixelSize: CGSize? {
         guard let width = model.detail?.asset.width, let height = model.detail?.asset.height else { return nil }
-        return develop.croppedPixelSize(assetSize: CGSize(width: width, height: height))
+        let size = develop.croppedPixelSize(assetSize: CGSize(width: width, height: height))
+        ZoomTrace.log("pixelSize detail=\(model.detail?.asset.id ?? -1) open=\(develop.assetID ?? -1) asset=\(width)x\(height) -> \(ZoomTrace.size(size))")
+        return size
     }
 
     private func bottomBar(compact: Bool) -> some View {
