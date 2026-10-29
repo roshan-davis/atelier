@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Masking · Atelier Help</title>
+<link rel="stylesheet" href="assets/help.css">
+<script src="assets/toc.js" defer></script>
+<script src="assets/help.js" defer></script>
+</head>
+<body>
+<main class="page">
+
+<div class="eyebrow">Tool</div>
+<h1>Masking</h1>
+<p class="lede">Edit just part of a photo: darken a sky, brighten a face, warm one corner. A mask says <i>where</i>; its sliders say <i>what</i>.</p>
+
+<div class="chips">
+  <a href="#start">Start a mask</a><a href="#panel">The Masks panel</a><a href="#linear">Linear Gradient</a><a href="#radial">Radial Gradient</a>
+  <a href="#brush">Brush</a><a href="#luminance">Luminance Range</a><a href="#subject">Select Subject and Object</a><a href="#combine">Add, Subtract, Intersect</a><a href="#adjust">Mask sliders</a>
+</div>
+
+<h2 id="start">Start a mask</h2>
+<ol class="steps">
+  <li>In Develop, click the Masking button (the dashed circle under the histogram) or press <kbd>⇧W</kbd>. Or jump straight to a tool: <kbd>M</kbd> Linear Gradient, <kbd>⇧M</kbd> Radial Gradient, <kbd>K</kbd> Brush.</li>
+  <li>Click <b>Create New Mask</b> and pick a kind, then draw it on the photo.</li>
+  <li>Move the mask's sliders (Exposure, Temp, Clarity…). They change only the masked area.</li>
+  <li>Press <kbd>Return</kbd> or click <b>Done</b>. Masks keep working after Masking closes; open it again any time to change them.</li>
+</ol>
+<p>You can zoom and move around as usual while masking (<kbd>Z</kbd>, double-click, pinch, scroll, or hold <kbd>Space</kbd> and drag). Pins and handles stay the same size on screen.</p>
+
+<h2 id="panel">The Masks panel</h2>
+<figure>
+  <div class="pins pinned">
+  <div class="panel">
+    <div class="ph"><span class="chev">›</span>Masking<span class="dot"></span><span class="grow"></span><span class="reset">↺</span></div>
+    <div class="pb">
+      <div style="background:rgba(0,0,0,.18);border-radius:5px;padding:4px" data-pin="1">
+        <div class="row" style="background:rgba(10,132,255,.3);border-radius:4px;padding:0 6px"><span style="flex:1">Mask 1</span>👁</div>
+        <div class="row" style="padding-left:20px" data-pin="2" data-pin-side="right"><span style="color:var(--app-text-2)">▤</span><span style="flex:1">Linear Gradient</span><span class="badge" style="background:#3a3a3a">+</span></div>
+        <div class="row" style="padding-left:20px"><span style="color:var(--app-text-2)">◐</span><span style="flex:1">Luminance Range</span><span class="badge" style="background:#3a3a3a">∩</span></div>
+        <div class="row" style="padding:0 6px"><span style="flex:1">Mask 2</span>👁</div>
+      </div>
+      <div class="row" data-pin="3"><span class="btn">New Mask ⌄</span><span class="btn">Add ⌄</span><span class="btn">Subtract ⌄</span></div>
+      <div class="check" data-pin="4"><i class="on"></i>Show Overlay</div>
+      <div class="gh" data-pin="5">Mask 1</div>
+      <div class="sl" data-name="Amount" data-value="100%" data-at="0.5" data-def="0.5"></div>
+      <div class="sl" data-name="Exposure" data-value="−1.00" data-at="0.4" data-def="0.5"></div>
+      <div class="sl" data-name="Highlights" data-value="−30" data-at="0.35" data-def="0.5"></div>
+      <div class="sl" data-name="Clarity" data-value="+20" data-at="0.6" data-def="0.5"></div>
+      <div class="muted">… Temp, Tint, Contrast, Shadows, Whites, Blacks, Texture, Dehaze, Saturation, Sharpness, Noise</div>
+      <div class="row" style="justify-content:space-between"><span class="check"><i></i>Invert</span><span class="btn">Reset Sliders</span><span class="btn on">Done</span></div>
+    </div>
+  </div>
+  </div>
+</figure>
+<ol class="legend">
+  <li><b>Masks</b>, in the order you made them. Click one to select it; double-click to rename. The eye hides its effect.</li>
+  <li>A selected mask lists its <b>parts</b>, each with a badge: <b>+</b> added, <b>−</b> subtracted, <b>∩</b> intersected.</li>
+  <li><b>New Mask</b>, and with a mask selected, <b>Add</b> or <b>Subtract</b> a part: Brush, Linear Gradient, Radial Gradient, Luminance Range, Select Subject, Select Object.</li>
+  <li><b>Show Overlay</b> (<kbd>O</kbd>) tints the selected mask red, so you can see exactly where it lands.</li>
+  <li>The selected mask's <a href="#adjust">sliders</a>.</li>
+</ol>
+
+<h2 id="linear">Linear Gradient</h2>
+<p>A gradual change across the photo, like a graduated filter on a lens: darken a sky, lighten a foreground.</p>
+<div class="duo">
+  <figure>
+    <div class="frame" style="position:relative">
+      <img src="images/mask-linear-overlay.jpg" alt="Linear gradient with overlay">
+      <div class="overlay"><svg viewBox="0 0 960 639" preserveAspectRatio="none">
+        <g stroke="#fff" stroke-width="2"><line x1="0" y1="13" x2="960" y2="13"/><line x1="0" y1="150" x2="960" y2="150" stroke-dasharray="8 6"/><line x1="0" y1="288" x2="960" y2="288"/></g>
+        <circle cx="480" cy="150" r="10" fill="#fff" stroke="#000" stroke-opacity=".5"/><circle cx="480" cy="150" r="4" fill="#0a84ff"/>
+      </svg></div>
+    </div>
+    <figcaption>With <b>Show Overlay</b>: red is where the change is full, fading to nothing at the bottom line.</figcaption>
+  </figure>
+  <figure>
+    <div class="frame compare" data-before="redwoods-flat.jpg" data-after="mask-linear-after.jpg" data-labels="Before|Exposure −1"></div>
+    <figcaption>The result: the bright top darkened, the rest untouched.</figcaption>
+  </figure>
+</div>
+<ul>
+  <li><b>Draw:</b> drag from where the change should be full to where it should fade out.</li>
+  <li><b>Three lines</b> show the start, middle and end. Lines close together give a hard edge; far apart, a soft one.</li>
+  <li><b>Move:</b> drag the pin in the middle. <b>Widen, narrow or turn:</b> drag an end line.</li>
+</ul>
+
+<h2 id="radial">Radial Gradient</h2>
+<p>An ellipse: brighten a face, spotlight a subject, or (inverted) darken everything around it.</p>
+<div class="duo">
+  <figure>
+    <div class="frame" style="position:relative">
+      <img src="images/mask-radial-overlay.jpg" alt="Radial gradient with overlay">
+      <div class="overlay"><svg viewBox="0 0 960 639" preserveAspectRatio="none">
+        <ellipse cx="408" cy="422" rx="125" ry="153" fill="none" stroke="#fff" stroke-width="2"/>
+        <ellipse cx="408" cy="422" rx="69" ry="84" fill="none" stroke="#fff" stroke-width="1.5" stroke-dasharray="6 5"/>
+        <g fill="#fff" stroke="#000" stroke-opacity=".4"><rect x="277" y="416" width="10" height="10"/><rect x="529" y="416" width="10" height="10"/><rect x="403" y="263" width="10" height="10"/><rect x="403" y="571" width="10" height="10"/></g>
+        <line x1="408" y1="269" x2="408" y2="238" stroke="#fff"/><circle cx="408" cy="232" r="6" fill="#fff"/>
+        <circle cx="408" cy="422" r="10" fill="#fff" stroke="#000" stroke-opacity=".5"/><circle cx="408" cy="422" r="4" fill="#0a84ff"/>
+      </svg></div>
+    </div>
+    <figcaption>Drag the pin to move it, the four square handles to resize, the round handle on top to rotate. The dashed inner ellipse shows where the full effect ends.</figcaption>
+  </figure>
+  <figure>
+    <div class="frame compare" data-before="redwoods-flat.jpg" data-after="mask-radial-after.jpg" data-labels="Before|Hiker lifted"></div>
+    <figcaption>A radial gradient lifts the hiker; the rest is slightly darkened with a second, inverted mask.</figcaption>
+  </figure>
+</div>
+<ul>
+  <li><b>Draw:</b> drag from the center outward.</li>
+  <li><b>Feather</b> (0 to 100, default 50) softens the edge.</li>
+  <li>The change is <b>inside</b> by default. Tick <b>Invert</b> to put it outside, for a custom vignette.</li>
+</ul>
+
+<h2 id="brush">Brush</h2>
+<p>Paint the mask where you want it.</p>
+<table class="keys">
+  <tr><td>Drag on the photo</td><td>Paint.</td></tr>
+  <tr><td>Hold <kbd>⌥</kbd> while painting, or choose <b>Erase</b></td><td>Erase.</td></tr>
+  <tr><td><kbd>[</kbd> · <kbd>]</kbd></td><td>Smaller · bigger brush.</td></tr>
+  <tr><td><kbd>⇧[</kbd> · <kbd>⇧]</kbd></td><td>Less · more feather.</td></tr>
+</table>
+<p><b>Size</b>, <b>Feather</b> and <b>Flow</b> are in the panel. Flow is how much each stroke adds, so low Flow builds up gradually. The pointer is a circle the size of the brush, with an inner circle where the feather begins.</p>
+
+<h2 id="luminance">Luminance Range</h2>
+<p>Selects by brightness: only the parts of the photo between two brightness levels (0 to 100). <b>Smoothness</b> softens the edges of the range.</p>
+<div class="duo">
+  <figure><div class="pic"><img src="images/mask-luminance-overlay.jpg" alt=""><span class="tag">Overlay: the brightest areas</span></div></figure>
+  <figure><div class="frame compare" data-before="redwoods-flat.jpg" data-after="mask-luminance-after.jpg" data-labels="Before|Highlights −60 in the range"></div></figure>
+</div>
+<div class="tip"><p><span class="label">Most useful combined.</span> Intersect a Linear Gradient with a Luminance Range to darken only the bright sky, not the trees that reach into it.</p></div>
+
+<h2 id="subject">Select Subject and Select Object</h2>
+<p><b>Select Subject</b> finds the main subject (people, animals, things in front) with Apple's Vision, on your Mac. <b>Select Object</b> finds something inside a box you drag, so smaller subjects work too; drag the pin to move the box.</p>
+<div class="duo">
+  <figure><div class="pic"><img src="images/mask-subject-overlay.jpg" alt=""><span class="tag">Select Subject</span></div></figure>
+  <figure><div class="frame compare" data-before="mask-subject-before.jpg" data-after="mask-subject-after.jpg" data-labels="Before|Background muted"></div></figure>
+</div>
+<p>Both have a <b>Feather</b> slider (default 20) to soften Vision's hard edge. To change the background instead of the subject, tick <b>Invert</b>. If Vision finds nothing, the panel says so.</p>
+
+<h2 id="combine">Add, Subtract and Intersect</h2>
+<p>A mask can have several parts:</p>
+<dl class="defs">
+  <dt>Add</dt><dd>Joins a part to the mask: two radial gradients on two faces.</dd>
+  <dt>Subtract</dt><dd>Cuts a part out: brush away the trees from a sky gradient.</dd>
+  <dt>Intersect</dt><dd>Keeps only where both overlap. Right-click the mask › <span class="path">Intersect Mask With</span>.</dd>
+</dl>
+<p>Right-click a <b>mask</b> for Rename, Duplicate, Invert, Intersect Mask With and Delete. Right-click a <b>part</b> for Invert, Switch to Add / Subtract and Delete. <kbd>Delete</kbd> removes the selected part (the whole mask if it was the last part).</p>
+
+<h2 id="adjust">Mask sliders</h2>
+<p>Each mask has its own: <b>Amount</b> (0 to 200%, scales all of the mask's sliders at once), Temp, Tint, Exposure, Contrast, Highlights, Shadows, Whites, Blacks, Texture, Clarity, Dehaze, Saturation, Sharpness and Noise. They work like the <a href="basic.html">Basic</a> sliders. Double-click a name to reset it; <b>Reset Sliders</b> clears them all.</p>
+<div class="tip"><p><span class="label">Change your mind later.</span> Masks stay on the same spot of the photo when you crop, straighten or change the Transform. They're saved with the photo, copied by Copy/Paste Settings and virtual copies, and can be included in presets.</p></div>
+
+<div class="see-also">See also: <a href="develop.html#history">History and undo</a> · <a href="presets.html#create">Create a preset</a></div>
+
+</main>
+</body>
+</html>

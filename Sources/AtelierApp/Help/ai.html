@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI tools · Atelier Help</title>
+<link rel="stylesheet" href="assets/help.css">
+<script src="assets/toc.js" defer></script>
+<script src="assets/help.js" defer></script>
+</head>
+<body>
+<main class="page">
+
+<div class="eyebrow">Tool</div>
+<h1>AI tools</h1>
+<p class="lede">Remove an object, replace a background or enlarge a photo with AI models running on your own Mac. The result is saved as a new photo stacked on the original, which never changes.</p>
+
+<div class="chips"><a href="#setup">Set up ComfyUI</a><a href="#remove">Remove Object</a><a href="#background">Replace Background</a><a href="#upscale">Upscale</a><a href="#results">Results</a><a href="#licenses">Licenses</a></div>
+
+<h2 id="setup">Set up ComfyUI</h2>
+<p>Atelier sends photos to <b>ComfyUI</b>, a free app you run yourself; nothing is bundled with Atelier.</p>
+<ol class="steps">
+  <li>Start ComfyUI (the desktop app, or from Terminal).</li>
+  <li>In <span class="path">Atelier › Settings… › AI</span>, set <b>Server</b>: the ComfyUI desktop app uses <code>http://127.0.0.1:8000</code>, ComfyUI from Terminal uses port 8188. Click <b>Connect</b>.</li>
+  <li>Pick the <b>Edit model</b> and the <b>Upscale model (4×)</b> from what your server has, and a <b>Generation size</b>: 768 px (faster), 1024 px, or 1536 px (slower).</li>
+</ol>
+<p>The AI panel shows whether ComfyUI is reachable. If it says “ComfyUI not reachable”, start ComfyUI and click <b>Check</b>.</p>
+
+<h2 id="open">Open the AI panel</h2>
+<p>In Develop, click the wand (the third icon under the histogram), or choose <span class="path">Photo › Remove Object…</span>, <span class="path">Replace Background…</span> or <span class="path">Upscale…</span>. Pick a <b>Recipe</b>, set it up, then click <b>Generate</b>. Progress shows as “Generating… N s” with a bar and a percentage; <b>Cancel</b> stops it.</p>
+
+<h2 id="remove">Remove Object</h2>
+<ol class="steps">
+  <li>Choose <b>Remove Object</b>.</li>
+  <li>Paint over what should go. <b>Brush Size</b> (or <kbd>[</kbd> <kbd>]</kbd>), <b>Paint</b> or <b>Erase</b>, and <b>Clear</b> to start again.</li>
+  <li>Optionally say what it is (“a hiker”, “a sign”), which helps the model.</li>
+  <li>Click <b>Generate</b>.</li>
+</ol>
+<div class="duo">
+  <figure><div class="pic"><img src="images/ai-remove-strokes.jpg" alt=""><span class="tag">Painted</span></div></figure>
+  <figure><div class="frame compare" data-before="redwoods.jpg" data-after="ai-remove-after.jpg" data-labels="Before|Removed"></div></figure>
+</div>
+<figcaption>Only the area around your strokes is sent, at the generation size, so detail stays high; the result is blended back softly. (Illustration: the real result comes from the model.)</figcaption>
+
+<h2 id="background">Replace Background</h2>
+<p>Atelier finds the subject (the background to replace is tinted on the photo), and you describe the new background in words. The subject's pixels are kept exactly.</p>
+
+<h2 id="upscale">Upscale</h2>
+<p>Enlarge 2× or 4× with an upscale model, for big prints or heavy crops.</p>
+<figure>
+  <div class="frame compare" data-before="ai-upscale-before.jpg" data-after="ai-upscale-after.jpg" data-labels="Enlarged normally|Upscaled" style="max-width:540px;margin:0 auto"></div>
+</figure>
+
+<h2 id="results">Results</h2>
+<p>Each result is a 16-bit TIFF named <code>name-AI Recipe.tif</code> next to the original, stacked on it with a <span class="badge">✦ AI</span> badge in the grid. Atelier records the recipe, models, licenses, prompt and seed with it, so any result can be traced and reproduced.</p>
+
+<h2 id="licenses">Licenses: what you can publish</h2>
+<div class="note"><p><span class="label">For your website or shop,</span> use only results from permissively licensed models (Apache 2.0 or MIT), such as Qwen-Image-Edit-2511 (the default for Remove Object and Replace Background) or FLUX.2 [klein] 4B. Non-commercial models such as Qwen-Image-2.1, Fibo 2.0 or FLUX.2 [klein] 9B are for experiments only.</p></div>
+
+<h2 id="workflows">Your own workflows</h2>
+<p>Save a ComfyUI workflow in API format as <code>remove-object.json</code>, <code>replace-background.json</code> or <code>upscale.json</code> in the folder from <span class="path">Settings › AI › Show Workflows Folder</span>, and it replaces the built-in one. Title its nodes Atelier Image, Atelier Mask, Atelier Prompt, Atelier Sampler and Atelier Output, as in the example files there.</p>
+
+<div class="see-also">See also: <a href="edit-in.html">Edit In other apps</a> · <a href="photos.html#stacks">Stacks</a></div>
+
+</main>
+</body>
+</html>

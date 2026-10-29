@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Detail · Atelier Help</title>
+<link rel="stylesheet" href="assets/help.css">
+<script src="assets/toc.js" defer></script>
+<script src="assets/help.js" defer></script>
+</head>
+<body>
+<main class="page">
+
+<div class="eyebrow">Develop panel</div>
+<h1>Detail</h1>
+<p class="lede">Sharpen fine detail and clean up noise. Judge both at 100%: double-click the photo or press <kbd>Z</kbd> first.</p>
+
+<div class="chips"><a href="#sharpening">Sharpening</a><a href="#sharpen-option">See what you're sharpening</a><a href="#noise">Noise Reduction</a></div>
+
+<figure>
+  <div class="pins pinned">
+  <div class="panel">
+    <div class="ph"><span class="chev">›</span>Detail<span class="dot"></span><span class="grow"></span><span class="reset">↺</span></div>
+    <div class="pb">
+      <div class="gh" data-pin="1">Sharpening</div>
+      <div class="sl" data-name="Amount" data-value="60" data-at="0.4" data-def="0"></div>
+      <div class="sl" data-name="Radius" data-value="1.0" data-at="0.2" data-def="0.2"></div>
+      <div class="sl" data-name="Detail" data-value="25" data-at="0.25" data-def="0.25"></div>
+      <div class="sl" data-name="Masking" data-value="40" data-at="0.4" data-def="0"></div>
+      <div class="gh" data-pin="2">Noise Reduction</div>
+      <div class="sl" data-name="Luminance" data-value="20" data-at="0.2" data-def="0"></div>
+      <div class="sl" data-name="Color" data-value="25" data-at="0.25" data-def="0"></div>
+    </div>
+  </div>
+  </div>
+</figure>
+
+<h2 id="sharpening">Sharpening</h2>
+<dl class="defs">
+  <dt>Amount <span class="range">0–150</span></dt><dd>How much to sharpen. Start around 40 to 70.</dd>
+  <dt>Radius <span class="range">0.5–3.0</span></dt><dd>How wide the sharpened edges are. Low for fine detail (feathers, landscapes), higher for soft subjects.</dd>
+  <dt>Detail <span class="range">0–100, default 25</span></dt><dd>Below 25 holds back halos on strong edges; above 25 brings out fine texture.</dd>
+  <dt>Masking <span class="range">0–100</span></dt><dd>Keeps sharpening to edges. 0 sharpens everywhere; 100 only the strongest edges, so skies and skin stay smooth.</dd>
+</dl>
+<figure>
+  <div class="frame compare" data-before="sharpening-before.jpg" data-after="sharpening-after.jpg" data-labels="Before|Sharpened"></div>
+  <figcaption>At 100%, sharpening crisps the feathers around the eye and the edge of the beak.</figcaption>
+</figure>
+
+<h3 id="sharpen-option">See what you're sharpening (⌥)</h3>
+<p>Hold <kbd>⌥</kbd> while you drag a Sharpening slider:</p>
+<dl class="defs">
+  <dt>Amount</dt><dd>The photo in grayscale, so color doesn't distract you.</dd>
+  <dt>Radius, Detail</dt><dd>Only the sharpening's edge halos, on mid gray.</dd>
+  <dt>Masking</dt><dd>A black and white mask: white is sharpened, black is left alone. Drag until flat areas turn black.</dd>
+</dl>
+
+<h2 id="noise">Noise Reduction</h2>
+<dl class="defs">
+  <dt>Luminance</dt><dd>Smooths grainy speckle in brightness (high ISO). Too much looks plasticky; stop when the grain is calm.</dd>
+  <dt>Color</dt><dd>Removes colored blotches in shadows and flat areas. A little goes a long way.</dd>
+</dl>
+<div class="duo">
+  <figure>
+    <div class="frame compare" data-before="noise-before.jpg" data-after="noise-after.jpg" data-labels="Noisy|Luminance"></div>
+    <figcaption><b>Luminance</b> noise reduction.</figcaption>
+  </figure>
+  <figure>
+    <div class="frame compare" data-before="color-noise-before.jpg" data-after="color-noise-after.jpg" data-labels="Noisy|Color"></div>
+    <figcaption><b>Color</b> noise reduction.</figcaption>
+  </figure>
+</div>
+<div class="tip"><p><span class="label">Order.</span> Noise reduction runs before sharpening, so reduce noise first, then sharpen with some Masking so the noise isn't sharpened back.</p></div>
+
+<div class="see-also">See also: <a href="basic.html#texture-clarity">Texture and Clarity</a> · <a href="effects.html#grain">Grain</a></div>
+
+</main>
+</body>
+</html>

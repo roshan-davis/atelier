@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HSL / Color and B&amp;W · Atelier Help</title>
+<link rel="stylesheet" href="assets/help.css">
+<script src="assets/toc.js" defer></script>
+<script src="assets/help.js" defer></script>
+</head>
+<body>
+<main class="page">
+
+<div class="eyebrow">Develop panel</div>
+<h1>HSL / Color and B&amp;W Mix</h1>
+<p class="lede">Change one color without touching the others: make greens more golden, calm down orange skin, darken a blue sky. In Black &amp; White, the same panel decides how bright each color becomes in gray.</p>
+
+<div class="chips"><a href="#bands">The eight colors</a><a href="#hue">Hue</a><a href="#saturation">Saturation</a><a href="#luminance">Luminance</a><a href="#bw-mix">B&amp;W Mix</a></div>
+
+<h2 id="bands">The eight colors</h2>
+<p>Red, Orange, Yellow, Green, Aqua, Blue, Purple and Magenta each have three sliders. Neighboring colors blend smoothly, and grays and whites are never affected.</p>
+<figure>
+  <div class="pins pinned">
+  <div class="panel">
+    <div class="ph"><span class="chev">›</span>HSL / Color<span class="dot"></span><span class="grow"></span><span class="reset">↺</span></div>
+    <div class="pb">
+      <div class="row" data-pin="1"><span class="seg"><span class="sel">Hue</span><span>Saturation</span><span>Luminance</span><span>All</span></span></div>
+      <div class="sl" data-name="Red" data-value="0" data-at="0.5" data-gradient="hue-0"></div>
+      <div class="sl" data-name="Orange" data-value="0" data-at="0.5" data-gradient="hue-30"></div>
+      <div class="sl" data-name="Yellow" data-value="−18" data-at="0.41" data-gradient="hue-60"></div>
+      <div class="sl" data-pin="2" data-name="Green" data-value="−30" data-at="0.35" data-gradient="hue-120"></div>
+      <div class="sl" data-name="Aqua" data-value="0" data-at="0.5" data-gradient="hue-180"></div>
+      <div class="sl" data-name="Blue" data-value="0" data-at="0.5" data-gradient="hue-240"></div>
+      <div class="sl" data-name="Purple" data-value="0" data-at="0.5" data-gradient="hue-270"></div>
+      <div class="sl" data-name="Magenta" data-value="0" data-at="0.5" data-gradient="hue-300"></div>
+    </div>
+  </div>
+  </div>
+</figure>
+<ol class="legend">
+  <li>Show <b>Hue</b>, <b>Saturation</b> or <b>Luminance</b> one at a time, or <b>All</b> 24 sliders.</li>
+  <li>Each track is painted with the colors that end of the slider gives, so you can see which way to drag.</li>
+</ol>
+
+<h2 id="hue">Hue</h2>
+<p>Shifts a color toward its neighbors. Green toward yellow gives autumn foliage; blue toward aqua gives tropical water.</p>
+<figure>
+  <div class="frame compare" data-before="redwoods.jpg" data-after="hsl-hue-after.jpg" data-labels="Before|Green and Yellow Hue −"></div>
+</figure>
+
+<h2 id="saturation">Saturation</h2>
+<p>Makes one color stronger or weaker. Turning down Orange and Red calms skin and wood; turning up Blue deepens a sky.</p>
+<figure>
+  <div class="frame compare" data-before="treatment-before.jpg" data-after="hsl-sat-after.jpg" data-labels="Before|Orange −70, Red −50" style="max-width:420px;margin:0 auto"></div>
+</figure>
+
+<h2 id="luminance">Luminance</h2>
+<p>Makes one color brighter or darker. Darkening Blue makes skies dramatic; lightening Orange brightens faces.</p>
+<figure>
+  <div class="frame compare" data-before="redwoods.jpg" data-after="hsl-lum-after.jpg" data-labels="Before|Green and Yellow Luminance −"></div>
+</figure>
+
+<h2 id="bw-mix">B&amp;W Mix</h2>
+<p>When <a href="basic.html#treatment">Treatment</a> is Black &amp; White (press <kbd>V</kbd>), this panel shows the <b>B&amp;W Mix</b> instead of HSL: eight sliders that set how light or dark each color becomes in gray, like colored filters on black and white film.</p>
+<div class="duo">
+  <figure><div class="pic"><img src="images/bw-default.jpg" alt=""><span class="tag">B&amp;W Mix at 0</span></div></figure>
+  <figure><div class="pic"><img src="images/bw-mix.jpg" alt=""><span class="tag">Green +90, Yellow +80, Orange −60</span></div></figure>
+</div>
+<figcaption>The same conversion with the foliage lifted and the warm wood darkened.</figcaption>
+<div class="tip"><p><span class="label">Classic filters.</span> Darken Blue for a dramatic sky (a red filter). Lighten Orange and Red for smooth skin. Lighten Green and Yellow for bright foliage.</p></div>
+<p>Vibrance and Saturation have no effect in Black &amp; White. <a href="color-grading.html">Color Grading</a> still works, for toned prints (Sepia, Selenium in the <a href="presets.html#built-in">Black &amp; White presets</a>).</p>
+
+<div class="see-also">See also: <a href="basic.html#vibrance-saturation">Vibrance and Saturation</a> · <a href="color-grading.html">Color Grading</a></div>
+
+</main>
+</body>
+</html>

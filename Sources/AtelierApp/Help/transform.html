@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Transform · Atelier Help</title>
+<link rel="stylesheet" href="assets/help.css">
+<script src="assets/toc.js" defer></script>
+<script src="assets/help.js" defer></script>
+</head>
+<body>
+<main class="page">
+
+<div class="eyebrow">Develop panel</div>
+<h1>Transform</h1>
+<p class="lede">Straighten leaning buildings, trees and artwork. Upright finds straight lines and fixes the perspective for you; Guided lets you draw the lines yourself.</p>
+
+<div class="chips"><a href="#upright">Upright</a><a href="#guided">Guided</a><a href="#sliders">Manual sliders</a><a href="#constrain-crop">Constrain Crop</a></div>
+
+<figure>
+  <div class="frame compare" data-before="upright-before.jpg" data-after="redwoods.jpg" data-labels="Trees lean in|Upright: Vertical"></div>
+  <figcaption>Tilting the camera up makes vertical lines lean toward each other. Upright makes them parallel again.</figcaption>
+</figure>
+
+<h2 id="upright">Upright</h2>
+<figure>
+  <div class="panel narrow" style="margin:0 auto">
+    <div class="ph"><span class="chev">›</span>Transform<span class="dot"></span><span class="grow"></span><span class="reset">↺</span></div>
+    <div class="pb">
+      <div class="row" style="gap:4px;flex-wrap:wrap"><span class="btn">Off</span><span class="btn">Auto</span><span class="btn">Level</span><span class="btn on">Vertical</span><span class="btn">Full</span><span class="btn">Guided</span></div>
+      <div class="check"><i></i>Constrain Crop</div>
+    </div>
+  </div>
+</figure>
+<dl class="defs">
+  <dt>Off</dt><dd>No Upright correction.</dd>
+  <dt>Auto</dt><dd>Like Full, but holds back when the lines are weak, so it never warps a photo hard on thin evidence. A safe first try.</dd>
+  <dt>Level</dt><dd>Makes horizontal lines level. Rotation only.</dd>
+  <dt>Vertical</dt><dd>Also makes vertical lines parallel. The usual choice for buildings and trees.</dd>
+  <dt>Full</dt><dd>Also corrects horizontal perspective, for a wall shot from an angle.</dd>
+  <dt>Guided</dt><dd>You draw the lines. See <a href="#guided">Guided</a>.</dd>
+</dl>
+<p>If there aren't enough straight lines, the button says “Not enough straight lines found” and nothing changes. The correction is saved with the photo; click the mode again to measure again.</p>
+<div class="note"><p><span class="label">Upright resets the crop.</span> As in Lightroom, choosing an Upright mode resets the crop's cut and straighten angle and the manual Transform sliders (rotations and flips stay). <kbd>⌥</kbd>-click the button to keep them.</p></div>
+
+<h2 id="guided">Guided</h2>
+<p>Click <b>Guided</b> or press <kbd>⇧T</kbd>, then drag along edges that should be straight up or straight across.</p>
+<figure>
+  <div class="frame" style="position:relative">
+    <img src="images/upright-before.jpg" alt="Drawing guides along the leaning trees">
+    <div class="overlay"><svg viewBox="0 0 960 639" preserveAspectRatio="none">
+      <g stroke="#ffd60a" stroke-width="3" fill="#ffd60a">
+        <line x1="135" y1="70" x2="78" y2="560"/><circle cx="135" cy="70" r="6"/><circle cx="78" cy="560" r="6"/>
+        <line x1="575" y1="40" x2="610" y2="470"/><circle cx="575" cy="40" r="6"/><circle cx="610" cy="470" r="6"/>
+      </g>
+      <g transform="translate(700,120)"><circle r="70" fill="#000" fill-opacity=".35" stroke="#fff" stroke-width="2"/>
+        <path d="M-70 0H70M0 -70V70" stroke="#fff" stroke-opacity=".8"/></g>
+    </svg></div>
+    <span class="pin" style="left:14%;top:11%">1</span>
+    <span class="pin" style="left:60%;top:6%">2</span>
+    <span class="pin" style="left:80%;top:19%">3</span>
+  </div>
+</figure>
+<ol class="legend">
+  <li>Drag along a tree trunk or building edge to draw a guide. Each guide counts as vertical or horizontal, whichever it's closer to.</li>
+  <li>The photo straightens once there are two guides, and updates with each guide you add or move (up to four). Two vertical guides fix leaning verticals; add horizontal guides to fix the horizontal perspective too.</li>
+  <li>While you draw or move a guide's end, a 3× loupe beside the pointer shows exactly where you are. <span class="path">Show Loupe</span> or <kbd>O</kbd> turns it off.</li>
+</ol>
+<table class="keys">
+  <tr><td>Drag a guide's end</td><td>Move it.</td></tr>
+  <tr><td>Click a guide, then <kbd>Delete</kbd></td><td>Remove it. <span class="path">Clear Guides</span> removes all of them.</td></tr>
+  <tr><td><kbd>⌘⌥</kbd> drag the photo</td><td>Move it with X and Y Offset (add <kbd>⇧</kbd> to move in one direction only).</td></tr>
+  <tr><td><kbd>Esc</kbd> or <b>Done</b></td><td>Close Guided.</td></tr>
+</table>
+<p>A strong correction can push part of the photo out of the frame, guide ends included. Lower <b>Scale</b> to bring it back, or turn on <b>Show Whole Photo</b> to zoom the view out to the whole corrected photo. That changes only the view, never the edit.</p>
+<div class="beyond"><p><span class="label">Beyond Lightroom.</span> Show Whole Photo isn't in Lightroom, and every guide ends exactly straight even with four guides.</p></div>
+
+<h2 id="sliders">Manual sliders</h2>
+<p>Added on top of Upright, for fine-tuning or for doing it by hand.</p>
+<dl class="defs">
+  <dt>Vertical <span class="range">−100–100</span></dt><dd>Negative widens the top: fixes buildings shot from below.</dd>
+  <dt>Horizontal <span class="range">−100–100</span></dt><dd>Turns the photo left or right, for a wall shot from the side.</dd>
+  <dt>Rotate <span class="range">−10°–10°</span></dt><dd>Small rotations.</dd>
+  <dt>Aspect <span class="range">−100–100</span></dt><dd>Positive stretches the width, negative the height. Fixes buildings that look too tall after a correction.</dd>
+  <dt>Scale <span class="range">50–150%</span></dt><dd>Shrinks or enlarges the corrected photo in its frame.</dd>
+  <dt>X Offset, Y Offset</dt><dd>Moves the photo sideways or up and down.</dd>
+</dl>
+
+<h2 id="constrain-crop">Constrain Crop</h2>
+<p>Perspective corrections leave empty, light gray areas at the edges. Turn on <b>Constrain Crop</b> to crop to the largest rectangle with no gray, keeping your crop's shape. It finds the crop again whenever the correction changes, and the <a href="crop.html">Crop tool</a> won't let the crop leave the photo. Turning it off leaves the crop as it is.</p>
+
+<div class="see-also">See also: <a href="lens-corrections.html">Lens Corrections</a> · <a href="crop.html">Crop &amp; Straighten</a></div>
+
+</main>
+</body>
+</html>

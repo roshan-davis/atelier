@@ -724,6 +724,10 @@ struct PanelSection<Content: View>: View {
                 Divider()
                 Button("Expand All Panels", action: expandAll)
                 Button("Collapse All Panels", action: collapseAll)
+                if let topic = HelpWindow.topic(forPanel: title) {
+                    Divider()
+                    Button("\(title) Help") { HelpWindow.shared.show(page: topic.page, section: topic.section) }
+                }
             }
             if isExpanded {
                 content()

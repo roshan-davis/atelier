@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Virtual copies, stacks and removing · Atelier Help</title>
+<link rel="stylesheet" href="assets/help.css">
+<script src="assets/toc.js" defer></script>
+<script src="assets/help.js" defer></script>
+</head>
+<body>
+<main class="page">
+
+<div class="eyebrow">Library</div>
+<h1>Virtual copies, stacks and removing</h1>
+<p class="lede">Make several versions of one photo without duplicating the file, see how versions stack, and take photos out of the catalog or move them to the Trash.</p>
+
+<h2 id="virtual-copies">Virtual copies</h2>
+<p>A virtual copy is a second set of edits on the same file: a color and a black and white version, or two different crops.</p>
+<div class="duo">
+  <figure><div class="pic"><img src="images/redwoods.jpg" alt=""><span class="tag">NZ6_9144</span></div></figure>
+  <figure><div class="pic"><img src="images/thumbs/forest-bw.jpg" alt="" style="width:100%;aspect-ratio:3/2;object-fit:cover"><span class="tag">⧉ Copy 1</span></div></figure>
+</div>
+<ul>
+  <li><b>Make one:</b> right-click › <span class="path">Create Virtual Copy</span>, or <span class="path">Photo › Create Virtual Copy</span> (<kbd>⌘'</kbd>). Each selected photo gets one.</li>
+  <li>A copy starts with the photo's current edits, rating, label, keywords and collections (not its flag), then has its own of everything. Editing a copy never changes the original.</li>
+  <li>Copies sit right after the original in the grid with a <span class="badge">⧉ Copy 1</span> badge.</li>
+  <li><b>Remove one:</b> right-click › <span class="path">Remove Virtual Copy…</span>. Only the copy's settings go; the file is untouched.</li>
+</ul>
+
+<h2 id="stacks">Stacks</h2>
+<p>Edit In versions, AI results and virtual copies stack on their original: they sort right after it, join the same imports and collections, and the original shows the count (<span class="badge">▤ 3</span>).</p>
+
+<h2 id="remove">Remove or delete photos</h2>
+<ol class="steps">
+  <li>Select photos and press <kbd>Delete</kbd>, or right-click › <span class="path">Remove Photo…</span> (<span class="path">Remove 3 Photos…</span> with several).</li>
+  <li>The dialog says what will happen, with numbers: how many files, how many virtual copies go with them, how many are on a drive that isn't connected.</li>
+  <li>Choose:
+    <dl class="defs">
+      <dt>Remove</dt><dd>The default. Takes the photos out of the catalog, with their edits and metadata. The files stay where they are.</dd>
+      <dt>Delete from Disk</dt><dd>Also moves the files to the Trash.</dd>
+      <dt>Cancel</dt><dd>Nothing changes (or press <kbd>Esc</kbd>).</dd>
+    </dl>
+  </li>
+</ol>
+<p>With RAW+JPEG pairs, the dialog has a checkbox per kind of file (for example “RAW (.NEF) 12 files” and “JPEG (.JPG) 12 files”); untick one to keep those files.</p>
+<div class="note"><p><span class="label">Nothing is erased silently.</span> Files only go to the Trash. A network share like the NAS has no Trash, so Atelier asks before deleting from it immediately.</p></div>
+<p>You'll hear the Dock's poof when something is removed from Atelier, and Finder's Trash sound when files go to the Trash. Turn this off in <span class="path">Settings › General › Feedback</span>.</p>
+
+<div class="see-also">See also: <a href="library.html">Organize and find</a> · <a href="edit-in.html">Edit In</a></div>
+
+</main>
+</body>
+</html>

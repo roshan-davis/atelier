@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Color Grading · Atelier Help</title>
+<link rel="stylesheet" href="assets/help.css">
+<script src="assets/toc.js" defer></script>
+<script src="assets/help.js" defer></script>
+</head>
+<body>
+<main class="page">
+
+<div class="eyebrow">Develop panel</div>
+<h1>Color Grading</h1>
+<p class="lede">Tint the shadows, midtones and highlights separately: teal shadows and warm highlights for a film look, a cool cast for night, a sepia tone for black and white.</p>
+
+<div class="chips">
+  <a href="#wheel">Reading a wheel</a><a href="#dragging">Dragging</a><a href="#views">3-Way and single wheels</a>
+  <a href="#blend">Blending and Balance</a><a href="#picker">Color picker</a><a href="#compare">Compare and solo</a><a href="#menu">Right-click menu</a>
+</div>
+
+<figure>
+  <div class="frame compare" data-before="redwoods-flat.jpg" data-after="color-grading-after.jpg" data-labels="Before|Teal shadows, warm highlights"></div>
+  <figcaption>Shadows: Hue 195, Saturation 55. Highlights: Hue 35, Saturation 55. Drag across to compare.</figcaption>
+</figure>
+
+<h2 id="wheel">Reading a wheel</h2>
+<p>Each wheel is a circle of colors. The <b>angle</b> picks the hue (red at 3 o'clock, then yellow, green, cyan, blue and magenta going counterclockwise) and the <b>distance from the center</b> is how strong the tint is. The center is no tint at all.</p>
+<figure>
+  <div class="pins" style="width: 340px; max-width: 100%; margin: 0 auto; background: var(--app-panel); border-radius: 50%; box-shadow: var(--shadow)">
+    <img src="images/wheel-shadows.svg" alt="The Shadows wheel" style="width: 100%">
+    <span class="pin" style="left: 31%; top: 67%">1</span>
+    <span class="pin" style="left: 4%; top: 72%">2</span>
+    <span class="pin" style="left: 42%; top: 45%">3</span>
+    <span class="pin" style="left: 20%; top: 33%">4</span>
+    <span class="pin" style="left: 77%; top: 29%">5</span>
+  </div>
+</figure>
+<ol class="legend">
+  <li><b>The inner dot</b> (hollow, filled with the tint it gives) sets hue and saturation together. Drag it.</li>
+  <li><b>The rim dot</b> sets the hue only. Drag it around the edge to change the color but keep the strength.</li>
+  <li><b>The spoke</b> runs from the center through the dot to the rim, so you can see the direction of the tint.</li>
+  <li><b>The faint black dots</b> are the colors in your photo that fall in this wheel's range (here, the shadows), like a small vectorscope. A cluster away from the center shows a color cast; as you move the inner dot, the cluster moves with it.</li>
+  <li><b>The small ring</b> is where another wheel's tint is (here, the warm Highlights tint), so you can line tints up or set them opposite.</li>
+</ol>
+<div class="beyond"><p><span class="label">Beyond Lightroom.</span> The photo's color dots and the other wheels' rings aren't in Lightroom. They update as you edit.</p></div>
+
+<h2 id="dragging">Dragging, with modifier keys</h2>
+<table class="keys">
+  <tr><td>Drag the inner dot</td><td>Hue and saturation. It moves from where it is, so it never jumps under the pointer.</td></tr>
+  <tr><td>Click elsewhere on the wheel</td><td>Put the dot there.</td></tr>
+  <tr><td>Drag along the spoke</td><td>Changes only the strength: the hue holds until you move well off the line.</td></tr>
+  <tr><td><kbd>⇧</kbd> drag</td><td>Saturation only.</td></tr>
+  <tr><td><kbd>⌘</kbd> drag</td><td>Hue only.</td></tr>
+  <tr><td><kbd>⌥</kbd> drag</td><td>Fine adjustment: moves at a tenth of the speed.</td></tr>
+  <tr><td>Double-click inside a wheel</td><td>Reset its hue and saturation.</td></tr>
+  <tr><td>Double-click a wheel's name</td><td>Reset the whole wheel, Luminance included.</td></tr>
+  <tr><td><kbd>←</kbd> <kbd>→</kbd> · <kbd>↑</kbd> <kbd>↓</kbd></td><td>With the pointer over a wheel: turn the hue · change saturation. Add <kbd>⇧</kbd> for steps of 10.</td></tr>
+</table>
+
+<h2 id="views">3-Way and single wheels</h2>
+<p>The row of buttons at the top of the panel picks the view. Atelier remembers it.</p>
+<figure>
+  <div class="pins pinned">
+  <div class="panel">
+    <div class="ph"><span class="chev">›</span>Color Grading<span class="dot"></span><span class="grow"></span><span class="switch" data-pin="5" data-pin-side="right"></span><span class="reset">↺</span></div>
+    <div class="pb">
+      <div class="row" data-pin="1"><span class="gh" style="margin:0;flex:1">Adjust</span>
+        <span class="icon on" title="3-Way" style="width:22px;height:20px">⁂</span>
+        <span class="icon" style="width:22px;height:20px"><i style="width:11px;height:11px;border-radius:50%;background:#262626;border:1px solid #888"></i></span>
+        <span class="icon" style="width:22px;height:20px"><i style="width:11px;height:11px;border-radius:50%;background:#808080;border:1px solid #888"></i></span>
+        <span class="icon" style="width:22px;height:20px"><i style="width:11px;height:11px;border-radius:50%;background:#ebebeb;border:1px solid #888"></i></span>
+        <span class="icon" style="width:22px;height:20px"><i style="width:11px;height:11px;border-radius:50%;background:conic-gradient(red,yellow,lime,cyan,blue,magenta,red);border:1px solid #888"></i></span>
+        <span style="color:#666">|</span><span class="icon" data-pin="2" data-pin-side="right" style="width:22px;height:20px;color:var(--app-text-2)">✎</span></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
+        <div class="gh" style="margin:0">Midtones 👁</div>
+        <img src="images/wheel-midtones.svg" alt="" style="width:118px">
+        <div class="sl" style="width:118px" data-name="" data-value="" data-at="0.5" data-gradient="bw"></div>
+      </div>
+      <div style="display:flex;justify-content:space-around" data-pin="3">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
+          <div class="gh" style="margin:0">Shadows 👁</div><img src="images/wheel-shadows.svg" alt="" style="width:118px">
+          <div style="font-size:10px;color:var(--app-text-2)">H 195 · S 55 · L 0</div></div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
+          <div class="gh" style="margin:0">Highlights 👁</div><img src="images/wheel-highlights.svg" alt="" style="width:118px">
+          <div style="font-size:10px;color:var(--app-text-2)">H 35 · S 55 · L 0</div></div>
+      </div>
+      <div class="gh" data-pin="4">Blend</div>
+      <div class="sl" data-name="Blending" data-value="50" data-at="0.5" data-def="0.5"></div>
+      <div class="sl" data-name="Balance" data-value="0" data-at="0.5" data-def="0.5"></div>
+      <svg viewBox="0 0 300 34" style="width:100%;height:34px">
+        <path d="M0,4 L120,4 C150,4 150,32 180,32 L0,32 Z" fill="#3b6fd8" fill-opacity=".22" stroke="#3b6fd8"/>
+        <path d="M80,32 C120,32 120,4 150,4 C180,4 180,32 220,32 Z" fill="#999" fill-opacity=".22" stroke="#999"/>
+        <path d="M120,32 C150,32 150,4 180,4 L300,4 L300,32 Z" fill="#e0b437" fill-opacity=".22" stroke="#e0b437"/>
+      </svg>
+    </div>
+  </div>
+  </div>
+</figure>
+<ol class="legend">
+  <li><b>View buttons</b>: 3-Way, then one large wheel at a time for Shadows, Midtones, Highlights or Global (all tones). Double-click <b>Adjust</b> to reset all Color Grading.</li>
+  <li><b>Color picker</b> (eyedropper): see <a href="#picker">Color picker</a>.</li>
+  <li>In 3-Way, each wheel has a <b>Luminance</b> slider under it and its values (H · S · L) below. A single-wheel view has Hue, Saturation and Luminance sliders instead, where you can type exact numbers.</li>
+  <li><b>Blending and Balance</b>, with a graph of where each range applies: see <a href="#blend">below</a>.</li>
+  <li><b>The panel switch</b> turns all Color Grading off to compare, keeping the settings.</li>
+</ol>
+<p><b>Luminance</b> lightens or darkens that tonal range. It rolls off toward white and black instead of clipping: lightening the shadows lifts and tints the blacks, darkening the highlights tints the whites.</p>
+<p><b>Global</b> tints the whole photo, on top of the three ranges.</p>
+
+<h2 id="blend">Blending and Balance</h2>
+<dl class="defs">
+  <dt>Blending</dt><dd>How much the three ranges overlap. Low gives distinct bands; high (the default is 50) blends them smoothly.</dd>
+  <dt>Balance</dt><dd>Moves the split between shadows and highlights. Negative gives the Shadows wheel more of the photo; positive gives Highlights more.</dd>
+</dl>
+<p>The graph under the sliders shows the three ranges from black (left) to white (right): <span style="color:#3b6fd8;font-weight:600">blue</span> for Shadows, <span style="color:#999;font-weight:600">gray</span> for Midtones and <span style="color:#d0a020;font-weight:600">yellow</span> for Highlights. It reshapes as you move the sliders.</p>
+<figure>
+  <div class="frame compare" data-before="redwoods-flat.jpg" data-after="grade-split-after.jpg" data-labels="Before|Split tone, Blending 80"></div>
+</figure>
+<div class="tip"><p><span class="label">Hold ⌥</span> on <b>Balance</b> to see the photo painted in the three ranges' colors, so you can see exactly where the split falls. On <b>Blending</b>, ⌥ shows every wheel's tint at full strength. On a single wheel's <b>Hue</b> slider, ⌥ shows that tint at full strength.</p></div>
+
+<h2 id="picker">Color picker: remove a color cast</h2>
+<ol class="steps">
+  <li>Click the eyedropper at the top right of the panel. The pointer becomes an eyedropper.</li>
+  <li>Click a spot in the photo that should have no color: a gray wall, a white shirt in shadow.</li>
+  <li>Atelier sets a wheel to the opposite tint, so that spot turns neutral. In 3-Way it picks Shadows, Midtones or Highlights by how bright the spot is; in a single-wheel view it sets that wheel. <kbd>Esc</kbd> cancels.</li>
+</ol>
+<div class="beyond"><p><span class="label">Beyond Lightroom.</span> Lightroom's Color Grading has no picker. Use White Balance first for an overall cast; use this for a cast in just the shadows or just the highlights.</p></div>
+
+<h2 id="compare">Compare and solo</h2>
+<ul>
+  <li><b>The switch</b> in the panel header turns Color Grading off and on. The settings are kept (and exports, presets and history follow the switch).</li>
+  <li><b>Press and hold the eye</b> 👁 next to a wheel's name to see the photo graded by that wheel alone.</li>
+</ul>
+
+<h2 id="menu">Right-click menu</h2>
+<p>Right-click a wheel for <span class="path">Reset Hue and Saturation</span>, <span class="path">Reset Luminance</span>, <span class="path">Reset</span> (the whole wheel), <span class="path">Copy … Settings</span> and <span class="path">Paste Settings to …</span> (copy one wheel's tint to another), and <span class="path">Reset All Color Grading</span>.</p>
+
+<div class="see-also">See also: <a href="basic.html#white-balance">White Balance</a> · <a href="hsl.html">HSL / Color and B&amp;W</a> · <a href="presets.html">Presets</a> (the Film and Cinematic packs use Color Grading)</div>
+
+</main>
+</body>
+</html>

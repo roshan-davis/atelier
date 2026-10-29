@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Organize and find · Atelier Help</title>
+<link rel="stylesheet" href="assets/help.css">
+<script src="assets/toc.js" defer></script>
+<script src="assets/help.js" defer></script>
+</head>
+<body>
+<main class="page">
+
+<div class="eyebrow">Library</div>
+<h1>Organize and find</h1>
+<p class="lede">Browse in the grid, look closely in the loupe, rate and flag with single keys, and find any photo with the filter bar.</p>
+
+<div class="chips"><a href="#sidebar">Sidebar</a><a href="#grid-loupe">Grid and Loupe</a><a href="#rate">Rate, flag, label</a><a href="#badges">Grid badges</a><a href="#filter">Filter and search</a><a href="#inspector">Inspector</a><a href="#collections">Collections and imports</a><a href="#filmstrip">Filmstrip</a><a href="#xmp">XMP sidecars</a><a href="#volumes">Drives and the NAS</a></div>
+
+<h2 id="sidebar">Sidebar</h2>
+<dl class="defs">
+  <dt>Library › All Photographs</dt><dd>Every photo in the catalog.</dd>
+  <dt>Imports</dt><dd>One entry per import, named after its folder. Right-click to Rename…, Import More Photos Into This…, Cull… or Delete Import… (deleting the list keeps the photos in the catalog and on disk).</dd>
+  <dt>Volumes</dt><dd>Your drives and the NAS, each with its folders as they are on disk. An offline drive is marked; its photos stay browsable.</dd>
+  <dt>Collections</dt><dd>Your own lists. A photo can be in any number of them. <b>+</b> makes a new one.</dd>
+</dl>
+
+<h2 id="grid-loupe">Grid and Loupe</h2>
+<table class="keys">
+  <tr><td><kbd>G</kbd> · <kbd>E</kbd> · <kbd>D</kbd></td><td>Grid · Loupe (one photo, large) · Develop. Also the toolbar buttons and <kbd>⌘G</kbd> <kbd>⌘E</kbd> <kbd>⌘D</kbd>.</td></tr>
+  <tr><td>Double-click a thumbnail, or <kbd>Return</kbd></td><td>Open it in Loupe. <kbd>Return</kbd> or <kbd>Esc</kbd> goes back to the grid.</td></tr>
+  <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>Previous or next photo.</td></tr>
+  <tr><td>Click · <kbd>⌘</kbd>-click · <kbd>⇧</kbd>-click</td><td>Select one · add or remove one · select a run.</td></tr>
+  <tr><td>Double-click in Loupe, or <kbd>Z</kbd></td><td>Zoom to 100% and back. Drag to move around.</td></tr>
+  <tr><td>Right-click a photo</td><td>The photo menu: open, edit, rate, flag, label, develop settings, presets, collections, Edit In, AI, Export, Remove Photo…</td></tr>
+</table>
+
+<h2 id="rate">Rate, flag, label</h2>
+<p>Single keys, as in Lightroom. They act on the selected photos (change them in <span class="path">Settings › Keyboard</span>).</p>
+<div class="shortcut-grid">
+<table class="keys">
+  <caption>Rating</caption>
+  <tr><td><kbd>1</kbd> … <kbd>5</kbd></td><td>★ to ★★★★★</td></tr>
+  <tr><td><kbd>0</kbd></td><td>Clear the rating</td></tr>
+</table>
+<table class="keys">
+  <caption>Flags</caption>
+  <tr><td><kbd>P</kbd></td><td>Picked ⚑</td></tr>
+  <tr><td><kbd>X</kbd></td><td>Rejected ✕ (dimmed in the grid)</td></tr>
+  <tr><td><kbd>U</kbd></td><td>Remove the flag</td></tr>
+</table>
+<table class="keys">
+  <caption>Color labels</caption>
+  <tr><td><kbd>6</kbd> <kbd>7</kbd> <kbd>8</kbd> <kbd>9</kbd></td><td><span style="color:#ff453a">●</span> Red · <span style="color:#ffd60a">●</span> Yellow · <span style="color:#32d74b">●</span> Green · <span style="color:#0a84ff">●</span> Blue</td></tr>
+</table>
+</div>
+
+<h2 id="badges">Grid badges</h2>
+<p>Under each thumbnail, a line of small marks tells you about the photo:</p>
+<dl class="defs">
+  <dt><span class="badge">⚑</span> <span class="badge">✕</span> <span class="badge">★★★</span></dt><dd>Picked, rejected, rating. A colored strip shows the label.</dd>
+  <dt><span class="badge">▤ 3</span></dt><dd>An original with versions stacked on it (edits, AI results, virtual copies): 3 photos in all. See <a href="photos.html#stacks">Stacks</a>.</dd>
+  <dt><span class="badge">◪ Edit</span> <span class="badge">✦ AI</span> <span class="badge">⧉ Copy 1</span></dt><dd>An <a href="edit-in.html">Edit In</a> version, an <a href="ai.html">AI</a> result, a <a href="photos.html#virtual-copies">virtual copy</a>.</dd>
+  <dt><span class="badge">RAW+JPG</span></dt><dd>A RAW shown with the JPEG shot alongside it, as one photo.</dd>
+  <dt><span class="badge">◫ 4</span></dt><dd>Culled with 3 other shots. <kbd>⇧⌘G</kbd> shows the group (see <a href="cull.html#review">Cull</a>).</dd>
+</dl>
+
+<h2 id="filter">Filter and search</h2>
+<p>The bar above the photos narrows the current list:</p>
+<ul>
+  <li><b>Search</b>: type part of a filename, title, caption or keyword.</li>
+  <li><b>Filters</b>: a minimum <b>Rating</b> (★ + to ★★★★★ +), a <b>Flag</b> (Picked, Unflagged, Rejected) and a <b>Label</b>. The button shows how many are on.</li>
+</ul>
+<p>Filters apply to whatever is selected in the sidebar, and to the Filmstrip.</p>
+
+<h2 id="inspector">Inspector</h2>
+<p>The right panel in Grid and Loupe (toggle it with the <b>Inspector</b> toolbar button). It shows the photo's file, camera and lens, and lets you set rating, flag and label, a <b>Title and caption</b>, and <b>Keywords</b> (comma separated; <b>Apply Keywords</b> adds them to every selected photo).</p>
+
+<h2 id="collections">Collections and imports</h2>
+<p>The <b>Organize</b> toolbar menu works on the selected photos: <span class="path">New Collection with Selection…</span>, <span class="path">Add to</span> a collection, <span class="path">Add to Import</span>, and, when you're in a collection or import, <span class="path">Remove from This Collection</span> or <span class="path">Remove from This Import</span>. Removing from a list never removes the photo from the catalog.</p>
+
+<h2 id="filmstrip">Filmstrip</h2>
+<p>The strip of thumbnails along the bottom, in every view, showing the current list in the same order as the grid. Its header shows the list's name, how many photos, how many are selected, which one you're on, and its filename.</p>
+<ul>
+  <li>Click, <kbd>⌘</kbd>-click and <kbd>⇧</kbd>-click select, as in the grid. Right-click for the photo menu.</li>
+  <li>Drag its top edge to make thumbnails bigger or smaller.</li>
+  <li>Hide or show it with the small tab in the middle of the bottom edge, <span class="path">View › Show Filmstrip</span>, or <kbd>F6</kbd>.</li>
+</ul>
+
+<h2 id="xmp">XMP sidecars</h2>
+<p>Ratings, flags, labels, keywords, titles and captions live in the catalog. To let Lightroom, Bridge or Capture One see them, write them to <code>.xmp</code> files next to the originals:</p>
+<ul>
+  <li><span class="path">Library › Write XMP for Selection</span> (<kbd>⌘S</kbd>) or <span class="path">Write All Unsaved XMP</span> (<kbd>⌥⌘S</kbd>).</li>
+  <li>Or turn on <span class="path">Settings › Metadata › Automatically write changes into XMP sidecars</span>.</li>
+</ul>
+
+<h2 id="volumes">Drives and the NAS</h2>
+<p>Atelier remembers photos by drive, not by where it's mounted, so plugging a drive in somewhere else doesn't break anything. When the NAS or a drive is off, its photos stay in the grid from their previews, marked Offline. <span class="path">Library › Refresh Volumes</span> (<kbd>⌘R</kbd>) checks again after you connect one.</p>
+
+<div class="see-also">See also: <a href="photos.html">Virtual copies, stacks and removing</a> · <a href="shortcuts.html">Keyboard shortcuts</a></div>
+
+</main>
+</body>
+</html>

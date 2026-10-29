@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Import photos · Atelier Help</title>
+<link rel="stylesheet" href="assets/help.css">
+<script src="assets/toc.js" defer></script>
+<script src="assets/help.js" defer></script>
+</head>
+<body>
+<main class="page">
+
+<div class="eyebrow">Library</div>
+<h1>Import photos</h1>
+<p class="lede">Bring a shoot into Atelier from a card, a drive or the NAS. Leave the files where they are, or copy them into your library folder.</p>
+
+<h2 id="open">Start an import</h2>
+<p>Any of these opens the Import dialog:</p>
+<ul>
+  <li><span class="path">File › Import Photos…</span> (<kbd>⇧⌘I</kbd>) or the <b>Import</b> button in the toolbar.</li>
+  <li>Drag folders or photos from Finder onto the Atelier window.</li>
+  <li>Right-click an import in the sidebar › <span class="path">Import More Photos Into This…</span></li>
+</ul>
+
+<h2 id="dialog">The Import dialog</h2>
+<figure>
+  <div class="pins pinned wide" style="max-width:540px">
+  <div class="panel" style="background:#323232">
+    <div class="pb" style="gap:10px">
+      <div style="font-weight:700;font-size:15px">Import Photos</div>
+      <div class="gh" style="margin:0">Photos</div>
+      <div data-pin="1" style="border:1.5px dashed #666;border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:6px">
+        <div class="row"><span style="flex:1">📁 Nikon Z6 card / DCIM / 100NZ6</span><span class="muted">128</span><span style="color:#888">⊖</span></div>
+        <div class="row"><span class="btn">Add More…</span><span class="muted">Drag folders or photos here</span></div>
+      </div>
+      <div class="gh" style="margin:0">Import into</div>
+      <div class="row" data-pin="2"><span class="name">Entry</span><span class="popup">New import</span></div>
+      <div class="row"><span class="name">Name</span><span class="popup" style="background:#1f1f1f">100NZ6</span></div>
+      <div class="gh" style="margin:0">Files</div>
+      <div class="row" data-pin="3"><span class="check"><i></i>Leave files where they are</span></div>
+      <div class="row"><span class="check"><i class="on" style="border-radius:50%"></i>Copy into my library folder</span></div>
+      <div class="muted">Copies go to YYYY/YYYY-MM-DD 100NZ6/ and each one is checked against the original.</div>
+      <div class="gh" style="margin:0">Apply During Import</div>
+      <div class="row" data-pin="4"><span class="name">Develop Settings</span><span class="popup">None</span></div>
+      <div class="row"><span class="name">Keywords</span><span class="popup" style="color:#888">redwoods, hiking</span></div>
+      <div class="row" data-pin="5"><span class="check"><i></i>Cull before importing</span></div>
+      <div class="row" style="justify-content:flex-end;gap:8px" data-pin="6"><span class="btn">Cancel</span><span class="btn on">Import 128 Photos</span></div>
+    </div>
+  </div>
+  </div>
+</figure>
+<ol class="legend">
+  <li><b>Photos</b>: <b>Choose Folders or Photos…</b> or drag them in. Each source shows how many photos it has; ⊖ removes it, <b>Add More…</b> adds another.</li>
+  <li><b>Import into</b>: <b>New import</b> (named after the first folder; type another name if you like) or pick an existing import to add to.</li>
+  <li><b>Files</b>: <b>Leave files where they are</b> (on this Mac or the NAS; nothing is moved) or <b>Copy into my library folder</b>, in dated folders, each copy checked against the original.</li>
+  <li><b>Apply During Import</b>: a develop <a href="presets.html">preset</a> and keywords for every photo.</li>
+  <li><b>Cull before importing</b>: group similar shots and pick the keepers first. See <a href="cull.html">Cull</a>.</li>
+  <li>The button says how many photos will be imported, and stays dimmed until there's at least one.</li>
+</ol>
+
+<h2 id="progress">While it imports</h2>
+<p>The dialog closes, the new import is selected in the sidebar, and photos appear as they're added. The status bar shows progress and <b>Cancel</b>. When it's done it sums up what was imported, what was already in the catalog, and any files it couldn't read; <b>Show Problems</b> lists those with the reason.</p>
+<div class="tip"><p><span class="label">Importing again is safe.</span> Photos already in the catalog aren't added twice; they just join the import entry.</p></div>
+
+<h2 id="raw-jpeg">RAW+JPEG pairs</h2>
+<p>If your camera saves a RAW and a JPEG of each shot, Atelier shows them as one photo, the RAW, marked <span class="badge">RAW+JPG</span>. Ratings, flags, labels and keywords apply to both; editing and export use the RAW. Turn this off in <span class="path">Settings › Import › Show RAW+JPEG pairs as one photo</span>.</p>
+
+<h2 id="defaults">Defaults</h2>
+<p><span class="path">Atelier › Settings… › Import</span> sets whether new imports leave or copy files, and where the library folder is. The dialog remembers your last choices.</p>
+
+<div class="see-also">Next: <a href="cull.html">Cull: pick the keepers</a> · <a href="library.html">Organize and find</a></div>
+
+</main>
+</body>
+</html>

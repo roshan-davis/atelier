@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Export · Atelier Help</title>
+<link rel="stylesheet" href="assets/help.css">
+<script src="assets/toc.js" defer></script>
+<script src="assets/help.js" defer></script>
+</head>
+<body>
+<main class="page">
+
+<div class="eyebrow">Share</div>
+<h1>Export</h1>
+<p class="lede">Save finished photos as JPEG, HEIC, TIFF or PNG, with your edits, at the size and color space you need. Originals are never changed.</p>
+
+<h2 id="open">Open the Export dialog</h2>
+<p>Select photos and choose <span class="path">File › Export…</span> (<kbd>⇧⌘E</kbd>), click <b>Export</b> in the toolbar, or right-click › <span class="path">Export…</span>. In Loupe and Develop it exports the photo you're on (or the filmstrip selection).</p>
+
+<figure>
+  <div class="pins pinned wide" style="max-width:520px">
+  <div class="panel" style="background:#323232">
+    <div class="pb" style="gap:9px">
+      <div style="font-weight:700;font-size:15px">Export 12 Photos</div>
+      <div class="row" data-pin="1"><span class="name">Quick settings</span><span class="btn">Website</span><span class="btn">Full-Size JPEG</span><span class="btn">Full-Size TIFF</span></div>
+      <div class="row" data-pin="2"><span class="name">Format</span><span class="popup">JPEG</span></div>
+      <div class="row"><span class="name">Quality</span><span class="sl" style="flex:1" data-name="" data-value="85" data-at="0.7" data-def="0"></span></div>
+      <div class="row" data-pin="3"><span class="check" style="width:110px"><i class="on"></i>Resize to fit</span><span class="popup" style="flex:none;width:80px">2048</span><span class="muted">pixels</span></div>
+      <div class="row" data-pin="4"><span class="name">Color space</span><span class="popup">sRGB (web and social)</span></div>
+      <div class="row"><span class="name">Sharpening</span><span class="popup">For screen</span></div>
+      <div class="row" data-pin="5"><span class="name">Metadata</span><span class="popup">All except location</span></div>
+      <div class="row" data-pin="6"><span class="name">Save to</span><span class="muted" style="flex:1">~/Pictures/Exports</span><span class="btn">Change…</span></div>
+      <div class="check"><i class="on"></i>Show in Finder when done</div>
+      <div class="row" style="justify-content:flex-end;gap:8px"><span class="btn">Cancel</span><span class="btn on">Export 12 Photos</span></div>
+    </div>
+  </div>
+  </div>
+</figure>
+<ol class="legend">
+  <li><b>Quick settings</b> fill in everything below in one click: <b>Website</b> (JPEG, 2048 px long edge, sRGB, sharpened for screen, no location), <b>Full-Size JPEG</b>, and <b>Full-Size TIFF</b> (16-bit, Adobe RGB, for print or further editing).</li>
+  <li><b>Format</b>: JPEG and HEIC (with Quality, 50 to 100), TIFF (16-bit) or PNG.</li>
+  <li><b>Resize to fit</b>: the long edge in pixels. Off keeps the full size.</li>
+  <li><b>Color space</b>: sRGB for web and social, Display P3, Adobe RGB (1998) or ProPhoto RGB. <b>Sharpening</b>: None or For screen.</li>
+  <li><b>Metadata</b>: All metadata, All except location (removes GPS), or None.</li>
+  <li><b>Save to</b> a folder. Atelier remembers your last choices.</li>
+</ol>
+
+<h2 id="while">While it runs</h2>
+<ul>
+  <li>Exports run in the background, with progress and <b>Cancel</b> in the status bar. Keep working meanwhile.</li>
+  <li>Files keep their original names. An existing file is never replaced: a number is added instead. A virtual copy is named <code>name-Copy1.jpg</code>.</li>
+  <li>Keywords, title, caption and rating are written into the files (unless Metadata is None).</li>
+  <li>Photos whose drive is offline are listed under <b>Show Problems</b>; the rest still export.</li>
+</ul>
+
+<div class="see-also">See also: <a href="edit-in.html">Edit In other apps</a> · <a href="settings.html#export">Settings › Export</a></div>
+
+</main>
+</body>
+</html>
