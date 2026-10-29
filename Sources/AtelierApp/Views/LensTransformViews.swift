@@ -139,6 +139,7 @@ struct LensCorrectionsPanel: View {
 /// Transform: Upright, Constrain Crop and the manual perspective sliders.
 struct TransformPanel: View {
     @ObservedObject var develop: DevelopController
+    @AppStorage(GuidedUprightView.loupeKey) private var showLoupe = true
 
     private typealias Mode = DevelopSettings.Upright.Mode
 
@@ -149,7 +150,7 @@ struct TransformPanel: View {
                 GridRow {
                     uprightButton(nil, help: "No Upright correction")
                     uprightButton(.auto, help: "Balanced level, vertical and horizontal correction")
-                    uprightButton(.guided, help: "Draw guides along edges that should be straight (⇧T)")
+                    uprightButton(.guided, help: "Draw two to four guides along edges that should be straight (⇧T)")
                 }
                 GridRow {
                     uprightButton(.level, help: "Make horizontal lines level")
@@ -170,10 +171,12 @@ struct TransformPanel: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             if develop.isGuiding {
-                Text("Drag along edges that should be vertical or horizontal, up to four guides. Drag a guide's end to move it; click a guide and press Delete to remove it.")
+                Text("Drag along edges that should be vertical or horizontal. The photo straightens once there are two guides; draw up to four. Drag a guide's end to move it; click a guide and press Delete to remove it.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                Toggle("Show Loupe", isOn: $showLoupe)
+                    .help("Magnify the photo around the pointer while you place a guide")
                 HStack {
                     Button("Clear Guides") { develop.setGuides([]) }
                         .disabled(develop.settings.upright?.guides.isEmpty ?? true)
@@ -194,7 +197,9 @@ struct TransformPanel: View {
     private func uprightButton(_ mode: Mode?, help: String) -> some View {
         let active = mode == nil ? develop.settings.upright == nil && !develop.isGuiding
             : develop.settings.upright?.mode == mode || (mode == .guided && develop.isGuiding)
-        return Button { develop.setUpright(mode) } label: {
+        return Button {
+            develop.setUpright(mode, keepSettings: NSEvent.modifierFlags.contains(.option))
+        } label: {
             Text(mode?.title ?? "Off")
                 .lineLimit(1)
                 .frame(maxWidth: .infinity)
@@ -206,7 +211,7 @@ struct TransformPanel: View {
         }
         .buttonStyle(.plain)
         .disabled(develop.isFindingLines)
-        .help(help)
+        .help(mode == nil ? help : help + ". Resets the crop and the Transform sliders; ⌥-click to keep them.")
     }
 }
 
@@ -225,6 +230,11 @@ struct GuidedUprightView: View {
     @State private var action: DragAction?
     /// The guide being drawn or moved, in view points.
     @State private var draft: (CGPoint, CGPoint)?
+    /// The end being placed, for the loupe.
+    @State private var loupePoint: CGPoint?
+    @AppStorage(GuidedUprightView.loupeKey) private var showLoupe = true
+
+    static let loupeKey = "guidedUprightShowsLoupe"
 
     private let color = Color(red: 0.2, green: 0.85, blue: 1)
 
@@ -253,6 +263,9 @@ struct GuidedUprightView: View {
                     .background(.regularMaterial, in: Capsule())
                     .position(x: geometry.size.width / 2, y: 22)
                     .allowsHitTesting(false)
+                if showLoupe, let loupePoint {
+                    loupe(at: loupePoint, rect: rect, in: geometry.size)
+                }
             }
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .local)
@@ -265,6 +278,7 @@ struct GuidedUprightView: View {
         .onChange(of: develop.assetID) { _, _ in
             action = nil
             draft = nil
+            loupePoint = nil
         }
     }
 
@@ -273,8 +287,11 @@ struct GuidedUprightView: View {
     private var hint: String {
         let count = guides.count
         if count >= DevelopSettings.Upright.maxGuides { return "Four guides drawn. Drag an end to adjust one." }
-        return count == 0 ? "Drag along an edge that should be vertical or horizontal"
-            : "Guide \(count) of 4. Draw another, or press Done"
+        switch count {
+        case 0: return "Drag along an edge that should be vertical or horizontal"
+        case 1: return "Draw a second guide to straighten the photo"
+        default: return "Guide \(count) of 4. Draw another, or press Done"
+        }
     }
 
     // MARK: Mapping
@@ -294,6 +311,51 @@ struct GuidedUprightView: View {
         let source = geometry.sourcePoint(fromOutput: CGPoint(x: (clampedX - rect.minX) / rect.width,
                                                               y: (clampedY - rect.minY) / rect.height))
         return DevelopSettings.MaskPoint(x: Double(source.x), y: Double(source.y))
+    }
+
+    // MARK: Loupe
+
+    /// Lightroom's loupe: the photo around the end being placed, magnified, beside the pointer.
+    private func loupe(at point: CGPoint, rect: CGRect, in size: CGSize) -> some View {
+        let diameter: CGFloat = 150, zoom: CGFloat = 3
+        let offset = diameter / 2 + 24
+        // Up and to the left of the pointer, or the other side near an edge.
+        let x = point.x - offset - diameter / 2 < 0 ? point.x + offset : point.x - offset
+        let y = point.y - offset - diameter / 2 < 0 ? point.y + offset : point.y - offset
+        var lines = viewGuides(rect)
+        if case .moveEnd(let index, _) = action, lines.indices.contains(index) { lines.remove(at: index) }
+        if let draft { lines.append(draft) }
+        return Canvas { context, canvas in
+            let bounds = CGRect(origin: .zero, size: canvas)
+            context.clip(to: Path(ellipseIn: bounds))
+            context.fill(Path(bounds), with: .color(.black))
+            var zoomed = context
+            zoomed.translateBy(x: canvas.width / 2, y: canvas.height / 2)
+            zoomed.scaleBy(x: zoom, y: zoom)
+            zoomed.translateBy(x: -point.x, y: -point.y)
+            zoomed.clip(to: Path(rect))
+            zoomed.draw(Image(nsImage: image).interpolation(.high), in: rect)
+            for line in lines {
+                var path = Path()
+                path.move(to: line.0)
+                path.addLine(to: line.1)
+                zoomed.stroke(path, with: .color(.black.opacity(0.5)), lineWidth: 2.5 / zoom)
+                zoomed.stroke(path, with: .color(color), lineWidth: 1 / zoom)
+            }
+            // Crosshair on the end being placed.
+            let mid = CGPoint(x: canvas.width / 2, y: canvas.height / 2)
+            var cross = Path()
+            cross.move(to: CGPoint(x: mid.x - 8, y: mid.y))
+            cross.addLine(to: CGPoint(x: mid.x + 8, y: mid.y))
+            cross.move(to: CGPoint(x: mid.x, y: mid.y - 8))
+            cross.addLine(to: CGPoint(x: mid.x, y: mid.y + 8))
+            context.stroke(cross, with: .color(.white), lineWidth: 1)
+        }
+        .frame(width: diameter, height: diameter)
+        .overlay(Circle().stroke(Color.white.opacity(0.9), lineWidth: 2))
+        .shadow(color: .black.opacity(0.4), radius: 6)
+        .position(x: x, y: y)
+        .allowsHitTesting(false)
     }
 
     // MARK: Drawing
@@ -330,10 +392,12 @@ struct GuidedUprightView: View {
         switch action {
         case .draw(let start):
             draft = (start, drag.location)
+            loupePoint = drag.location
         case .moveEnd(let index, let isStart):
             let lines = viewGuides(rect)
             guard lines.indices.contains(index) else { return }
             draft = isStart ? (drag.location, lines[index].1) : (lines[index].0, drag.location)
+            loupePoint = drag.location
         case .select:
             break
         }
@@ -343,6 +407,7 @@ struct GuidedUprightView: View {
         defer {
             action = nil
             draft = nil
+            loupePoint = nil
         }
         guard let action else { return }
         switch action {

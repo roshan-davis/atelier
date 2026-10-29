@@ -170,6 +170,8 @@ final class DevelopController: ObservableObject {
     }
     /// The guide selected with a click, for Delete.
     @Published var selectedGuide: Int?
+    /// Guided was opened with ⌥ held, so its correction keeps the crop and Transform sliders.
+    private var guidedKeepsSettings = false
     /// Upright is looking for lines.
     @Published private(set) var isFindingLines = false
     /// Why the last Upright button changed nothing.
@@ -720,8 +722,9 @@ final class DevelopController: ObservableObject {
     }
 
     /// An Upright button: nil is Off; Guided opens the guides tool; the others find the photo's
-    /// lines and solve for them.
-    func setUpright(_ mode: DevelopSettings.Upright.Mode?) {
+    /// lines and solve for them. As in Lightroom, applying a mode resets the crop and the manual
+    /// Transform sliders unless `keepSettings` (⌥-click).
+    func setUpright(_ mode: DevelopSettings.Upright.Mode?, keepSettings: Bool = false) {
         guard assetID != nil else { return }
         uprightMessage = nil
         guard let mode else {
@@ -733,6 +736,7 @@ final class DevelopController: ObservableObject {
         }
         if mode == .guided {
             isGuiding = true
+            guidedKeepsSettings = keepSettings
             if settings.upright?.mode != .guided { setGuides(settings.upright?.guides ?? []) }
             return
         }
@@ -753,6 +757,7 @@ final class DevelopController: ObservableObject {
                         self.uprightMessage = "Not enough straight lines found for \(mode.title)."
                         return
                     }
+                    if !keepSettings { self.clearForUpright() }
                     self.settings.upright = upright
                     self.shapeChanged(step: "Upright: \(mode.title)")
                 }
@@ -760,10 +765,14 @@ final class DevelopController: ObservableObject {
         }
     }
 
-    /// Guided Upright's lines changed: solve again from them.
+    /// Guided Upright's lines changed: solve again from them. The photo changes once there are
+    /// two guides, as in Lightroom; that first correction resets the crop and Transform sliders.
     func setGuides(_ guides: [DevelopSettings.Guide]) {
         guard assetID != nil, let sourceSize else { return }
         let guides = Array(guides.prefix(DevelopSettings.Upright.maxGuides))
+        let minimum = DevelopSettings.Upright.minGuides
+        let wasCorrecting = settings.upright?.mode == .guided && (settings.upright?.guides.count ?? 0) >= minimum
+        if guides.count >= minimum, !wasCorrecting, !guidedKeepsSettings { clearForUpright() }
         let lines = guides.map { LineSegment(start: CGPoint(x: $0.start.x, y: $0.start.y), end: CGPoint(x: $0.end.x, y: $0.end.y)) }
         var upright = UprightSolver.solve(.guided, lines: lines, size: sourceSize, focalLength35: focalLength35)
             ?? DevelopSettings.Upright(mode: .guided)
@@ -772,6 +781,21 @@ final class DevelopController: ObservableObject {
         settings.upright = upright
         if let selected = selectedGuide, selected >= guides.count { selectedGuide = nil }
         shapeChanged(step: added ? "Add Guide" : "Upright: Guided")
+    }
+
+    /// What applying an Upright mode resets in Lightroom: the crop's cut and straighten (turns
+    /// and flips stay) and the manual Transform sliders.
+    private func clearForUpright() {
+        for parameter in DevelopSettings.Panel.transform.parameters {
+            settings[parameter] = DevelopSettings.neutral[parameter]
+        }
+        guard var crop = settings.crop else { return }
+        crop.angle = 0
+        crop.x = 0
+        crop.y = 0
+        crop.width = 1
+        crop.height = 1
+        settings.crop = crop.isIdentity ? nil : crop
     }
 
     func deleteSelectedGuide() {

@@ -38,19 +38,37 @@ extension DevelopSettings {
         public var pitch = 0.0
         public var yaw = 0.0
         public var roll = 0.0
+        /// Guided Upright only: a slant of the verticals (the tangent of its angle), applied
+        /// before the roll. With two vertical and two horizontal guides it takes up what one
+        /// turn of the camera cannot, so all four guides end exactly straight, as in Lightroom.
+        public var shear = 0.0
         /// Guided Upright's lines, up to four, on the photo before the Transform (0...1 from
         /// the top left).
         public var guides: [Guide] = []
 
-        public init(mode: Mode, pitch: Double = 0, yaw: Double = 0, roll: Double = 0, guides: [Guide] = []) {
+        public init(mode: Mode, pitch: Double = 0, yaw: Double = 0, roll: Double = 0, shear: Double = 0,
+                    guides: [Guide] = []) {
             self.mode = mode
             self.pitch = pitch
             self.yaw = yaw
             self.roll = roll
+            self.shear = shear
             self.guides = guides
         }
 
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            mode = try c.decode(Mode.self, forKey: .mode)
+            pitch = try c.decodeIfPresent(Double.self, forKey: .pitch) ?? 0
+            yaw = try c.decodeIfPresent(Double.self, forKey: .yaw) ?? 0
+            roll = try c.decodeIfPresent(Double.self, forKey: .roll) ?? 0
+            shear = try c.decodeIfPresent(Double.self, forKey: .shear) ?? 0
+            guides = try c.decodeIfPresent([Guide].self, forKey: .guides) ?? []
+        }
+
         public static let maxGuides = 4
+        /// Guided Upright changes the photo once this many guides are drawn, as in Lightroom.
+        public static let minGuides = 2
     }
 
     public struct Guide: Codable, Hashable, Sendable {
@@ -108,6 +126,7 @@ public struct LensGeometry: Sendable {
             pitch: (upright?.pitch ?? 0) - settings[.transformVertical] * 0.3,
             yaw: (upright?.yaw ?? 0) + settings[.transformHorizontal] * 0.3,
             roll: (upright?.roll ?? 0) + settings[.transformRotate],
+            shear: upright?.shear ?? 0,
             aspect: settings[.transformAspect],
             scale: settings[.transformScale] / 100,
             offsetX: settings[.transformOffsetX] / 100 * halfWidth,
@@ -259,9 +278,12 @@ public struct LensGeometry: Sendable {
 }
 
 /// Lightroom's Transform as a camera turned in front of the photo: pitch and yaw tilt it,
-/// then it is rotated, stretched, scaled and moved. The photo's center stays put.
+/// then it is slanted (Guided Upright only), rotated, stretched, scaled and moved. The photo's
+/// center stays put.
 struct Perspective {
     var pitch = 0.0, yaw = 0.0, roll = 0.0
+    /// The tangent of the verticals' slant.
+    var shear = 0.0
     /// -100...100: positive stretches the width.
     var aspect = 0.0
     var scale = 1.0
@@ -278,8 +300,10 @@ struct Perspective {
         let center = h.apply(SIMD2(0, 0))
         h = Matrix3.translation(-center.x, -center.y) * h
         let rotation = Matrix3(rows: [SIMD3(cos(r), -sin(r), 0), SIMD3(sin(r), cos(r), 0), SIMD3(0, 0, 1)])
+        let slant = Matrix3(rows: [SIMD3(1, shear, 0), SIMD3(0, 1, 0), SIMD3(0, 0, 1)])
         let stretch = exp(aspect / 100 * 0.25)
-        return Matrix3.translation(offsetX, offsetY) * Matrix3.scale(scale * stretch, scale / stretch) * rotation * h
+        return Matrix3.translation(offsetX, offsetY) * Matrix3.scale(scale * stretch, scale / stretch)
+            * rotation * slant * h
     }
 }
 
@@ -349,7 +373,7 @@ public struct LineSegment: Equatable, Sendable {
 
 public enum UprightSolver {
     /// Solves an Upright mode for a photo of `size` from its lines (for Guided, the guides).
-    /// Returns nil when there are too few usable lines.
+    /// Returns nil when there are too few usable lines (for Guided, fewer than two guides).
     public static func solve(_ mode: DevelopSettings.Upright.Mode, lines: [LineSegment], size: CGSize,
                              focalLength35: Double) -> DevelopSettings.Upright? {
         let long = max(1, Double(max(size.width, size.height)))
@@ -374,24 +398,35 @@ public enum UprightSolver {
             }
         }
         let verticals = usable.filter(\.vertical).count, horizontals = usable.count - verticals
-        guard !usable.isEmpty, guided || usable.count >= 2 else { return nil }
+        guard usable.count >= 2 else { return nil }
+        // Parameters: pitch, yaw, roll (degrees) and, for Guided, shear (its angle in degrees).
         var free: [Int] = [2]  // roll
         switch mode {
         case .level:
             break
         case .vertical:
             if verticals >= 2 { free.append(0) }
-        case .auto, .full, .guided:
+        case .auto, .full:
             if verticals >= 2 { free.append(0) }
             if horizontals >= 2 { free.append(1) }
+        case .guided:
+            // Every guide should end straight, as in Lightroom: a single vertical and horizontal
+            // guide can take pitch or yaw too, and with two of each the slant takes up what a
+            // camera turn cannot (an imprecise guide, or a focal length the file gets wrong).
+            free = [0, 1, 2]
+            if verticals >= 2, horizontals >= 2 { free.append(3) }
         }
         if mode == .vertical, !free.contains(0) { return nil }
         let regularization = mode == .auto ? 0.08 : 0.0002
-        let limits = mode == .auto ? [20.0, 20.0, 15.0] : [50.0, 50.0, 45.0]
+        let limits = mode == .auto ? [20.0, 20.0, 15.0, 0] : [50.0, 50.0, 45.0, 20.0]
         let focal = LensGeometry.focal(focalLength35)
 
+        func perspective(_ params: [Double]) -> Perspective {
+            Perspective(pitch: params[0], yaw: params[1], roll: params[2], shear: tan(params[3] * .pi / 180), focal: focal)
+        }
+
         func cost(_ params: [Double], _ lines: [Line]) -> Double {
-            let m = Perspective(pitch: params[0], yaw: params[1], roll: params[2], focal: focal).matrix
+            let m = perspective(params).matrix
             let total = lines.reduce(0) { $0 + $1.weight }
             var sum = 0.0
             for line in lines {
@@ -402,15 +437,17 @@ public enum UprightSolver {
                 sum += line.weight * off * off / length2
             }
             let r = params.map { $0 * .pi / 180 }
-            return sum / max(total, 1e-9) + regularization * (r[0] * r[0] + r[1] * r[1] + r[2] * r[2])
+            return sum / max(total, 1e-9) + regularization * r.reduce(0) { $0 + $1 * $1 }
         }
 
         func descend(_ lines: [Line]) -> [Double] {
-            var params = [0.0, 0.0, 0.0]
+            var params = [0.0, 0.0, 0.0, 0.0]
             var best = cost(params, lines)
             var step = 4.0
             var iterations = 0
-            while step > 0.005, iterations < 4000 {
+            // Guides are few, so solve them finer.
+            let finest = guided ? 0.001 : 0.005
+            while step > finest, iterations < 4000 {
                 iterations += 1
                 var improved = false
                 for i in free {
@@ -434,7 +471,7 @@ public enum UprightSolver {
         var params = descend(usable)
         if !guided {
             // Drop lines that still lean more than 5° (trees, diagonals), then solve again.
-            let m = Perspective(pitch: params[0], yaw: params[1], roll: params[2], focal: focal).matrix
+            let m = perspective(params).matrix
             let kept = usable.filter { line in
                 let d = m.apply(line.b) - m.apply(line.a)
                 let off = abs(line.vertical ? d.x : d.y) / max(1e-9, (d * d).sum().squareRoot())
@@ -442,7 +479,8 @@ public enum UprightSolver {
             }
             if kept.count >= 2, kept.count < usable.count { params = descend(kept) }
         }
-        return DevelopSettings.Upright(mode: mode, pitch: params[0], yaw: params[1], roll: params[2])
+        return DevelopSettings.Upright(mode: mode, pitch: params[0], yaw: params[1], roll: params[2],
+                                       shear: tan(params[3] * .pi / 180))
     }
 }
 

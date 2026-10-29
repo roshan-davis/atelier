@@ -104,6 +104,46 @@ final class TransformTests: XCTestCase {
         XCTAssertNil(UprightSolver.solve(.vertical, lines: Array(guides.prefix(1)), size: size, focalLength35: 50))
     }
 
+    func testGuidedWaitsForTwoGuides() {
+        // As in Lightroom, one guide does not change the photo.
+        let one = [LineSegment(start: CGPoint(x: 0.3, y: 0.85), end: CGPoint(x: 0.33, y: 0.2))]
+        XCTAssertNil(UprightSolver.solve(.guided, lines: one, size: size, focalLength35: 50))
+    }
+
+    func testThreeAndFourGuidesAllEndStraight() throws {
+        // A facade shot tilted up and to the side, with guides drawn a little imprecisely and a
+        // focal length that does not match the lens, as Lightroom still straightens every guide.
+        let tilted = Perspective(pitch: 12, yaw: -9, roll: 2, focal: LensGeometry.focal(24)).matrix
+        let inverse = try XCTUnwrap(tilted.inverted)
+        let hw = 0.5, hh = 1.0 / 3
+        func photo(_ x: Double, _ y: Double) -> CGPoint {
+            let p = inverse.apply(SIMD2(x, y))
+            return CGPoint(x: p.x / (2 * hw) + 0.5, y: p.y / (2 * hh) + 0.5)
+        }
+        let verticals = [LineSegment(start: photo(-0.3, -0.25), end: photo(-0.28, 0.25)),
+                         LineSegment(start: photo(0.3, -0.25), end: photo(0.33, 0.25))]
+        let horizontals = [LineSegment(start: photo(-0.35, -0.2), end: photo(0.35, -0.22)),
+                           LineSegment(start: photo(-0.35, 0.2), end: photo(0.35, 0.19))]
+        for guides in [verticals + horizontals.prefix(1), verticals + horizontals] {
+            let upright = try XCTUnwrap(UprightSolver.solve(.guided, lines: guides, size: size, focalLength35: 35))
+            var settings = DevelopSettings()
+            settings.upright = upright
+            let geometry = LensGeometry(settings: settings, size: size, focalLength35: 35)
+            for (index, guide) in guides.enumerated() {
+                let a = geometry.outputPoint(fromSource: guide.start), b = geometry.outputPoint(fromSource: guide.end)
+                let lean = index < 2 ? angleFromVertical(a, b) : angleFromHorizontal(a, b)
+                XCTAssertLessThan(lean, 0.1, "guide \(index + 1) of \(guides.count)")
+            }
+        }
+    }
+
+    func testUprightWithoutShearStillDecodes() throws {
+        // Settings saved before Guided had a slant.
+        let json = #"{"mode":"guided","pitch":4,"yaw":-1,"roll":0.5,"guides":[]}"#
+        let upright = try JSONDecoder().decode(DevelopSettings.Upright.self, from: Data(json.utf8))
+        XCTAssertEqual(upright, .init(mode: .guided, pitch: 4, yaw: -1, roll: 0.5))
+    }
+
     func testLineDetectorFindsDrawnLines() {
         let width = 400, height = 300
         let drawn = [(CGPoint(x: 100, y: 30), CGPoint(x: 112, y: 270)), (CGPoint(x: 150, y: 200), CGPoint(x: 370, y: 212))]
