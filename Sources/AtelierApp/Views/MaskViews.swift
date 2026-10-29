@@ -47,7 +47,8 @@ struct MaskEditorView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let layout = navigator.layout(size: geometry.size, document: pixelSize ?? image.size, zoom: zoom)
+            let layout = navigator.layout(size: geometry.size, document: pixelSize ?? image.size,
+                                          zoom: navigator.liveZoom ?? zoom)
             let rect = layout.rect
             let space = MaskSpace(sourceSize: develop.sourceSize ?? image.size, crop: develop.crop, rect: rect,
                                   outputSize: image.size)
@@ -86,7 +87,10 @@ struct MaskEditorView: View {
                     if pinchStart == nil { pinchStart = navigator.magnification }
                     navigator.zoom(to: (pinchStart ?? 1) * value.magnification, anchor: value.startLocation)
                 }
-                .onEnded { _ in pinchStart = nil })
+                .onEnded { _ in
+                    pinchStart = nil
+                    navigator.endLiveZoom()
+                })
             .onContinuousHover { phase in
                 if case .active(let point) = phase {
                     hover = point
@@ -98,7 +102,10 @@ struct MaskEditorView: View {
                     NSCursor.arrow.set()
                 }
             }
-            .onChange(of: layout.report, initial: true) { _, report in onReport(report) }
+            // Reported once a pinch or scroll zoom settles, not on every step of it.
+            .onChange(of: navigator.liveZoom == nil ? layout.report : nil, initial: true) { _, report in
+                if let report { onReport(report) }
+            }
             .onChange(of: geometry.frame(in: .global), initial: true) { _, frame in navigator.frame = frame }
         }
         .onAppear {
@@ -845,6 +852,10 @@ final class MaskNavigator: ObservableObject {
     @Published var center = CGPoint(x: 0.5, y: 0.5)
     /// Space is held: drags pan, as in Lightroom.
     @Published var spaceDown = false
+    /// The zoom while a pinch or ⌘-scroll is under way. The shared zoom (and with it the zoom bar
+    /// and the rest of the window) follows once it settles, instead of on every event.
+    @Published private(set) var liveZoom: ZoomLevel?
+    private var liveZoomEnd: DispatchWorkItem?
     /// The view's frame in the window, top-left origin, for scroll events.
     var frame = CGRect.zero
     var setZoom: ((ZoomLevel) -> Void)?
@@ -891,7 +902,16 @@ final class MaskNavigator: ObservableObject {
         let width = document.width * next, height = document.height * next
         center = CGPoint(x: (size.width / 2 - anchor.x) / width + fraction.x,
                          y: (size.height / 2 - anchor.y) / height + fraction.y)
-        setZoom?(next <= fit * 1.001 ? .fit : .percent(Double(next * 100)))
+        liveZoom = next <= fit * 1.001 ? .fit : .percent(Double(next * 100))
+    }
+
+    /// Hands the zoom from a pinch or scroll to the shared zoom.
+    func endLiveZoom() {
+        liveZoomEnd?.cancel()
+        liveZoomEnd = nil
+        guard let level = liveZoom else { return }
+        liveZoom = nil
+        setZoom?(level)
     }
 
     func pan(by delta: CGSize) {
@@ -912,6 +932,7 @@ final class MaskNavigator: ObservableObject {
         if let monitor { NSEvent.removeMonitor(monitor) }
         monitor = nil
         spaceDown = false
+        endLiveZoom()
     }
 
     private func handle(_ event: NSEvent) -> NSEvent? {
@@ -928,6 +949,13 @@ final class MaskNavigator: ObservableObject {
         let precise = event.hasPreciseScrollingDeltas
         if !event.modifierFlags.intersection([.command, .option]).isEmpty {
             zoom(to: magnification * exp(event.scrollingDeltaY * (precise ? 0.01 : 0.1)), anchor: local)
+            // A mouse wheel has no end phase; settle shortly after the last event.
+            liveZoomEnd?.cancel()
+            let end = DispatchWorkItem { [weak self] in
+                MainActor.assumeIsolated { self?.endLiveZoom() }
+            }
+            liveZoomEnd = end
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: end)
         } else {
             let scale: CGFloat = precise ? 1 : 10
             pan(by: CGSize(width: event.scrollingDeltaX * scale, height: event.scrollingDeltaY * scale))

@@ -56,6 +56,11 @@ final class ZoomScrollView: NSScrollView {
     private var documentSize = CGSize.zero
     private var lastReport = ZoomReport()
     private let padding: CGFloat = 16
+    /// Set while a pinch or ⌥/⌘-scroll zoom is under way. The photo is only scaled on the GPU
+    /// then: SwiftUI hears the new zoom, and a sharper image is swapped in, once it settles.
+    private var isLiveZooming = false
+    private var pendingImage: (image: NSImage?, pixelSize: CGSize?)?
+    private var scrollZoomEnd: DispatchWorkItem?
 
     var onZoomChange: ((ZoomLevel) -> Void)?
     var onReport: ((ZoomReport) -> Void)?
@@ -75,6 +80,8 @@ final class ZoomScrollView: NSScrollView {
         scrollerStyle = .overlay
         drawsBackground = false
         contentView.drawsBackground = false
+        NotificationCenter.default.addObserver(self, selector: #selector(willStartMagnify),
+                                               name: NSScrollView.willStartLiveMagnifyNotification, object: self)
         NotificationCenter.default.addObserver(self, selector: #selector(didEndMagnify),
                                                name: NSScrollView.didEndLiveMagnifyNotification, object: self)
     }
@@ -84,6 +91,11 @@ final class ZoomScrollView: NSScrollView {
     // MARK: Content
 
     func setImage(_ image: NSImage?, pixelSize: CGSize?) {
+        // Swapping a full-resolution image in mid-gesture stalls a frame; wait until it ends.
+        if isLiveZooming {
+            pendingImage = (image, pixelSize)
+            return
+        }
         canvas.setImage(image)
         guard let image, image.size.width > 0, image.size.height > 0 else { return }
         // Keep the displayed image's aspect, at the full-size photo's long edge.
@@ -94,7 +106,10 @@ final class ZoomScrollView: NSScrollView {
         }
         let backing = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
         let size = CGSize(width: pixels.width / backing, height: pixels.height / backing)
-        guard abs(size.width - documentSize.width) > 0.5 || abs(size.height - documentSize.height) > 0.5 else { return }
+        // The proxy and the full-resolution render round to slightly different aspects; treat
+        // them as the same photo so the swap doesn't re-zoom.
+        let tolerance = max(0.5, max(documentSize.width, documentSize.height) * 0.005)
+        guard abs(size.width - documentSize.width) > tolerance || abs(size.height - documentSize.height) > tolerance else { return }
         documentSize = size
         canvas.frame = CGRect(origin: .zero, size: size)
         applyLevel(level, anchor: nil)
@@ -107,7 +122,8 @@ final class ZoomScrollView: NSScrollView {
     // MARK: Zoom
 
     func apply(_ newLevel: ZoomLevel) {
-        guard newLevel != level else { return }
+        // SwiftUI's zoom is behind during a gesture; it catches up when the gesture ends.
+        guard !isLiveZooming, newLevel != level else { return }
         applyLevel(newLevel, anchor: nil)
     }
 
@@ -151,16 +167,52 @@ final class ZoomScrollView: NSScrollView {
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
+        guard !isLiveZooming else { return }
         if level == .fit || level == .fill {
             magnification = magnification(for: level)
         }
         report()
     }
 
+    // MARK: Live zoom
+
+    @objc private func willStartMagnify() {
+        scrollZoomEnd?.cancel()
+        isLiveZooming = true
+    }
+
     @objc private func didEndMagnify() {
-        level = .percent(Double(magnification * 100))
+        // Pinched out past fit: spring back, as in Preview and Lightroom.
+        if magnification < fitMagnification * 0.999 {
+            NSAnimationContext.runAnimationGroup({ context in
+                context.duration = 0.2
+                animator().magnification = fitMagnification
+            }, completionHandler: { [weak self] in
+                MainActor.assumeIsolated { self?.endLiveZoom() }
+            })
+        } else {
+            endLiveZoom()
+        }
+    }
+
+    /// Hands the settled zoom to SwiftUI, reports it, and shows any image that arrived meanwhile.
+    private func endLiveZoom() {
+        scrollZoomEnd?.cancel()
+        scrollZoomEnd = nil
+        isLiveZooming = false
+        level = magnification <= fitMagnification * 1.001 ? .fit : .percent(Double(magnification * 100))
+        if let pending = pendingImage {
+            pendingImage = nil
+            setImage(pending.image, pixelSize: pending.pixelSize)
+        }
+        canvas.window?.invalidateCursorRects(for: canvas)
         onZoomChange?(level)
         report()
+    }
+
+    /// Two-finger double-tap toggles Fit and the click zoom, like a click.
+    override func smartMagnify(with event: NSEvent) {
+        toggleZoom(at: canvas.convert(event.locationInWindow, from: nil))
     }
 
     override func scrollWheel(with event: NSEvent) {
@@ -169,10 +221,16 @@ final class ZoomScrollView: NSScrollView {
             return
         }
         let factor = exp(event.scrollingDeltaY * (event.hasPreciseScrollingDeltas ? 0.01 : 0.1))
-        let point = canvas.convert(event.locationInWindow, from: nil)
-        let newLevel = ZoomLevel.percent(Double(min(maxMagnification, max(minMagnification, magnification * factor)) * 100))
-        applyLevel(newLevel, anchor: point)
-        onZoomChange?(newLevel)
+        let target = min(maxMagnification, max(fitMagnification, magnification * factor))
+        isLiveZooming = true
+        setMagnification(target, centeredAt: canvas.convert(event.locationInWindow, from: nil))
+        // Scroll events have no end of their own (a mouse wheel has no phases); settle shortly after the last.
+        scrollZoomEnd?.cancel()
+        let end = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated { self?.endLiveZoom() }
+        }
+        scrollZoomEnd = end
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: end)
     }
 
     private func report() {
@@ -205,11 +263,14 @@ final class ZoomCanvasView: NSView {
     private var dragStart: NSPoint?
     private var dragged = false
     private var currentImage: NSImage?
+    private var contents: CGImage?
 
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
-        layer?.contentsGravity = .resize
+        // Never redrawn by AppKit while zooming: the layer's contents are the photo, scaled on the GPU.
+        layerContentsRedrawPolicy = .onSetNeedsDisplay
+        layerContentsPlacement = .scaleAxesIndependently
         layer?.minificationFilter = .trilinear
         layer?.magnificationFilter = .linear
     }
@@ -221,7 +282,15 @@ final class ZoomCanvasView: NSView {
     func setImage(_ image: NSImage?) {
         guard image !== currentImage else { return }
         currentImage = image
-        layer?.contents = image?.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        contents = image?.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        needsDisplay = true
+    }
+
+    override var wantsUpdateLayer: Bool { true }
+
+    override func updateLayer() {
+        layer?.contentsGravity = .resize
+        layer?.contents = contents
     }
 
     override func resetCursorRects() {
