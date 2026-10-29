@@ -346,8 +346,8 @@ struct DevelopPanel: View {
                     ForEach(DevelopSettings.Panel.allCases, id: \.self) { panel in
                         PanelSection(title: panel.title, isExpanded: isExpanded(panel.rawValue), soloMode: $soloMode,
                                      isModified: develop.isModified(panel), reset: { develop.reset(panel) },
-                                     isOn: panel == .colorGrading
-                                        ? Binding(get: { develop.isColorGradingOn }, set: { develop.setColorGradingOn($0) })
+                                     isOn: panel.hasSwitch
+                                        ? Binding(get: { develop.isPanelOn(panel) }, set: { develop.setPanelOn(panel, $0) })
                                         : nil,
                                      expandAll: expandAll, collapseAll: collapseAll) {
                             switch panel {
@@ -676,7 +676,8 @@ struct PanelSection<Content: View>: View {
     @Binding var soloMode: Bool
     var isModified = false
     var reset: (() -> Void)?
-    /// The panel's on/off switch, for panels that have one (Color Grading).
+    /// The panel's on/off switch, for every panel but Basic. While off, the panel's controls
+    /// are dimmed but still work; moving one turns the panel back on.
     var isOn: Binding<Bool>? = nil
     let expandAll: () -> Void
     let collapseAll: () -> Void
@@ -729,6 +730,7 @@ struct PanelSection<Content: View>: View {
                 content()
                     .padding(.horizontal, 12)
                     .padding(.bottom, 12)
+                    .opacity(isOn?.wrappedValue == false ? 0.45 : 1)
             }
             Divider()
         }

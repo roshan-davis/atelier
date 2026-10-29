@@ -33,7 +33,6 @@ struct ColorGradingPanel: View {
                     threeWay
                 }
             }
-            .opacity(develop.isColorGradingOn ? 1 : 0.45)
             GroupHeading(title: "Blend")
             ParameterSlider(parameter: .gradeBlending, develop: develop)
             ParameterSlider(parameter: .gradeBalance, develop: develop)
@@ -68,7 +67,7 @@ struct ColorGradingPanel: View {
             }
             .buttonStyle(.borderless)
             .foregroundStyle(develop.isPickingGradeColor ? Color.accentColor : Color.secondary)
-            .disabled(develop.assetID == nil || !develop.isColorGradingOn)
+            .disabled(develop.assetID == nil)
             .help(single.map { "Color picker: click a spot to set the \($0.rawValue) wheel so its color cast turns neutral" }
                   ?? "Color picker: click a spot to set the Shadows, Midtones or Highlights wheel (by the spot's tone) "
                   + "so its color cast turns neutral")

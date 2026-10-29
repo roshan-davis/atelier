@@ -590,7 +590,7 @@ public enum LookMatcher {
     static func fitGrade(_ settings: inout DevelopSettings, reference: LookSample,
                          measure: (DevelopSettings) -> LookSample?) {
         // Color Grading switched off stays off.
-        guard settings[.gradeDisabled] < 0.5, let photo = measure(settings) else { return }
+        guard settings.isOn(.colorGrading), let photo = measure(settings) else { return }
         let midShift = reference.midtoneAB - photo.midtoneAB
         let probe = 20.0
         var needs: [(DevelopSettings.GradeRegion, SIMD2<Double>, Double)] = []

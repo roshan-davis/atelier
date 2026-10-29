@@ -243,11 +243,11 @@ enum LayoutSnapshots {
                           to: folder.appendingPathComponent("color-grading-\(view.lowercased())-320.png"))
         }
         UserDefaults.standard.set("3-Way", forKey: "develop.gradeView")
-        develop.setColorGradingOn(false)
+        develop.setPanelOn(.colorGrading, false)
         try? await Task.sleep(for: .seconds(1))
         await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
                       to: folder.appendingPathComponent("develop-grading-off-1280x800.png"))
-        develop.setColorGradingOn(true)
+        develop.setPanelOn(.colorGrading, true)
         develop.isPickingGradeColor = true
         try? await Task.sleep(for: .seconds(1))
         await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),

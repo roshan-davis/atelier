@@ -500,6 +500,7 @@ public final class DevelopSession: @unchecked Sendable {
     /// to tint red, for the Masks panel's Show Overlay; `preview` is a slider's Option-drag view.
     public func image(with settings: DevelopSettings, cropping: Bool = true, overlay: UUID? = nil,
                       preview: SliderPreview? = nil) -> CIImage? {
+        let settings = settings.applyingPanelSwitches()
         lock.lock()
         defer { lock.unlock() }
         if let view = preview?.defringeView {
@@ -535,6 +536,7 @@ public final class DevelopSession: @unchecked Sendable {
     /// corrections (chromatic aberration, Defringe, vignetting, distortion) and the Transform.
     /// The result starts at the origin. Call with the lock held.
     private func corrected(_ settings: DevelopSettings, defringeView: Defringe.View = .photo) -> CIImage? {
+        let settings = settings.applyingPanelSwitches()
         var image: CIImage
         if let raw = rawFilter {
             raw.neutralTemperature = Float(settings.temperature ?? asShotTemperature)

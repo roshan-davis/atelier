@@ -674,16 +674,6 @@ final class DevelopController: ObservableObject {
         changed(step: "Reset Color Grading \(region.rawValue)")
     }
 
-    /// Color Grading's panel switch, as in Lightroom: off hides every wheel's effect and keeps
-    /// their settings.
-    var isColorGradingOn: Bool { settings[.gradeDisabled] < 0.5 }
-
-    func setColorGradingOn(_ on: Bool) {
-        guard assetID != nil, on != isColorGradingOn else { return }
-        settings[.gradeDisabled] = on ? 0 : 1
-        changed(step: on ? "Color Grading On" : "Color Grading Off")
-    }
-
     /// One wheel's settings, for Copy and Paste in a wheel's right-click menu.
     struct GradeWheelValues: Equatable {
         var hue: Double
@@ -766,6 +756,7 @@ final class DevelopController: ObservableObject {
         default:
             break
         }
+        settings.setPanel(panel, on: true)
         if panel == .lensCorrections || panel == .transform { beforeImage = nil }
         for parameter in panel.parameters {
             if parameter == .temperature {
@@ -777,7 +768,26 @@ final class DevelopController: ObservableObject {
         changed(step: "Reset \(panel.title)")
     }
 
+    // MARK: Panel switches
+
+    func isPanelOn(_ panel: DevelopSettings.Panel) -> Bool { settings.isOn(panel) }
+
+    /// A panel header's switch, as in Lightroom: off hides the panel's effect and keeps its
+    /// settings. Moving any of the panel's controls turns it back on (see `changed`).
+    func setPanelOn(_ panel: DevelopSettings.Panel, _ on: Bool) {
+        guard assetID != nil, panel.hasSwitch, on != isPanelOn(panel) else { return }
+        settings.setPanel(panel, on: on)
+        let step = "\(panel.title) \(on ? "On" : "Off")"
+        if panel == .lensCorrections || panel == .transform {
+            if !on { isGuiding = false }
+            shapeChanged(step: step)
+        } else {
+            changed(step: step)
+        }
+    }
+
     func isModified(_ panel: DevelopSettings.Panel) -> Bool {
+        if !settings.isOn(panel) { return true }
         switch panel {
         case .basic where settings.profile != .cameraMatching || settings.monochrome: return true
         case .toneCurve where settings.hasPointCurve: return true
@@ -1114,19 +1124,31 @@ final class DevelopController: ObservableObject {
         if let assetID, targets.contains(assetID) {
             settings = newSettings
             validateMaskSelection()
-            changed(step: step)
+            changed(step: step, replacing: true)
         }
     }
 
     /// An edit to the open photo. `step` names it in the history; nil (undo, redo, jumping
-    /// in the history) saves without adding a step.
-    private func changed(step: String?) {
+    /// in the history) saves without adding a step. `replacing` is for whole settings put in
+    /// place (a preset, a snapshot, Paste), whose panel switches stand as they come.
+    private func changed(step: String?, replacing: Bool = false) {
+        if step != nil, !replacing { turnOnEditedPanels() }
         if !settingPresetAmount { presetAmount = nil }
         constrainCropIfNeeded()
         dirty = true
         if let step { pendingStep = step }
         scheduleRender()
         scheduleSave()
+    }
+
+    /// As in Lightroom, changing anything in a panel that is off turns it back on, so an edit
+    /// never goes unseen. Compares with the last history step, so a drag turns it on once.
+    private func turnOnEditedPanels() {
+        for panel in settings.disabledPanels
+        where !committed.isOn(panel) && committed.contents(of: panel) != settings.contents(of: panel) {
+            settings.setPanel(panel, on: true)
+            if panel == .lensCorrections || panel == .transform { beforeImage = nil }
+        }
     }
 
     // MARK: Presets
@@ -1149,7 +1171,7 @@ final class DevelopController: ObservableObject {
             settings = preset.applied(to: settings)
             validateMaskSelection()
             beforeImage = nil
-            changed(step: step)
+            changed(step: step, replacing: true)
             // Saved and in the history at once, so leaving the photo right away can't lose it.
             flushSave()
             if targets.count == 1 { presetAmount = PresetAmount(preset: preset, assetID: assetID, base: base, amount: 100) }
@@ -1171,7 +1193,7 @@ final class DevelopController: ObservableObject {
             committed = settings
             changed(step: nil)
         } else {
-            changed(step: step)
+            changed(step: step, replacing: true)
         }
         settingPresetAmount = false
         presetAmount = state
@@ -1350,7 +1372,7 @@ final class DevelopController: ObservableObject {
         settings = snapshot.settings
         validateMaskSelection()
         beforeImage = nil
-        changed(step: "Snapshot: \(snapshot.name)")
+        changed(step: "Snapshot: \(snapshot.name)", replacing: true)
     }
 
     func updateSnapshot(_ id: UUID) {
