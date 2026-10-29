@@ -19,6 +19,10 @@ public enum SliderPreview: Hashable, Sendable {
     case shadowClipping
     /// Color Grading hue: the region's tint at full saturation, so the hue is easy to judge.
     case fullSaturation(DevelopSettings.GradeRegion)
+    /// Defringe Amount: white, with the fringes being turned neutral shown in their color.
+    case defringeAmount(DevelopSettings.FringeColor)
+    /// Defringe Hue: black outside the Hue range, so it shows which colors can be affected.
+    case defringeHue(DevelopSettings.FringeColor)
 
     /// The view Option shows while dragging `parameter`, if it has one.
     public init?(parameter: DevelopSettings.Parameter) {
@@ -28,6 +32,10 @@ public enum SliderPreview: Hashable, Sendable {
         case .sharpenMasking: self = .sharpenMask
         case .exposure, .highlights, .whites: self = .highlightClipping
         case .shadows, .blacks: self = .shadowClipping
+        case .lensDefringePurpleAmount: self = .defringeAmount(.purple)
+        case .lensDefringeGreenAmount: self = .defringeAmount(.green)
+        case .lensDefringePurpleHueLow, .lensDefringePurpleHueHigh: self = .defringeHue(.purple)
+        case .lensDefringeGreenHueLow, .lensDefringeGreenHueHigh: self = .defringeHue(.green)
         default:
             guard let region = DevelopSettings.GradeRegion.allCases.first(where: { $0.hue == parameter }) else { return nil }
             self = .fullSaturation(region)
@@ -43,6 +51,17 @@ public enum SliderPreview: Hashable, Sendable {
         case .highlightClipping: return "Hold Option while dragging to see clipped highlights"
         case .shadowClipping: return "Hold Option while dragging to see clipped shadows"
         case .fullSaturation: return "Hold Option while dragging to change only the hue, shown at full saturation"
+        case .defringeAmount: return "Hold Option while dragging to see the fringes being removed (in color, on white)"
+        case .defringeHue: return "Hold Option while dragging to see which colors the range covers (the rest turns black)"
+        }
+    }
+
+    /// The Defringe view this is, if it is one.
+    var defringeView: Defringe.View? {
+        switch self {
+        case .defringeAmount(let color): return .amount(color)
+        case .defringeHue(let color): return .hue(color)
+        default: return nil
         }
     }
 

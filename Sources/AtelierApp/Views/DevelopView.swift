@@ -35,7 +35,11 @@ struct DevelopImageView: View {
                                           pixelSize: pixelSize,
                                           zoom: model.zoomState,
                                           onReport: onZoomReport,
-                                          menu: { model.photoMenu(includeZoom: true) })
+                                          menu: { model.photoMenu(includeZoom: true) },
+                                          onPick: develop.isPickingFringe ? { (point: CGPoint) in develop.pickFringe(at: point) } : nil)
+                        if develop.isPickingFringe {
+                            FringePickerHint(develop: develop)
+                        }
                     } else if develop.compareMode == .sideBySide {
                         // Both panes share the zoom and stay on the same spot, as in Lightroom.
                         HStack(spacing: 12) {

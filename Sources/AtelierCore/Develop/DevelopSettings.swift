@@ -35,6 +35,9 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
     public var profile = Profile.cameraMatching
     /// Lens Corrections > Enable Profile Corrections: the RAW engine's corrections for the lens.
     public var lensProfileCorrections = true
+    /// Lens Corrections > Remove Chromatic Aberration: line up the red and blue channels with
+    /// green, measured from the photo (see `LateralCA`).
+    public var removeChromaticAberration = false
     /// Transform > Upright; nil is Off.
     public var upright: Upright?
     /// Transform > Constrain Crop: enlarge the corrected photo so no empty edges show.
@@ -192,6 +195,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         masks = (try? c.decodeIfPresent([Mask].self, forKey: Key("masks"))) ?? []
         profile = (try? c.decodeIfPresent(Profile.self, forKey: Key("profile"))) ?? .cameraMatching
         lensProfileCorrections = try c.decodeIfPresent(Bool.self, forKey: Key("lensProfileCorrections")) ?? true
+        removeChromaticAberration = try c.decodeIfPresent(Bool.self, forKey: Key("removeChromaticAberration")) ?? false
         upright = try? c.decodeIfPresent(Upright.self, forKey: Key("upright"))
         constrainCrop = try c.decodeIfPresent(Bool.self, forKey: Key("constrainCrop")) ?? false
         monochrome = try c.decodeIfPresent(Bool.self, forKey: Key("monochrome")) ?? false
@@ -209,6 +213,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         if !masks.isEmpty { try c.encode(masks, forKey: Key("masks")) }
         if profile != .cameraMatching { try c.encode(profile, forKey: Key("profile")) }
         if !lensProfileCorrections { try c.encode(false, forKey: Key("lensProfileCorrections")) }
+        if removeChromaticAberration { try c.encode(true, forKey: Key("removeChromaticAberration")) }
         try c.encodeIfPresent(upright, forKey: Key("upright"))
         if constrainCrop { try c.encode(true, forKey: Key("constrainCrop")) }
         if monochrome { try c.encode(true, forKey: Key("monochrome")) }
@@ -218,7 +223,8 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
 
     public var isNeutral: Bool {
         temperature == nil && values.isEmpty && pointCurves.isEmpty && storedCrop == nil && masks.isEmpty
-            && profile == .cameraMatching && lensProfileCorrections && upright == nil && !constrainCrop && !monochrome
+            && profile == .cameraMatching && lensProfileCorrections && !removeChromaticAberration && upright == nil
+            && !constrainCrop && !monochrome
     }
 
     public func encoded() throws -> String {
@@ -348,7 +354,10 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         case gradeGlobalHue, gradeGlobalSat, gradeGlobalLum
         case gradeBlending, gradeBalance
         case sharpening, sharpenRadius, sharpenDetail, sharpenMasking, luminanceNoise, colorNoise
-        case lensDistortion, lensVignette, lensVignetteMidpoint
+        case lensDistortion
+        case lensDefringePurpleAmount, lensDefringePurpleHueLow, lensDefringePurpleHueHigh
+        case lensDefringeGreenAmount, lensDefringeGreenHueLow, lensDefringeGreenHueHigh
+        case lensVignette, lensVignetteMidpoint
         case transformVertical, transformHorizontal, transformRotate, transformAspect, transformScale
         case transformOffsetX, transformOffsetY
         case vignette, vignetteMidpoint, grain, grainSize, grainRoughness
@@ -383,6 +392,10 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             case .vignetteMidpoint, .gradeBlending, .lensVignetteMidpoint, .grainRoughness: return 50
             case .transformScale: return 100
             case .grainSize: return 25
+            case .lensDefringePurpleHueLow: return 30
+            case .lensDefringePurpleHueHigh: return 70
+            case .lensDefringeGreenHueLow: return 40
+            case .lensDefringeGreenHueHigh: return 60
             default: return 0
             }
         }
@@ -400,6 +413,9 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             case .transformScale: return 50...150
             case .gradeShadowsHue, .gradeMidtonesHue, .gradeHighlightsHue, .gradeGlobalHue: return 0...360
             case .gradeShadowsSat, .gradeMidtonesSat, .gradeHighlightsSat, .gradeGlobalSat: return 0...100
+            case .lensDefringePurpleAmount, .lensDefringeGreenAmount: return 0...20
+            case .lensDefringePurpleHueLow, .lensDefringePurpleHueHigh, .lensDefringeGreenHueLow,
+                 .lensDefringeGreenHueHigh: return 0...100
             default: return -100...100
             }
         }
@@ -410,6 +426,10 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             case .temperature: return "Temp"
             case .sharpening, .vignette, .grain, .lensDistortion, .lensVignette: return "Amount"
             case .lensVignetteMidpoint: return "Midpoint"
+            case .lensDefringePurpleAmount: return "Purple Amount"
+            case .lensDefringePurpleHueLow, .lensDefringePurpleHueHigh: return "Purple Hue"
+            case .lensDefringeGreenAmount: return "Green Amount"
+            case .lensDefringeGreenHueLow, .lensDefringeGreenHueHigh: return "Green Hue"
             case .transformVertical: return "Vertical"
             case .transformHorizontal: return "Horizontal"
             case .transformRotate: return "Rotate"
@@ -468,6 +488,8 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             case .vignette, .vignetteMidpoint: return "Post-Crop Vignetting"
             case .grain, .grainSize, .grainRoughness: return "Grain"
             case .lensDistortion: return "Distortion"
+            case .lensDefringePurpleAmount, .lensDefringePurpleHueLow, .lensDefringePurpleHueHigh,
+                 .lensDefringeGreenAmount, .lensDefringeGreenHueLow, .lensDefringeGreenHueHigh: return "Defringe"
             case .lensVignette, .lensVignetteMidpoint: return "Vignetting"
             case .transformVertical, .transformHorizontal, .transformRotate, .transformAspect, .transformScale,
                  .transformOffsetX, .transformOffsetY: return "Transform"

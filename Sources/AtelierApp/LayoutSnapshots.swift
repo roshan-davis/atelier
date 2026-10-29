@@ -293,6 +293,9 @@ enum LayoutSnapshots {
         ])
         develop.setConstrainCrop(true)
         develop.set(.lensDistortion, to: 15)
+        develop.setRemoveChromaticAberration(true)
+        develop.set(.lensDefringePurpleAmount, to: 6)
+        develop.setHueRange(.green, low: 35, high: 65)
         try? await Task.sleep(for: .seconds(2))
         print("SNAPSHOT: upright \(String(describing: develop.settings.upright))")
         await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
@@ -301,8 +304,19 @@ enum LayoutSnapshots {
         try? await Task.sleep(for: .seconds(1))
         await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
                       to: folder.appendingPathComponent("develop-transform-1280x800.png"))
-        await capture(AnyView(DevelopPanel(develop: develop).environmentObject(model)), size: CGSize(width: 320, height: 1700),
-                      to: folder.appendingPathComponent("panel-transform-320x1700.png"))
+        await capture(AnyView(DevelopPanel(develop: develop).environmentObject(model)), size: CGSize(width: 320, height: 1900),
+                      to: folder.appendingPathComponent("panel-transform-320x1900.png"))
+        // Defringe: the Fringe Color Selector out, and the Purple Hue Option-drag view.
+        develop.isPickingFringe = true
+        try? await Task.sleep(for: .seconds(1))
+        await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
+                      to: folder.appendingPathComponent("develop-fringe-picker-1280x800.png"))
+        develop.isPickingFringe = false
+        develop.sliderPreview = .defringeHue(.purple)
+        try? await Task.sleep(for: .seconds(2))
+        await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
+                      to: folder.appendingPathComponent("develop-defringe-hue-1280x800.png"))
+        develop.sliderPreview = nil
         develop.reset(.transform)
         develop.reset(.lensCorrections)
         develop.flushSave()

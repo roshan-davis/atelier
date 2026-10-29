@@ -86,6 +86,9 @@ struct ZoomableImageView: NSViewRepresentable {
     var visibleWidth: CGFloat? = nil
     var onReport: (ZoomReport) -> Void
     var menu: () -> NSMenu?
+    /// Set while a picker is out (the Fringe Color Selector): a click reports the point
+    /// (0...1 across and down the photo) instead of zooming; dragging still pans.
+    var onPick: ((CGPoint) -> Void)? = nil
 
     func makeNSView(context: Context) -> ZoomScrollView {
         ZoomScrollView()
@@ -94,6 +97,7 @@ struct ZoomableImageView: NSViewRepresentable {
     func updateNSView(_ view: ZoomScrollView, context: Context) {
         view.menuProvider = menu
         view.onReport = onReport
+        view.onPick = onPick
         let zoom = self.zoom
         view.onZoomChange = { level in
             if zoom.level != level { zoom.level = level }
@@ -134,6 +138,12 @@ final class ZoomScrollView: NSScrollView {
     var onZoomChange: ((ZoomLevel) -> Void)?
     var onReport: ((ZoomReport) -> Void)?
     var menuProvider: (() -> NSMenu?)?
+    /// Takes clicks instead of zooming; see `ZoomableImageView.onPick`.
+    var onPick: ((CGPoint) -> Void)? {
+        didSet {
+            if (onPick == nil) != (oldValue == nil) { canvas.window?.invalidateCursorRects(for: canvas) }
+        }
+    }
     /// Told what part of the photo is in view, for the Navigator.
     weak var viewport: ZoomViewport? {
         didSet { if viewport !== oldValue { reportVisible() } }
@@ -454,7 +464,11 @@ final class ZoomCanvasView: NSView {
     }
 
     override func resetCursorRects() {
-        if scrollView?.canPan == true { addCursorRect(visibleRect, cursor: .openHand) }
+        if scrollView?.onPick != nil {
+            addCursorRect(visibleRect, cursor: .crosshair)
+        } else if scrollView?.canPan == true {
+            addCursorRect(visibleRect, cursor: .openHand)
+        }
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -476,6 +490,11 @@ final class ZoomCanvasView: NSView {
     override func mouseUp(with event: NSEvent) {
         if dragged {
             NSCursor.pop()
+        } else if let onPick = scrollView?.onPick {
+            let point = convert(event.locationInWindow, from: nil)
+            if bounds.width > 0, bounds.height > 0, bounds.contains(point) {
+                onPick(CGPoint(x: point.x / bounds.width, y: point.y / bounds.height))
+            }
         } else if event.clickCount == 1 {
             scrollView?.toggleZoom(at: convert(event.locationInWindow, from: nil))
         }
