@@ -174,7 +174,10 @@ final class DevelopController: ObservableObject {
     /// The AI tool is open: the photo shows under the AI brush and the AI panel replaces Crop.
     @Published var isAIOpen = false {
         didSet {
-            guard isAIOpen != oldValue, isAIOpen else { return }
+            guard isAIOpen != oldValue else { return }
+            // The AI tool works on the plain photo, without the clipping overlay.
+            if showShadowClipping || showHighlightClipping { clippingOverlayChanged() }
+            guard isAIOpen else { return }
             isCropping = false
             isMasking = false
             isGuiding = false
@@ -239,6 +242,16 @@ final class DevelopController: ObservableObject {
     @Published private(set) var lensCorrectionSupported = false
     @Published private(set) var isRAW = false
     private(set) var focalLength35 = 0.0
+    /// ISO, focal length, aperture and shutter speed for the line under the histogram.
+    @Published private(set) var shootingInfo: ShootingInfo?
+    /// Lightroom's clipping overlay (J, or the histogram's triangles): clipped highlights red and
+    /// clipped shadows blue on the photo. Off for each new launch, as in Lightroom.
+    @Published var showHighlightClipping = false {
+        didSet { if showHighlightClipping != oldValue { clippingOverlayChanged() } }
+    }
+    @Published var showShadowClipping = false {
+        didSet { if showShadowClipping != oldValue { clippingOverlayChanged() } }
+    }
 
     /// The selected mask and part in the Masks panel.
     @Published var selectedMaskID: UUID? {
@@ -407,6 +420,7 @@ final class DevelopController: ObservableObject {
         imageIsWhole = false
         beforeImage = nil
         histogram = nil
+        shootingInfo = nil
         colorScope = nil
         fullImage = nil
         fullImageSettings = nil
@@ -446,6 +460,12 @@ final class DevelopController: ObservableObject {
         }
         sourceURL = url
         isLoading = true
+        Task.detached(priority: .userInitiated) {
+            let info = ShootingInfo(url: url)
+            await MainActor.run {
+                if self.assetID == assetID { self.shootingInfo = info }
+            }
+        }
         queue.async {
             let session = DevelopRenderer.shared.session(for: url, maxPixelSize: Self.proxySize)
             DispatchQueue.main.async {
@@ -1487,11 +1507,13 @@ final class DevelopController: ObservableObject {
         let assetID = self.assetID
         let overlay = isMasking && showMaskOverlay ? selectedMaskID : nil
         let preview = showingBefore ? nil : sliderPreview
+        let clipping = overlay == nil && preview == nil ? clippingOverlay : (shadows: false, highlights: false)
         queue.async {
-            let cgImage = session.render(settings, cropping: cropping, overlay: overlay, preview: preview)
+            let rendered = session.render(settings, cropping: cropping, overlay: overlay, preview: preview)
             // The red overlay or an Option-drag view would skew the histogram; keep the last one while it shows.
-            let histogram = overlay == nil && preview == nil ? cgImage.flatMap { Histogram(image: $0) } : nil
-            let scope = overlay == nil && preview == nil ? cgImage.flatMap { ColorScope(image: $0) } : nil
+            let histogram = overlay == nil && preview == nil ? rendered.flatMap { Histogram(image: $0) } : nil
+            let scope = overlay == nil && preview == nil ? rendered.flatMap { ColorScope(image: $0) } : nil
+            let cgImage = rendered.map { Self.withClipping($0, clipping) }
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     self.rendering = false
@@ -1514,6 +1536,31 @@ final class DevelopController: ObservableObject {
         }
     }
 
+    /// The clipping overlay the next render paints: none on the Before view or while cropping or
+    /// using the AI tool, which work on the plain photo.
+    private var clippingOverlay: (shadows: Bool, highlights: Bool) {
+        guard !showingBefore, !isCropping, !isAIOpen else { return (false, false) }
+        return (showShadowClipping, showHighlightClipping)
+    }
+
+    nonisolated private static func withClipping(_ image: CGImage, _ clipping: (shadows: Bool, highlights: Bool)) -> CGImage {
+        guard clipping.shadows || clipping.highlights else { return image }
+        return ClippingOverlay.apply(to: image, shadows: clipping.shadows, highlights: clipping.highlights) ?? image
+    }
+
+    /// J: both overlays on, or both off when either is on.
+    func toggleClippingOverlay() {
+        let on = !(showShadowClipping || showHighlightClipping)
+        showShadowClipping = on
+        showHighlightClipping = on
+    }
+
+    private func clippingOverlayChanged() {
+        // The full-size render has the old overlay painted in; show the proxy until it is redone.
+        fullImageSettings = nil
+        scheduleRender()
+    }
+
     /// Full-resolution render for zoomed views, after the proxy settles. Latest wins.
     private func scheduleFullRender() {
         guard wantsFullResolution, !showingBefore, !isCropping, !isGuiding, let url = sourceURL, fullImageSettings != settings else { return }
@@ -1525,9 +1572,10 @@ final class DevelopController: ObservableObject {
         let settings = self.settings
         let assetID = self.assetID
         let existing = fullSession
+        let clipping = clippingOverlay
         fullQueue.async {
             let session = existing ?? DevelopRenderer.shared.session(for: url, maxPixelSize: nil)
-            let cgImage = session?.render(settings)
+            let cgImage = session?.render(settings).map { Self.withClipping($0, clipping) }
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     self.fullRendering = false

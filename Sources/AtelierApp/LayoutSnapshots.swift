@@ -61,6 +61,7 @@ enum LayoutSnapshots {
         await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
                       to: folder.appendingPathComponent("develop-ai-1280x800.png"))
         model.develop.isAIOpen = false
+        await snapshotClipping(model: model, into: folder)
         await snapshotSliderPreviews(model: model, into: folder)
         await snapshotColorGrading(model: model, into: folder)
         await snapshotMatchLook(model: model, into: folder)
@@ -122,6 +123,21 @@ enum LayoutSnapshots {
         Theme.system.apply()
         fflush(stdout)
         exit(0)
+    }
+
+    /// Exposure pushed until the sky clips, with the clipping overlay (J) on: the histogram's
+    /// highlight triangle lit and the clipped area red on the photo.
+    private static func snapshotClipping(model: LibraryModel, into folder: URL) async {
+        let develop = model.develop
+        let exposure = develop.settings[.exposure]
+        develop.set(.exposure, to: 2)
+        develop.toggleClippingOverlay()
+        try? await Task.sleep(for: .seconds(2))
+        await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
+                      to: folder.appendingPathComponent("develop-clipping-1280x800.png"))
+        develop.toggleClippingOverlay()
+        develop.set(.exposure, to: exposure)
+        try? await Task.sleep(for: .seconds(1))
     }
 
     /// The Presets panel with groups open, the Amount slider and Recent, a B&W pack preset on the photo,
@@ -608,7 +624,17 @@ enum LayoutSnapshots {
         guard let image = context.makeImage(),
               let destination = CGImageDestinationCreateWithURL(url as CFURL, "public.jpeg" as CFString, 1, nil)
         else { return }
-        CGImageDestinationAddImage(destination, image, nil)
+        // Camera settings for the line under the histogram.
+        let properties: [CFString: Any] = [
+            kCGImagePropertyExifDictionary: [
+                kCGImagePropertyExifISOSpeedRatings: [400], kCGImagePropertyExifFocalLength: 50.0,
+                kCGImagePropertyExifFNumber: 2.8, kCGImagePropertyExifExposureTime: 1.0 / 250,
+                kCGImagePropertyExifLensModel: "NIKKOR Z 50mm f/1.8 S",
+            ] as [CFString: Any],
+            kCGImagePropertyTIFFDictionary: [kCGImagePropertyTIFFMake: "NIKON CORPORATION", kCGImagePropertyTIFFModel: "NIKON Z f"]
+                as [CFString: Any],
+        ]
+        CGImageDestinationAddImage(destination, image, properties as CFDictionary)
         CGImageDestinationFinalize(destination)
         model.runImport(sources: [url], options: ImportOptions())
         for _ in 0..<60 where model.rows.isEmpty || model.importProgress != nil {

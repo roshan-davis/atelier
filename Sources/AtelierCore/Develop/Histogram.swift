@@ -13,6 +13,10 @@ public struct Histogram: Sendable, Hashable {
     /// Share of pixels at pure black or pure white in any channel, for clipping warnings.
     public var shadowClipping: Double
     public var highlightClipping: Double
+    /// Share of pixels at pure black (shadows) or pure white (highlights) in red, green and blue,
+    /// for the color of the histogram's clipping triangles.
+    public var shadowChannels: [Double]
+    public var highlightChannels: [Double]
 
     /// Samples a downscaled copy, so this is cheap enough to run after every render. Transparent
     /// pixels (the crop tool's empty corners around a straightened photo) are left out.
@@ -31,6 +35,7 @@ public struct Histogram: Sendable, Hashable {
         var r = [Double](repeating: 0, count: Self.binCount)
         var g = r, b = r, l = r
         var lowClipped = 0, highClipped = 0
+        var lowChannels = [0, 0, 0], highChannels = [0, 0, 0]
         let shift = 256 / Self.binCount
         var counted = 0
         for i in 0..<(width * height) {
@@ -46,6 +51,9 @@ public struct Histogram: Sendable, Hashable {
             l[min(255, luma) / shift] += 1
             if red == 0 || green == 0 || blue == 0 { lowClipped += 1 }
             if red == 255 || green == 255 || blue == 255 { highClipped += 1 }
+            if red == 0 { lowChannels[0] += 1 } else if red == 255 { highChannels[0] += 1 }
+            if green == 0 { lowChannels[1] += 1 } else if green == 255 { highChannels[1] += 1 }
+            if blue == 0 { lowChannels[2] += 1 } else if blue == 255 { highChannels[2] += 1 }
         }
         // Ignore the end bins when scaling so a clipped spike doesn't flatten the rest.
         let peak = max(1, [r, g, b, l].map { $0[1..<(Self.binCount - 1)].max() ?? 1 }.max() ?? 1)
@@ -57,5 +65,7 @@ public struct Histogram: Sendable, Hashable {
         let total = Double(max(1, counted))
         shadowClipping = Double(lowClipped) / total
         highlightClipping = Double(highClipped) / total
+        shadowChannels = lowChannels.map { Double($0) / total }
+        highlightChannels = highChannels.map { Double($0) / total }
     }
 }
