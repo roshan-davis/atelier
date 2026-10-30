@@ -114,11 +114,12 @@ enum LayoutSnapshots {
         exit(0)
     }
 
-    /// The Presets panel with groups open and the Amount slider, a B&W pack preset on the photo,
+    /// The Presets panel with groups open, the Amount slider and Recent, a B&W pack preset on the photo,
     /// and the Create Preset and Manage Presets dialogs.
     private static func snapshotPresets(model: LibraryModel, into folder: URL) async {
         let develop = model.develop
         UserDefaults.standard.set("pack:Film\npack:Black & White", forKey: "presets.toggledGroups")
+        develop.clearRecentPresets()
         develop.createPreset(name: "Snapshot Look", group: "Weddings", parts: [.tone, .colorGrading])
         if let portrait = develop.presets.first(where: { $0.name == "Portrait 400" }) {
             develop.applyPreset(portrait)
@@ -154,6 +155,7 @@ enum LayoutSnapshots {
                       to: folder.appendingPathComponent("presets-manage-dialog.png"))
         if let created = develop.presets.first(where: { $0.name == "Snapshot Look" }) { develop.deletePreset(created) }
         UserDefaults.standard.removeObject(forKey: "presets.toggledGroups")
+        develop.clearRecentPresets()
         develop.resetAll()
         develop.flushSave()
     }

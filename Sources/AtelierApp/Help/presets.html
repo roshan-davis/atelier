@@ -15,7 +15,7 @@
 <h1>Presets</h1>
 <p class="lede">A preset is a saved set of slider values. Apply a look in one click, save your own, and use them on many photos at once.</p>
 
-<div class="chips"><a href="#apply">Preview and apply</a><a href="#amount">Amount</a><a href="#create">Create a preset</a><a href="#manage">Manage presets and groups</a><a href="#built-in">Built-in packs</a><a href="#many">Many photos at once</a></div>
+<div class="chips"><a href="#apply">Preview and apply</a><a href="#recent">Recent</a><a href="#amount">Amount</a><a href="#create">Create a preset</a><a href="#manage">Manage presets and groups</a><a href="#built-in">Built-in packs</a><a href="#many">Many photos at once</a></div>
 
 <h2 id="apply">Preview and apply</h2>
 <figure>
@@ -24,13 +24,16 @@
     <div class="row" style="padding:7px 12px;background:#333;font-size:11px;font-weight:700;letter-spacing:.05em;color:#aaa" data-pin="1"><span style="flex:1">PRESETS</span><span>＋</span><span style="margin-left:10px">⇕</span></div>
     <div class="pb">
       <div class="row" style="background:#1f1f1f;border-radius:5px;padding:0 8px;color:#777" data-pin="2">Search Presets</div>
+      <div class="row" data-pin="5"><span style="flex:1">⌄ 🕘 Recent</span><span style="color:var(--app-text-2)">2</span></div>
+      <div class="row" style="padding-left:18px"><span style="flex:1">Chrome 64</span><span style="color:var(--app-text-2);font-size:10px">🔒</span></div>
+      <div class="row" style="padding-left:18px"><span style="flex:1">Muted Chrome</span><span style="color:var(--app-text-2);font-size:10px">🔒</span></div>
       <div class="row" data-pin="3"><span style="flex:1">› User Presets</span><span style="color:var(--app-text-2)">3</span></div>
       <div class="row"><span style="flex:1">› Atelier</span><span style="color:var(--app-text-2)">5</span></div>
-      <div class="row"><span style="flex:1">⌄ Film</span><span style="color:var(--app-text-2)">6</span></div>
+      <div class="row"><span style="flex:1">⌄ Film</span><span style="color:var(--app-text-2)">9</span></div>
       <div class="row" style="padding-left:18px"><span style="flex:1">Portrait 400</span><span style="color:var(--app-text-2);font-size:10px">🔒</span></div>
       <div class="row" style="padding-left:18px;background:rgba(10,132,255,.3);border-radius:4px" data-pin="4" data-pin-side="right"><span style="flex:1">Gold 200</span><span style="color:var(--app-text-2);font-size:10px">🔒</span></div>
       <div class="row" style="padding-left:18px"><span style="flex:1">Vivid Slide</span><span style="color:var(--app-text-2);font-size:10px">🔒</span></div>
-      <div class="row"><span style="flex:1">› Black &amp; White</span><span style="color:var(--app-text-2)">6</span></div>
+      <div class="row"><span style="flex:1">› Black &amp; White</span><span style="color:var(--app-text-2)">8</span></div>
     </div>
   </div>
   </div>
@@ -40,8 +43,18 @@
   <li><b>Search</b> filters every group by name.</li>
   <li><b>Groups</b>: yours first, then the built-in packs. Click a group to open or close it. Built-in presets show a lock.</li>
   <li><b>Rest the pointer</b> on a preset to see it on your photo in the <a href="develop.html#navigator">Navigator</a>. <b>Click</b> to apply it.</li>
+  <li><b>Recent</b>: the presets you applied last, newest first. See <a href="#recent">Recent</a>.</li>
 </ol>
 <p>Applying is one history step (Preset: Gold 200), so <kbd>⌘Z</kbd> undoes it. A preset only changes the settings it includes; everything else on the photo stays as it was.</p>
+
+<h2 id="recent">Recent</h2>
+<p>The <b>Recent</b> group at the top of the Presets section lists the last six presets you applied, from any group, newest first. Applying one again moves it back to the top. It's there as soon as you've applied a preset, and stays between launches.</p>
+<dl class="defs">
+  <dt>Right-click a preset in Recent</dt><dd>Remove from Recent, then the preset's usual menu.</dd>
+  <dt>Right-click the Recent group</dt><dd>Clear Recent.</dd>
+  <dt>Right-click photos</dt><dd><span class="path">Apply Develop Preset › Recent</span> has the same list.</dd>
+</dl>
+<p>Recent hides while you search (the search already finds every preset). A deleted preset, or one in a hidden pack, drops out of the list.</p>
 
 <h2 id="amount">Amount</h2>
 <p>After you click a preset, an <b>Amount</b> slider appears at the top of the Presets section. Drag it from 0 to 200% to use the look more gently or more strongly. It updates the same history step, and goes away when you edit another setting or open another photo. Double-click it to go back to 100%.</p>
@@ -66,26 +79,34 @@
 <p>Photos that used a deleted preset keep their settings. Your presets are kept in one file shared by every catalog: <code>~/Library/Application Support/Atelier/Presets.json</code>.</p>
 
 <h2 id="built-in">Built-in packs</h2>
-<p>Six packs of looks, made only from Atelier's own sliders, so they work on RAW, JPEG and HEIC alike. They never touch your exposure, sharpening, white balance, crop or masks.</p>
+<p>Eight packs, 52 looks, made only from Atelier's own sliders, so they work on RAW, JPEG and HEIC alike. They never touch your exposure, white balance, crop or masks, so apply one after you've set those. Each look follows what a film stock or style is known for; the names describe the look, not a brand.</p>
 <div class="looks">
   <figure><img src="images/preset-none.jpg" alt=""><figcaption>No preset<small>The photo as edited</small></figcaption></figure>
-  <figure><img src="images/preset-portrait-400.jpg" alt=""><figcaption>Portrait 400<small>Film · soft, warm, gentle grain</small></figcaption></figure>
+  <figure><img src="images/preset-portrait-400.jpg" alt=""><figcaption>Portrait 400<small>Film · soft, warm skin</small></figcaption></figure>
+  <figure><img src="images/preset-pastel-400.jpg" alt=""><figcaption>Pastel 400<small>Film · bright, mint greens</small></figcaption></figure>
+  <figure><img src="images/preset-chrome-64.jpg" alt=""><figcaption>Chrome 64<small>Film · deep reds and blues</small></figcaption></figure>
   <figure><img src="images/preset-vivid-slide.jpg" alt=""><figcaption>Vivid Slide<small>Film · contrast and deep color</small></figcaption></figure>
   <figure><img src="images/preset-golden-hour.jpg" alt=""><figcaption>Golden Hour<small>Landscape · warm light</small></figcaption></figure>
-  <figure><img src="images/preset-faded-matte.jpg" alt=""><figcaption>Faded Matte<small>Vintage &amp; Matte</small></figcaption></figure>
+  <figure><img src="images/preset-muted-chrome.jpg" alt=""><figcaption>Muted Chrome<small>Street · documentary color</small></figcaption></figure>
   <figure><img src="images/preset-teal-orange.jpg" alt=""><figcaption>Teal &amp; Orange<small>Cinematic</small></figcaption></figure>
+  <figure><img src="images/preset-dark-moody.jpg" alt=""><figcaption>Dark &amp; Moody<small>Cinematic · muted greens</small></figcaption></figure>
+  <figure><img src="images/preset-faded-matte.jpg" alt=""><figcaption>Faded Matte<small>Vintage &amp; Matte</small></figcaption></figure>
+  <figure><img src="images/preset-classic-400.jpg" alt=""><figcaption>Classic 400<small>B&amp;W · film grain, yellow filter</small></figcaption></figure>
+  <figure><img src="images/preset-dark-sky.jpg" alt=""><figcaption>Dark Sky<small>B&amp;W · deep red filter</small></figcaption></figure>
   <figure><img src="images/preset-noir.jpg" alt=""><figcaption>Noir<small>Cinematic · deep B&amp;W, vignette</small></figcaption></figure>
 </div>
 <dl class="defs">
   <dt>Atelier</dt><dd>Clean Product, Punchy, Soft Matte, Warm Film, Black &amp; White</dd>
-  <dt>Film</dt><dd>Portrait 400, Gold 200, Vivid Slide, Tungsten 800T, Expired, Instant</dd>
-  <dt>Black &amp; White</dt><dd>Neutral, High Contrast, Soft Matte B&amp;W, Push 400, Selenium, Sepia</dd>
-  <dt>Portrait</dt><dd>Natural Skin, Soft Glow, Warm Portrait, Clean Studio, Moody Portrait</dd>
-  <dt>Landscape</dt><dd>Vivid Landscape, Golden Hour, Blue Hour, Deep Greens, Haze Cut</dd>
+  <dt>Film</dt><dd>Portrait 400 (soft portrait negative), Gold 200 (warm consumer film), Pastel 400 (bright, mint greens, cyan shadows), Vivid 100 (punchy fine-grain negative), Vivid Slide (slide film), Chrome 64 (classic chrome slide), Tungsten 800T (cool cinema film in daylight), Expired, Instant</dd>
+  <dt>Black &amp; White</dt><dd>Neutral, Classic 400 (yellow filter, grain), High Contrast (red filter), Push 400 (hard, coarse grain), Soft Matte B&amp;W, Dark Sky (deep red filter for landscapes), Selenium, Sepia</dd>
+  <dt>Portrait</dt><dd>Natural Skin, Bright &amp; Airy, Soft Glow, Warm Portrait, Rich Skin (for deeper skin tones), Clean Studio, Moody Portrait</dd>
+  <dt>Landscape</dt><dd>Vivid Landscape, Dramatic Sky, Golden Hour, Blue Hour, Deep Greens, Autumn Colors, Haze Cut</dd>
+  <dt>Street</dt><dd>Muted Chrome (low-saturation documentary color), Gritty, Hard Light (deep shadows, bold color), Urban Cool, Daylight Negative (everyday film, green shadows)</dd>
+  <dt>Cinematic</dt><dd>Teal &amp; Orange, Dark &amp; Moody, Bleach Bypass, Noir, Night City, Warm Drama</dd>
   <dt>Vintage &amp; Matte</dt><dd>Faded Matte, Seventies, Washed Teal, Cross Process, Dusty Pastel</dd>
-  <dt>Cinematic</dt><dd>Teal &amp; Orange, Bleach Bypass, Noir, Night City, Warm Drama</dd>
 </dl>
-<p class="muted" style="color:var(--text-3);font-size:13px">The pictures above approximate each look. Hover a preset in Atelier to see it exactly on your own photo.</p>
+<div class="note"><p><span class="label">Start strong, then dial in.</span> Film and style looks are strong by design. If one is too much for a photo, drag <a href="#amount">Amount</a> down to 50–70% rather than picking a weaker look.</p></div>
+<p class="muted" style="color:var(--text-3);font-size:13px">The pictures above are the real presets rendered on Rosh's redwoods photo outside the app, so they are close but not exact. Hover a preset in Atelier to see it exactly on your own photo.</p>
 
 <h2 id="many">Many photos at once</h2>
 <ul>
