@@ -133,7 +133,6 @@ enum LayoutSnapshots {
         exit(0)
     }
 
-    /// Uses a disposable damaged database, never the user's catalog.
     /// Can run without opening a catalog via ATELIER_METADATA_SNAPSHOTS.
     static func snapshotMetadata(into folder: URL) async {
         let savedTheme = UserDefaults.standard.object(forKey: Theme.defaultsKey)
@@ -151,6 +150,7 @@ enum LayoutSnapshots {
         }
     }
 
+    /// Uses a disposable damaged database, never the user's catalog.
     static func snapshotCatalogRecovery(into folder: URL) async {
         let savedTheme = UserDefaults.standard.object(forKey: Theme.defaultsKey)
         defer {

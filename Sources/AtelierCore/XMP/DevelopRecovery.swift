@@ -27,7 +27,7 @@ enum DevelopRecovery {
         // silently claim success after dropping them.
         if let masks = object["masks"] {
             _ = try JSONDecoder().decode([DevelopSettings.Mask].self,
-                                         from: JSONSerialization.data(withJSONObject: masks))
+                                         from: JSONSerialization.data(withJSONObject: masks, options: .fragmentsAllowed))
         }
         if let profile = object["profile"] {
             _ = try JSONDecoder().decode(DevelopSettings.Profile.self,
@@ -41,10 +41,11 @@ enum DevelopRecovery {
     }
 
     enum RecoveryError: LocalizedError {
-        case unsupported, invalidSidecar
+        case unsupported, invalidSidecar, invalidRecovery
         var errorDescription: String? {
             switch self {
             case .unsupported: return "Unsupported Atelier XMP recovery version. The sidecar was preserved."
+            case .invalidRecovery: return "The Atelier XMP recovery data cannot be read. The sidecar was preserved."
             case .invalidSidecar: return "The existing XMP sidecar cannot be read. It was preserved."
             }
         }

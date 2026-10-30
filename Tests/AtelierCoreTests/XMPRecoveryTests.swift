@@ -116,6 +116,8 @@ final class XMPRecoveryTests: XCTestCase {
         let sidecar = XMPSidecar.sidecarURL(for: file)
         for value in ["not XML", recoveryXML(format: 99, settings: #"{"schemaVersion":3}"#),
                       recoveryXML(settings: #"{"schemaVersion":999,"exposure":1}"#),
+                      recoveryXML(settings: #"{"schemaVersion":3,"masks":"broken"}"#),
+                      recoveryXML(settings: #"{"schemaVersion":3,"profile":"unknown"}"#),
                       recoveryXML(settings: #"{"schemaVersion":3,"masks":[{"components":[{"kind":"sky"}]}]}"#)] {
             try Data(value.utf8).write(to: sidecar)
             let bytes = try Data(contentsOf: sidecar)

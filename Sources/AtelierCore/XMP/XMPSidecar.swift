@@ -39,7 +39,7 @@ public enum XMPSidecar {
         }
         CGImageMetadataRegisterNamespaceForPrefix(mutable, atelierNamespace as CFString,
                                                   atelierPrefix as CFString, nil)
-        guard let json = string(mutable, DevelopRecovery.path) else { return nil }
+        guard let json = try recoveryJSON(mutable) else { return nil }
         let packet = try DevelopRecovery.packet(json)
         guard let settings = packet.files[original.lastPathComponent] else { return nil }
         return try DevelopRecovery.settings(settings)
@@ -112,7 +112,7 @@ public enum XMPSidecar {
                                                   atelierPrefix as CFString, nil)
 
         if let develop, let filename {
-            var packet = try string(metadata, DevelopRecovery.path).map(DevelopRecovery.packet)
+            var packet = try recoveryJSON(metadata).map(DevelopRecovery.packet)
                 ?? DevelopRecovery.Packet()
             // Do not downgrade an entry written by a newer app or replace damaged edits.
             if let existing = packet.files[filename] { _ = try DevelopRecovery.settings(existing) }
@@ -144,6 +144,14 @@ public enum XMPSidecar {
     }
 
     // MARK: Helpers
+
+    private static func recoveryJSON(_ metadata: CGImageMetadata) throws -> String? {
+        guard CGImageMetadataCopyTagWithPath(metadata, nil, DevelopRecovery.path as CFString) != nil else { return nil }
+        guard let json = string(metadata, DevelopRecovery.path) else {
+            throw DevelopRecovery.RecoveryError.invalidRecovery
+        }
+        return json
+    }
 
     private static func string(_ metadata: CGImageMetadata, _ path: String) -> String? {
         CGImageMetadataCopyStringValueWithPath(metadata, nil, path as CFString) as String?
