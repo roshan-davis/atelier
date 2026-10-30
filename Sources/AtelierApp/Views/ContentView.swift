@@ -108,6 +108,10 @@ struct ContentView: View {
             RemovePhotosSheet(removal: removal)
                 .environmentObject(model)
         }
+        .sheet(item: $model.deletingImport) { deletion in
+            DeleteImportSheet(deletion: deletion)
+                .environmentObject(model)
+        }
         .sheet(isPresented: $model.showingShortcuts) {
             ShortcutsSheet()
         }

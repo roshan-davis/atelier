@@ -89,6 +89,9 @@ struct ImportSheet: View {
                 ImportProgressStep(copying: copyFiles) { dismiss() }
             }
         }
+        // One size for every step, so the dialog never jumps: the Cull step's size as a wizard,
+        // the settings' size otherwise.
+        .frame(width: cullFirst ? 1080 : 560, height: cullFirst ? 760 : 600)
         .onAppear {
             existingGroup = model.pendingImportGroup
             add(model.pendingImportSources)
@@ -101,92 +104,97 @@ struct ImportSheet: View {
 
     private var settingsStep: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Import Photos")
-                .font(.title2.bold())
-                .padding([.horizontal, .top], 20)
-                .padding(.bottom, 12)
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Import Photos")
+                    .font(.title2.bold())
+                    .padding([.horizontal, .top], 20)
+                    .padding(.bottom, 12)
 
-            Form {
-                Section("Photos") {
-                    if sources.isEmpty {
-                        dropZone
-                    } else {
-                        ForEach(sources, id: \.self) { url in
-                            SourceRow(url: url, count: counts[url]) {
-                                sources.removeAll { $0 == url }
+                Form {
+                    Section("Photos") {
+                        if sources.isEmpty {
+                            dropZone
+                        } else {
+                            ForEach(sources, id: \.self) { url in
+                                SourceRow(url: url, count: counts[url]) {
+                                    sources.removeAll { $0 == url }
+                                }
                             }
-                        }
-                        HStack {
-                            Button("Add More…", action: choose)
-                            Spacer()
-                            summary
-                        }
-                    }
-                }
-
-                Section("Import into") {
-                    Picker("Entry", selection: $existingGroup) {
-                        Text("New import").tag(Int64?.none)
-                        if !model.sidebar.imports.isEmpty {
-                            Divider()
-                            ForEach(model.sidebar.imports) { entry in
-                                Text("\(entry.name) (\(entry.photoCount))").tag(Int64?.some(entry.id))
-                            }
-                        }
-                    }
-                    if existingGroup == nil {
-                        TextField("Name", text: $name, prompt: Text(suggestedName))
-                    }
-                }
-
-                Section("Files") {
-                    Picker("Files", selection: $copyFiles) {
-                        Text("Leave files where they are").tag(false)
-                        Text("Copy into my library folder").tag(true)
-                    }
-                    .pickerStyle(.radioGroup)
-                    .labelsHidden()
-                    if copyFiles {
-                        LabeledContent("Library folder") {
                             HStack {
-                                Text(destinationPath).lineLimit(1).truncationMode(.middle)
-                                Button("Change…", action: chooseDestination)
+                                Button("Add More…", action: choose)
+                                Spacer()
+                                summary
                             }
                         }
-                        Text("Copies go to YYYY/YYYY-MM-DD \(effectiveName)/ and each one is checked against the original.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text("Photos stay in their current folders, on this Mac or the NAS. Nothing is moved or changed.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
                     }
-                }
 
-                Section("Apply During Import") {
-                    Picker("Develop Settings", selection: $presetID) {
-                        Text("None").tag("")
-                        ForEach(presetGroups, id: \.0) { group in
-                            Section(group.0) {
-                                ForEach(group.1) { preset in
-                                    Text(preset.name).tag(preset.id.uuidString)
+                    Section("Import into") {
+                        Picker("Entry", selection: $existingGroup) {
+                            Text("New import").tag(Int64?.none)
+                            if !model.sidebar.imports.isEmpty {
+                                Divider()
+                                ForEach(model.sidebar.imports) { entry in
+                                    Text("\(entry.name) (\(entry.photoCount))").tag(Int64?.some(entry.id))
                                 }
                             }
                         }
+                        if existingGroup == nil {
+                            TextField("Name", text: $name, prompt: Text(suggestedName))
+                        }
                     }
-                    TextField("Keywords", text: $keywords, prompt: Text("Added to every photo, comma separated"))
-                }
 
-                Section {
-                    Toggle("Cull before importing", isOn: $cullFirst)
-                } footer: {
-                    Text("Groups similar shots and suggests the best of each, so you pick the keepers first. Only keepers go into the import entry; the rest are cataloged as Rejected and can be reviewed later with Photo > Show Cull Group.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Section("Files") {
+                        Picker("Files", selection: $copyFiles) {
+                            Text("Leave files where they are").tag(false)
+                            Text("Copy into my library folder").tag(true)
+                        }
+                        .pickerStyle(.radioGroup)
+                        .labelsHidden()
+                        if copyFiles {
+                            LabeledContent("Library folder") {
+                                HStack {
+                                    Text(destinationPath).lineLimit(1).truncationMode(.middle)
+                                    Button("Change…", action: chooseDestination)
+                                }
+                            }
+                            Text("Copies go to YYYY/YYYY-MM-DD \(effectiveName)/ and each one is checked against the original.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("Photos stay in their current folders, on this Mac or the NAS. Nothing is moved or changed.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    Section("Apply During Import") {
+                        Picker("Develop Settings", selection: $presetID) {
+                            Text("None").tag("")
+                            ForEach(presetGroups, id: \.0) { group in
+                                Section(group.0) {
+                                    ForEach(group.1) { preset in
+                                        Text(preset.name).tag(preset.id.uuidString)
+                                    }
+                                }
+                            }
+                        }
+                        TextField("Keywords", text: $keywords, prompt: Text("Added to every photo, comma separated"))
+                    }
+
+                    Section {
+                        Toggle("Cull before importing", isOn: $cullFirst)
+                    } footer: {
+                        Text("Groups similar shots and suggests the best of each, so you pick the keepers first. Only keepers go into the import entry; the rest are cataloged as Rejected and can be reviewed later with Photo > Show Cull Group.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
+                .formStyle(.grouped)
             }
-            .formStyle(.grouped)
+            // In the wider wizard the settings stay a readable column in the middle.
+            .frame(maxWidth: 600)
+            .frame(maxWidth: .infinity)
 
             HStack {
                 Spacer()
@@ -198,7 +206,6 @@ struct ImportSheet: View {
             }
             .padding(20)
         }
-        .frame(width: 560, height: 600)
         .dropDestination(for: URL.self) { urls, _ in
             add(urls)
             return true
@@ -430,7 +437,6 @@ struct ImportProgressStep: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 0)
             HStack {
                 Spacer()
                 Button("Run in Background", action: close)
@@ -441,7 +447,8 @@ struct ImportProgressStep: View {
             }
         }
         .padding(20)
-        .frame(width: 560, height: 280, alignment: .topLeading)
+        .frame(maxWidth: 560)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onChange(of: model.importProgress == nil) { _, finished in
             if finished { close() }
         }

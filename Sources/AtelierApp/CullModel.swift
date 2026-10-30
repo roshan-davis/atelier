@@ -53,6 +53,12 @@ final class CullModel: ObservableObject, Identifiable {
     @Published private(set) var reveal: CullReveal?
     /// Finding the photos and reading their capture times, before analysis.
     @Published private(set) var isLoading = true
+    /// While loading: photos found (nil while the folders are still being listed) and how many
+    /// have had their capture time read.
+    @Published private(set) var found: Int?
+    @Published private(set) var read = 0
+    /// When analysis started, for the time left.
+    @Published private(set) var analysisStarted: Date?
     @Published private(set) var analyzed = 0
     @Published private(set) var isAnalyzing = true
     /// 0 is tight (only near-identical shots), 1 is loose. Every cull starts tight, so shots that
@@ -107,9 +113,26 @@ final class CullModel: ObservableObject, Identifiable {
             loadTask = Task.detached(priority: .userInitiated) { [weak self] in
                 let files = Importer.collectFiles(from: sources)
                 // A RAW and its JPEG are one frame: culled as the RAW, the decision applies to both.
-                let photos = FilePairs.pairs(files).enumerated().map { index, pair in
+                let pairs = FilePairs.pairs(files)
+                await MainActor.run { self?.found = pairs.count }
+                // Capture times, a few files at a time, reporting as each batch is done.
+                var times = [Date?](repeating: nil, count: pairs.count)
+                let batch = 24
+                for start in stride(from: 0, to: pairs.count, by: batch) {
+                    if Task.isCancelled { return }
+                    let end = min(start + batch, pairs.count)
+                    let slice = UnsafeMutableBufferPointer<Date?>.allocate(capacity: end - start)
+                    slice.initialize(repeating: nil)
+                    DispatchQueue.concurrentPerform(iterations: end - start) { offset in
+                        slice[offset] = MetadataReader.read(pairs[start + offset].primary).captureTime
+                    }
+                    for offset in 0..<(end - start) { times[start + offset] = slice[offset] }
+                    slice.deallocate()
+                    await MainActor.run { self?.read = end }
+                }
+                let photos = pairs.enumerated().map { index, pair in
                     CullPhoto(id: index, url: pair.primary, assetID: nil, name: pair.primary.lastPathComponent,
-                              captureTime: MetadataReader.read(pair.primary).captureTime, siblings: pair.siblings,
+                              captureTime: times[index], siblings: pair.siblings,
                               pairFormats: pair.siblings.map { $0.pathExtension.uppercased() })
                 }
                 let ordered = CullModel.ordered(photos)
@@ -145,6 +168,7 @@ final class CullModel: ObservableObject, Identifiable {
     }
 
     private func analyze() {
+        analysisStarted = Date()
         let jobs = photos.map { ($0.id, $0.url) }
         analysisTask = Task.detached(priority: .userInitiated) { [weak self] in
             let workers = max(2, ProcessInfo.processInfo.activeProcessorCount / 2)
@@ -284,13 +308,14 @@ final class CullModel: ObservableObject, Identifiable {
 
     /// Arrow keys: left and right within the order, up and down a group at a time.
     func move(_ step: Int, byGroup: Bool) {
-        let order = multiGroups.flatMap { $0 } + singles
+        // While analyzing there are no groups yet: move through the photos in capture order.
+        let order = isAnalyzing ? photos.map(\.id) : multiGroups.flatMap { $0 } + singles
         guard !order.isEmpty else { return }
         guard let current = focused, let index = order.firstIndex(of: current) else {
             focusAndReveal(order[0])
             return
         }
-        if byGroup {
+        if byGroup, !isAnalyzing {
             let all = multiGroups + (singles.isEmpty ? [] : [singles])
             guard let groupIndex = all.firstIndex(where: { $0.contains(current) }) else { return }
             let target = min(max(groupIndex + step, 0), all.count - 1)

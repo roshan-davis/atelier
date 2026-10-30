@@ -108,6 +108,8 @@ final class LibraryModel: ObservableObject {
     @Published var matchProgress: ImportStatus?
     /// The Remove Photo dialog, while open.
     @Published var removal: PhotoRemoval?
+    /// The Delete Import dialog, while open.
+    @Published var deletingImport: ImportDeletion?
     var matchTask: Task<Void, Never>?
     private var exportTask: Task<Void, Never>?
     private var importTask: Task<Void, Never>?
