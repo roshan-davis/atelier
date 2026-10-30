@@ -58,8 +58,9 @@ public struct ImportProgress: Sendable {
     /// The size of every file to import, and of those handled so far.
     public var totalBytes: Int64 = 0
     public var bytesDone: Int64 = 0
-    /// The file most recently started.
+    /// The file most recently started, and the one most recently finished (cataloged or not).
     public var currentFile: URL?
+    public var finishedFile: URL?
 
     public init() {}
 }
@@ -167,6 +168,7 @@ public final class Importer: Sendable {
                 }
                 state.processed += 1
                 state.bytesDone += sizes[index]
+                state.finishedFile = file
                 if !Task.isCancelled, next < files.count {
                     let index = next
                     next += 1

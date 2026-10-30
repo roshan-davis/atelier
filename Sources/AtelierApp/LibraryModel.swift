@@ -647,10 +647,12 @@ final class LibraryModel: ObservableObject {
         let copying: Bool
         if case .copy = options.mode { copying = true } else { copying = false }
         importProgress = ImportStatus(phase: "Looking for photos…", fraction: nil)
+        let meter = ImportMeter()
         importTask = Task.detached {
-            let start = Date()
             let result = await importer.run(sources: sources, options: options, stager: stager) { progress in
-                let status = LibraryModel.importStatus(progress, copying: copying, elapsed: Date().timeIntervalSince(start))
+                // Called on the import's own loop after every file: keep it cheap, and update
+                // the dialog a few times a second rather than per file.
+                guard let status = meter.status(for: progress, copying: copying) else { return }
                 Task { @MainActor in
                     if self.importTask != nil, !self.importWasCancelled { self.importProgress = status }
                 }
@@ -676,7 +678,8 @@ final class LibraryModel: ObservableObject {
     }
 
     /// "Copying 23 of 400 photos" for the status bar, with the figures the Import dialog shows.
-    nonisolated static func importStatus(_ progress: ImportProgress, copying: Bool, elapsed: TimeInterval) -> ImportStatus {
+    nonisolated static func importStatus(_ progress: ImportProgress, copying: Bool, speed: Double?,
+                                         doneFiles: Set<String> = []) -> ImportStatus {
         let verb = copying ? "Copying" : "Adding"
         let shown = min(progress.processed + 1, progress.total)
         var status = ImportStatus(phase: progress.total == 0 ? "Looking for photos…"
@@ -687,13 +690,12 @@ final class LibraryModel: ObservableObject {
         let bytes = ByteCountFormatter()
         bytes.countStyle = .file
         status.done = progress.processed
-        status.doneFiles = Set(progress.assetIDsBySource.keys.map(\.standardizedFileURL.path))
+        status.doneFiles = doneFiles
         status.total = progress.total
         status.amount = "\(bytes.string(fromByteCount: progress.bytesDone)) of \(bytes.string(fromByteCount: progress.totalBytes))"
         status.file = progress.currentFile?.lastPathComponent
         // Speed and time left once there is enough to go on.
-        if progress.bytesDone > 0, elapsed > 1 {
-            let speed = Double(progress.bytesDone) / elapsed
+        if progress.bytesDone > 0, let speed, speed > 0 {
             status.speed = "\(bytes.string(fromByteCount: Int64(speed)))/s"
             let left = Double(progress.totalBytes - progress.bytesDone) / speed
             let time = DateComponentsFormatter()

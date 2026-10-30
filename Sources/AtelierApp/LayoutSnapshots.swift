@@ -94,7 +94,7 @@ enum LayoutSnapshots {
         (copying.total, copying.processed) = (412, 137)
         (copying.totalBytes, copying.bytesDone) = (18_400_000_000, 6_100_000_000)
         copying.currentFile = URL(fileURLWithPath: "/Volumes/NIKON Z 6/DCIM/100NCZ_6/NZ6_9144.NEF")
-        model.importProgress = LibraryModel.importStatus(copying, copying: true, elapsed: 34)
+        model.importProgress = LibraryModel.importStatus(copying, copying: true, speed: 180_000_000)
         await capture(AnyView(ImportProgressStep(copying: true) {}.environmentObject(model)),
                       size: CGSize(width: ImportSheet.size.width, height: ImportSheet.size.height - 92),
                       to: folder.appendingPathComponent("import-progress.png"))
