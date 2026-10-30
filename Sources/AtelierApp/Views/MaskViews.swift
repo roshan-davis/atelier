@@ -745,6 +745,7 @@ struct MasksPanel: View {
         Toggle("Invert", isOn: Binding(get: { component.inverted }, set: { _ in
             if let mask = develop.selectedMaskID { develop.invertComponent(component.id, in: mask) }
         }))
+        .help("Select everything except this \(component.kind.title)")
     }
 
     private func update(_ component: DevelopSettings.MaskComponent, _ shape: DevelopSettings.MaskComponent.Shape) {
@@ -766,6 +767,12 @@ struct MasksPanel: View {
             }
             SliderRow(label: "Amount", value: Binding(get: { mask.amount }, set: { develop.setMaskAmount($0) }),
                       range: 0...200, step: 1, origin: 100, format: { "\(Int($0.rounded()))%" })
+            // One Invert at a time, for what is selected: the part's sits with its settings
+            // above, the whole mask's here when the mask itself is selected.
+            if develop.selectedComponentID == nil {
+                Toggle("Invert", isOn: Binding(get: { mask.inverted }, set: { _ in develop.invertMask(mask.id) }))
+                    .help("Apply the sliders everywhere except the mask")
+            }
             ForEach(DevelopSettings.LocalParameter.allCases, id: \.self) { parameter in
                 if parameter.group > 0, parameter == DevelopSettings.LocalParameter.allCases.first(where: { $0.group == parameter.group }) {
                     Spacer().frame(height: 2)
@@ -779,8 +786,6 @@ struct MasksPanel: View {
                               return value == 0 ? "0" : String(format: parameter.range.lowerBound < 0 ? "%+.0f" : "%.0f", value)
                           })
             }
-            Toggle("Invert", isOn: Binding(get: { mask.inverted }, set: { _ in develop.invertMask(mask.id) }))
-                .help("Apply the sliders everywhere except the mask")
         }
     }
 

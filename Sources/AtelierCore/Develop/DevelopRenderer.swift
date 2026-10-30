@@ -550,17 +550,15 @@ public final class DevelopSession: @unchecked Sendable {
         } else {
             guard let base = baseImage else { return nil }
             image = base
-            if let temperature = settings.temperature, temperature != asShotTemperature || settings.tint != 0 {
+            let temperature = settings.temperature ?? asShotTemperature
+            if temperature != asShotTemperature || settings.tint != 0 {
+                // As on a RAW: the photo is treated as lit by `temperature`, so a higher Temp
+                // warms it and a higher Tint adds magenta. Core Image turns `neutral` into
+                // `targetNeutral`'s white.
                 let filter = CIFilter.temperatureAndTint()
                 filter.inputImage = image
-                filter.neutral = CIVector(x: asShotTemperature, y: 0)
-                filter.targetNeutral = CIVector(x: temperature, y: settings.tint)
-                image = filter.outputImage ?? image
-            } else if settings.tint != 0 {
-                let filter = CIFilter.temperatureAndTint()
-                filter.inputImage = image
-                filter.neutral = CIVector(x: asShotTemperature, y: 0)
-                filter.targetNeutral = CIVector(x: asShotTemperature, y: settings.tint)
+                filter.neutral = CIVector(x: temperature, y: settings.tint)
+                filter.targetNeutral = CIVector(x: asShotTemperature, y: 0)
                 image = filter.outputImage ?? image
             }
             if settings.exposure != 0 {
