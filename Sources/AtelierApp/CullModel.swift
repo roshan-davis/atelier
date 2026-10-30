@@ -158,6 +158,7 @@ final class CullModel: ObservableObject, Identifiable {
         self.photos = photos
         isLoading = false
         focused = photos.first?.id
+        loadLarge()
         analyze()
     }
 
@@ -215,6 +216,9 @@ final class CullModel: ObservableObject, Identifiable {
         self.neighbors = neighbors
         isAnalyzing = false
         regroup()
+        // The list starts again at the top with the groups, so the keys do too: the first
+        // photo of the first group, not wherever capture order left off.
+        focused = rows.first?.first
         loadLarge()
     }
 

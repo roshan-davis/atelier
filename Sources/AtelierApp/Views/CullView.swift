@@ -138,6 +138,7 @@ struct CullView: View {
     }
 
     private var finishTitle: String {
+        if cull.isAnalyzing || cull.isLoading { return cull.isImporting ? "Import" : "Done" }
         if cull.isImporting { return "Import \(cull.keptCount) Photo\(cull.keptCount == 1 ? "" : "s")" }
         return cull.isReview ? "Done" : "Pick \(cull.keptCount), Reject \(cull.droppedCount)"
     }
@@ -199,6 +200,9 @@ struct CullView: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             .fixedSize()
+            // Keepers are suggested once every photo is checked.
+            .disabled(cull.isAnalyzing)
+            .opacity(cull.isAnalyzing ? 0 : 1)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)

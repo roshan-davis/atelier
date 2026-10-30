@@ -47,11 +47,12 @@ struct ImportSheet: View {
 
 // MARK: - Header
 
-/// The title and, on the right, where the user is in the steps.
+/// The title, what this step is for, and on the right where the user is in the steps. The
+/// icon on the left follows the step.
 private struct ImportHeader: View {
     @ObservedObject var flow: ImportFlow
 
-    private var steps: [(ImportFlow.Step, String)] {
+    private var steps: [(step: ImportFlow.Step, title: String)] {
         flow.cullFirst ? [(.choose, "Choose Photos"), (.cull, "Cull"), (.importing, "Import")]
             : [(.choose, "Choose Photos"), (.importing, "Import")]
     }
@@ -64,38 +65,53 @@ private struct ImportHeader: View {
         }
     }
 
+    private var icon: String {
+        switch flow.step {
+        case .choose: return "photo.on.rectangle.angled"
+        case .cull: return "square.stack.3d.down.right"
+        case .importing: return "square.and.arrow.down"
+        }
+    }
+
     var body: some View {
         HStack(spacing: 16) {
-            Image(systemName: "square.and.arrow.down.on.square")
-                .font(.system(size: 22, weight: .regular))
-                .foregroundStyle(Color.accentColor)
-                .frame(width: 36, height: 36)
-                .background(Color.accentColor.opacity(0.14), in: RoundedRectangle(cornerRadius: 9))
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Import Photos").font(.title3.weight(.semibold))
-                Text(subtitle).font(.callout).foregroundStyle(.secondary)
+            Image(systemName: icon)
+                .font(.system(size: 24, weight: .medium))
+                .foregroundStyle(.white)
+                .frame(width: 52, height: 52)
+                .background(
+                    LinearGradient(colors: [Color.accentColor.opacity(0.95), Color.accentColor.opacity(0.7)],
+                                   startPoint: .top, endPoint: .bottom),
+                    in: RoundedRectangle(cornerRadius: 13))
+                .shadow(color: Color.accentColor.opacity(0.35), radius: 6, y: 2)
+                .contentTransition(.symbolEffect(.replace))
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Import Photos").font(.system(size: 22, weight: .bold))
+                Text(subtitle).font(.body).foregroundStyle(.secondary)
             }
-            Spacer()
-            HStack(spacing: 0) {
+            Spacer(minLength: 24)
+            HStack(alignment: .top, spacing: 0) {
                 ForEach(Array(steps.enumerated()), id: \.offset) { index, item in
                     if index > 0 {
                         Capsule()
-                            .fill(item.0.rawValue <= flow.step.rawValue ? Color.accentColor : Color.secondary.opacity(0.3))
-                            .frame(width: 36, height: 2)
-                            .padding(.horizontal, 8)
+                            .fill(item.step.rawValue <= flow.step.rawValue ? Color.accentColor : Color.secondary.opacity(0.3))
+                            .frame(width: 56, height: 2)
+                            .padding(.top, 16)
                     }
-                    StepDot(number: index + 1, title: item.1,
-                            state: item.0 == flow.step ? .current : (item.0.rawValue < flow.step.rawValue ? .done : .ahead))
+                    StepDot(number: index + 1, title: item.title,
+                            state: item.step == flow.step ? .current : (item.step.rawValue < flow.step.rawValue ? .done : .ahead))
                 }
             }
-            .animation(.easeInOut(duration: 0.2), value: flow.step)
-            .animation(.easeInOut(duration: 0.2), value: flow.cullFirst)
+            .animation(.easeInOut(duration: 0.25), value: flow.step)
+            .animation(.easeInOut(duration: 0.25), value: flow.cullFirst)
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 14)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 18)
+        .background(Color.primary.opacity(0.04))
     }
 }
 
+/// A step: a numbered circle (a check once done) with its name underneath.
 private struct StepDot: View {
     enum Phase { case done, current, ahead }
     let number: Int
@@ -103,25 +119,28 @@ private struct StepDot: View {
     let state: Phase
 
     var body: some View {
-        HStack(spacing: 7) {
+        VStack(spacing: 6) {
             ZStack {
                 Circle()
                     .fill(state == .ahead ? Color.clear : Color.accentColor)
                 Circle()
-                    .strokeBorder(state == .ahead ? Color.secondary.opacity(0.5) : Color.accentColor, lineWidth: 1.5)
+                    .strokeBorder(state == .ahead ? Color.secondary.opacity(0.5) : Color.accentColor, lineWidth: 2)
                 if state == .done {
-                    Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundStyle(.white)
+                    Image(systemName: "checkmark").font(.system(size: 14, weight: .bold)).foregroundStyle(.white)
                 } else {
                     Text("\(number)")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: 16, weight: .bold, design: .rounded))
                         .foregroundStyle(state == .current ? Color.white : Color.secondary)
                 }
             }
-            .frame(width: 22, height: 22)
+            .frame(width: 34, height: 34)
+            .shadow(color: state == .current ? Color.accentColor.opacity(0.45) : .clear, radius: 6)
             Text(title)
                 .font(.callout.weight(state == .current ? .semibold : .regular))
                 .foregroundStyle(state == .ahead ? Color.secondary : Color.primary)
+                .fixedSize()
         }
+        .frame(minWidth: 70)
     }
 }
 

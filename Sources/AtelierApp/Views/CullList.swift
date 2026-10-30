@@ -14,7 +14,12 @@ struct CullList: View {
     @ObservedObject var cull: CullModel
     @Environment(\.theme) private var theme
     @State private var position = ScrollPosition(edge: .top)
-    @State private var geometry: ScrollGeometry?
+    /// The list's visible size and its content's height, measured as soon as it is laid out
+    /// (scroll-geometry callbacks only come with a change, so they can't be relied on alone).
+    @State private var viewport: CGSize = .zero
+    @State private var contentHeight: CGFloat = 0
+    /// How far the list is scrolled; zero until the user or a key scrolls it.
+    @State private var offset: CGFloat = 0
     /// Each row's frame in the list's content.
     @State private var rowFrames: [Int: CGRect] = [:]
 
@@ -35,30 +40,36 @@ struct CullList: View {
                 }
             }
             .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            // Never wider than the list, so nothing is cut off at the sides.
+            .frame(width: viewport.width > 0 ? viewport.width : nil, alignment: .leading)
             .coordinateSpace(.named(Self.space))
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
         }
         .scrollPosition($position)
-        .onScrollGeometryChange(for: ScrollGeometry.self, of: { $0 }) { _, new in
-            geometry = new
+        .onScrollGeometryChange(for: CGFloat.self, of: { $0.contentOffset.y }) { _, new in offset = new }
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
+            viewport = size
             // While analyzing, as many photos per row as fit.
-            let columns = max(1, Int((new.containerSize.width - 32 + CullTile.spacing) / CullTile.stride))
+            let columns = max(1, Int((size.width - 32 + CullTile.spacing) / CullTile.stride))
             if cull.columns != columns { cull.columns = columns }
         }
         .background(Color(nsColor: theme.gridBackground))
         .onChange(of: cull.reveal) { _, reveal in
-            guard let reveal, let geometry,
+            guard let reveal, viewport.height > 0,
                   let row = cull.rows.firstIndex(where: { $0.contains(reveal.id) }), let frame = rowFrames[row],
                   let y = ScrollReveal.offset(item: Double(frame.minY)...Double(frame.maxY),
-                                              visibleStart: Double(geometry.visibleRect.minY),
-                                              visibleLength: Double(geometry.visibleRect.height),
-                                              contentLength: Double(geometry.contentSize.height), margin: 12)
+                                              visibleStart: Double(offset), visibleLength: Double(viewport.height),
+                                              contentLength: Double(contentHeight), margin: 12)
             else { return }
+            offset = CGFloat(y)
             withAnimation(.easeOut(duration: 0.15)) { position.scrollTo(y: CGFloat(y)) }
         }
         .onChange(of: cull.isAnalyzing) { _, analyzing in
             // The groups replace the analysis list: start again at the top.
-            if !analyzing { position.scrollTo(edge: .top) }
+            if !analyzing {
+                offset = 0
+                position.scrollTo(edge: .top)
+            }
         }
     }
 
@@ -114,7 +125,8 @@ private struct CullGroupCard: View {
     let isSingles: Bool
     @Environment(\.theme) private var theme
     @State private var position = ScrollPosition(edge: .leading)
-    @State private var geometry: ScrollGeometry?
+    @State private var width: CGFloat = 0
+    @State private var offset: CGFloat = 0
 
     var body: some View {
         let kept = ids.filter { cull.kept.contains($0) }.count
@@ -153,7 +165,8 @@ private struct CullGroupCard: View {
                 .padding(.bottom, 4)
             }
             .scrollPosition($position)
-            .onScrollGeometryChange(for: ScrollGeometry.self, of: { $0 }) { _, new in geometry = new }
+            .onScrollGeometryChange(for: CGFloat.self, of: { $0.contentOffset.x }) { _, new in offset = new }
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         }
         .padding(12)
         .background(Color(nsColor: theme.panel).opacity(0.9), in: RoundedRectangle(cornerRadius: 10))
@@ -161,13 +174,14 @@ private struct CullGroupCard: View {
             .strokeBorder(ids.contains(cull.focused ?? -1) ? Color.accentColor.opacity(0.6) : Color.secondary.opacity(0.18)))
         // Tiles are a fixed width, so a photo's place in the row is known without measuring.
         .onChange(of: cull.reveal) { _, reveal in
-            guard let reveal, let column = ids.firstIndex(of: reveal.id), let geometry else { return }
+            guard let reveal, let column = ids.firstIndex(of: reveal.id), width > 0 else { return }
             let start = Double(column) * CullTile.stride
             guard let x = ScrollReveal.offset(item: start...(start + CullTile.width),
-                                              visibleStart: Double(geometry.visibleRect.minX),
-                                              visibleLength: Double(geometry.visibleRect.width),
-                                              contentLength: Double(geometry.contentSize.width), margin: 8)
+                                              visibleStart: Double(offset), visibleLength: Double(width),
+                                              contentLength: Double(ids.count) * CullTile.stride - CullTile.spacing,
+                                              margin: 8)
             else { return }
+            offset = CGFloat(x)
             withAnimation(.easeOut(duration: 0.15)) { position.scrollTo(x: CGFloat(x)) }
         }
     }
