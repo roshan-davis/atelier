@@ -91,9 +91,11 @@ struct CullList: View {
             HStack {
                 Text("Checking sharpness, faces and similar shots")
                     .font(.headline)
-                Spacer()
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 8)
                 Text("\(cull.analyzed) of \(cull.photos.count)")
                     .monospacedDigit()
+                    .fixedSize()
                     .foregroundStyle(.secondary)
             }
             ProgressView(value: Double(cull.analyzed), total: Double(max(cull.photos.count, 1)))
@@ -136,27 +138,33 @@ private struct CullGroupCard: View {
             HStack(spacing: 8) {
                 Image(systemName: isSingles ? "photo" : "square.stack.3d.down.right")
                     .foregroundStyle(.secondary)
-                Text(title).font(.headline)
+                Text(title).font(.headline).lineLimit(1).fixedSize()
                 if let kind {
                     Text(kind)
                         .font(.caption.weight(.medium))
                         .padding(.horizontal, 6)
                         .padding(.vertical, 1)
                         .background(Color.secondary.opacity(0.18), in: Capsule())
+                        .fixedSize()
                         .help(kind == "Same frame" ? "Framed alike: people moved a little, blinked or changed expression"
                               : "The same scene, zoomed, recomposed or refocused")
                 }
+                // The count and time give way (truncate) before the card grows past the list.
                 Text("\(ids.count) photo\(ids.count == 1 ? "" : "s")")
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
                 if !isSingles, let time = cull.photos[ids[0]].captureTime {
-                    Text(time.formatted(date: .omitted, time: .standard)).foregroundStyle(.secondary)
+                    Text(time.formatted(date: .omitted, time: .shortened)).foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .layoutPriority(-1)
                 }
-                Spacer()
+                Spacer(minLength: 4)
                 Text(kept == 0 ? "None kept" : "\(kept) kept")
                     .font(.caption.weight(.semibold))
                     .padding(.horizontal, 7)
                     .padding(.vertical, 2)
                     .background(kept == 0 ? Color.orange.opacity(0.25) : Color.green.opacity(0.22), in: Capsule())
+                    .fixedSize()
             }
             ScrollView(.horizontal, showsIndicators: true) {
                 LazyHStack(spacing: CullTile.spacing) {

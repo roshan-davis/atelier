@@ -87,6 +87,10 @@ final class CullModel: ObservableObject, Identifiable {
     var onClose: ((Bool) -> Void)?
     /// Set in the Import dialog to show Back, which returns to the import settings.
     var onBack: (() -> Void)?
+    /// In the Import dialog: copies the files to the library while the user culls, and how far
+    /// it has got. Import takes over what it has done.
+    var stager: ImportStager?
+    @Published var ahead: ImportStager.Progress?
     private var loadTask: Task<Void, Never>?
     private var analysisTask: Task<Void, Never>?
     private var largeTask: Task<Void, Never>?
@@ -394,7 +398,7 @@ final class CullModel: ObservableObject, Identifiable {
         case .importing(_, let options):
             // Everything is cataloged so rejects can be reviewed later; only keepers join the entry.
             let files = photos.flatMap { [$0.url!] + $0.siblings }
-            model.runImport(sources: files, options: options) { result in
+            model.runImport(sources: files, options: options, stager: stager) { result in
                 guard let entry = result.importGroupId else { return }
                 let id = { (index: Int) in result.assetIDsBySource[photos[index].url!] }
                 let rejected = photos.filter { !kept.contains($0.id) }

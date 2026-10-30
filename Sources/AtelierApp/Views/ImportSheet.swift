@@ -34,7 +34,7 @@ struct ImportSheet: View {
                         CullView(cull: cull, embedded: true)
                     }
                 case .importing:
-                    ImportProgressStep(copying: flow.copyFiles) { dismiss() }
+                    ImportProgressStep(copying: flow.copyFiles, photos: flow.wall) { dismiss() }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -514,17 +514,17 @@ private struct SourceThumbnail: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
-        .task(id: url) {
-            if let cached = SourceThumbnailCache.shared.object(forKey: url as NSURL) {
-                image = cached
-                return
-            }
-            let loaded = await Task.detached(priority: .utility) {
-                Culling.image(at: url, maxPixel: 320).map { NSImage(cgImage: $0, size: .zero) }
-            }.value
-            if let loaded { SourceThumbnailCache.shared.setObject(loaded, forKey: url as NSURL) }
-            image = loaded
-        }
+        .task(id: url) { image = await Self.load(url) }
+    }
+
+    /// The photo's embedded preview, small, from the cache or read off the main thread.
+    static func load(_ url: URL, priority: TaskPriority = .utility) async -> NSImage? {
+        if let cached = SourceThumbnailCache.shared.object(forKey: url as NSURL) { return cached }
+        let loaded = await Task.detached(priority: priority) {
+            Culling.image(at: url, maxPixel: 320).map { NSImage(cgImage: $0, size: .zero) }
+        }.value
+        if let loaded { SourceThumbnailCache.shared.setObject(loaded, forKey: url as NSURL) }
+        return loaded
     }
 }
 
@@ -538,19 +538,27 @@ private enum SourceThumbnailCache {
 
 // MARK: - Importing
 
-/// The last step: how far the import has got, in big clear figures, with Cancel. Run in
-/// Background closes the dialog and leaves the progress in the status bar. The dialog closes by
-/// itself when every file is in.
+/// The last step: how far the import has got, in big clear figures, with Cancel, over a wall
+/// of the photos being imported that light up as each one is in. Run in Background closes the
+/// dialog and leaves the progress in the status bar. The dialog closes by itself when every
+/// file is in.
 struct ImportProgressStep: View {
     @EnvironmentObject private var model: LibraryModel
     @Environment(\.theme) private var theme
     let copying: Bool
+    var photos: [ImportWallPhoto] = []
     let close: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
             ZStack {
                 Color(nsColor: theme.gridBackground)
+                ImportWall(photos: photos, done: model.importProgress?.doneFiles ?? [])
+                // The wall recedes behind the card, so the figures stay easy to read.
+                RadialGradient(colors: [Color(nsColor: theme.gridBackground).opacity(0.92),
+                                        Color(nsColor: theme.gridBackground).opacity(0.15)],
+                               center: .center, startRadius: 180, endRadius: 640)
+                    .allowsHitTesting(false)
                 VStack(spacing: 22) {
                     if let progress = model.importProgress {
                         figures(progress)
@@ -560,9 +568,9 @@ struct ImportProgressStep: View {
                 }
                 .padding(32)
                 .frame(width: 560)
-                .background(Color(nsColor: theme.panel), in: RoundedRectangle(cornerRadius: 14))
-                .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.secondary.opacity(0.18)))
-                .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+                .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.secondary.opacity(0.2)))
+                .shadow(color: .black.opacity(0.25), radius: 24, y: 8)
             }
             ImportFooter {
                 Text(copying ? "Each copy is checked against the original. Thumbnails are made once every photo is in."
@@ -637,5 +645,110 @@ struct ImportProgressStep: View {
                 .lineLimit(1)
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+/// Behind the copy step's figures: every photo being imported, faint and grey until it is in
+/// the catalog, then in full color with a check. The wall moves on by itself to keep the photos
+/// being copied in view. Thumbnails come from the Cull step, or the Choose step's cache, so the
+/// wall adds almost nothing to the copy.
+private struct ImportWall: View {
+    let photos: [ImportWallPhoto]
+    let done: Set<String>
+    @State private var position = ScrollPosition(edge: .top)
+    @State private var size: CGSize = .zero
+
+    private static let spacing = 6.0
+    private static let padding = 12.0
+    /// The tile width aimed for; tiles stretch a little to fill the width.
+    private static let target = 128.0
+
+    var body: some View {
+        let layout = Layout(width: size.width, count: photos.count)
+        ScrollView(.vertical, showsIndicators: false) {
+            if layout.tile > 0 {
+                LazyVGrid(columns: Array(repeating: GridItem(.fixed(layout.tile), spacing: Self.spacing),
+                                         count: layout.columns),
+                          spacing: Self.spacing) {
+                    ForEach(photos) { photo in
+                        ImportWallTile(photo: photo, isDone: done.contains(photo.key))
+                            .frame(width: layout.tile, height: layout.tileHeight)
+                    }
+                }
+                .padding(Self.padding)
+            }
+        }
+        .scrollDisabled(true)
+        .scrollPosition($position)
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { size = $0 }
+        .onChange(of: firstWaiting) { _, index in follow(index, layout) }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    /// The first photo not in yet: copies finish a few at a time, a little out of order.
+    private var firstWaiting: Int {
+        photos.firstIndex { !done.contains($0.key) } ?? photos.count
+    }
+
+    /// Keeps the row being copied a little above the middle, where the card doesn't hide it all.
+    private func follow(_ index: Int, _ layout: Layout) {
+        guard layout.tile > 0, size.height > 0 else { return }
+        let row = Double(min(index, max(photos.count - 1, 0)) / layout.columns)
+        let rowStride = layout.tileHeight + Self.spacing
+        let content = Self.padding * 2 + Double(layout.rows) * rowStride - Self.spacing
+        let y = Self.padding + row * rowStride - size.height * 0.3
+        let clamped = min(max(0, content - size.height), max(0, y))
+        withAnimation(.easeInOut(duration: 0.8)) { position.scrollTo(y: clamped) }
+    }
+
+    private struct Layout {
+        let columns: Int
+        let tile: Double
+        let rows: Int
+        var tileHeight: Double { (tile * 0.75).rounded() }
+
+        init(width: Double, count: Int) {
+            let usable = width - ImportWall.padding * 2
+            columns = max(1, Int((usable + ImportWall.spacing) / (ImportWall.target + ImportWall.spacing)))
+            tile = usable > 40 ? ((usable - Double(columns - 1) * ImportWall.spacing) / Double(columns)).rounded(.down) : 0
+            rows = (count + columns - 1) / columns
+        }
+    }
+}
+
+private struct ImportWallTile: View {
+    let photo: ImportWallPhoto
+    let isDone: Bool
+    @State private var loaded: NSImage?
+
+    var body: some View {
+        ZStack(alignment: .bottomTrailing) {
+            RoundedRectangle(cornerRadius: 5).fill(Color.primary.opacity(0.08))
+            if let image = photo.thumbnail ?? loaded {
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipShape(RoundedRectangle(cornerRadius: 5))
+            }
+            if isDone {
+                Image(systemName: "checkmark.circle.fill")
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.white, .green)
+                    .font(.system(size: 15))
+                    .shadow(color: .black.opacity(0.4), radius: 2)
+                    .padding(5)
+                    .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .saturation(isDone ? 1 : 0)
+        .opacity(isDone ? 1 : 0.32)
+        .animation(.easeOut(duration: 0.4), value: isDone)
+        .task(id: photo.url) {
+            // Only for photos the Cull step didn't show: a small read of the embedded preview,
+            // at low priority so the copy keeps the drive.
+            if photo.thumbnail == nil { loaded = await SourceThumbnail.load(photo.url, priority: .background) }
+        }
     }
 }

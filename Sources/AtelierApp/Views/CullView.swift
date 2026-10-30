@@ -10,6 +10,7 @@ struct CullView: View {
     var embedded = false
     @Environment(\.theme) private var theme
     @State private var keys = CullKeyMonitor()
+    @AppStorage("cull.listWidth") private var listWidth = 560.0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -18,11 +19,19 @@ struct CullView: View {
             if cull.isLoading {
                 loadingStatus
             } else {
-                HSplitView {
-                    CullList(cull: cull)
-                        .frame(minWidth: 420, idealWidth: 560)
-                    preview
-                        .frame(minWidth: 360, idealWidth: 520)
+                // The list gets exactly the width it is given, so its rows wrap to the pane
+                // (a split view would lay it out wider and clip both sides).
+                GeometryReader { proxy in
+                    let range = 420.0...max(420.0, Double(proxy.size.width) - 360)
+                    HStack(spacing: 0) {
+                        CullList(cull: cull)
+                            .frame(width: min(range.upperBound, max(range.lowerBound, listWidth)))
+                            .clipped()
+                        PanelResizeHandle(width: $listWidth, range: range, panel: .leading)
+                        preview
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .clipped()
+                    }
                 }
             }
             footer
@@ -119,7 +128,11 @@ struct CullView: View {
 
     private var footer: some View {
         ImportFooter {
-            Text("Click to look · Space or double-click keeps or drops · P keep · X drop · arrows move")
+            if let ahead = cull.ahead, ahead.total > 0 {
+                aheadStatus(ahead)
+            } else {
+                Text("Click to look · Space or double-click keeps or drops · P keep · X drop · arrows move")
+            }
         } buttons: {
             Button("Keep All") { cull.keepAll() }
                 .disabled(cull.isAnalyzing)
@@ -135,6 +148,24 @@ struct CullView: View {
                 .keyboardShortcut(.defaultAction)
                 .disabled(cull.isAnalyzing || cull.keptCount == 0)
         }
+    }
+
+    /// While the user culls, the files are copied to the library, so Import is quick.
+    private func aheadStatus(_ ahead: ImportStager.Progress) -> some View {
+        HStack(spacing: 6) {
+            if ahead.isFinished {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                Text(ahead.copying ? "All \(ahead.total) files copied to your library ahead; Import only files them"
+                     : "All \(ahead.total) files checked ahead; Import will be quick")
+            } else {
+                ProgressView(value: Double(ahead.done), total: Double(max(ahead.total, 1)))
+                    .progressViewStyle(.circular)
+                    .controlSize(.small)
+                Text("\(ahead.copying ? "Copying to your library" : "Checking files") while you cull: \(ahead.done) of \(ahead.total)")
+                    .monospacedDigit()
+            }
+        }
+        .help("Atelier copies the photos while you cull, so Import has less to do. Back or Cancel discards these copies.")
     }
 
     private var finishTitle: String {

@@ -40,6 +40,8 @@ struct ImportStatus: Equatable {
     var speed: String?
     var timeLeft: String?
     var file: String?
+    /// The paths of the files in the catalog so far, for the dialog's wall of photos.
+    var doneFiles: Set<String> = []
 }
 
 /// A file the last import or export could not handle, shown from the status bar.
@@ -638,14 +640,16 @@ final class LibraryModel: ObservableObject {
 
     /// `then` runs on the main actor with the result, before the status is set. The import
     /// entry is selected when every file is cataloged, and thumbnails are made after that.
-    func runImport(sources: [URL], options: ImportOptions, then: ((ImportProgress) -> Void)? = nil) {
+    /// A `stager` hands over what it copied ahead while the user culled.
+    func runImport(sources: [URL], options: ImportOptions, stager: ImportStager? = nil,
+                   then: ((ImportProgress) -> Void)? = nil) {
         let importer = Importer(catalog: catalog, previews: nil, scheduler: previewScheduler)
         let copying: Bool
         if case .copy = options.mode { copying = true } else { copying = false }
         importProgress = ImportStatus(phase: "Looking for photos…", fraction: nil)
         importTask = Task.detached {
             let start = Date()
-            let result = await importer.run(sources: sources, options: options) { progress in
+            let result = await importer.run(sources: sources, options: options, stager: stager) { progress in
                 let status = LibraryModel.importStatus(progress, copying: copying, elapsed: Date().timeIntervalSince(start))
                 Task { @MainActor in
                     if self.importTask != nil, !self.importWasCancelled { self.importProgress = status }
@@ -683,6 +687,7 @@ final class LibraryModel: ObservableObject {
         let bytes = ByteCountFormatter()
         bytes.countStyle = .file
         status.done = progress.processed
+        status.doneFiles = Set(progress.assetIDsBySource.keys.map(\.standardizedFileURL.path))
         status.total = progress.total
         status.amount = "\(bytes.string(fromByteCount: progress.bytesDone)) of \(bytes.string(fromByteCount: progress.totalBytes))"
         status.file = progress.currentFile?.lastPathComponent

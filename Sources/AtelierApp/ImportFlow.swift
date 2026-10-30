@@ -1,5 +1,6 @@
 import AppKit
 import AtelierCore
+import Combine
 import Foundation
 
 /// The Import dialog's state, from choosing photos to the last file copied. The dialog's views
@@ -54,6 +55,12 @@ final class ImportFlow: ObservableObject {
     private var nameEdited = false
 
     private weak var model: LibraryModel?
+    /// Copies the files to the library while the user culls; handed to the import on Import.
+    private var stager: ImportStager?
+    private var watch: AnyCancellable?
+    /// The photos the copy step shows behind its figures: the culled photos with their
+    /// thumbnails, or the photos chosen.
+    @Published private(set) var wall: [ImportWallPhoto] = []
 
     init(model: LibraryModel) {
         self.model = model
@@ -133,22 +140,52 @@ final class ImportFlow: ObservableObject {
     func next(close: @escaping () -> Void) {
         guard let model, canContinue else { return }
         guard cullFirst else {
+            wall = photos.map { ImportWallPhoto(url: $0, thumbnail: nil) }
             model.runImport(sources: sources.map(\.url), options: options)
             step = .importing
             return
         }
+        let options = self.options
         let cull = model.importCull(sources: sources.map(\.url), options: options)
         cull.onBack = { [weak self] in self?.back() }
-        cull.onClose = { [weak self] imported in
-            self?.cull = nil
-            if imported { self?.step = .importing } else { close() }
+        cull.onClose = { [weak self, weak cull] imported in
+            guard let self else { return }
+            if imported {
+                // The import owns the copies made ahead now, and discards what it doesn't use.
+                self.stager = nil
+                self.wall = (cull?.photos ?? []).compactMap { photo in
+                    photo.url.map { ImportWallPhoto(url: $0, thumbnail: photo.thumbnail) }
+                }
+            }
+            self.watch = nil
+            self.cull = nil
+            if imported { self.step = .importing } else { self.discardAhead(); close() }
+        }
+        // Copy ahead once the photos are listed, alongside the analysis: it reads little of each
+        // file, the copy reads the rest.
+        let stager = ImportStager(mode: options.mode)
+        cull.stager = stager
+        self.stager = stager
+        let urls = sources.map(\.url)
+        watch = cull.$isLoading.first { !$0 }.sink { [weak cull] _ in
+            guard let cull else { return }
+            stager.start(sources: urls, workers: Importer.workers(for: options.mode) / 2) { [weak cull] progress in
+                Task { @MainActor [weak cull] in cull?.ahead = progress }
+            }
         }
         self.cull = cull
         step = .cull
     }
 
+    private func discardAhead() {
+        stager?.discard()
+        stager = nil
+        watch = nil
+    }
+
     /// From the Cull step back to the settings, as they were.
     func back() {
+        discardAhead()
         cull?.stop()
         cull = nil
         step = .choose
@@ -156,7 +193,24 @@ final class ImportFlow: ObservableObject {
 
     /// The dialog closed, by any route.
     func closed() {
+        discardAhead()
         cull?.stop()
         cull = nil
     }
+}
+
+/// A photo on the copy step's wall: its thumbnail when the Cull step already made one.
+struct ImportWallPhoto: Identifiable {
+    let url: URL
+    let thumbnail: NSImage?
+    /// Matches `ImportStatus.doneFiles`.
+    let key: String
+
+    init(url: URL, thumbnail: NSImage?) {
+        self.url = url
+        self.thumbnail = thumbnail
+        key = url.standardizedFileURL.path
+    }
+
+    var id: URL { url }
 }

@@ -106,6 +106,55 @@ final class AtelierCoreTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: destination), try Data(contentsOf: source))
     }
 
+    func testFilesCopiedAheadAreMovedIntoPlace() async throws {
+        let shoot = try makeShoot(count: 3)
+        let library = workDir.appendingPathComponent("Library", isDirectory: true)
+        let mode = ImportMode.copy(destinationRoot: library, eventName: "Ahead")
+        let stager = ImportStager(mode: mode, copiesOnSameVolume: true)
+        stager.start(sources: [shoot])
+        await stager.waitUntilDone()
+        let staging = try XCTUnwrap(stager.directory)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: staging.path).count, 3)
+
+        // A file that changed after it was copied ahead is copied again.
+        let changed = shoot.appendingPathComponent("IMG_0001.jpg")
+        try FileManager.default.removeItem(at: changed)
+        try FileManager.default.copyItem(at: shoot.appendingPathComponent("IMG_0002.jpg"), to: changed)
+        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSinceNow: -3600)],
+                                              ofItemAtPath: changed.path)
+
+        let catalog = try Catalog()
+        let result = await Importer(catalog: catalog, previews: nil)
+            .run(sources: [shoot], options: ImportOptions(mode: mode, buildPreviews: false), stager: stager)
+        XCTAssertEqual(result.imported, 3)
+        XCTAssertTrue(result.failures.isEmpty, "\(result.failures)")
+        for id in result.importedAssetIDs {
+            let detail = try XCTUnwrap(catalog.detail(for: id))
+            let url = try XCTUnwrap(detail.fileURL)
+            XCTAssertEqual(detail.asset.contentHash, try FileHasher.sha256(of: url))
+            XCTAssertEqual(detail.asset.contentHash,
+                           try FileHasher.sha256(of: shoot.appendingPathComponent(url.lastPathComponent)))
+        }
+        await stager.discard().value
+        XCTAssertFalse(FileManager.default.fileExists(atPath: ImportStager.stagingRoot(in: library).path))
+    }
+
+    func testReferencedFilesHashedAheadKeepTheirHash() async throws {
+        let shoot = try makeShoot(count: 2)
+        let stager = ImportStager(mode: .reference)
+        stager.start(sources: [shoot])
+        await stager.waitUntilDone()
+        XCTAssertNil(stager.directory)
+        let catalog = try Catalog()
+        let result = await Importer(catalog: catalog, previews: nil)
+            .run(sources: [shoot], options: ImportOptions(buildPreviews: false), stager: stager)
+        XCTAssertEqual(result.imported, 2)
+        for id in result.importedAssetIDs {
+            let detail = try XCTUnwrap(catalog.detail(for: id))
+            XCTAssertEqual(detail.asset.contentHash, try FileHasher.sha256(of: try XCTUnwrap(detail.fileURL)))
+        }
+    }
+
     // MARK: Import entries
 
     func testEachImportGetsAnEntryAndMoreCanBeAddedToIt() async throws {
