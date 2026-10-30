@@ -12,53 +12,57 @@ import SwiftUI
 /// rather than left to `ScrollViewReader`, which jumps in nested and lazy stacks.
 struct CullList: View {
     @ObservedObject var cull: CullModel
+    /// The list's size, given by the Cull view's own layout rather than measured, so rows are
+    /// always laid out to exactly this width from the first frame.
+    let size: CGSize
     @Environment(\.theme) private var theme
     @State private var position = ScrollPosition(edge: .top)
-    /// The list's visible size and its content's height, measured as soon as it is laid out
-    /// (scroll-geometry callbacks only come with a change, so they can't be relied on alone).
-    @State private var viewport: CGSize = .zero
-    @State private var contentHeight: CGFloat = 0
     /// How far the list is scrolled; zero until the user or a key scrolls it.
     @State private var offset: CGFloat = 0
     /// Each row's frame in the list's content.
     @State private var rowFrames: [Int: CGRect] = [:]
 
     private static let space = "cullList"
+    private static let padding = 16.0
+
+    /// The width inside the list's padding, which every row and card fits.
+    private var innerWidth: Double { max(0, Double(size.width) - Self.padding * 2) }
+    /// While analyzing, as many photos per row as fit.
+    private var columns: Int { max(1, Int((innerWidth + CullTile.spacing) / CullTile.stride)) }
 
     var body: some View {
+        let columns = self.columns
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: 12) {
                 if cull.isAnalyzing {
                     analysisStatus
+                        .frame(width: innerWidth, alignment: .leading)
                 }
                 let rows = cull.rows
                 ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
                     rowView(index, row, isLast: index == rows.count - 1)
+                        .frame(width: innerWidth, alignment: .leading)
                         .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: {
                             rowFrames[index] = $0
                         }
                 }
             }
-            .padding(16)
-            // Never wider than the list, so nothing is cut off at the sides.
-            .frame(width: viewport.width > 0 ? viewport.width : nil, alignment: .leading)
+            .padding(Self.padding)
+            .frame(width: size.width, alignment: .leading)
             .coordinateSpace(.named(Self.space))
-            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
         }
+        .frame(width: size.width, height: size.height)
         .scrollPosition($position)
         .onScrollGeometryChange(for: CGFloat.self, of: { $0.contentOffset.y }) { _, new in offset = new }
-        .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
-            viewport = size
-            // While analyzing, as many photos per row as fit.
-            let columns = max(1, Int((size.width - 32 + CullTile.spacing) / CullTile.stride))
-            if cull.columns != columns { cull.columns = columns }
-        }
+        .onAppear { if cull.columns != columns { cull.columns = columns } }
+        .onChange(of: columns) { _, columns in cull.columns = columns }
         .background(Color(nsColor: theme.gridBackground))
         .onChange(of: cull.reveal) { _, reveal in
-            guard let reveal, viewport.height > 0,
+            let contentHeight = (rowFrames.values.map(\.maxY).max() ?? 0) + Self.padding
+            guard let reveal, size.height > 0,
                   let row = cull.rows.firstIndex(where: { $0.contains(reveal.id) }), let frame = rowFrames[row],
                   let y = ScrollReveal.offset(item: Double(frame.minY)...Double(frame.maxY),
-                                              visibleStart: Double(offset), visibleLength: Double(viewport.height),
+                                              visibleStart: Double(offset), visibleLength: Double(size.height),
                                               contentLength: Double(contentHeight), margin: 12)
             else { return }
             offset = CGFloat(y)
@@ -81,7 +85,8 @@ struct CullList: View {
             }
         } else {
             let isSingles = isLast && !cull.singles.isEmpty
-            CullGroupCard(cull: cull, ids: ids, index: index, isSingles: isSingles)
+            // The card's padding is 12 on each side.
+            CullGroupCard(cull: cull, ids: ids, index: index, isSingles: isSingles, width: innerWidth - 24)
         }
     }
 
@@ -125,9 +130,10 @@ private struct CullGroupCard: View {
     let ids: [Int]
     let index: Int
     let isSingles: Bool
+    /// The width of the row of photos, from the list's width.
+    let width: Double
     @Environment(\.theme) private var theme
     @State private var position = ScrollPosition(edge: .leading)
-    @State private var width: CGFloat = 0
     @State private var offset: CGFloat = 0
 
     var body: some View {
@@ -172,10 +178,11 @@ private struct CullGroupCard: View {
                 }
                 .padding(.bottom, 4)
             }
+            .frame(width: max(0, width))
             .scrollPosition($position)
             .onScrollGeometryChange(for: CGFloat.self, of: { $0.contentOffset.x }) { _, new in offset = new }
-            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         }
+        .frame(width: max(0, width), alignment: .leading)
         .padding(12)
         .background(Color(nsColor: theme.panel).opacity(0.9), in: RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10)
@@ -185,7 +192,7 @@ private struct CullGroupCard: View {
             guard let reveal, let column = ids.firstIndex(of: reveal.id), width > 0 else { return }
             let start = Double(column) * CullTile.stride
             guard let x = ScrollReveal.offset(item: start...(start + CullTile.width),
-                                              visibleStart: Double(offset), visibleLength: Double(width),
+                                              visibleStart: Double(offset), visibleLength: width,
                                               contentLength: Double(ids.count) * CullTile.stride - CullTile.spacing,
                                               margin: 8)
             else { return }

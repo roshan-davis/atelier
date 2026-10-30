@@ -23,9 +23,9 @@ struct CullView: View {
                 // (a split view would lay it out wider and clip both sides).
                 GeometryReader { proxy in
                     let range = 420.0...max(420.0, Double(proxy.size.width) - 360)
+                    let width = min(range.upperBound, max(range.lowerBound, listWidth))
                     HStack(spacing: 0) {
-                        CullList(cull: cull)
-                            .frame(width: min(range.upperBound, max(range.lowerBound, listWidth)))
+                        CullList(cull: cull, size: CGSize(width: width, height: proxy.size.height))
                             .clipped()
                         PanelResizeHandle(width: $listWidth, range: range, panel: .leading)
                         preview
