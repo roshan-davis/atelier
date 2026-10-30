@@ -134,7 +134,7 @@ Evidence baseline, October 30, 2026:
 
 **Evidence:** review §8/10 lists watermarks, WebP, named export presets, plugins, batch AI, PSD, Core ML and MLX as remaining work, not a single approved project.
 
-**Acceptance to agree:** selected feature has a PRD scope, output/interoperability fixtures, Help and runtime acceptance. Preserve one Processor contract and backend order; explicitly defer the other capabilities.
+**Acceptance to agree:** selected feature has a PRD scope, output/interoperability fixtures, Help and runtime acceptance. Preserve one Processor contract and backend order; explicitly defer the other capabilities. Export features are now itemized in AT-022 and plugins/HDR in AT-021.
 
 ## AT-016 — Track this list and the working agreement
 
@@ -153,3 +153,88 @@ Evidence baseline, October 30, 2026:
 **Scope:** accept only a silent exit 1 from the generated no-index whitespace command. Preserve diagnostics and all other failures. Regression coverage checks clean/dirty committed, staged, working and untracked files, including names with spaces, plus missing-file errors and silent non-difference error statuses. No app behavior, rendering, data or UI changes.
 
 **Validation/limits:** ten script regressions pass. Full Mac check passed at base `17ea9c3` plus this four-file patch: Help/build/whitespace and 214 XCTest tests, 2 missing-RAW skips, zero failures. Final committed-head validation and CI status are recorded in the PR. No desktop/UI actions needed or authorized; do not take over the desktop without asking Rosh and receiving explicit approval. Manual app/session acceptance is outside this script-only item.
+
+## AT-018 — Filmstrip: source menu, thumbnail overlays and toolbar
+
+**Status:** Proposed / discuss — UX design first. Rosh asked for a design (mockups or snapshots) to agree before any code. **Owner/chat/branch/PR:** unassigned. **Requested:** Rosh, October 30, 2026. **Dependencies:** none; coordinate AT-014 for focus and keyboard behaviour.
+
+**Evidence at `5086f3d`:** the Filmstrip header (`FilmstripView.swift`) shows source name, count, "N of M" and filename only; there is no source menu, filter or sort control. Filmstrip and grid cells show rating, flag and stack as one text badge (`ThumbnailItem.badge` in `GridView.swift`); the focused photo has a 2 pt border and the rest of the selection a faint one. Thumbnail size is set by dragging the Filmstrip's top edge.
+
+**Scope to design:**
+
+1. **Source menu.** The source title becomes a pop-up, as Lightroom Classic's Filmstrip source indicator: All Photographs, recent import entries, collections and folders, plus the current filter. Choosing one changes the Library source.
+2. **Clearer focus and selection, everywhere a thumbnail can be selected** (grid, Filmstrip, Cull, pickers). One shared thumbnail cell, not per-view fixes. Overlays on the thumbnail:
+   - group indication: stack count/kind, RAW+JPEG pair, virtual copy;
+   - star rating, flag and color label as icons, not text;
+   - other candidates to agree: has Develop edits, has masks or AI/external edit, offline original, cropped, badge for "in a collection". Lightroom Classic's grid cell badges are the reference.
+   - Focused vs selected vs unselected must read clearly in every theme.
+3. **Right-side toolbar.** A Filter pop-up (Flagged, rated, color label, edited, custom saved filters; same rules as the Library filter bar) and a sort control (Capture Time, Import Order, File Name, Rating, Edit Time, with ascending/descending).
+4. **The magnifier −/+ slider** seen in Lightroom is a thumbnail-size slider. Atelier already resizes Filmstrip thumbnails by dragging its top edge, so a slider is redundant here. Recommendation: leave it out of the Filmstrip; reconsider only for the grid toolbar.
+
+**Acceptance to agree:** approved mockups first; then layout snapshots for each theme and Filmstrip height; keyboard selection and ⌘/⇧-click unchanged; one cell component reused by grid, Filmstrip and Cull; PRD and Help updated.
+
+## AT-019 — Photo lags when selected: background shows before the image
+
+**Status:** Approved / ready — bug reported by Rosh, October 30, 2026; fix to be bounded to the selection-to-first-frame path. **Owner/chat/branch/PR:** unassigned. **Dependencies:** AT-011 measurement protocol for before/after timings.
+
+**Symptom:** selecting a photo (Filmstrip, arrow keys) first draws the empty main panel background, then the photo.
+
+**Evidence at `5086f3d` (source inspection, not reproduced):**
+
+- Loupe (`LoupeView.load()`): on a new photo it sets `image = nil` before loading, so the panel shows the surround (and a `ProgressView`) until the 2560 px preview arrives. `NSImage(contentsOf:)` runs on a detached task but decodes lazily, so the JPEG is decoded on the main thread when `ZoomCanvasView.setImage` asks for its `CGImage`.
+- Develop (`DevelopController.open`): clears `image`, then sets it synchronously from `NSImage(contentsOf:)` of the cached preview (again decoded on the main thread at draw time); if no preview is cached, the panel is empty until the proxy session renders.
+- No in-memory cache or prefetch of neighbouring previews.
+
+**Scope:** keep the previous photo on screen until the next one is decoded (never clear to background); show the cached grid thumbnail immediately, then swap to the preview; decode off the main thread (`CGImageSource` with `kCGImageSourceShouldCacheImmediately`); a small LRU of decoded previews and prefetch of the next/previous photo in the current order. Apply to Loupe and Develop, and check Compare/Before-After and Cull for the same pattern.
+
+**Acceptance:** stepping through 50 photos with arrow keys never shows the empty background; time from selection to first photo frame measured before/after on Rosh's Mac (target to agree, e.g. under 100 ms from a cached preview); no change to rendered look, so no `PreviewCache.version` bump.
+
+## AT-020 — Zoom cursor shows when the photo can't zoom or pan
+
+**Status:** Approved / ready — bug reported by Rosh, October 30, 2026. **Owner/chat/branch/PR:** unassigned. **Dependencies:** none.
+
+**Evidence at `5086f3d`:** `ZoomCanvasView.cursorShape` in `ZoomableImageView.swift` returns `.grab` when `canPan`, otherwise always `.zoomIn`. Zoom is double-click only since PR #44, so a magnifier over a fitted photo suggests a single click zooms. It also shows when double-click would not change anything (for example a small photo whose click-zoom size, `LibraryModel.clickZoomPercent`, is not larger than fit).
+
+**Scope:** arrow cursor when the photo fits and nothing can be panned; hand when it can be panned; eyedropper/tool cursors unchanged. Keep the change in `cursorShape` (one place, used by Loupe, Develop and Compare). Confirm with Rosh whether a magnifier should ever show (proposal: no, since the hint line already says "Double-click the photo to zoom").
+
+**Acceptance:** at Fit, Fill, below-fit and zoomed-in levels the cursor matches what a drag or double-click does, in Loupe, Develop, Compare and with Masking open; updates without moving the mouse after zoom changes (`Cursors.shared.refresh()`).
+
+## AT-021 — Plugin architecture, with HDR Merge as the first plugin
+
+**Status:** Proposed / discuss. **Owner/chat/branch/PR:** unassigned. **Requested:** Rosh, October 30, 2026. **Dependencies:** AT-008 (plugins must use the one Processor contract, not a second path); AT-005/007 for provenance of merged files.
+
+**Plugin requirements to agree:** plugins are Processors (input photos plus settings, progress, cancel, output files registered and stacked); discovery and enable/disable in Settings; a plugin can add a menu item (Photo > Merge to HDR…) and its own dialog with preview; versioned API; failures never touch originals.
+
+**HDR Merge requirements (Lightroom Classic Photo Merge > HDR is the reference):**
+
+1. Select 2+ bracketed photos (Photo > Photo Merge > HDR…, ⌃H); optional automatic detection of brackets by capture time and exposure bias for Rosh's Nikon Zf/Z6 bracket sequences.
+2. Dialog with a preview: **Auto Align** (handheld brackets), **Auto Settings** (tone the result), **Deghost Amount** None/Low/Medium/High with **Show Deghost Overlay**, **Create Stack** with the sources.
+3. Merge RAW data in linear space before tone mapping, so the result stays fully editable in Develop with an extended Exposure range (Lightroom gives ±10 EV on merged HDRs).
+4. Output an editable high-bit file next to the sources: floating-point DNG like Lightroom, or 32-bit float TIFF/OpenEXR if DNG writing needs a third-party SDK (check license and macOS encoder support first). Copy metadata from the reference frame; record sources in provenance.
+5. Headless merge with last settings (Lightroom: ⇧⌃H), background progress with cancel, and batch merge of several bracket groups.
+6. Edge cases: mismatched sizes or orientations, mixed RAW/JPEG, missing originals, moving subjects (deghost), clipped highlights in every frame.
+
+**Acceptance to agree:** bracket fixtures from Rosh's cameras; aligned, ghost-free result; Develop edits on the merged file; stack and provenance survive restart; PRD and Help.
+
+## AT-022 — Richer Export: watermark, presets, batch
+
+**Status:** Proposed / discuss — pick a first slice with Rosh. Takes the export part of AT-015. **Owner/chat/branch/PR:** unassigned. **Requested:** Rosh, October 30, 2026. **Dependencies:** AT-009 for exports of offline originals; AT-007 output policy for AI-derived photos.
+
+**Today (PRD Export row, `Exporter.swift` at `5086f3d`):** JPEG, HEIC, 16-bit TIFF, PNG; long edge; sharpen for screen; sRGB, Display P3, Adobe RGB, ProPhoto; metadata all / without location / none; quick settings for website and full size. PRD already lists watermark, metadata rules, named presets and publish to folder as later; U9 needs long edge 2048, sRGB, watermark, no GPS, WebP and JPEG.
+
+**Candidate features (from Lightroom Classic and Capture One):**
+
+1. **Watermark:** text or image (PNG logo), opacity, size (proportional/fit/fill), anchor and inset, shadow; saved watermark styles; live preview in the dialog.
+2. **Named export presets** (Lightroom) and **several at once** (Capture One process recipes; Lightroom batch export): one run produces, for example, website JPEG + full-size TIFF + social crop.
+3. **File naming templates** with tokens (filename, date, sequence, title, custom text, virtual copy name) and conflict handling (ask, unique name, overwrite, skip).
+4. **Destination:** chosen folder, same folder as original, subfolder, ask each time; add the export back to the catalog and stack it with the original.
+5. **Sizing:** long edge, short edge, width × height, megapixels, percentage, "don't enlarge", resolution (ppi); limit file size to N KB (Lightroom).
+6. **Output sharpening:** Screen, Matte or Glossy paper, Low/Standard/High.
+7. **Metadata rules:** copyright only, copyright and contact, all except camera and location, remove people; keywords; title/caption.
+8. **Formats:** WebP (needs an encoder; ImageIO can't write it), AVIF/JPEG XL as available on macOS, HDR output with gain map later.
+9. **Batch and background:** export queue with progress and cancel, "Export with previous" with no dialog, after-export action (Show in Finder, open in app).
+10. **Publish services:** publish-to-folder that re-exports changed photos (later: WooCommerce, Instagram per PRD).
+
+**Acceptance to agree:** chosen slice in the PRD; output fixtures (size, color profile, metadata, watermark position); background export does not block editing; Help page. Remaining features stay listed here, deferred explicitly.
+
+**Sources (secondary unless noted):** Adobe Help, "Export files to disk or CD" (primary, Lightroom Classic) https://helpx.adobe.com/lightroom-classic/help/export-files-disk-or-cd.html; Adobe Help, "HDR photo merge" (primary) https://helpx.adobe.com/ie/lightroom-classic/desktop/process-and-develop-photos/hdr-photo-merge.html; Julieanne Kost, "Exporting Photos from Lightroom Classic" https://jkost.com/blog/2024/09/export-and-batch-exporting-photos-from-lightroom-classic.html; Julieanne Kost, "Creating HDR images in Lightroom Classic" https://jkost.com/blog/2024/09/creating-high-dynamic-range-images-hdr-in-lightroom-classic.html; CreativeLive (David Grover), Capture One process recipes https://phoenix.creativelive.com/class/quick-start-to-capture-one-david-grover/lessons/overview-of-process-recipes; Have Camera Will Travel, Lightroom HDR deghost https://havecamerawilltravel.com/lightroom/hdr-photo-merge/.
