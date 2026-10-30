@@ -26,6 +26,25 @@ public struct XMPFields: Sendable, Hashable {
 /// Sidecars use the Adobe naming convention (IMG_0001.CR3 -> IMG_0001.xmp) so Lightroom and
 /// Bridge read them. Writing merges into an existing sidecar, keeping tags other apps wrote.
 public enum XMPSidecar {
+    // Serialize read/merge/replace across metadata and Develop writers, including pairs.
+    static let writeLock = NSRecursiveLock()
+
+    public static func readDevelop(for original: URL) throws -> DevelopSettings? {
+        let url = sidecarURL(for: original)
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        let data = try Data(contentsOf: url)
+        guard let metadata = CGImageMetadataCreateFromXMPData(data as CFData),
+              let mutable = CGImageMetadataCreateMutableCopy(metadata) else {
+            throw DevelopRecovery.RecoveryError.invalidSidecar
+        }
+        CGImageMetadataRegisterNamespaceForPrefix(mutable, atelierNamespace as CFString,
+                                                  atelierPrefix as CFString, nil)
+        guard let json = string(mutable, DevelopRecovery.path) else { return nil }
+        let packet = try DevelopRecovery.packet(json)
+        guard let settings = packet.files[original.lastPathComponent] else { return nil }
+        return try DevelopRecovery.settings(settings)
+    }
+
     public static let atelierNamespace = "http://ns.atelier.app/xmp/1.0/"
     public static let atelierPrefix = "atelier"
 
@@ -74,17 +93,34 @@ public enum XMPSidecar {
 
     // MARK: Writing
 
-    public static func write(_ fields: XMPFields, toSidecar url: URL) throws {
+    public static func write(_ fields: XMPFields, toSidecar url: URL,
+                             develop: DevelopSettings? = nil, filename: String? = nil) throws {
+        writeLock.lock()
+        defer { writeLock.unlock() }
         let metadata: CGMutableImageMetadata
-        if let data = try? Data(contentsOf: url),
-           let existing = CGImageMetadataCreateFromXMPData(data as CFData),
-           let copy = CGImageMetadataCreateMutableCopy(existing) {
+        if FileManager.default.fileExists(atPath: url.path) {
+            let data = try Data(contentsOf: url)
+            guard let existing = CGImageMetadataCreateFromXMPData(data as CFData),
+                  let copy = CGImageMetadataCreateMutableCopy(existing) else {
+                throw DevelopRecovery.RecoveryError.invalidSidecar
+            }
             metadata = copy
         } else {
             metadata = CGImageMetadataCreateMutable()
         }
         CGImageMetadataRegisterNamespaceForPrefix(metadata, atelierNamespace as CFString,
                                                   atelierPrefix as CFString, nil)
+
+        if let develop, let filename {
+            var packet = try string(metadata, DevelopRecovery.path).map(DevelopRecovery.packet)
+                ?? DevelopRecovery.Packet()
+            // Do not downgrade an entry written by a newer app or replace damaged edits.
+            if let existing = packet.files[filename] { _ = try DevelopRecovery.settings(existing) }
+            packet.files[filename] = try develop.encoded()
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            set(metadata, DevelopRecovery.path, String(decoding: try encoder.encode(packet), as: UTF8.self))
+        }
 
         set(metadata, "xmp:Rating", fields.rating.map(String.init))
         set(metadata, "xmp:Label", fields.colorLabel?.rawValue)

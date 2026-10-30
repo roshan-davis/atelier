@@ -558,7 +558,7 @@ struct AISettingsTab: View {
 
 // MARK: - Metadata
 
-private struct MetadataSettings: View {
+struct MetadataSettings: View {
     @AppStorage("xmp.autoWrite") private var autoWrite = false
 
     var body: some View {
@@ -566,7 +566,7 @@ private struct MetadataSettings: View {
             Section {
                 Toggle("Automatically write changes into XMP sidecars", isOn: $autoWrite)
             } footer: {
-                Text("When on, ratings, flags, labels, keywords, titles and captions are written to .xmp files next to the originals as you change them, so Lightroom, Bridge and Capture One see them. When off, use Library > Write XMP for Selection (⌘S).")
+                Text("When on, metadata and current Develop edits, including masks, are written to .xmp files next to the originals as you change them. Other apps can read the metadata; Develop edits are for Atelier recovery. When off, use Library > Write XMP for Selection (⌘S).")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

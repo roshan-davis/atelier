@@ -101,6 +101,12 @@
   <li>Or turn on <span class="path">Settings › Metadata › Automatically write changes into XMP sidecars</span>.</li>
 </ul>
 
+<h3 id="recover-edits">Recover current edits</h3>
+<p>Writing XMP also saves the current Atelier Develop settings and masks. Develop edits mark the sidecar unsaved; automatic writing includes them. To back up edits made before this feature, select those photos and choose <span class="path">Library › Write XMP for Selection</span>.</p>
+<p>If you lose the catalog, import the originals with their sidecars into a new catalog. Atelier restores the matching current edits before making previews, even when an import preset is selected. Photos already in the catalog keep their existing edits. RAW and JPEG files with the same name keep separate Develop entries in their shared sidecar; ratings and other standard metadata remain shared. Keep filenames unchanged for recovery.</p>
+<p>Old metadata-only sidecars still work. Unsupported or damaged recovery data appears in the import problems; Atelier leaves the sidecar untouched instead of silently replacing your edits. A write that cannot safely preserve existing recovery data also reports a problem.</p>
+<p>This recovers one current state, shown as <b>Recovered from XMP</b>, not history, snapshots, virtual copies, stacks, collections or AI provenance. Subject and object masks are regenerated from their saved instructions, so edges may change with macOS. Keep separate backups of originals and external/AI result files. Other apps can read the standard metadata, but the Develop settings are specific to Atelier.</p>
+
 <h2 id="volumes">Drives and the NAS</h2>
 <p>Atelier remembers photos by drive, not by where it's mounted, so plugging a drive in somewhere else doesn't break anything. When the NAS or a drive is off, its photos stay in the grid from their previews, marked Offline. <span class="path">Library › Refresh Volumes</span> (<kbd>⌘R</kbd>) checks again after you connect one.</p>
 

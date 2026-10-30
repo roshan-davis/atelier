@@ -185,6 +185,9 @@ final class LibraryModel: ObservableObject {
         previewScheduler.onFinish { [weak self] _, _ in
             Task { @MainActor in self?.previewsChanged() }
         }
+        develop.onSettingsSaved = { [weak self] id in
+            if UserDefaults.standard.bool(forKey: "xmp.autoWrite") { self?.autoWriteXMP([id]) }
+        }
         develop.onPreviewsUpdated = { [weak self] id in
             ThumbnailLoader.shared.invalidate(id)
             self?.previewsChanged()
@@ -595,27 +598,44 @@ final class LibraryModel: ObservableObject {
         guard !ids.isEmpty else { return }
         let catalog = self.catalog
         Task.detached(priority: .utility) {
-            _ = try? catalog.writeXMPSidecars(for: ids)
-            await MainActor.run { self.reloadDetail() }
+            do {
+                let result = try catalog.writeXMPSidecars(for: ids)
+                await MainActor.run {
+                    self.reloadDetail()
+                    if let failure = result.failures.first {
+                        self.status = "XMP write failed: \(failure.url.lastPathComponent): \(failure.reason)"
+                    }
+                }
+            } catch {
+                await MainActor.run { self.status = "XMP write failed: \(error.localizedDescription)" }
+            }
         }
     }
 
     func writeXMP(selectionOnly: Bool) {
+        develop.flushSave()
         let ids: [Int64]? = selectionOnly ? targetIDs : nil
         let catalog = self.catalog
         status = "Writing XMP…"
         Task.detached {
             let message: String
+            let failures: [ImportFailure]
             do {
                 let result = try catalog.writeXMPSidecars(for: ids)
                 var parts = ["Wrote \(result.written) XMP sidecar\(result.written == 1 ? "" : "s")"]
                 if result.offline > 0 { parts.append("\(result.offline) waiting for offline volumes") }
                 if !result.failures.isEmpty { parts.append("\(result.failures.count) failed") }
                 message = parts.joined(separator: ", ")
+                failures = result.failures
             } catch {
                 message = "XMP write failed: \(error.localizedDescription)"
+                failures = []
             }
-            await MainActor.run { self.status = message }
+            await MainActor.run {
+                self.status = message
+                self.problems = failures.map { Problem(name: $0.url.lastPathComponent, reason: $0.reason) }
+                self.problemsTitle = "These XMP sidecars could not be written"
+            }
         }
     }
 
@@ -659,6 +679,9 @@ final class LibraryModel: ObservableObject {
                 self.status = parts.joined(separator: ", ")
                 if let groupID = result.importGroupId {
                     self.sidebarSelection = .importGroup(groupID)
+                }
+                if UserDefaults.standard.bool(forKey: "xmp.autoWrite") {
+                    self.autoWriteXMP(result.importedAssetIDs)
                 }
                 then?(result)
                 self.problems = result.failures.map { Problem(name: $0.url.lastPathComponent, reason: $0.reason) }
