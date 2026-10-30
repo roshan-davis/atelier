@@ -11,6 +11,7 @@ To add a page: write Sources/AtelierApp/Help/<name>.html from an existing page, 
 GROUPS below. Give each h2/h3 an id so search results and the app can link straight to it.
 """
 
+import argparse
 import json
 import os
 import re
@@ -114,6 +115,10 @@ def clean(text):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--check", action="store_true", help="Validate without writing; fail if toc.js is stale")
+    args = parser.parse_args()
+
     problems = []
     parsed = {}
     for _, pages in GROUPS:
@@ -165,10 +170,20 @@ def main():
                 })
 
     out = os.path.join(HELP, "assets/toc.js")
-    with open(out, "w", encoding="utf-8") as f:
-        f.write("// Written by Scripts/help/build_help_index.py; don't edit by hand.\n")
-        f.write("window.HELP_TOC = " + json.dumps({"groups": groups, "sections": sections}, ensure_ascii=False,
-                                                  separators=(",", ":")) + ";\n")
+    content = "// Written by Scripts/help/build_help_index.py; don't edit by hand.\n"
+    content += "window.HELP_TOC = " + json.dumps({"groups": groups, "sections": sections}, ensure_ascii=False,
+                                               separators=(",", ":")) + ";\n"
+    if args.check:
+        try:
+            with open(out, encoding="utf-8") as f:
+                current = f.read()
+        except FileNotFoundError:
+            current = None
+        if current != content:
+            problems.append("Help index is stale; run python3 Scripts/help/build_help_index.py")
+    else:
+        with open(out, "w", encoding="utf-8") as f:
+            f.write(content)
     print(f"{len(parsed)} pages, {len(sections)} sections -> {os.path.relpath(out, ROOT)}")
     for problem in problems:
         print("PROBLEM:", problem)

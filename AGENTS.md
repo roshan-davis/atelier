@@ -98,6 +98,14 @@ Agents run in one of two places. Know which one you are.
 
 Either way, GitHub is the only hand-off: Rosh sees a change after it's pushed and they pull or check out the branch in Xcode.
 
+## Local checks before a PR
+
+- Every agent running on a Mac (Co/Codex, Cl/Claude, Antigravity) runs `python3 Scripts/check_pr.py` from the task worktree before opening or updating a PR.
+- Include the checked commit, working changes, summary/log location, failures and skipped tests in the PR. A failed build/test is not a pass. Resolve failures or explicitly report the blocker.
+- Optional real RAW fixtures: `python3 Scripts/check_pr.py --samples /absolute/path/to/raws`. Inspect the test log for skips; the script does not download samples.
+- The local check does not render or inspect GUI snapshots. UI changes still require the snapshot review below. No GitHub setup is needed for the local check.
+- Work in a separate worktree/branch from freshly fetched `origin/main` on Rosh's Mac. Do not switch branches, stash, or edit files in Rosh's active Xcode checkout. The earlier checkout instructions apply only to the agent's own task checkout.
+
 ## Pull requests
 
 Rosh reads PRs to decide what to test and merge, often days later and from several agents at once. Each PR must make sense on its own. [.github/pull_request_template.md](.github/pull_request_template.md) has the layout; GitHub fills it in when a PR is opened in the browser, and agents that open PRs another way copy it.

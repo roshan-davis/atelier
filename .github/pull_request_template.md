@@ -28,6 +28,12 @@ Then in Xcode: Product > Run (⌘R), and:
 
 1.
 
+## Validation
+
+<!-- Run python3 Scripts/check_pr.py on a Mac. Record commit and working changes, PASS/FAIL,
+     log location, skipped tests (especially RAW fixtures), and snapshot review when applicable.
+     If blocked or run elsewhere, give the actual commands and reason; never claim a pass. -->
+
 ## Checklist
 
 <!-- Tick what was done; strike through (~~like this~~) what doesn't apply. -->

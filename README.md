@@ -43,3 +43,25 @@ Every pull request and push to `main` runs [.github/workflows/build.yml](.github
 ## Not built yet
 
 Smart collections, perceptual-hash duplicates, watch folders, App Sandbox, model registry and license gate for AI outputs, PSD round-trip, Core ML and MLX backends. See the PRD for the phase plan.
+
+## Local pre-PR checks (Mac agents)
+
+Run from your task branch before opening or updating a PR:
+
+```sh
+python3 Scripts/check_pr.py
+# Optional existing RAW fixtures (no automatic downloads):
+python3 Scripts/check_pr.py --samples /absolute/path/to/sample-raws
+```
+
+Requires full Xcode and Python 3; the first Swift build may resolve dependencies over the network.
+The script checks whitespace, validates Help and its generated index without rewriting it,
+builds the app, and runs the tests. It exits nonzero if any check fails and retains individual
+logs plus `summary.txt` in `.build/local-checks/<run>/`, including the tested commit and working changes.
+It honors `DEVELOPER_DIR`, otherwise uses selected Xcode or `/Applications/Xcode.app` when only
+Command Line Tools are selected. It never changes the global Xcode selection.
+
+Report failures and skipped RAW tests in the PR; a successful run does not certify real-RAW
+coverage or visual layout. For UI changes, render and inspect layout snapshots separately.
+This local check requires no GitHub configuration and leaves the existing Actions workflow intact.
+Use a separate task worktree so Rosh's Xcode checkout stays untouched.

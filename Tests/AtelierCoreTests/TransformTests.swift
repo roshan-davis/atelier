@@ -124,7 +124,7 @@ final class TransformTests: XCTestCase {
                          LineSegment(start: photo(0.3, -0.25), end: photo(0.33, 0.25))]
         let horizontals = [LineSegment(start: photo(-0.35, -0.2), end: photo(0.35, -0.22)),
                            LineSegment(start: photo(-0.35, 0.2), end: photo(0.35, 0.19))]
-        for guides in [verticals + horizontals.prefix(1), verticals + horizontals] {
+        for guides in [verticals + Array(horizontals.prefix(1)), verticals + horizontals] {
             let upright = try XCTUnwrap(UprightSolver.solve(.guided, lines: guides, size: size, focalLength35: 35))
             var settings = DevelopSettings()
             settings.upright = upright

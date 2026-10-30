@@ -222,7 +222,10 @@ final class ColorToolsTests: XCTestCase {
                                               space: space, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue))
         context.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
         return (0..<(w * h)).map { i in
-            (0.2126 * Double(data[i * 4]) + 0.7152 * Double(data[i * 4 + 1]) + 0.0722 * Double(data[i * 4 + 2])) / 255
+            let red = Double(data[i * 4])
+            let green = Double(data[i * 4 + 1])
+            let blue = Double(data[i * 4 + 2])
+            return (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255
         }
     }
 
