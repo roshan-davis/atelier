@@ -3,8 +3,14 @@ import AtelierCore
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The import dialog. It opens first; photos are chosen or dropped inside it.
+/// The import dialog. It opens first; photos are chosen or dropped inside it. With Cull before
+/// importing on it is a wizard (settings, cull, import); otherwise the progress replaces the
+/// settings in place. Either way the dialog stays open until every file is copied.
 struct ImportSheet: View {
+    enum Step: Int, CaseIterable {
+        case settings, cull, importing
+    }
+
     @EnvironmentObject private var model: LibraryModel
     @Environment(\.dismiss) private var dismiss
 
@@ -39,6 +45,9 @@ struct ImportSheet: View {
     }
     @AppStorage("import.cull") private var cullFirst = false
     @State private var dropTargeted = false
+    @State private var step = Step.settings
+    /// The Cull step, made on Continue to Culling.
+    @State private var cull: CullModel?
 
     private var photoCount: Int? {
         let values = sources.map { counts[$0] }
@@ -64,6 +73,33 @@ struct ImportSheet: View {
     }
 
     var body: some View {
+        VStack(spacing: 0) {
+            if cullFirst {
+                ImportSteps(current: step)
+                Divider()
+            }
+            switch step {
+            case .settings:
+                settingsStep
+            case .cull:
+                if let cull {
+                    CullView(cull: cull)
+                }
+            case .importing:
+                ImportProgressStep(copying: copyFiles) { dismiss() }
+            }
+        }
+        .onAppear {
+            existingGroup = model.pendingImportGroup
+            add(model.pendingImportSources)
+        }
+        .onDisappear {
+            cull?.stop()
+            cull = nil
+        }
+    }
+
+    private var settingsStep: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Import Photos")
                 .font(.title2.bold())
@@ -156,28 +192,13 @@ struct ImportSheet: View {
                 Spacer()
                 Button("Cancel", role: .cancel) { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button(importButtonTitle) {
-                    var options = self.options
-                    options.developPreset = model.develop.presets.first { $0.id.uuidString == presetID }
-                    let sources = self.sources
-                    dismiss()
-                    if cullFirst {
-                        // After the dialog closes, so the Cull view isn't stacked on it.
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { model.beginImportCull(sources: sources, options: options) }
-                    } else {
-                        model.runImport(sources: sources, options: options)
-                    }
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(!canImport)
+                Button(importButtonTitle, action: start)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(!canImport)
             }
             .padding(20)
         }
         .frame(width: 560, height: 600)
-        .onAppear {
-            existingGroup = model.pendingImportGroup
-            add(model.pendingImportSources)
-        }
         .dropDestination(for: URL.self) { urls, _ in
             add(urls)
             return true
@@ -222,6 +243,32 @@ struct ImportSheet: View {
     }
 
     // MARK: Actions
+
+    /// Import, or with culling on, the Cull step; both stay in this dialog.
+    private func start() {
+        var options = self.options
+        options.developPreset = model.develop.presets.first { $0.id.uuidString == presetID }
+        guard cullFirst else {
+            model.runImport(sources: sources, options: options)
+            step = .importing
+            return
+        }
+        let cull = model.importCull(sources: sources, options: options)
+        cull.onBack = {
+            self.cull = nil
+            step = .settings
+        }
+        cull.onClose = { imported in
+            self.cull = nil
+            if imported {
+                step = .importing
+            } else {
+                dismiss()
+            }
+        }
+        self.cull = cull
+        step = .cull
+    }
 
     private func add(_ urls: [URL]) {
         for url in urls where !sources.contains(url) {
@@ -293,6 +340,113 @@ private struct SourceRow: View {
             .buttonStyle(.borderless)
             .foregroundStyle(.secondary)
             .help("Remove from this import")
+        }
+    }
+}
+
+/// The wizard's steps, shown when culling before importing: 1 Choose Photos › 2 Cull › 3 Import.
+private struct ImportSteps: View {
+    let current: ImportSheet.Step
+
+    var body: some View {
+        HStack(spacing: 10) {
+            item(.settings, "Choose Photos")
+            chevron
+            item(.cull, "Cull")
+            chevron
+            item(.importing, "Import")
+        }
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity)
+    }
+
+    private var chevron: some View {
+        Image(systemName: "chevron.right")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.tertiary)
+    }
+
+    private func item(_ step: ImportSheet.Step, _ title: String) -> some View {
+        let isCurrent = step == current
+        let isDone = step.rawValue < current.rawValue
+        return HStack(spacing: 6) {
+            ZStack {
+                Circle().fill(isCurrent ? Color.accentColor : Color.secondary.opacity(isDone ? 0.35 : 0.18))
+                if isDone {
+                    Image(systemName: "checkmark").font(.system(size: 9, weight: .bold))
+                } else {
+                    Text("\(step.rawValue + 1)").font(.system(size: 10, weight: .bold))
+                }
+            }
+            .frame(width: 18, height: 18)
+            .foregroundStyle(isCurrent ? Color.white : Color.primary)
+            Text(title)
+                .font(.callout.weight(isCurrent ? .semibold : .regular))
+                .foregroundStyle(isCurrent ? Color.primary : Color.secondary)
+        }
+    }
+}
+
+/// The import's progress inside the dialog: count, amount copied, speed, time left and the file
+/// being copied, with Cancel. Run in Background closes the dialog and leaves the progress in the
+/// status bar. The dialog closes by itself when every file is in.
+struct ImportProgressStep: View {
+    @EnvironmentObject private var model: LibraryModel
+    let copying: Bool
+    let close: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(copying ? "Copying Photos" : "Adding Photos")
+                .font(.title2.bold())
+            if let progress = model.importProgress {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(progress.phase)
+                        .font(.headline)
+                        .monospacedDigit()
+                    Group {
+                        if let fraction = progress.fraction {
+                            ProgressView(value: fraction)
+                        } else {
+                            ProgressView()
+                        }
+                    }
+                    .progressViewStyle(.linear)
+                    if let detail = progress.detail {
+                        Text(detail)
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(progress.file ?? " ")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+            Text(copying
+                 ? "Each copy is checked against the original. Thumbnails are made when every photo is copied. Photos copied before you cancel stay in the catalog."
+                 : "Thumbnails are made when every photo is added. Photos added before you cancel stay in the catalog.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            HStack {
+                Spacer()
+                Button("Run in Background", action: close)
+                    .help("Close this dialog; the progress stays in the status bar")
+                Button("Cancel Import", role: .cancel) { model.cancelImport() }
+                    .keyboardShortcut(.cancelAction)
+                    .disabled(model.importProgress?.phase == "Cancelling…")
+            }
+        }
+        .padding(20)
+        .frame(width: 560, height: 280, alignment: .topLeading)
+        .onChange(of: model.importProgress == nil) { _, finished in
+            if finished { close() }
+        }
+        .onAppear {
+            if model.importProgress == nil { close() }
         }
     }
 }

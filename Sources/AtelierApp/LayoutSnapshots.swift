@@ -89,6 +89,15 @@ enum LayoutSnapshots {
         await snapshotRawPair(model: model, into: folder)
         await capture(AnyView(ImportSettings().frame(width: 560)), size: CGSize(width: 560, height: 420),
                       to: folder.appendingPathComponent("settings-import.png"))
+        // The Import dialog's progress step, partway through a copy.
+        var copying = ImportProgress()
+        (copying.total, copying.processed) = (412, 137)
+        (copying.totalBytes, copying.bytesDone) = (18_400_000_000, 6_100_000_000)
+        copying.currentFile = URL(fileURLWithPath: "/Volumes/NIKON Z 6/DCIM/100NCZ_6/NZ6_9144.NEF")
+        model.importProgress = LibraryModel.importStatus(copying, copying: true, elapsed: 34)
+        await capture(AnyView(ImportProgressStep(copying: true) {}.environmentObject(model)),
+                      size: CGSize(width: 560, height: 280), to: folder.appendingPathComponent("import-progress.png"))
+        model.importProgress = nil
         await capture(AnyView(AppearanceSettings().frame(width: 560)), size: CGSize(width: 560, height: 330),
                       to: folder.appendingPathComponent("settings-appearance.png"))
         await capture(AnyView(EditInSettings().frame(width: 640)), size: CGSize(width: 640, height: 360),
@@ -423,7 +432,7 @@ enum LayoutSnapshots {
             writeScene(scene, shift: second % 3, soft: soft, second: second, to: url)
             files.append(url)
         }
-        let cull = CullModel(source: .importing(files: files, options: ImportOptions(target: .newGroup(name: "Cull Test"))),
+        let cull = CullModel(source: .importing(sources: files, options: ImportOptions(target: .newGroup(name: "Cull Test"))),
                              title: "Cull Before Importing \u{201C}Cull Test\u{201D}", model: model)
         for _ in 0..<60 where cull.isAnalyzing { try? await Task.sleep(for: .milliseconds(250)) }
         let names = cull.photos.map(\.name)

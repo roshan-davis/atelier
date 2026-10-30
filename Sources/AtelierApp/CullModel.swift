@@ -26,12 +26,19 @@ struct CullPhoto: Identifiable {
     }
 }
 
+/// Asks the group list to scroll a photo into view. Only keyboard moves do; a click leaves the
+/// list where the user put it.
+struct CullReveal: Equatable {
+    let id: Int
+    let serial: Int
+}
+
 /// The Cull view's state: photos grouped into similar shots and which ones are kept.
 @MainActor
 final class CullModel: ObservableObject, Identifiable {
     enum Source {
-        /// Files chosen in the Import dialog, not cataloged yet.
-        case importing(files: [URL], options: ImportOptions)
+        /// Folders and files chosen in the Import dialog, not cataloged yet.
+        case importing(sources: [URL], options: ImportOptions)
         /// Cataloged photos: an import entry, or one saved cull group under review.
         case photos([Int64], isReview: Bool)
     }
@@ -43,10 +50,14 @@ final class CullModel: ObservableObject, Identifiable {
     @Published private(set) var suggested: Set<Int> = []
     @Published var kept: Set<Int> = []
     @Published var focused: Int?
+    @Published private(set) var reveal: CullReveal?
+    /// Finding the photos and reading their capture times, before analysis.
+    @Published private(set) var isLoading = true
     @Published private(set) var analyzed = 0
     @Published private(set) var isAnalyzing = true
-    /// 0 is tight (only near-identical shots), 1 is loose.
-    @Published var looseness = 0.5 {
+    /// 0 is tight (only near-identical shots), 1 is loose. Every cull starts tight, so shots that
+    /// only look alike are never hidden in a group unless the user loosens it (Rosh, Oct 30, 2026).
+    @Published var looseness = 0.0 {
         didSet { if abs(looseness - oldValue) > 0.001, !isAnalyzing { regroup() } }
     }
     /// Same frame only, or similar shots too; remembered between culls.
@@ -65,6 +76,12 @@ final class CullModel: ObservableObject, Identifiable {
     @Published private(set) var largeImage: NSImage?
 
     private weak var model: LibraryModel?
+    /// Set when the Cull view is a step of the Import dialog: called with true after Import, with
+    /// false after Cancel. Otherwise finishing or cancelling closes the Cull sheet.
+    var onClose: ((Bool) -> Void)?
+    /// Set in the Import dialog to show Back, which returns to the import settings.
+    var onBack: (() -> Void)?
+    private var loadTask: Task<Void, Never>?
     private var analysisTask: Task<Void, Never>?
     private var largeTask: Task<Void, Never>?
 
@@ -85,14 +102,20 @@ final class CullModel: ObservableObject, Identifiable {
     private func load() {
         guard let model else { return }
         switch source {
-        case .importing(let files, _):
-            // A RAW and its JPEG are one frame: culled as the RAW, the decision applies to both.
-            let photos = FilePairs.pairs(files).enumerated().map { index, pair in
-                CullPhoto(id: index, url: pair.primary, assetID: nil, name: pair.primary.lastPathComponent,
-                          captureTime: MetadataReader.read(pair.primary).captureTime, siblings: pair.siblings,
-                          pairFormats: pair.siblings.map { $0.pathExtension.uppercased() })
+        case .importing(let sources, _):
+            // Off the main thread: a card or the NAS can take a while to list and read.
+            loadTask = Task.detached(priority: .userInitiated) { [weak self] in
+                let files = Importer.collectFiles(from: sources)
+                // A RAW and its JPEG are one frame: culled as the RAW, the decision applies to both.
+                let photos = FilePairs.pairs(files).enumerated().map { index, pair in
+                    CullPhoto(id: index, url: pair.primary, assetID: nil, name: pair.primary.lastPathComponent,
+                              captureTime: MetadataReader.read(pair.primary).captureTime, siblings: pair.siblings,
+                              pairFormats: pair.siblings.map { $0.pathExtension.uppercased() })
+                }
+                let ordered = CullModel.ordered(photos)
+                guard !Task.isCancelled else { return }
+                await MainActor.run { self?.loaded(ordered) }
             }
-            self.photos = Self.ordered(photos)
         case .photos(let ids, _):
             let photos = ids.enumerated().compactMap { index, id -> CullPhoto? in
                 guard let detail = try? model.catalog.detail(for: id) else { return nil }
@@ -104,14 +127,19 @@ final class CullModel: ObservableObject, Identifiable {
                 return CullPhoto(id: index, url: url, assetID: id, name: detail.asset.filename,
                                  captureTime: detail.asset.captureTime, siblingIDs: siblings, pairFormats: formats)
             }
-            self.photos = Self.ordered(photos)
+            loaded(Self.ordered(photos))
         }
+    }
+
+    private func loaded(_ photos: [CullPhoto]) {
+        self.photos = photos
+        isLoading = false
         focused = photos.first?.id
         analyze()
     }
 
     /// Capture order, renumbered so ids are positions.
-    private static func ordered(_ photos: [CullPhoto]) -> [CullPhoto] {
+    nonisolated private static func ordered(_ photos: [CullPhoto]) -> [CullPhoto] {
         photos.sorted { ($0.captureTime ?? .distantFuture, $0.name) < ($1.captureTime ?? .distantFuture, $1.name) }
             .enumerated().map { index, photo in photo.renumbered(index) }
     }
@@ -248,21 +276,27 @@ final class CullModel: ObservableObject, Identifiable {
         loadLarge()
     }
 
+    /// Focuses a photo and scrolls the list to it, for the arrow keys.
+    private func focusAndReveal(_ id: Int) {
+        focus(id)
+        reveal = CullReveal(id: id, serial: (reveal?.serial ?? 0) + 1)
+    }
+
     /// Arrow keys: left and right within the order, up and down a group at a time.
     func move(_ step: Int, byGroup: Bool) {
         let order = multiGroups.flatMap { $0 } + singles
         guard !order.isEmpty else { return }
         guard let current = focused, let index = order.firstIndex(of: current) else {
-            focus(order[0])
+            focusAndReveal(order[0])
             return
         }
         if byGroup {
             let all = multiGroups + (singles.isEmpty ? [] : [singles])
             guard let groupIndex = all.firstIndex(where: { $0.contains(current) }) else { return }
             let target = min(max(groupIndex + step, 0), all.count - 1)
-            focus(all[target].first { kept.contains($0) } ?? all[target][0])
+            focusAndReveal(all[target].first { kept.contains($0) } ?? all[target][0])
         } else {
-            focus(order[min(max(index + step, 0), order.count - 1)])
+            focusAndReveal(order[min(max(index + step, 0), order.count - 1)])
         }
     }
 
@@ -296,9 +330,15 @@ final class CullModel: ObservableObject, Identifiable {
     var droppedCount: Int { photos.count - kept.count }
 
     func cancel() {
+        stop()
+        if let onClose { onClose(false) } else { model?.cullSession = nil }
+    }
+
+    /// Stops reading and analyzing, as when going back from the Import dialog's Cull step.
+    func stop() {
+        loadTask?.cancel()
         analysisTask?.cancel()
         largeTask?.cancel()
-        model?.cullSession = nil
     }
 
     func finish() {
@@ -333,7 +373,7 @@ final class CullModel: ObservableObject, Identifiable {
                 model.status = error.localizedDescription
             }
         }
-        model.cullSession = nil
+        if let onClose { onClose(true) } else { model.cullSession = nil }
     }
 }
 
@@ -360,16 +400,15 @@ extension LibraryModel {
         cullSession = session
     }
 
-    /// From the Import dialog with Cull before importing on.
-    func beginImportCull(sources: [URL], options: ImportOptions) {
-        let files = Importer.collectFiles(from: sources)
-        guard !files.isEmpty else { return }
+    /// The Import dialog's Cull step, with Cull before importing on.
+    func importCull(sources: [URL], options: ImportOptions) -> CullModel {
         let name: String
         switch options.target {
         case .existingGroup(let id): name = sidebar.imports.first { $0.id == id }?.name ?? "Import"
         case .newGroup(let entry): name = entry.isEmpty ? (sources.first?.lastPathComponent ?? "Import") : entry
         }
-        cullSession = CullModel(source: .importing(files: files, options: options), title: "Cull Before Importing \u{201C}\(name)\u{201D}", model: self)
+        return CullModel(source: .importing(sources: sources, options: options),
+                         title: "Cull Before Importing \u{201C}\(name)\u{201D}", model: self)
     }
 
     var focusedCullGroupSize: Int {

@@ -32,6 +32,10 @@ struct ImportStatus: Equatable {
     var phase: String
     /// nil shows an indeterminate bar.
     var fraction: Double?
+    /// For the Import dialog's progress: "1.2 GB of 9.8 GB · 180 MB/s · About 1 minute left".
+    var detail: String?
+    /// The file being read or copied.
+    var file: String?
 }
 
 /// A file the last import or export could not handle, shown from the status bar.
@@ -108,7 +112,6 @@ final class LibraryModel: ObservableObject {
     private var exportTask: Task<Void, Never>?
     private var importTask: Task<Void, Never>?
     private var importWasCancelled = false
-    private var shownImportGroup: Int64?
     /// Bumped when previews are generated so visible cells reload their images.
     @Published var previewRevision = 0
     /// Zoom shared by loupe and develop; what happens on moving to another photo is a setting
@@ -627,27 +630,19 @@ final class LibraryModel: ObservableObject {
         showingImportSheet = true
     }
 
-    /// `then` runs on the main actor with the result, before the status is set.
+    /// `then` runs on the main actor with the result, before the status is set. The import
+    /// entry is selected when every file is cataloged, and thumbnails are made after that.
     func runImport(sources: [URL], options: ImportOptions, then: ((ImportProgress) -> Void)? = nil) {
         let importer = Importer(catalog: catalog, previews: nil, scheduler: previewScheduler)
-        importProgress = ImportStatus(phase: "Scanning…", fraction: nil)
-        shownImportGroup = nil
+        let copying: Bool
+        if case .copy = options.mode { copying = true } else { copying = false }
+        importProgress = ImportStatus(phase: "Looking for photos…", fraction: nil)
         importTask = Task.detached {
+            let start = Date()
             let result = await importer.run(sources: sources, options: options) { progress in
-                let phase: String
-                let fraction: Double?
-                phase = "Importing \(min(progress.processed + 1, progress.total)) of \(progress.total)"
-                fraction = Double(progress.processed) / Double(max(progress.total, 1))
-                let groupID = progress.importGroupId
+                let status = LibraryModel.importStatus(progress, copying: copying, elapsed: Date().timeIntervalSince(start))
                 Task { @MainActor in
-                    // Show the entry right away so photos appear as they arrive.
-                    if let groupID, self.shownImportGroup != groupID {
-                        self.shownImportGroup = groupID
-                        self.sidebarSelection = .importGroup(groupID)
-                    }
-                    if self.importTask != nil {
-                        self.importProgress = ImportStatus(phase: phase, fraction: fraction)
-                    }
+                    if self.importTask != nil, !self.importWasCancelled { self.importProgress = status }
                 }
             }
             await MainActor.run {
@@ -656,6 +651,9 @@ final class LibraryModel: ObservableObject {
                 if !result.failures.isEmpty { parts.append("\(result.failures.count) could not be read") }
                 if Task.isCancelled || self.importWasCancelled { parts.insert("Import cancelled", at: 0) }
                 self.status = parts.joined(separator: ", ")
+                if let groupID = result.importGroupId {
+                    self.sidebarSelection = .importGroup(groupID)
+                }
                 then?(result)
                 self.problems = result.failures.map { Problem(name: $0.url.lastPathComponent, reason: $0.reason) }
                 self.problemsTitle = "These files could not be imported"
@@ -665,6 +663,33 @@ final class LibraryModel: ObservableObject {
                 self.previewRevision += 1
             }
         }
+    }
+
+    /// "Copying 23 of 400", with the amount copied, the speed and the time left.
+    nonisolated static func importStatus(_ progress: ImportProgress, copying: Bool, elapsed: TimeInterval) -> ImportStatus {
+        let verb = copying ? "Copying" : "Adding"
+        let shown = min(progress.processed + 1, progress.total)
+        let phase = progress.total == 0 ? "Looking for photos…"
+            : "\(verb) \(shown) of \(progress.total) photo\(progress.total == 1 ? "" : "s")"
+        let fraction = progress.totalBytes > 0
+            ? Double(progress.bytesDone) / Double(progress.totalBytes)
+            : Double(progress.processed) / Double(max(progress.total, 1))
+        let bytes = ByteCountFormatter()
+        bytes.countStyle = .file
+        var parts = ["\(bytes.string(fromByteCount: progress.bytesDone)) of \(bytes.string(fromByteCount: progress.totalBytes))"]
+        // Speed and time left once there is enough to go on.
+        if progress.bytesDone > 0, elapsed > 1 {
+            let speed = Double(progress.bytesDone) / elapsed
+            parts.append("\(bytes.string(fromByteCount: Int64(speed)))/s")
+            let left = Double(progress.totalBytes - progress.bytesDone) / speed
+            let time = DateComponentsFormatter()
+            time.unitsStyle = .full
+            time.maximumUnitCount = 1
+            time.allowedUnits = left < 60 ? [.second] : [.hour, .minute]
+            if left >= 1, let text = time.string(from: left.rounded(.up)) { parts.append("About \(text) left") }
+        }
+        return ImportStatus(phase: phase, fraction: fraction, detail: parts.joined(separator: " · "),
+                            file: progress.currentFile?.lastPathComponent)
     }
 
     func cancelImport() {

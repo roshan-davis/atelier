@@ -67,6 +67,7 @@ struct CullView: View {
     }
 
     private var subtitle: String {
+        if cull.isLoading { return "Finding photos…" }
         if cull.isAnalyzing { return "Looking at \(cull.analyzed) of \(cull.photos.count) photos…" }
         if cull.isReview {
             return "\(cull.photos.count) shots culled together · \(cull.keptCount) kept"
@@ -85,6 +86,12 @@ struct CullView: View {
             Spacer()
             Button("Keep All") { cull.keepAll() }
                 .disabled(cull.isAnalyzing)
+            if let back = cull.onBack {
+                Button("Back") {
+                    cull.stop()
+                    back()
+                }
+            }
             Button("Cancel", role: .cancel) { cull.cancel() }
                 .keyboardShortcut(.cancelAction)
             Button(finishTitle) { cull.finish() }
@@ -114,19 +121,34 @@ struct CullView: View {
                         ForEach(Array(cull.multiGroups.enumerated()), id: \.offset) { index, group in
                             groupCard(group, title: cull.isReview ? "Culled together" : "Group \(index + 1)",
                                       kind: cull.isReview ? nil : (cull.isSameFrame(group) ? "Same frame" : "Similar shots"))
+                                .id(CardID.group(index))
                         }
                         if !cull.singles.isEmpty {
                             groupCard(cull.singles, title: "Single shots", isSingles: true)
+                                .id(CardID.singles)
                         }
                     }
                 }
                 .padding(16)
             }
             .background(Color(nsColor: theme.gridBackground))
-            .onChange(of: cull.focused) { _, id in
-                if let id { withAnimation(.easeInOut(duration: 0.15)) { proxy.scrollTo(id) } }
+            // Only the arrow keys scroll, by the least that shows the photo's group. Clicking a
+            // photo never moves the list.
+            .onChange(of: cull.reveal) { _, reveal in
+                guard let reveal, let card = cardID(of: reveal.id) else { return }
+                withAnimation(.easeInOut(duration: 0.15)) { proxy.scrollTo(card) }
             }
         }
+    }
+
+    private enum CardID: Hashable {
+        case group(Int)
+        case singles
+    }
+
+    private func cardID(of id: Int) -> CardID? {
+        if let index = cull.multiGroups.firstIndex(where: { $0.contains(id) }) { return .group(index) }
+        return cull.singles.contains(id) ? .singles : nil
     }
 
     private func groupCard(_ group: [Int], title: String, kind: String? = nil, isSingles: Bool = false) -> some View {
@@ -166,21 +188,28 @@ struct CullView: View {
     }
 
     private func tiles(_ ids: [Int], title: String) -> some View {
-        ScrollView(.horizontal, showsIndicators: true) {
-            LazyHStack(spacing: 8) {
-                ForEach(ids, id: \.self) { id in
-                    CullTile(photo: cull.photos[id], isKept: cull.kept.contains(id),
-                             isSuggested: cull.suggested.contains(id), isFocused: cull.focused == id,
-                             dimsWhenDropped: !cull.isAnalyzing)
-                        .id(id)
-                        .onTapGesture(count: 2) { cull.toggle(id) }
-                        .onTapGesture { cull.focus(id) }
-                        .contextMenu {
-                            Button(cull.kept.contains(id) ? "Drop" : "Keep") { cull.toggle(id) }
-                        }
+        ScrollViewReader { row in
+            ScrollView(.horizontal, showsIndicators: true) {
+                LazyHStack(spacing: 8) {
+                    ForEach(ids, id: \.self) { id in
+                        CullTile(photo: cull.photos[id], isKept: cull.kept.contains(id),
+                                 isSuggested: cull.suggested.contains(id), isFocused: cull.focused == id,
+                                 dimsWhenDropped: !cull.isAnalyzing)
+                            .id(id)
+                            .onTapGesture(count: 2) { cull.toggle(id) }
+                            .onTapGesture { cull.focus(id) }
+                            .contextMenu {
+                                Button(cull.kept.contains(id) ? "Drop" : "Keep") { cull.toggle(id) }
+                            }
+                    }
                 }
+                .padding(.bottom, 4)
             }
-            .padding(.bottom, 4)
+            // A long row follows the arrow keys sideways.
+            .onChange(of: cull.reveal) { _, reveal in
+                guard let reveal, ids.contains(reveal.id) else { return }
+                row.scrollTo(reveal.id)
+            }
         }
     }
 
