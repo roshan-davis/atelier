@@ -94,7 +94,7 @@ struct ContentView: View {
             }
         }
         .sheet(isPresented: $model.showingImportSheet) {
-            ImportSheet()
+            ImportSheet(model: model)
                 .environment(\.theme, theme)
         }
         .sheet(isPresented: $model.showingExportSheet) {

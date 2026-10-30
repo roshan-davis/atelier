@@ -6,6 +6,8 @@ import SwiftUI
 /// photos carry a check; the rest are dimmed.
 struct CullView: View {
     @ObservedObject var cull: CullModel
+    /// A step of the Import dialog, which shows its own title.
+    var embedded = false
     @Environment(\.theme) private var theme
     @State private var keys = CullKeyMonitor()
 
@@ -17,16 +19,15 @@ struct CullView: View {
                 loadingStatus
             } else {
                 HSplitView {
-                    groupList
+                    CullList(cull: cull)
                         .frame(minWidth: 420, idealWidth: 560)
                     preview
                         .frame(minWidth: 360, idealWidth: 520)
                 }
             }
-            Divider()
             footer
         }
-        .frame(minWidth: 980, idealWidth: 1240, minHeight: 640, idealHeight: 800)
+        .frame(minWidth: 980, idealWidth: 1240, minHeight: 600, idealHeight: 800)
         // The keys work as soon as the view is up, whatever has keyboard focus in the window
         // (except a text field), so nothing has to be clicked first.
         .background(WindowAccessor { keys.window = $0 })
@@ -65,46 +66,17 @@ struct CullView: View {
         .background(Color(nsColor: theme.gridBackground))
     }
 
-    /// Above the photos while they are analyzed.
-    private var analysisStatus: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text("Checking sharpness, faces and similar shots")
-                    .font(.headline)
-                Spacer()
-                Text("\(cull.analyzed) of \(cull.photos.count)")
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-            }
-            ProgressView(value: Double(cull.analyzed), total: Double(max(cull.photos.count, 1)))
-            Text(analysisTimeLeft ?? "Groups and suggested keepers appear when every photo is checked.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .padding(12)
-        .background(Color(nsColor: theme.panel).opacity(0.9), in: RoundedRectangle(cornerRadius: 10))
-    }
-
-    private var analysisTimeLeft: String? {
-        guard let start = cull.analysisStarted, cull.analyzed >= 4 else { return nil }
-        let elapsed = Date().timeIntervalSince(start)
-        let left = elapsed / Double(cull.analyzed) * Double(cull.photos.count - cull.analyzed)
-        let time = DateComponentsFormatter()
-        time.unitsStyle = .full
-        time.maximumUnitCount = 1
-        time.allowedUnits = left < 60 ? [.second] : [.hour, .minute]
-        guard let text = time.string(from: max(left, 1).rounded(.up)) else { return nil }
-        return "About \(text) left. Groups and suggested keepers appear when every photo is checked."
-    }
-
     // MARK: Header and footer
 
     private var header: some View {
         HStack(alignment: .center, spacing: 16) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(cull.title).font(.title2.bold())
+                if !embedded {
+                    Text(cull.title).font(.title2.bold())
+                }
                 Text(subtitle)
-                    .foregroundStyle(.secondary)
+                    .font(embedded ? .headline : .body)
+                    .foregroundStyle(embedded ? .primary : .secondary)
                     .monospacedDigit()
             }
             Spacer()
@@ -146,12 +118,9 @@ struct CullView: View {
     }
 
     private var footer: some View {
-        HStack(spacing: 10) {
+        ImportFooter {
             Text("Click to look · Space or double-click keeps or drops · P keep · X drop · arrows move")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-            Spacer()
+        } buttons: {
             Button("Keep All") { cull.keepAll() }
                 .disabled(cull.isAnalyzing)
             if let back = cull.onBack {
@@ -166,135 +135,11 @@ struct CullView: View {
                 .keyboardShortcut(.defaultAction)
                 .disabled(cull.isAnalyzing || cull.keptCount == 0)
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
     }
 
     private var finishTitle: String {
         if cull.isImporting { return "Import \(cull.keptCount) Photo\(cull.keptCount == 1 ? "" : "s")" }
         return cull.isReview ? "Done" : "Pick \(cull.keptCount), Reject \(cull.droppedCount)"
-    }
-
-    // MARK: Groups
-
-    private var groupList: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 14) {
-                    if cull.isAnalyzing {
-                        analysisStatus
-                        // Every photo in capture order, wrapped, until the groups are ready.
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 8)], alignment: .leading, spacing: 8) {
-                            ForEach(cull.photos.map(\.id), id: \.self) { id in
-                                tile(id).id(id)
-                            }
-                        }
-                    } else {
-                        ForEach(Array(cull.multiGroups.enumerated()), id: \.offset) { index, group in
-                            groupCard(group, title: cull.isReview ? "Culled together" : "Group \(index + 1)",
-                                      kind: cull.isReview ? nil : (cull.isSameFrame(group) ? "Same frame" : "Similar shots"))
-                                .id(CardID.group(index))
-                        }
-                        if !cull.singles.isEmpty {
-                            groupCard(cull.singles, title: "Single shots", isSingles: true)
-                                .id(CardID.singles)
-                        }
-                    }
-                }
-                .padding(16)
-            }
-            .background(Color(nsColor: theme.gridBackground))
-            // Only the arrow keys scroll, by the least that shows the photo's group. Clicking a
-            // photo never moves the list.
-            .onChange(of: cull.reveal) { _, reveal in
-                guard let reveal else { return }
-                if cull.isAnalyzing {
-                    proxy.scrollTo(reveal.id)
-                    return
-                }
-                guard let card = cardID(of: reveal.id) else { return }
-                withAnimation(.easeInOut(duration: 0.15)) { proxy.scrollTo(card) }
-            }
-            .onChange(of: cull.isAnalyzing) { _, analyzing in
-                // The groups replace the analysis list: start at the top.
-                if !analyzing { proxy.scrollTo(CardID.group(0), anchor: .top) }
-            }
-        }
-    }
-
-    private enum CardID: Hashable {
-        case group(Int)
-        case singles
-    }
-
-    private func cardID(of id: Int) -> CardID? {
-        if let index = cull.multiGroups.firstIndex(where: { $0.contains(id) }) { return .group(index) }
-        return cull.singles.contains(id) ? .singles : nil
-    }
-
-    private func groupCard(_ group: [Int], title: String, kind: String? = nil, isSingles: Bool = false) -> some View {
-        let kept = group.filter { cull.kept.contains($0) }.count
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Image(systemName: isSingles ? "photo" : "square.stack.3d.down.right")
-                    .foregroundStyle(.secondary)
-                Text(title).font(.headline)
-                if let kind {
-                    Text(kind)
-                        .font(.caption.weight(.medium))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 1)
-                        .background(Color.secondary.opacity(0.18), in: Capsule())
-                        .help(kind == "Same frame" ? "Framed alike: people moved a little, blinked or changed expression"
-                              : "The same scene, zoomed, recomposed or refocused")
-                }
-                Text("\(group.count) photo\(group.count == 1 ? "" : "s")")
-                    .foregroundStyle(.secondary)
-                if !isSingles, let time = cull.photos[group[0]].captureTime {
-                    Text(time.formatted(date: .omitted, time: .standard)).foregroundStyle(.secondary)
-                }
-                Spacer()
-                Text(kept == 0 ? "None kept" : "\(kept) kept")
-                    .font(.caption.weight(.semibold))
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 2)
-                    .background(kept == 0 ? Color.orange.opacity(0.25) : Color.green.opacity(0.22), in: Capsule())
-            }
-            tiles(group, title: title)
-        }
-        .padding(12)
-        .background(Color(nsColor: theme.panel).opacity(0.9), in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10)
-            .strokeBorder(group.contains(cull.focused ?? -1) ? Color.accentColor.opacity(0.6) : Color.secondary.opacity(0.18)))
-    }
-
-    private func tiles(_ ids: [Int], title: String) -> some View {
-        ScrollViewReader { row in
-            ScrollView(.horizontal, showsIndicators: true) {
-                LazyHStack(spacing: 8) {
-                    ForEach(ids, id: \.self) { id in
-                        tile(id).id(id)
-                    }
-                }
-                .padding(.bottom, 4)
-            }
-            // A long row follows the arrow keys sideways.
-            .onChange(of: cull.reveal) { _, reveal in
-                guard let reveal, ids.contains(reveal.id) else { return }
-                row.scrollTo(reveal.id)
-            }
-        }
-    }
-
-    private func tile(_ id: Int) -> some View {
-        CullTile(photo: cull.photos[id], isKept: cull.kept.contains(id),
-                 isSuggested: cull.suggested.contains(id), isFocused: cull.focused == id,
-                 dimsWhenDropped: !cull.isAnalyzing)
-            .onTapGesture(count: 2) { cull.toggle(id) }
-            .onTapGesture { cull.focus(id) }
-            .contextMenu {
-                Button(cull.kept.contains(id) ? "Drop" : "Keep") { cull.toggle(id) }
-            }
     }
 
     // MARK: Preview
@@ -366,16 +211,16 @@ struct CullView: View {
     private func handle(_ event: NSEvent) -> Bool {
         if cull.isLoading { return false }
         switch event.keyCode {
-        case 123: cull.move(-1, byGroup: false)
-        case 124: cull.move(1, byGroup: false)
-        case 126: cull.move(-1, byGroup: true)
-        case 125: cull.move(1, byGroup: true)
+        case 123: cull.move(-1, byRow: false)
+        case 124: cull.move(1, byRow: false)
+        case 126: cull.move(-1, byRow: true)
+        case 125: cull.move(1, byRow: true)
         default:
             guard !cull.isAnalyzing, let id = cull.focused else { return false }
             switch event.charactersIgnoringModifiers?.lowercased() {
             case " ": cull.toggle(id)
-            case "p": cull.setKept(id, true); cull.move(1, byGroup: false)
-            case "x": cull.setKept(id, false); cull.move(1, byGroup: false)
+            case "p": cull.setKept(id, true); cull.move(1, byRow: false)
+            case "x": cull.setKept(id, false); cull.move(1, byRow: false)
             default: return false
             }
         }
@@ -409,7 +254,12 @@ final class CullKeyMonitor {
 }
 
 /// One thumbnail: a check when kept, dimmed when dropped, a star on the suggested keeper.
-private struct CullTile: View {
+struct CullTile: View {
+    /// Every tile is this wide, so rows can be laid out and scrolled without measuring.
+    static let width = 150.0
+    static let spacing = 8.0
+    static var stride: Double { width + spacing }
+
     let photo: CullPhoto
     let isKept: Bool
     let isSuggested: Bool
@@ -429,7 +279,7 @@ private struct CullTile: View {
                             .overlay(ProgressView().controlSize(.small))
                     }
                 }
-                .frame(width: 150, height: 104)
+                .frame(width: Self.width, height: 104)
                 .opacity(dimsWhenDropped && !isKept ? 0.4 : 1)
                 if dimsWhenDropped {
                     Image(systemName: isKept ? "checkmark.circle.fill" : "circle")
@@ -452,7 +302,7 @@ private struct CullTile: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                 }
             }
-            .frame(width: 150, height: 104)
+            .frame(width: Self.width, height: 104)
             .background(Color.black.opacity(0.25))
             .clipShape(RoundedRectangle(cornerRadius: 5))
             .overlay(RoundedRectangle(cornerRadius: 5)
@@ -463,7 +313,7 @@ private struct CullTile: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
-                .frame(width: 150)
+                .frame(width: Self.width)
         }
         .contentShape(Rectangle())
         .help(isSuggested ? "Suggested keeper: sharpest, best faces" : photo.name)

@@ -306,21 +306,37 @@ final class CullModel: ObservableObject, Identifiable {
         reveal = CullReveal(id: id, serial: (reveal?.serial ?? 0) + 1)
     }
 
-    /// Arrow keys: left and right within the order, up and down a group at a time.
-    func move(_ step: Int, byGroup: Bool) {
-        // While analyzing there are no groups yet: move through the photos in capture order.
-        let order = isAnalyzing ? photos.map(\.id) : multiGroups.flatMap { $0 } + singles
-        guard !order.isEmpty else { return }
-        guard let current = focused, let index = order.firstIndex(of: current) else {
-            focusAndReveal(order[0])
+    /// The rows the list shows, top to bottom: while analyzing, every photo in capture order
+    /// wrapped at `columns`; then the groups of similar shots and a last row of single shots.
+    /// The arrow keys move through these, so they always match what is on screen.
+    var rows: [[Int]] {
+        if isAnalyzing {
+            let ids = photos.map(\.id)
+            return stride(from: 0, to: ids.count, by: max(columns, 1)).map { Array(ids[$0..<min($0 + max(columns, 1), ids.count)]) }
+        }
+        return multiGroups + (singles.isEmpty ? [] : [singles])
+    }
+
+    /// Photos per row while analyzing, set by the list from its width.
+    @Published var columns = 4
+
+    /// Arrow keys: left and right through the photos in list order, up and down to the row above
+    /// or below, keeping the place in the row where it can (like a grid).
+    func move(_ step: Int, byRow: Bool) {
+        let rows = self.rows
+        guard !rows.isEmpty else { return }
+        guard let current = focused, let row = rows.firstIndex(where: { $0.contains(current) }),
+              let column = rows[row].firstIndex(of: current) else {
+            focusAndReveal(rows[0][0])
             return
         }
-        if byGroup, !isAnalyzing {
-            let all = multiGroups + (singles.isEmpty ? [] : [singles])
-            guard let groupIndex = all.firstIndex(where: { $0.contains(current) }) else { return }
-            let target = min(max(groupIndex + step, 0), all.count - 1)
-            focusAndReveal(all[target].first { kept.contains($0) } ?? all[target][0])
+        if byRow {
+            let target = row + step
+            guard rows.indices.contains(target) else { return }
+            focusAndReveal(rows[target][min(column, rows[target].count - 1)])
         } else {
+            let order = rows.flatMap { $0 }
+            guard let index = order.firstIndex(of: current) else { return }
             focusAndReveal(order[min(max(index + step, 0), order.count - 1)])
         }
     }

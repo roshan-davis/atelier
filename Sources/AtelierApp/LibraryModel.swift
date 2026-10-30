@@ -32,9 +32,13 @@ struct ImportStatus: Equatable {
     var phase: String
     /// nil shows an indeterminate bar.
     var fraction: Double?
-    /// For the Import dialog's progress: "1.2 GB of 9.8 GB · 180 MB/s · About 1 minute left".
-    var detail: String?
-    /// The file being read or copied.
+    /// The Import dialog's figures: photos done and in all, "1.2 GB of 9.8 GB", "180 MB/s",
+    /// "About 1 minute", and the file being read or copied.
+    var done: Int?
+    var total: Int?
+    var amount: String?
+    var speed: String?
+    var timeLeft: String?
     var file: String?
 }
 
@@ -667,31 +671,33 @@ final class LibraryModel: ObservableObject {
         }
     }
 
-    /// "Copying 23 of 400", with the amount copied, the speed and the time left.
+    /// "Copying 23 of 400 photos" for the status bar, with the figures the Import dialog shows.
     nonisolated static func importStatus(_ progress: ImportProgress, copying: Bool, elapsed: TimeInterval) -> ImportStatus {
         let verb = copying ? "Copying" : "Adding"
         let shown = min(progress.processed + 1, progress.total)
-        let phase = progress.total == 0 ? "Looking for photos…"
-            : "\(verb) \(shown) of \(progress.total) photo\(progress.total == 1 ? "" : "s")"
-        let fraction = progress.totalBytes > 0
-            ? Double(progress.bytesDone) / Double(progress.totalBytes)
-            : Double(progress.processed) / Double(max(progress.total, 1))
+        var status = ImportStatus(phase: progress.total == 0 ? "Looking for photos…"
+                                    : "\(verb) \(shown) of \(progress.total) photo\(progress.total == 1 ? "" : "s")",
+                                  fraction: progress.totalBytes > 0
+                                    ? Double(progress.bytesDone) / Double(progress.totalBytes)
+                                    : Double(progress.processed) / Double(max(progress.total, 1)))
         let bytes = ByteCountFormatter()
         bytes.countStyle = .file
-        var parts = ["\(bytes.string(fromByteCount: progress.bytesDone)) of \(bytes.string(fromByteCount: progress.totalBytes))"]
+        status.done = progress.processed
+        status.total = progress.total
+        status.amount = "\(bytes.string(fromByteCount: progress.bytesDone)) of \(bytes.string(fromByteCount: progress.totalBytes))"
+        status.file = progress.currentFile?.lastPathComponent
         // Speed and time left once there is enough to go on.
         if progress.bytesDone > 0, elapsed > 1 {
             let speed = Double(progress.bytesDone) / elapsed
-            parts.append("\(bytes.string(fromByteCount: Int64(speed)))/s")
+            status.speed = "\(bytes.string(fromByteCount: Int64(speed)))/s"
             let left = Double(progress.totalBytes - progress.bytesDone) / speed
             let time = DateComponentsFormatter()
             time.unitsStyle = .full
             time.maximumUnitCount = 1
             time.allowedUnits = left < 60 ? [.second] : [.hour, .minute]
-            if left >= 1, let text = time.string(from: left.rounded(.up)) { parts.append("About \(text) left") }
+            status.timeLeft = left < 1 ? "Almost done" : time.string(from: left.rounded(.up)).map { "About \($0)" }
         }
-        return ImportStatus(phase: phase, fraction: fraction, detail: parts.joined(separator: " · "),
-                            file: progress.currentFile?.lastPathComponent)
+        return status
     }
 
     func cancelImport() {

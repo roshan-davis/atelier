@@ -96,7 +96,8 @@ enum LayoutSnapshots {
         copying.currentFile = URL(fileURLWithPath: "/Volumes/NIKON Z 6/DCIM/100NCZ_6/NZ6_9144.NEF")
         model.importProgress = LibraryModel.importStatus(copying, copying: true, elapsed: 34)
         await capture(AnyView(ImportProgressStep(copying: true) {}.environmentObject(model)),
-                      size: CGSize(width: 560, height: 280), to: folder.appendingPathComponent("import-progress.png"))
+                      size: CGSize(width: ImportSheet.size.width, height: ImportSheet.size.height - 66),
+                      to: folder.appendingPathComponent("import-progress.png"))
         model.importProgress = nil
         await capture(AnyView(AppearanceSettings().frame(width: 560)), size: CGSize(width: 560, height: 330),
                       to: folder.appendingPathComponent("settings-appearance.png"))
@@ -432,6 +433,11 @@ enum LayoutSnapshots {
             writeScene(scene, shift: second % 3, soft: soft, second: second, to: url)
             files.append(url)
         }
+        // The Import dialog's first step on these photos.
+        model.pendingImportSources = [dir]
+        await capture(AnyView(ImportSheet(model: model).environmentObject(model)), size: ImportSheet.size,
+                      to: folder.appendingPathComponent("import-choose.png"))
+        model.pendingImportSources = []
         let cull = CullModel(source: .importing(sources: files, options: ImportOptions(target: .newGroup(name: "Cull Test"))),
                              title: "Cull Before Importing \u{201C}Cull Test\u{201D}", model: model)
         for _ in 0..<60 where cull.isAnalyzing { try? await Task.sleep(for: .milliseconds(250)) }
