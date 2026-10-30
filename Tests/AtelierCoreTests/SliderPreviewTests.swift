@@ -45,7 +45,14 @@ final class SliderPreviewTests: XCTestCase {
         XCTAssertLessThan(try center(black.render(.neutral, preview: .shadowClipping)).luma, 0.05, "clipped black shows black")
         var brighter = DevelopSettings()
         brighter.exposure = 3
-        XCTAssertGreaterThan(try center(gray.render(brighter, preview: .highlightClipping)).luma, 0.95, "+3 EV clips")
+        // Non-RAW exposure now has a soft shoulder: +3 EV approaches white but
+        // does not cross the display clipping threshold.
+        XCTAssertGreaterThan(try center(gray.render(brighter)).luma, 0.95)
+        XCTAssertLessThan(try center(gray.render(brighter, preview: .highlightClipping)).luma, 0.05,
+                          "soft-rolled highlights are not clipped")
+        brighter.exposure = 8
+        XCTAssertGreaterThan(try center(gray.render(brighter, preview: .highlightClipping)).luma, 0.95,
+                             "a shoulder that rounds to white still clips")
     }
 
     func testSharpeningViewsOnAFlatPhoto() throws {

@@ -69,7 +69,8 @@ final class PairTests: XCTestCase {
         // Culling the RAW decides for its JPEG too, which stays out of the cull group.
         try catalog.applyCull(groups: [[raw, single]], keepers: [single])
         XCTAssertEqual(try catalog.detail(for: jpeg)?.metadata.flag, .rejected)
-        XCTAssertEqual(try catalog.cullGroup(of: raw), [raw, single])
+        // Group membership is independent of concurrent import insertion order.
+        XCTAssertEqual(Set(try catalog.cullGroup(of: raw)), [raw, single])
 
         // A virtual copy of the JPEG is a deliberate version and always shows.
         let copy = try catalog.createVirtualCopy(of: jpeg)
