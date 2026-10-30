@@ -138,11 +138,11 @@ Evidence baseline, October 30, 2026:
 
 ## AT-016 — Track this list and the working agreement
 
-**Status:** In progress — documentation only, authorized by Rosh. **Owner:** Co. **Chat:** [this documentation chat](codex://threads/01a18eb2-5536-7c20-bd4b-3e8b8f528f14). **Branch:** `codex/backlog-working-agreement`. **PR:** pending assignment. **Dependencies:** none.
+**Status:** In progress — documentation only, authorized by Rosh. **Owner:** Co. **Chat:** [this documentation chat](codex://threads/01a18eb2-5536-7c20-bd4b-3e8b8f528f14). **Branch:** `codex/backlog-working-agreement`. **PR:** [#63](https://github.com/roshan-davis/atelier/pull/63). **Dependencies:** none.
 
 **Scope:** establish this list and AGENTS.md rules for keeping status/evidence current, bounded approved work, one App-project Codex chat per PR and no merges without instruction.
 
-**Acceptance:** documentation review and required local checks reported in the linked PR. No app behavior, product decision, Help, rendering or UI changes; implementation of AT-003 and all proposals is deferred to separate scoped PRs. Mark Done only after merge.
+**Acceptance:** `python3 Scripts/check_pr.py` passed on full Xcode at base `9ed894a` plus the staged documentation (206 tests, 2 missing-RAW skips, zero failures); logs under `.build/local-checks/20261030-142918-754419/`. The final PR validation records the follow-up check and CI status. No app behavior, product decision, Help, rendering or UI changes; implementation of AT-003 and all proposals is deferred to separate scoped PRs. Mark Done only after merge.
 
 ## AT-017 — Local-check false failure on clean untracked files
 
