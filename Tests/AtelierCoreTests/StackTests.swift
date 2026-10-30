@@ -73,8 +73,12 @@ final class StackTests: XCTestCase {
             .run(sources: [workDir], options: ImportOptions(buildPreviews: false))
         let group = try XCTUnwrap(result.importGroupId)
         // Give the synthetic shoot explicit capture times; import workers are concurrent.
+        XCTAssertEqual(result.failures, [])
+        let byName = Dictionary(uniqueKeysWithValues: result.assetIDsBySource.map {
+            ($0.key.lastPathComponent, $0.value)
+        })
         let ids = try ["A.jpg", "B.jpg", "C.jpg"].map {
-            try XCTUnwrap(result.assetIDsBySource[workDir.appendingPathComponent($0)])
+            try XCTUnwrap(byName[$0], "imported filenames: \(byName.keys.sorted())")
         }
         try await catalog.writer.write { db in
             for (index, id) in ids.enumerated() {
