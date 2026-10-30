@@ -1,3 +1,5 @@
+import CryptoKit
+import Darwin
 import Foundation
 import GRDB
 
@@ -53,6 +55,14 @@ public struct ImportProgress: Sendable {
     public var importGroupId: Int64?
     /// Each source file's photo, new or already in the catalog.
     public var assetIDsBySource: [URL: Int64] = [:]
+    /// The size of every file to import, and of those handled so far.
+    public var totalBytes: Int64 = 0
+    public var bytesDone: Int64 = 0
+    /// The file most recently started, and the one most recently finished (cataloged or not).
+    public var currentFile: URL?
+    public var finishedFile: URL?
+
+    public init() {}
 }
 
 enum ImportOutcome {
@@ -67,8 +77,8 @@ public final class Importer: Sendable {
     let previews: PreviewCache?
     let scheduler: PreviewScheduler?
 
-    /// With a scheduler, each photo's thumbnail is queued as soon as it is cataloged and the
-    /// 2560 px previews follow on the slow lane, so the grid fills in during the import.
+    /// With a scheduler, thumbnails are queued once every file is cataloged and the 2560 px
+    /// previews follow on the slow lane.
     /// Without one, `previews` are built synchronously at the end.
     public init(catalog: Catalog, previews: PreviewCache?, scheduler: PreviewScheduler? = nil) {
         self.catalog = catalog
@@ -97,11 +107,25 @@ public final class Importer: Sendable {
         return files.sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
     }
 
-    public func run(sources: [URL], options: ImportOptions,
+    /// Files are handled a few at a time (reading, hashing and copying overlap), and nothing is
+    /// rendered until every file is cataloged: thumbnails and previews are queued at the end, so
+    /// they don't compete with the copy for the disk.
+    ///
+    /// With a `stager`, files it already copied (or hashed) while the user culled are moved into
+    /// place instead of copied again; its leftovers are discarded at the end.
+    public func run(sources: [URL], options: ImportOptions, stager: ImportStager? = nil,
                     progress: @escaping @Sendable (ImportProgress) -> Void = { _ in }) async -> ImportProgress {
+        await stager?.stop()
+        // In copy mode every file goes through a staged copy (made ahead or now), so a slow
+        // source is read once, start to end.
+        let staging = stager ?? Self.copyStager(for: options.mode)
+        defer { staging?.discard() }
         let files = Self.collectFiles(from: sources)
+        let sizes = files.map { Int64((try? $0.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) }
         var state = ImportProgress()
         state.total = files.count
+        state.totalBytes = sizes.reduce(0, +)
+        state.currentFile = files.first
         do {
             state.importGroupId = try resolveGroup(options.target, sources: sources)
         } catch {
@@ -110,45 +134,63 @@ public final class Importer: Sendable {
         }
         progress(state)
 
-        for file in files {
-            if Task.isCancelled { break }
-            do {
-                let assetID: Int64
-                switch try importFile(file, options: options) {
-                case .imported(let id, let url):
-                    state.imported += 1
-                    state.importedAssetIDs.append(id)
-                    assetID = id
-                    var developed: DevelopSettings?
-                    if let preset = options.developPreset {
-                        let settings = preset.applied(to: .neutral)
-                        try? catalog.saveDevelopSettings(settings, for: id, step: "Import Preset: \(preset.name)")
-                        developed = settings
-                    }
-                    if options.buildPreviews {
-                        scheduler?.request(.thumbnail, for: id, source: url, settings: developed)
-                    }
-                case .existing(let id):
-                    state.skipped += 1
-                    assetID = id
-                }
-                state.assetIDsBySource[file] = assetID
-                if let groupID = state.importGroupId {
-                    try catalog.addAssets([assetID], toImportGroup: groupID)
-                }
-            } catch {
-                state.failures.append(ImportFailure(url: file, reason: error.localizedDescription))
+        /// Imported photos by file index, so the result keeps the files' order.
+        var imported: [(index: Int, id: Int64, url: URL)] = []
+        await withTaskGroup(of: (Int, Result<ImportOutcome, Error>).self) { group in
+            var next = 0
+            for _ in 0..<min(Self.workers(for: options.mode), files.count) {
+                let index = next
+                next += 1
+                group.addTask { (index, Result { try self.importFile(files[index], options: options, stager: staging) }) }
             }
-            state.processed += 1
-            progress(state)
+            for await (index, outcome) in group {
+                let file = files[index]
+                do {
+                    let assetID: Int64
+                    switch try outcome.get() {
+                    case .imported(let id, let url):
+                        state.imported += 1
+                        imported.append((index, id, url))
+                        assetID = id
+                        if let preset = options.developPreset {
+                            try? catalog.saveDevelopSettings(preset.applied(to: .neutral), for: id,
+                                                             step: "Import Preset: \(preset.name)")
+                        }
+                    case .existing(let id):
+                        state.skipped += 1
+                        assetID = id
+                    }
+                    state.assetIDsBySource[file] = assetID
+                    if let groupID = state.importGroupId {
+                        try catalog.addAssets([assetID], toImportGroup: groupID)
+                    }
+                } catch is CancellationError {
+                    // The file was left out; its partial copy is already gone.
+                } catch {
+                    state.failures.append(ImportFailure(url: file, reason: error.localizedDescription))
+                }
+                state.processed += 1
+                state.bytesDone += sizes[index]
+                state.finishedFile = file
+                if !Task.isCancelled, next < files.count {
+                    let index = next
+                    next += 1
+                    state.currentFile = files[index]
+                    group.addTask { (index, Result { try self.importFile(files[index], options: options, stager: staging) }) }
+                }
+                progress(state)
+            }
         }
+        imported.sort { $0.index < $1.index }
+        state.importedAssetIDs = imported.map(\.id)
 
         if options.buildPreviews, let scheduler {
-            for id in state.importedAssetIDs {
-                if let url = try? catalog.fileURL(for: id) {
-                    let settings = options.developPreset.map { $0.applied(to: .neutral) }
-                    scheduler.request(.preview, for: id, source: url, settings: settings)
-                }
+            let settings = options.developPreset.map { $0.applied(to: .neutral) }
+            for photo in imported {
+                scheduler.request(.thumbnail, for: photo.id, source: photo.url, settings: settings)
+            }
+            for photo in imported {
+                scheduler.request(.preview, for: photo.id, source: photo.url, settings: settings)
             }
         } else if options.buildPreviews, let previews {
             let base = state
@@ -160,6 +202,22 @@ public final class Importer: Sendable {
             progress(state)
         }
         return state
+    }
+
+    /// The stager an import makes for itself in copy mode, when culling didn't make one.
+    static func copyStager(for mode: ImportMode) -> ImportStager? {
+        if case .copy = mode { return ImportStager(mode: mode) }
+        return nil
+    }
+
+    /// Files handled at once. Copies are bound by the card or drive, hashing a referenced file
+    /// by the CPU too.
+    public static func workers(for mode: ImportMode) -> Int {
+        let cores = ProcessInfo.processInfo.activeProcessorCount
+        switch mode {
+        case .copy: return 4
+        case .reference: return min(8, max(2, cores / 2))
+        }
     }
 
     func resolveGroup(_ target: ImportTarget, sources: [URL]) throws -> Int64 {
@@ -176,22 +234,35 @@ public final class Importer: Sendable {
         }
     }
 
-    func importFile(_ source: URL, options: ImportOptions) throws -> ImportOutcome {
+    func importFile(_ source: URL, options: ImportOptions, stager: ImportStager? = nil) throws -> ImportOutcome {
         // Re-importing a referenced folder should not re-hash files that are already cataloged.
         if options.mode == .reference, let existing = try existingAssetID(for: source) {
             return .existing(existing)
         }
 
-        let metadata = MetadataReader.read(source)
+        try Task.checkCancellation()
         let sourceValues = try source.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
-        let hash = try FileHasher.sha256(of: source)
+        let size = Int64(sourceValues.fileSize ?? 0)
+        var staged = stager?.take(source, size: size, modified: sourceValues.contentModificationDate)
+        if case .copy = options.mode, staged?.url == nil, let stager,
+           let copy = try stager.copy(source, size: size, modified: sourceValues.contentModificationDate) {
+            staged = copy
+        }
+        // From the local copy when there is one: reading a raw file's metadata takes many small
+        // reads, each a round trip to the NAS.
+        let metadata = MetadataReader.read(staged?.url ?? source, sidecarFor: source)
+        let hash: String
         var fileURL = source
 
         if case let .copy(root, eventName) = options.mode {
             let date = metadata.captureTime ?? sourceValues.contentModificationDate ?? Date()
             let directory = Self.destinationDirectory(root: root, date: date, eventName: eventName)
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            fileURL = try Self.copyVerified(source, hash: hash, into: directory)
+            let copy = try Self.copyVerified(source, into: directory, staged: staged)
+            fileURL = copy.url
+            hash = copy.hash
+        } else {
+            hash = try staged?.hash ?? FileHasher.sha256(of: source)
         }
 
         let volume = try VolumeIdentity.volume(containing: fileURL)
@@ -319,27 +390,78 @@ public final class Importer: Sendable {
             .appendingPathComponent(folderName, isDirectory: true)
     }
 
-    /// Copies `source` into `directory` and verifies the copy by hash. If an identical file is
-    /// already there, it is reused; a different file with the same name gets a numeric suffix.
-    static func copyVerified(_ source: URL, hash: String, into directory: URL) throws -> URL {
+    /// Copies `source` into `directory`, verifies the copy by hash and returns it with the
+    /// source's hash. If an identical file is already there, it is reused; a different file with
+    /// the same name gets a numeric suffix. Safe to run for several files at once.
+    ///
+    /// Copying from another drive or a card reads the source once, hashing it on the way. On the
+    /// same APFS volume the copy is a clone, which takes no time or space. A copy `staged` ahead
+    /// (already verified) is moved into place instead.
+    static func copyVerified(_ source: URL, into directory: URL,
+                             staged: ImportStager.Staged? = nil) throws -> (url: URL, hash: String) {
         let fm = FileManager.default
         let base = source.deletingPathExtension().lastPathComponent
         let ext = source.pathExtension
         var candidate = directory.appendingPathComponent(source.lastPathComponent)
         var counter = 1
-        while fm.fileExists(atPath: candidate.path) {
-            if (try? FileHasher.sha256(of: candidate)) == hash { return candidate }
+        /// Only needed when the name is taken, to tell an earlier copy from a different photo.
+        var sourceHash: String? = staged?.hash
+        // Creating the file exclusively claims the name, so two copies never pick the same one.
+        var reserved = open(candidate.path, O_WRONLY | O_CREAT | O_EXCL, 0o644)
+        while reserved < 0 {
+            guard errno == EEXIST else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+            let hash = try sourceHash ?? FileHasher.sha256(of: source)
+            sourceHash = hash
+            if (try? FileHasher.sha256(of: candidate)) == hash {
+                if let copy = staged?.url { try? fm.removeItem(at: copy) }
+                return (candidate, hash)
+            }
             let name = ext.isEmpty ? "\(base)-\(counter)" : "\(base)-\(counter).\(ext)"
             candidate = directory.appendingPathComponent(name)
             counter += 1
+            reserved = open(candidate.path, O_WRONLY | O_CREAT | O_EXCL, 0o644)
         }
-        try fm.copyItem(at: source, to: candidate)
-        guard try FileHasher.sha256(of: candidate) == hash else {
+
+        let hash: String
+        do {
+            // A copy made ahead was verified when it was made; moving it in is a rename.
+            let moved = staged?.url.map { Self.moveStaged($0, over: candidate, reservation: reserved) } ?? false
+            if let staged, moved {
+                hash = staged.hash
+            } else if Self.sameVolume(source, directory) {
+                close(reserved)
+                // A clone (or a plain copy where cloning isn't supported) replaces the placeholder.
+                let temporary = directory.appendingPathComponent(".\(UUID().uuidString).atelier-copy")
+                guard copyfile(source.path, temporary.path, nil, copyfile_flags_t(COPYFILE_ALL | COPYFILE_CLONE)) == 0 else {
+                    let code = errno
+                    try? fm.removeItem(at: temporary)
+                    throw POSIXError(POSIXErrorCode(rawValue: code) ?? .EIO)
+                }
+                guard rename(temporary.path, candidate.path) == 0 else {
+                    let code = errno
+                    try? fm.removeItem(at: temporary)
+                    throw POSIXError(POSIXErrorCode(rawValue: code) ?? .EIO)
+                }
+                hash = try sourceHash ?? FileHasher.sha256(of: source)
+            } else {
+                hash = try copyHashing(source, to: reserved)
+                if let sourceHash, sourceHash != hash {
+                    throw CocoaError(.fileWriteUnknown, userInfo: [
+                        NSFilePathErrorKey: source.path,
+                        NSLocalizedDescriptionKey: "\(source.lastPathComponent) changed while it was being copied.",
+                    ])
+                }
+            }
+            try Task.checkCancellation()
+            guard try moved || FileHasher.sha256(of: candidate) == hash else {
+                throw CocoaError(.fileWriteUnknown, userInfo: [
+                    NSFilePathErrorKey: candidate.path,
+                    NSLocalizedDescriptionKey: "Copy of \(source.lastPathComponent) failed hash verification.",
+                ])
+            }
+        } catch {
             try? fm.removeItem(at: candidate)
-            throw CocoaError(.fileWriteUnknown, userInfo: [
-                NSFilePathErrorKey: candidate.path,
-                NSLocalizedDescriptionKey: "Copy of \(source.lastPathComponent) failed hash verification.",
-            ])
+            throw error
         }
         // Bring an existing XMP sidecar along so ratings and keywords from other apps survive.
         let sidecar = XMPSidecar.sidecarURL(for: source)
@@ -347,6 +469,57 @@ public final class Importer: Sendable {
         if fm.fileExists(atPath: sidecar.path) && !fm.fileExists(atPath: sidecarDestination.path) {
             try? fm.copyItem(at: sidecar, to: sidecarDestination)
         }
-        return candidate
+        return (candidate, hash)
+    }
+
+    /// Copies `source` into the open file `destination` (and closes it), hashing what it reads,
+    /// then gives the copy the source's dates, permissions and extended attributes.
+    static func copyHashing(_ source: URL, to destination: Int32) throws -> String {
+        defer { close(destination) }
+        let input = open(source.path, O_RDONLY)
+        guard input >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        defer { close(input) }
+        _ = fcntl(input, F_RDAHEAD, 1)
+        let size = 8 * 1024 * 1024
+        let buffer = UnsafeMutableRawPointer.allocate(byteCount: size, alignment: 16)
+        defer { buffer.deallocate() }
+        var hasher = SHA256()
+        while true {
+            try Task.checkCancellation()
+            let count = read(input, buffer, size)
+            if count < 0 {
+                if errno == EINTR { continue }
+                throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+            }
+            if count == 0 { break }
+            hasher.update(bufferPointer: UnsafeRawBufferPointer(start: buffer, count: count))
+            var written = 0
+            while written < count {
+                let result = write(destination, buffer + written, count - written)
+                if result < 0 {
+                    if errno == EINTR { continue }
+                    throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+                }
+                written += result
+            }
+        }
+        // After the data, so the modification date stays the original's.
+        _ = fcopyfile(input, destination, nil, copyfile_flags_t(COPYFILE_STAT | COPYFILE_METADATA))
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// Moves a staged copy over the placeholder that reserved its name, and closes the
+    /// placeholder. False when it can't be moved (another volume), with the placeholder still open.
+    static func moveStaged(_ copy: URL, over candidate: URL, reservation: Int32) -> Bool {
+        guard rename(copy.path, candidate.path) == 0 else { return false }
+        close(reservation)
+        return true
+    }
+
+    static func sameVolume(_ a: URL, _ b: URL) -> Bool {
+        let key: URLResourceKey = .volumeIdentifierKey
+        guard let first = try? a.resourceValues(forKeys: [key]).volumeIdentifier as? NSObject,
+              let second = try? b.resourceValues(forKeys: [key]).volumeIdentifier as? NSObject else { return false }
+        return first.isEqual(second)
     }
 }

@@ -44,7 +44,7 @@ struct SidebarView: View {
                             Button("Cull…") { model.beginCull(importGroup: entry.id) }
                             Divider()
                             Button("Delete Import…", role: .destructive) {
-                                deleting = .importGroup(entry.id)
+                                model.beginDeleteImport(entry.id)
                             }
                         }
                     }

@@ -32,6 +32,16 @@ struct ImportStatus: Equatable {
     var phase: String
     /// nil shows an indeterminate bar.
     var fraction: Double?
+    /// The Import dialog's figures: photos done and in all, "1.2 GB of 9.8 GB", "180 MB/s",
+    /// "About 1 minute", and the file being read or copied.
+    var done: Int?
+    var total: Int?
+    var amount: String?
+    var speed: String?
+    var timeLeft: String?
+    var file: String?
+    /// The paths of the files in the catalog so far, for the dialog's wall of photos.
+    var doneFiles: Set<String> = []
 }
 
 /// A file the last import or export could not handle, shown from the status bar.
@@ -104,11 +114,12 @@ final class LibraryModel: ObservableObject {
     @Published var matchProgress: ImportStatus?
     /// The Remove Photo dialog, while open.
     @Published var removal: PhotoRemoval?
+    /// The Delete Import dialog, while open.
+    @Published var deletingImport: ImportDeletion?
     var matchTask: Task<Void, Never>?
     private var exportTask: Task<Void, Never>?
     private var importTask: Task<Void, Never>?
     private var importWasCancelled = false
-    private var shownImportGroup: Int64?
     /// Bumped when previews are generated so visible cells reload their images.
     @Published var previewRevision = 0
     /// Zoom shared by loupe and develop; what happens on moving to another photo is a setting
@@ -627,27 +638,23 @@ final class LibraryModel: ObservableObject {
         showingImportSheet = true
     }
 
-    /// `then` runs on the main actor with the result, before the status is set.
-    func runImport(sources: [URL], options: ImportOptions, then: ((ImportProgress) -> Void)? = nil) {
+    /// `then` runs on the main actor with the result, before the status is set. The import
+    /// entry is selected when every file is cataloged, and thumbnails are made after that.
+    /// A `stager` hands over what it copied ahead while the user culled.
+    func runImport(sources: [URL], options: ImportOptions, stager: ImportStager? = nil,
+                   then: ((ImportProgress) -> Void)? = nil) {
         let importer = Importer(catalog: catalog, previews: nil, scheduler: previewScheduler)
-        importProgress = ImportStatus(phase: "Scanning…", fraction: nil)
-        shownImportGroup = nil
+        let copying: Bool
+        if case .copy = options.mode { copying = true } else { copying = false }
+        importProgress = ImportStatus(phase: "Looking for photos…", fraction: nil)
+        let meter = ImportMeter()
         importTask = Task.detached {
-            let result = await importer.run(sources: sources, options: options) { progress in
-                let phase: String
-                let fraction: Double?
-                phase = "Importing \(min(progress.processed + 1, progress.total)) of \(progress.total)"
-                fraction = Double(progress.processed) / Double(max(progress.total, 1))
-                let groupID = progress.importGroupId
+            let result = await importer.run(sources: sources, options: options, stager: stager) { progress in
+                // Called on the import's own loop after every file: keep it cheap, and update
+                // the dialog a few times a second rather than per file.
+                guard let status = meter.status(for: progress, copying: copying) else { return }
                 Task { @MainActor in
-                    // Show the entry right away so photos appear as they arrive.
-                    if let groupID, self.shownImportGroup != groupID {
-                        self.shownImportGroup = groupID
-                        self.sidebarSelection = .importGroup(groupID)
-                    }
-                    if self.importTask != nil {
-                        self.importProgress = ImportStatus(phase: phase, fraction: fraction)
-                    }
+                    if self.importTask != nil, !self.importWasCancelled { self.importProgress = status }
                 }
             }
             await MainActor.run {
@@ -656,6 +663,9 @@ final class LibraryModel: ObservableObject {
                 if !result.failures.isEmpty { parts.append("\(result.failures.count) could not be read") }
                 if Task.isCancelled || self.importWasCancelled { parts.insert("Import cancelled", at: 0) }
                 self.status = parts.joined(separator: ", ")
+                if let groupID = result.importGroupId {
+                    self.sidebarSelection = .importGroup(groupID)
+                }
                 then?(result)
                 self.problems = result.failures.map { Problem(name: $0.url.lastPathComponent, reason: $0.reason) }
                 self.problemsTitle = "These files could not be imported"
@@ -665,6 +675,36 @@ final class LibraryModel: ObservableObject {
                 self.previewRevision += 1
             }
         }
+    }
+
+    /// "Copying 23 of 400 photos" for the status bar, with the figures the Import dialog shows.
+    nonisolated static func importStatus(_ progress: ImportProgress, copying: Bool, speed: Double?,
+                                         doneFiles: Set<String> = []) -> ImportStatus {
+        let verb = copying ? "Copying" : "Adding"
+        let shown = min(progress.processed + 1, progress.total)
+        var status = ImportStatus(phase: progress.total == 0 ? "Looking for photos…"
+                                    : "\(verb) \(shown) of \(progress.total) photo\(progress.total == 1 ? "" : "s")",
+                                  fraction: progress.totalBytes > 0
+                                    ? Double(progress.bytesDone) / Double(progress.totalBytes)
+                                    : Double(progress.processed) / Double(max(progress.total, 1)))
+        let bytes = ByteCountFormatter()
+        bytes.countStyle = .file
+        status.done = progress.processed
+        status.doneFiles = doneFiles
+        status.total = progress.total
+        status.amount = "\(bytes.string(fromByteCount: progress.bytesDone)) of \(bytes.string(fromByteCount: progress.totalBytes))"
+        status.file = progress.currentFile?.lastPathComponent
+        // Speed and time left once there is enough to go on.
+        if progress.bytesDone > 0, let speed, speed > 0 {
+            status.speed = "\(bytes.string(fromByteCount: Int64(speed)))/s"
+            let left = Double(progress.totalBytes - progress.bytesDone) / speed
+            let time = DateComponentsFormatter()
+            time.unitsStyle = .full
+            time.maximumUnitCount = 1
+            time.allowedUnits = left < 60 ? [.second] : [.hour, .minute]
+            status.timeLeft = left < 1 ? "Almost done" : time.string(from: left.rounded(.up)).map { "About \($0)" }
+        }
+        return status
     }
 
     func cancelImport() {

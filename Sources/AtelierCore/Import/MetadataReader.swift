@@ -27,7 +27,9 @@ public enum MetadataReader {
         return type.conforms(to: .image)
     }
 
-    public static func read(_ url: URL) -> PhotoMetadata {
+    /// `sidecarFor` is the file whose XMP sidecar applies, when `url` is a copy made elsewhere
+    /// (the import's staged copy of a file on the NAS).
+    public static func read(_ url: URL, sidecarFor: URL? = nil) -> PhotoMetadata {
         var result = PhotoMetadata()
         let options = [kCGImageSourceShouldCache: false] as CFDictionary
         if let source = CGImageSourceCreateWithURL(url as CFURL, options) {
@@ -60,7 +62,7 @@ public enum MetadataReader {
                 result.xmp = XMPSidecar.fields(from: embedded)
             }
         }
-        if let sidecar = XMPSidecar.read(sidecar: XMPSidecar.sidecarURL(for: url)) {
+        if let sidecar = XMPSidecar.read(sidecar: XMPSidecar.sidecarURL(for: sidecarFor ?? url)) {
             result.xmp = sidecar
         }
         return result

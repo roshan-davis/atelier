@@ -6,27 +6,73 @@ import SwiftUI
 /// photos carry a check; the rest are dimmed.
 struct CullView: View {
     @ObservedObject var cull: CullModel
+    /// A step of the Import dialog, which shows its own title.
+    var embedded = false
     @Environment(\.theme) private var theme
+    @State private var keys = CullKeyMonitor()
+    @AppStorage("cull.listWidth") private var listWidth = 560.0
 
     var body: some View {
         VStack(spacing: 0) {
             header
             Divider()
-            HSplitView {
-                groupList
-                    .frame(minWidth: 420, idealWidth: 560)
-                preview
-                    .frame(minWidth: 360, idealWidth: 520)
+            if cull.isLoading {
+                loadingStatus
+            } else {
+                // The list gets exactly the width it is given, so its rows wrap to the pane
+                // (a split view would lay it out wider and clip both sides).
+                GeometryReader { proxy in
+                    let range = 420.0...max(420.0, Double(proxy.size.width) - 360)
+                    let width = min(range.upperBound, max(range.lowerBound, listWidth))
+                    HStack(spacing: 0) {
+                        CullList(cull: cull, size: CGSize(width: width, height: proxy.size.height))
+                            .clipped()
+                        PanelResizeHandle(width: $listWidth, range: range, panel: .leading)
+                        preview
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .clipped()
+                    }
+                }
             }
-            Divider()
             footer
         }
-        .frame(minWidth: 980, idealWidth: 1240, minHeight: 640, idealHeight: 800)
-        .focusable()
-        .focusEffectDisabled()
-        .onKeyPress(keys: [.leftArrow, .rightArrow, .upArrow, .downArrow, .space, "p", "x", "P", "X"]) { press in
-            handle(press.key)
+        .frame(minWidth: 980, idealWidth: 1240, minHeight: 600, idealHeight: 800)
+        // The keys work as soon as the view is up, whatever has keyboard focus in the window
+        // (except a text field), so nothing has to be clicked first.
+        .background(WindowAccessor { keys.window = $0 })
+        .onAppear { keys.start(handle) }
+        .onDisappear { keys.stop() }
+    }
+
+    // MARK: Status while it works
+
+    /// Before the photos are listed: what is happening, with a count and a bar.
+    private var loadingStatus: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "photo.stack")
+                .font(.system(size: 40))
+                .foregroundStyle(.secondary)
+            if let found = cull.found {
+                Text("Reading \(found) photo\(found == 1 ? "" : "s")…").font(.title3.weight(.semibold))
+                ProgressView(value: Double(cull.read), total: Double(max(found, 1)))
+                    .frame(width: 360)
+                Text("Capture times, to put the shots in order: \(cull.read) of \(found)")
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            } else {
+                Text("Finding photos…").font(.title3.weight(.semibold))
+                ProgressView().progressViewStyle(.linear).frame(width: 360)
+                Text("Looking through the folders you chose")
+                    .foregroundStyle(.secondary)
+            }
+            Text("Next, each photo is checked for sharpness, faces and similar shots. You can look through them with the arrow keys while that runs.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(width: 380)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(nsColor: theme.gridBackground))
     }
 
     // MARK: Header and footer
@@ -34,9 +80,12 @@ struct CullView: View {
     private var header: some View {
         HStack(alignment: .center, spacing: 16) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(cull.title).font(.title2.bold())
+                if !embedded {
+                    Text(cull.title).font(.title2.bold())
+                }
                 Text(subtitle)
-                    .foregroundStyle(.secondary)
+                    .font(embedded ? .headline : .body)
+                    .foregroundStyle(embedded ? .primary : .secondary)
                     .monospacedDigit()
             }
             Spacer()
@@ -67,6 +116,7 @@ struct CullView: View {
     }
 
     private var subtitle: String {
+        if cull.isLoading { return "Finding photos…" }
         if cull.isAnalyzing { return "Looking at \(cull.analyzed) of \(cull.photos.count) photos…" }
         if cull.isReview {
             return "\(cull.photos.count) shots culled together · \(cull.keptCount) kept"
@@ -77,111 +127,51 @@ struct CullView: View {
     }
 
     private var footer: some View {
-        HStack(spacing: 10) {
-            Text("Click to look · Space or double-click keeps or drops · P keep · X drop · arrows move")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-            Spacer()
+        ImportFooter {
+            if let ahead = cull.ahead, ahead.total > 0 {
+                aheadStatus(ahead)
+            } else {
+                Text("Click to look · Space or double-click keeps or drops · P keep · X drop · arrows move")
+            }
+        } buttons: {
             Button("Keep All") { cull.keepAll() }
                 .disabled(cull.isAnalyzing)
+            if let back = cull.onBack {
+                Button("Back") {
+                    cull.stop()
+                    back()
+                }
+            }
             Button("Cancel", role: .cancel) { cull.cancel() }
                 .keyboardShortcut(.cancelAction)
             Button(finishTitle) { cull.finish() }
                 .keyboardShortcut(.defaultAction)
                 .disabled(cull.isAnalyzing || cull.keptCount == 0)
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
+    }
+
+    /// While the user culls, the files are copied to the library, so Import is quick.
+    private func aheadStatus(_ ahead: ImportStager.Progress) -> some View {
+        HStack(spacing: 6) {
+            if ahead.isFinished {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                Text(ahead.copying ? "All \(ahead.total) files copied to your library ahead; Import only files them"
+                     : "All \(ahead.total) files checked ahead; Import will be quick")
+            } else {
+                ProgressView(value: Double(ahead.done), total: Double(max(ahead.total, 1)))
+                    .progressViewStyle(.circular)
+                    .controlSize(.small)
+                Text("\(ahead.copying ? "Copying to your library" : "Checking files") while you cull: \(ahead.done) of \(ahead.total)")
+                    .monospacedDigit()
+            }
+        }
+        .help("Atelier copies the photos while you cull, so Import has less to do. Back or Cancel discards these copies.")
     }
 
     private var finishTitle: String {
+        if cull.isAnalyzing || cull.isLoading { return cull.isImporting ? "Import" : "Done" }
         if cull.isImporting { return "Import \(cull.keptCount) Photo\(cull.keptCount == 1 ? "" : "s")" }
         return cull.isReview ? "Done" : "Pick \(cull.keptCount), Reject \(cull.droppedCount)"
-    }
-
-    // MARK: Groups
-
-    private var groupList: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 14) {
-                    if cull.isAnalyzing {
-                        ProgressView(value: Double(cull.analyzed), total: Double(max(cull.photos.count, 1)))
-                            .padding(.horizontal, 4)
-                        tiles(cull.photos.map(\.id), title: "Photos")
-                    } else {
-                        ForEach(Array(cull.multiGroups.enumerated()), id: \.offset) { index, group in
-                            groupCard(group, title: cull.isReview ? "Culled together" : "Group \(index + 1)",
-                                      kind: cull.isReview ? nil : (cull.isSameFrame(group) ? "Same frame" : "Similar shots"))
-                        }
-                        if !cull.singles.isEmpty {
-                            groupCard(cull.singles, title: "Single shots", isSingles: true)
-                        }
-                    }
-                }
-                .padding(16)
-            }
-            .background(Color(nsColor: theme.gridBackground))
-            .onChange(of: cull.focused) { _, id in
-                if let id { withAnimation(.easeInOut(duration: 0.15)) { proxy.scrollTo(id) } }
-            }
-        }
-    }
-
-    private func groupCard(_ group: [Int], title: String, kind: String? = nil, isSingles: Bool = false) -> some View {
-        let kept = group.filter { cull.kept.contains($0) }.count
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Image(systemName: isSingles ? "photo" : "square.stack.3d.down.right")
-                    .foregroundStyle(.secondary)
-                Text(title).font(.headline)
-                if let kind {
-                    Text(kind)
-                        .font(.caption.weight(.medium))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 1)
-                        .background(Color.secondary.opacity(0.18), in: Capsule())
-                        .help(kind == "Same frame" ? "Framed alike: people moved a little, blinked or changed expression"
-                              : "The same scene, zoomed, recomposed or refocused")
-                }
-                Text("\(group.count) photo\(group.count == 1 ? "" : "s")")
-                    .foregroundStyle(.secondary)
-                if !isSingles, let time = cull.photos[group[0]].captureTime {
-                    Text(time.formatted(date: .omitted, time: .standard)).foregroundStyle(.secondary)
-                }
-                Spacer()
-                Text(kept == 0 ? "None kept" : "\(kept) kept")
-                    .font(.caption.weight(.semibold))
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 2)
-                    .background(kept == 0 ? Color.orange.opacity(0.25) : Color.green.opacity(0.22), in: Capsule())
-            }
-            tiles(group, title: title)
-        }
-        .padding(12)
-        .background(Color(nsColor: theme.panel).opacity(0.9), in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10)
-            .strokeBorder(group.contains(cull.focused ?? -1) ? Color.accentColor.opacity(0.6) : Color.secondary.opacity(0.18)))
-    }
-
-    private func tiles(_ ids: [Int], title: String) -> some View {
-        ScrollView(.horizontal, showsIndicators: true) {
-            LazyHStack(spacing: 8) {
-                ForEach(ids, id: \.self) { id in
-                    CullTile(photo: cull.photos[id], isKept: cull.kept.contains(id),
-                             isSuggested: cull.suggested.contains(id), isFocused: cull.focused == id,
-                             dimsWhenDropped: !cull.isAnalyzing)
-                        .id(id)
-                        .onTapGesture(count: 2) { cull.toggle(id) }
-                        .onTapGesture { cull.focus(id) }
-                        .contextMenu {
-                            Button(cull.kept.contains(id) ? "Drop" : "Keep") { cull.toggle(id) }
-                        }
-                }
-            }
-            .padding(.bottom, 4)
-        }
     }
 
     // MARK: Preview
@@ -241,6 +231,9 @@ struct CullView: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             .fixedSize()
+            // Keepers are suggested once every photo is checked.
+            .disabled(cull.isAnalyzing)
+            .opacity(cull.isAnalyzing ? 0 : 1)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -248,24 +241,60 @@ struct CullView: View {
 
     // MARK: Keys
 
-    private func handle(_ key: KeyEquivalent) -> KeyPress.Result {
-        guard !cull.isAnalyzing else { return .ignored }
-        switch key {
-        case .leftArrow: cull.move(-1, byGroup: false)
-        case .rightArrow: cull.move(1, byGroup: false)
-        case .upArrow: cull.move(-1, byGroup: true)
-        case .downArrow: cull.move(1, byGroup: true)
-        case .space: if let id = cull.focused { cull.toggle(id) }
-        case "p", "P": if let id = cull.focused { cull.setKept(id, true); cull.move(1, byGroup: false) }
-        case "x", "X": if let id = cull.focused { cull.setKept(id, false); cull.move(1, byGroup: false) }
-        default: return .ignored
+    /// Left and right move through the photos, up and down a group at a time; P keeps, X drops,
+    /// Space toggles. While the photos are analyzed the arrows already move through them.
+    private func handle(_ event: NSEvent) -> Bool {
+        if cull.isLoading { return false }
+        switch event.keyCode {
+        case 123: cull.move(-1, byRow: false)
+        case 124: cull.move(1, byRow: false)
+        case 126: cull.move(-1, byRow: true)
+        case 125: cull.move(1, byRow: true)
+        default:
+            guard !cull.isAnalyzing, let id = cull.focused else { return false }
+            switch event.charactersIgnoringModifiers?.lowercased() {
+            case " ": cull.toggle(id)
+            case "p": cull.setKept(id, true); cull.move(1, byRow: false)
+            case "x": cull.setKept(id, false); cull.move(1, byRow: false)
+            default: return false
+            }
         }
-        return .handled
+        return true
     }
 }
 
+/// The Cull view's keys, from a key-down monitor on its own window, so they work without
+/// clicking into the view first.
+final class CullKeyMonitor {
+    weak var window: NSWindow?
+    private var monitor: Any?
+
+    func start(_ handle: @escaping (NSEvent) -> Bool) {
+        stop()
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let window = self?.window, event.window === window, window.attachedSheet == nil,
+                  !(window.firstResponder is NSText),
+                  event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { return event }
+            let handled = MainActor.assumeIsolated { handle(event) }
+            return handled ? nil : event
+        }
+    }
+
+    func stop() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+    }
+
+    deinit { stop() }
+}
+
 /// One thumbnail: a check when kept, dimmed when dropped, a star on the suggested keeper.
-private struct CullTile: View {
+struct CullTile: View {
+    /// Every tile is this wide, so rows can be laid out and scrolled without measuring.
+    static let width = 150.0
+    static let spacing = 8.0
+    static var stride: Double { width + spacing }
+
     let photo: CullPhoto
     let isKept: Bool
     let isSuggested: Bool
@@ -285,7 +314,7 @@ private struct CullTile: View {
                             .overlay(ProgressView().controlSize(.small))
                     }
                 }
-                .frame(width: 150, height: 104)
+                .frame(width: Self.width, height: 104)
                 .opacity(dimsWhenDropped && !isKept ? 0.4 : 1)
                 if dimsWhenDropped {
                     Image(systemName: isKept ? "checkmark.circle.fill" : "circle")
@@ -308,7 +337,7 @@ private struct CullTile: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                 }
             }
-            .frame(width: 150, height: 104)
+            .frame(width: Self.width, height: 104)
             .background(Color.black.opacity(0.25))
             .clipShape(RoundedRectangle(cornerRadius: 5))
             .overlay(RoundedRectangle(cornerRadius: 5)
@@ -319,7 +348,7 @@ private struct CullTile: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
-                .frame(width: 150)
+                .frame(width: Self.width)
         }
         .contentShape(Rectangle())
         .help(isSuggested ? "Suggested keeper: sharpest, best faces" : photo.name)

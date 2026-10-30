@@ -74,6 +74,87 @@ final class AtelierCoreTests: XCTestCase {
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: expected.path).count, 2)
     }
 
+    func testParallelCopiesOfSameNamedFilesGetTheirOwnNames() async throws {
+        // Two cards with IMG_0001… of different photos, copied in one import, several at a time.
+        let cardA = try makeShoot(count: 3)
+        let cardB = try makeShoot(count: 4)
+        let library = workDir.appendingPathComponent("Library", isDirectory: true)
+        let catalog = try Catalog()
+        let options = ImportOptions(mode: .copy(destinationRoot: library, eventName: "Cards"), buildPreviews: false)
+        let result = await Importer(catalog: catalog, previews: nil).run(sources: [cardA, cardB], options: options)
+        XCTAssertEqual(result.imported, 7)
+        XCTAssertTrue(result.failures.isEmpty, "\(result.failures)")
+        XCTAssertEqual(result.processed, 7)
+        XCTAssertEqual(result.bytesDone, result.totalBytes)
+        let folder = Importer.destinationDirectory(root: library, date: Date(), eventName: "Cards")
+        let names = try FileManager.default.contentsOfDirectory(atPath: folder.path).sorted()
+        XCTAssertEqual(names.count, 7, "\(names)")
+        for id in result.importedAssetIDs {
+            let detail = try XCTUnwrap(catalog.detail(for: id))
+            XCTAssertEqual(detail.asset.contentHash, try FileHasher.sha256(of: try XCTUnwrap(detail.fileURL)))
+        }
+    }
+
+    func testStreamingCopyHashesWhatItWrites() throws {
+        let shoot = try makeShoot(count: 1, width: 900, height: 700)
+        let source = shoot.appendingPathComponent("IMG_0001.jpg")
+        let destination = workDir.appendingPathComponent("streamed.jpg")
+        let descriptor = open(destination.path, O_WRONLY | O_CREAT | O_EXCL, 0o644)
+        XCTAssertGreaterThanOrEqual(descriptor, 0)
+        let hash = try Importer.copyHashing(source, to: descriptor)
+        XCTAssertEqual(hash, try FileHasher.sha256(of: source))
+        XCTAssertEqual(try Data(contentsOf: destination), try Data(contentsOf: source))
+    }
+
+    func testFilesCopiedAheadAreMovedIntoPlace() async throws {
+        let shoot = try makeShoot(count: 3)
+        let library = workDir.appendingPathComponent("Library", isDirectory: true)
+        let mode = ImportMode.copy(destinationRoot: library, eventName: "Ahead")
+        let stager = ImportStager(mode: mode, copiesOnSameVolume: true)
+        stager.start(sources: [shoot])
+        await stager.waitUntilDone()
+        let staging = try XCTUnwrap(stager.directory)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: staging.path).count, 3)
+
+        // A file that changed after it was copied ahead is copied again.
+        let changed = shoot.appendingPathComponent("IMG_0001.jpg")
+        try FileManager.default.removeItem(at: changed)
+        try FileManager.default.copyItem(at: shoot.appendingPathComponent("IMG_0002.jpg"), to: changed)
+        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSinceNow: -3600)],
+                                              ofItemAtPath: changed.path)
+
+        let catalog = try Catalog()
+        let result = await Importer(catalog: catalog, previews: nil)
+            .run(sources: [shoot], options: ImportOptions(mode: mode, buildPreviews: false), stager: stager)
+        XCTAssertEqual(result.imported, 3)
+        XCTAssertTrue(result.failures.isEmpty, "\(result.failures)")
+        for id in result.importedAssetIDs {
+            let detail = try XCTUnwrap(catalog.detail(for: id))
+            let url = try XCTUnwrap(detail.fileURL)
+            XCTAssertEqual(detail.asset.contentHash, try FileHasher.sha256(of: url))
+            XCTAssertEqual(detail.asset.contentHash,
+                           try FileHasher.sha256(of: shoot.appendingPathComponent(url.lastPathComponent)))
+        }
+        await stager.discard().value
+        XCTAssertFalse(FileManager.default.fileExists(atPath: ImportStager.stagingRoot(in: library).path))
+    }
+
+    func testReferencedFilesHashedAheadKeepTheirHash() async throws {
+        let shoot = try makeShoot(count: 2)
+        let stager = ImportStager(mode: .reference)
+        stager.start(sources: [shoot])
+        await stager.waitUntilDone()
+        XCTAssertNil(stager.directory)
+        let catalog = try Catalog()
+        let result = await Importer(catalog: catalog, previews: nil)
+            .run(sources: [shoot], options: ImportOptions(buildPreviews: false), stager: stager)
+        XCTAssertEqual(result.imported, 2)
+        for id in result.importedAssetIDs {
+            let detail = try XCTUnwrap(catalog.detail(for: id))
+            XCTAssertEqual(detail.asset.contentHash, try FileHasher.sha256(of: try XCTUnwrap(detail.fileURL)))
+        }
+    }
+
     // MARK: Import entries
 
     func testEachImportGetsAnEntryAndMoreCanBeAddedToIt() async throws {

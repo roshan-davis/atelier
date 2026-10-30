@@ -49,7 +49,7 @@ struct ContentView: View {
                     .background(Color(nsColor: theme.chrome))
                     .clipped()
                     if showInspector {
-                        PanelResizeHandle(width: $panelWidth)
+                        PanelResizeHandle(width: $panelWidth, range: 280...560, panel: .trailing)
                         InspectorView()
                             .frame(width: panelWidth)
                             .clipped()
@@ -94,7 +94,8 @@ struct ContentView: View {
             }
         }
         .sheet(isPresented: $model.showingImportSheet) {
-            ImportSheet()
+            ImportSheet(model: model)
+                .environment(\.theme, theme)
         }
         .sheet(isPresented: $model.showingExportSheet) {
             ExportSheet()
@@ -105,6 +106,10 @@ struct ContentView: View {
         }
         .sheet(item: $model.removal) { removal in
             RemovePhotosSheet(removal: removal)
+                .environmentObject(model)
+        }
+        .sheet(item: $model.deletingImport) { deletion in
+            DeleteImportSheet(deletion: deletion)
                 .environmentObject(model)
         }
         .sheet(isPresented: $model.showingShortcuts) {
@@ -263,30 +268,6 @@ private struct ProblemsView: View {
             .frame(width: 380, height: 220)
         }
         .padding(14)
-    }
-}
-
-/// The divider between the photo and the right panel; drag it to resize the panel.
-private struct PanelResizeHandle: View {
-    @Binding var width: Double
-    @State private var startWidth: Double?
-
-    var body: some View {
-        Divider()
-            .overlay(
-                Color.clear
-                    .frame(width: 8)
-                    .contentShape(Rectangle())
-                    .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .global)
-                        .onChanged { value in
-                            let start = startWidth ?? width
-                            startWidth = start
-                            width = min(560, max(280, start - value.translation.width))
-                        }
-                        .onEnded { _ in startWidth = nil })
-                    .cursor(.columnResize)
-            )
-            .help("Drag to resize the panel")
     }
 }
 
