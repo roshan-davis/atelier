@@ -11,8 +11,44 @@ final class GrainTests: XCTestCase {
     func testRoughnessDefaultsToFifty() throws {
         let old = try DevelopSettings.decoded(from: #"{"schemaVersion":1,"grain":40}"#)
         XCTAssertEqual(old.grainRoughness, 50)
-        XCTAssertEqual(DevelopSettings.Panel.effects.parameters,
-                       [.vignette, .vignetteMidpoint, .grain, .grainSize, .grainRoughness])
+        XCTAssertEqual(old.grainType, .standard, "photos edited before Grain Type keep their grain")
+        XCTAssertEqual(DevelopSettings.Panel.effects.parameters.filter { $0.group == "Grain" },
+                       [.grain, .grainSize, .grainRoughness, .grainType])
+    }
+
+    /// Every type is about as strong at the same Amount, but each draws a different pattern.
+    func testGrainTypesKeepStrengthAndChangeThePattern() throws {
+        var standard = DevelopSettings()
+        standard.grain = 60
+        let reference = try spread(of: render(standard, linearGray: 0.2, size: 128)).deviation
+        let base = try pixels(render(standard, linearGray: 0.2))
+        for type in DevelopSettings.GrainType.allCases where type != .standard {
+            var settings = standard
+            settings.grainType = type
+            let deviation = try spread(of: render(settings, linearGray: 0.2, size: 128)).deviation
+            XCTAssertEqual(deviation, reference, accuracy: reference * 0.3, "\(type.title) strength")
+            XCTAssertNotEqual(base, try pixels(render(settings, linearGray: 0.2)), "\(type.title) pattern")
+        }
+    }
+
+    /// Tabular leaves deep shadows cleaner than Cubic, which reaches further into them.
+    func testCubicReachesShadowsTabularStaysClean() throws {
+        var cubic = DevelopSettings()
+        cubic.grain = 60
+        cubic.grainType = .cubic
+        var tabular = cubic
+        tabular.grainType = .tabular
+        XCTAssertGreaterThan(try spread(of: render(cubic, linearGray: 0.01, size: 128)).deviation,
+                             try spread(of: render(tabular, linearGray: 0.01, size: 128)).deviation)
+    }
+
+    func testFilmPresetsSetTheirGrainType() throws {
+        func preset(_ name: String) throws -> DevelopPreset {
+            try XCTUnwrap(DevelopPreset.builtIn.first { $0.name == name })
+        }
+        XCTAssertEqual(try preset("Portrait 400").settings.grainType, .tabular)
+        XCTAssertEqual(try preset("Classic 400").settings.grainType, .cubic)
+        XCTAssertEqual(try preset("Vivid 100").settings.grainType, .fine)
     }
 
     func testGrainIsStrongestInMidtonesAndKeepsBlackBlack() throws {
@@ -53,13 +89,16 @@ final class GrainTests: XCTestCase {
     /// A smaller render's grain is as strong as the full-size render shrunk to that size, so
     /// the live proxy matches the export.
     func testSmallerRenderMatchesADownsizedFullRender() throws {
-        var settings = DevelopSettings()
-        settings.grain = 80
-        let full = try render(settings, linearGray: 0.2, size: 256)
-        let shrunk = try XCTUnwrap(downsize(full, to: 64))
-        let small = try render(settings, linearGray: 0.2, size: 64, scale: 0.25)
-        let target = try spread(of: shrunk).deviation
-        XCTAssertEqual(try spread(of: small).deviation, target, accuracy: target * 0.35)
+        for type in DevelopSettings.GrainType.allCases {
+            var settings = DevelopSettings()
+            settings.grain = 80
+            settings.grainType = type
+            let full = try render(settings, linearGray: 0.2, size: 256)
+            let shrunk = try XCTUnwrap(downsize(full, to: 64))
+            let small = try render(settings, linearGray: 0.2, size: 64, scale: 0.25)
+            let target = try spread(of: shrunk).deviation
+            XCTAssertEqual(try spread(of: small).deviation, target, accuracy: target * 0.35, type.title)
+        }
     }
 
     // MARK: Helpers

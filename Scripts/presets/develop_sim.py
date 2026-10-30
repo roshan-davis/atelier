@@ -526,36 +526,51 @@ def _rot(px, py, angle):
     return c * px - s * py, s * px + c * py
 
 
-def grain(image, amount, size, roughness, scale):
+# FilmGrain.Look per Grain Type (in GrainType order): size scale, roughness map, detail octave,
+# crispness and its RMS, tone center and falloff, `visible` constant.
+GRAIN_LOOKS = [
+    (1.0, lambda r: r, 0.6, 0.0, 1.0, 0.5, 0.6, 0.9),
+    (0.7, lambda r: 0.5 * r, 0.6, 1.5, 0.748, 0.5, 0.6, 1.7),
+    (1.2, lambda r: 0.25 + 0.75 * r, 0.9, 1.4, 0.72, 0.42, 0.45, 1.8),
+    (1.0, lambda r: 0.4 * r, 0.3, 0.0, 1.0, 0.55, 1.2, 0.6),
+]
+
+
+def grain(image, amount, size, roughness, scale, grain_type=0):
     if amount <= 0:
         return image
     if size > 0.25:
         sigma = (size - 0.25) / 0.75 * 1.2 * scale
         if sigma >= 0.3:
             image = cv2.GaussianBlur(image, (0, 0), sigma, borderType=cv2.BORDER_REPLICATE)
-    particle = 2 ** (3 * size)
+    size_scale, rough_map, detail, crisp, crisp_norm, center, falloff, blur_fit = GRAIN_LOOKS[grain_type]
+    particle = 2 ** (3 * size) * size_scale
     on_screen = particle * max(scale, 1e-4)
     cell = max(on_screen, 1)
 
     def visible(e):
-        return e / math.sqrt(e * e + 0.9)
+        return e / math.sqrt(e * e + blur_fit)
 
     strength = 0.10 * amount * (visible(on_screen) / visible(particle)) / (0.79 if on_screen <= 1 else 1)
     H, W = image.shape[:2]
     y, x = np.mgrid[0:H, 0:W].astype(np.float64)
     qx, qy = (x + 0.5) / cell, (H - y - 0.5) / cell
-    r = roughness
+    r = min(max(rough_map(roughness), 0), 1)
     ax, ay = _rot(qx, qy, 1.1)
-    fine = _value_noise(qx, qy, 1) + 0.6 * _value_noise(ax * 1.7 + 17.3, ay * 1.7 + 5.1, 2)
+    fine = _value_noise(qx, qy, 1) + detail * _value_noise(ax * 1.7 + 17.3, ay * 1.7 + 5.1, 2)
     bx, by = _rot(qx, qy, 2.3)
     clump = _value_noise(bx / 1.8 + 3.7, by / 1.8 + 9.2, 3)
     g = fine * (1 - 0.3 * r) + clump * 0.8 * r
     cx, cy = _rot(qx, qy, 0.7)
     g *= 1 + 0.6 * r * _value_noise(cx / 3.5 + 1.3, cy / 3.5 + 7.7, 4)
-    g /= 0.528 - 0.167 * r + 0.174 * r * r
+    octave = 0.4527 ** 2
+    g /= math.sqrt((octave * (1 + detail ** 2) * (1 - 0.3 * r) ** 2 + octave * 0.64 * r * r) * (1 + 0.36 * r * r * octave))
+    if crisp > 0:
+        g = np.tanh(crisp * g) / crisp_norm
     luma = np.maximum(image @ LUMA_2020, 0)
     lp = np.power(luma, 1 / 2.2)
-    w = np.power(np.clip(4 * lp * (1 - lp), 0, 1), 0.6)
+    t = np.where(lp < center, 0.5 * lp / center, 0.5 + 0.5 * (lp - center) / (1 - center))
+    w = np.power(np.clip(4 * t * (1 - t), 0, 1), falloff)
     grained = np.power(np.maximum(lp + strength * w * g, 0), 2.2)
     ratio = np.where(luma > 1e-4, grained / np.maximum(luma, 1e-4), 1)
     out = np.where((luma > 1e-4)[..., None], image * ratio[..., None], image + (grained - luma)[..., None])
@@ -582,5 +597,6 @@ def develop(image, s, scale):
     if cube_needed(s):
         image = apply_cube(image, build_cube(s))
     image = vignette(image, s.get("vignette", 0), s.get("vignetteMidpoint", 50))
-    image = grain(image, s.get("grain", 0) / 100, s.get("grainSize", 25) / 100, s.get("grainRoughness", 50) / 100, scale)
+    image = grain(image, s.get("grain", 0) / 100, s.get("grainSize", 25) / 100, s.get("grainRoughness", 50) / 100, scale,
+                  int(s.get("grainType", 0)))
     return image

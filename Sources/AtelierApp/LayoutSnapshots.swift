@@ -339,8 +339,9 @@ enum LayoutSnapshots {
         develop.set(.vignetteRoundness, to: -30)
         develop.set(.glowAmount, to: 40)
         develop.set(.glowStyle, to: Double(DevelopSettings.GlowStyle.halation.rawValue))
+        develop.set(.grainType, to: Double(DevelopSettings.GrainType.cubic.rawValue))
         try? await Task.sleep(for: .seconds(1))
-        await panel(EffectsPanel(develop: develop), "effects", height: 420)
+        await panel(EffectsPanel(develop: develop), "effects", height: 450)
         await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
                       to: folder.appendingPathComponent("develop-effects-1280x800.png"))
 
@@ -350,7 +351,7 @@ enum LayoutSnapshots {
                       to: folder.appendingPathComponent("develop-targeted-1280x800.png"))
         develop.picker = nil
         for parameter in [DevelopSettings.Parameter.curveShadows, .curveHighlights, .curveMidtoneSplit, .curveRefineSaturation,
-                          .vignetteRoundness, .glowAmount, .glowStyle] {
+                          .vignetteRoundness, .glowAmount, .glowStyle, .grainType] {
             develop.reset(parameter)
         }
         develop.setPoints([], for: .rgb)

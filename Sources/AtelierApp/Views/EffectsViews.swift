@@ -3,14 +3,14 @@ import AtelierCore
 import SwiftUI
 
 /// Effects, as in Lightroom: Post-Crop Vignetting (Style, Amount, Midpoint, Roundness, Feather,
-/// Highlights), Glow (Diffusion, Bloom, Halation) and Grain.
+/// Highlights), Glow (Diffusion, Bloom, Halation) and Grain (Type, Amount, Size, Roughness).
 struct EffectsPanel: View {
     @ObservedObject var develop: DevelopController
 
     private let vignette: [DevelopSettings.Parameter] = [.vignetteStyle, .vignette, .vignetteMidpoint, .vignetteRoundness,
                                                          .vignetteFeather, .vignetteHighlights]
     private let glow: [DevelopSettings.Parameter] = [.glowStyle, .glowAmount, .glowRange, .glowSpread, .glowWarmth]
-    private let grain: [DevelopSettings.Parameter] = [.grain, .grainSize, .grainRoughness]
+    private let grain: [DevelopSettings.Parameter] = [.grainType, .grain, .grainSize, .grainRoughness]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
@@ -34,7 +34,10 @@ struct EffectsPanel: View {
             }
 
             GroupHeading(title: "Grain") { develop.reset(group: "Grain", parameters: grain) }
-            ForEach(grain, id: \.self) {
+            StyleRow(develop: develop, parameter: .grainType,
+                     options: DevelopSettings.GrainType.allCases.map { ($0.rawValue, $0.title) })
+                .help("The grain of a kind of film. Standard: Lightroom's grain. Fine: small, tight grain of slow film. Cubic: sharp, clumpy grain of classic film such as Tri-X. Tabular: smooth, even T-grain of Portra or T-Max.")
+            ForEach([DevelopSettings.Parameter.grain, .grainSize, .grainRoughness], id: \.self) {
                 ParameterSlider(parameter: $0, develop: develop)
             }
         }

@@ -1538,6 +1538,7 @@ final class DevelopController: ObservableObject {
         case .transformRotate: formatted = String(format: "%+.1f°", value)
         case .vignetteStyle: formatted = DevelopSettings.VignetteStyle(rawValue: Int(value))?.title ?? ""
         case .glowStyle: formatted = DevelopSettings.GlowStyle(rawValue: Int(value))?.title ?? ""
+        case .grainType: formatted = DevelopSettings.GrainType(rawValue: Int(value))?.title ?? ""
         default:
             formatted = parameter.range.lowerBound >= 0 ? "\(Int(value.rounded()))" : String(format: "%+.0f", value)
         }
