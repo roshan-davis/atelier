@@ -132,8 +132,6 @@ enum LayoutSnapshots {
         exit(0)
     }
 
-    /// Exposure pushed until the sky clips, with the clipping overlay (J) on: the histogram's
-    /// highlight triangle lit and the clipped area red on the photo.
     /// Uses a disposable damaged database, never the user's catalog.
     static func snapshotCatalogRecovery(into folder: URL) async {
         let savedTheme = UserDefaults.standard.object(forKey: Theme.defaultsKey)
@@ -158,6 +156,8 @@ enum LayoutSnapshots {
         }
     }
 
+    /// Exposure pushed until the sky clips, with the clipping overlay (J) on: the histogram's
+    /// highlight triangle lit and the clipped area red on the photo.
     private static func snapshotClipping(model: LibraryModel, into folder: URL) async {
         let develop = model.develop
         let exposure = develop.settings[.exposure]

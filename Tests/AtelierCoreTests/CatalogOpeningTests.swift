@@ -55,6 +55,58 @@ final class CatalogOpeningTests: XCTestCase {
     }
 
     @MainActor
+    func testEmptyPackageCanFinishAnInterruptedFirstLaunch() async throws {
+        let url = location()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        let opening = CatalogOpening(packageURL: url)
+        await opening.open()
+        XCTAssertNotNil(opening.catalog)
+        XCTAssertNil(opening.failureReason)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.appendingPathComponent("catalog.sqlite").path))
+    }
+
+    @MainActor
+    func testFinderMetadataOnlyPackageCanOpenWithoutChangingMetadata() async throws {
+        let url = location()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        let metadata = url.appendingPathComponent(".DS_Store")
+        let bytes = Data("Finder metadata fixture".utf8)
+        try bytes.write(to: metadata)
+        let opening = CatalogOpening(packageURL: url)
+        await opening.open()
+        XCTAssertNotNil(opening.catalog)
+        XCTAssertNil(opening.failureReason)
+        XCTAssertEqual(try Data(contentsOf: metadata), bytes)
+    }
+
+    @MainActor
+    func testOtherContentsAreNeverTreatedAsAnEmptyFirstLaunch() async throws {
+        for name in ["Backups", "catalog.sqlite-wal", ".recovery-marker", ".DS_Store"] {
+            let url = location()
+            defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+            let item = url.appendingPathComponent(name)
+            if name == "Backups" || name == ".DS_Store" {
+                // A directory named .DS_Store is not harmless Finder metadata.
+                try FileManager.default.createDirectory(at: item, withIntermediateDirectories: true)
+            } else {
+                try Data("Keep this file".utf8).write(to: item)
+            }
+            let opening = CatalogOpening(packageURL: url)
+            await opening.open()
+            XCTAssertNil(opening.catalog, name)
+            XCTAssertTrue(opening.failureReason?.contains("Backups") == true, name)
+            XCTAssertFalse(FileManager.default.fileExists(atPath: url.appendingPathComponent("catalog.sqlite").path), name)
+            XCTAssertTrue(FileManager.default.fileExists(atPath: item.path), name)
+            if name != "Backups" && name != ".DS_Store" {
+                XCTAssertEqual(try Data(contentsOf: item), Data("Keep this file".utf8), name)
+            }
+        }
+    }
+
+    @MainActor
     func testMissingDatabaseDoesNotCreateAnEmptyReplacement() async throws {
         let url = location()
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
