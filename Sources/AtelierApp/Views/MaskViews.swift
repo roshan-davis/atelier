@@ -42,6 +42,11 @@ private struct MaskOverlay: View {
         case paint(erasing: Bool)
         case movePin(original: Component, start: Point)
         case linearEnd(original: DevelopSettings.LinearGradient, isStart: Bool)
+        /// An outer line dragged anywhere along it: it moves square to itself, keeping the angle.
+        /// `level` lines run more across than up and down on screen, for the cursor.
+        case linearLine(original: DevelopSettings.LinearGradient, isStart: Bool, level: Bool)
+        /// The center line dragged: the gradient turns around its pin.
+        case linearRotate(original: DevelopSettings.LinearGradient, start: CGPoint)
         case radialAxis(original: DevelopSettings.RadialGradient, isX: Bool)
         case radialRotate(original: DevelopSettings.RadialGradient)
         case selectPin(mask: UUID, component: UUID)
@@ -309,6 +314,24 @@ private struct MaskOverlay: View {
         case .linearEnd(var gradient, let isStart):
             if isStart { gradient.start = space.maskPoint(drag.location) } else { gradient.end = space.maskPoint(drag.location) }
             replaceSelected(.linear(gradient))
+        case .linearLine(var gradient, let isStart, _):
+            let a = space.viewPoint(gradient.start), b = space.viewPoint(gradient.end)
+            let axis = unit(CGPoint(x: b.x - a.x, y: b.y - a.y))
+            // The pointer's distance from the other line, along the gradient; the lines can't cross.
+            let fixed = isStart ? b : a
+            let along = (drag.location.x - fixed.x) * axis.x + (drag.location.y - fixed.y) * axis.y
+            let length = isStart ? min(along, -4) : max(along, 4)
+            let moved = CGPoint(x: fixed.x + axis.x * length, y: fixed.y + axis.y * length)
+            if isStart { gradient.start = space.maskPoint(moved) } else { gradient.end = space.maskPoint(moved) }
+            replaceSelected(.linear(gradient))
+        case .linearRotate(var gradient, let start):
+            let a = space.viewPoint(gradient.start), b = space.viewPoint(gradient.end)
+            let mid = CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2)
+            let turn = atan2(drag.location.y - mid.y, drag.location.x - mid.x) - atan2(start.y - mid.y, start.x - mid.x)
+            let rotation = CGAffineTransform(translationX: mid.x, y: mid.y).rotated(by: turn).translatedBy(x: -mid.x, y: -mid.y)
+            gradient.start = space.maskPoint(a.applying(rotation))
+            gradient.end = space.maskPoint(b.applying(rotation))
+            replaceSelected(.linear(gradient))
         case .radialAxis(var gradient, let isX):
             // Measured on the photo itself, where the gradient's angle is defined.
             let c = space.sourcePixels(gradient.center), p = space.sourcePixels(fromView: drag.location)
@@ -377,6 +400,8 @@ private struct MaskOverlay: View {
         switch action {
         case .drawLinear, .drawRadial, .drawBox, .paint: return .crosshair
         case .movePin, .linearEnd, .radialAxis, .pan: return .grab
+        case .linearLine(_, _, let level): return level ? .rowResize : .columnResize
+        case .linearRotate: return .rotate
         case .radialRotate: return .rotate
         case .selectPin: return .link
         case .none: return .arrow
@@ -431,6 +456,23 @@ private struct MaskOverlay: View {
                 }
             }
         }
+        // As in Lightroom, the selected gradient's lines can be grabbed anywhere along them:
+        // an outer line widens or narrows that side, the center line turns it.
+        if case .linear(let gradient) = develop.selectedComponent?.shape, space.rect.insetBy(dx: -12, dy: -12).contains(point) {
+            let a = space.viewPoint(gradient.start), b = space.viewPoint(gradient.end)
+            let axis = unit(CGPoint(x: b.x - a.x, y: b.y - a.y))
+            func offset(from line: CGPoint) -> CGFloat { abs((point.x - line.x) * axis.x + (point.y - line.y) * axis.y) }
+            let mid = CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2)
+            let nearest = [(offset(from: a), 0), (offset(from: b), 1), (offset(from: mid), 2)].min { $0.0 < $1.0 }
+            if let nearest, nearest.0 < 5 {
+                switch nearest.1 {
+                // The lines are square to the axis, so a mostly upright axis means level lines.
+                case 0: return .linearLine(original: gradient, isStart: true, level: abs(axis.y) >= abs(axis.x))
+                case 1: return .linearLine(original: gradient, isStart: false, level: abs(axis.y) >= abs(axis.x))
+                default: return .linearRotate(original: gradient, start: point)
+                }
+            }
+        }
         if isPainting, space.rect.contains(point) { return painting }
         // Zoomed in, a drag on empty photo moves around it.
         return frame.canPan ? .pan(last: point) : .none
@@ -457,6 +499,11 @@ private struct MaskOverlay: View {
 
     private func distance(_ a: CGPoint, _ b: CGPoint) -> CGFloat {
         hypot(a.x - b.x, a.y - b.y)
+    }
+
+    private func unit(_ v: CGPoint) -> CGPoint {
+        let length = max(hypot(v.x, v.y), 0.001)
+        return CGPoint(x: v.x / length, y: v.y / length)
     }
 }
 
@@ -718,7 +765,7 @@ struct MasksPanel: View {
         case .linear:
             VStack(alignment: .leading, spacing: 6) {
                 GroupHeading(title: "Linear Gradient")
-                Text("Drag the pin to move it, the end handles to widen or turn it.")
+                Text("Drag the pin to move it. Drag an outer line to widen or narrow that side, or the center line to turn it.")
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 invertToggle(component)
             }
@@ -745,6 +792,7 @@ struct MasksPanel: View {
         Toggle("Invert", isOn: Binding(get: { component.inverted }, set: { _ in
             if let mask = develop.selectedMaskID { develop.invertComponent(component.id, in: mask) }
         }))
+        .help("Select everything except this \(component.kind.title)")
     }
 
     private func update(_ component: DevelopSettings.MaskComponent, _ shape: DevelopSettings.MaskComponent.Shape) {
@@ -766,6 +814,12 @@ struct MasksPanel: View {
             }
             SliderRow(label: "Amount", value: Binding(get: { mask.amount }, set: { develop.setMaskAmount($0) }),
                       range: 0...200, step: 1, origin: 100, format: { "\(Int($0.rounded()))%" })
+            // One Invert at a time, for what is selected: the part's sits with its settings
+            // above, the whole mask's here when the mask itself is selected.
+            if develop.selectedComponentID == nil {
+                Toggle("Invert", isOn: Binding(get: { mask.inverted }, set: { _ in develop.invertMask(mask.id) }))
+                    .help("Apply the sliders everywhere except the mask")
+            }
             ForEach(DevelopSettings.LocalParameter.allCases, id: \.self) { parameter in
                 if parameter.group > 0, parameter == DevelopSettings.LocalParameter.allCases.first(where: { $0.group == parameter.group }) {
                     Spacer().frame(height: 2)
@@ -779,8 +833,6 @@ struct MasksPanel: View {
                               return value == 0 ? "0" : String(format: parameter.range.lowerBound < 0 ? "%+.0f" : "%.0f", value)
                           })
             }
-            Toggle("Invert", isOn: Binding(get: { mask.inverted }, set: { _ in develop.invertMask(mask.id) }))
-                .help("Apply the sliders everywhere except the mask")
         }
     }
 

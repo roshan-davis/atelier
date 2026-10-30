@@ -24,7 +24,9 @@ public final class PreviewCache: Sendable {
     /// 5: Dehaze with the dark channel prior (`Dehaze`) instead of a flat contrast change, and
     ///    a hue-preserving tone curve (`ToneCurve`).
     /// 6: Color Grading tints in Oklab with gamut-safe Luminance (`ColorGrade`).
-    public static let version = 6
+    /// 7: Temp and Tint on masks and on JPEG/TIFF photos went the wrong way (higher Temp
+    ///    cooled, higher Tint went green); they now match Lightroom.
+    public static let version = 7
 
     /// Clears previews written by an older version. The old folder is moved aside at once and
     /// deleted in the background, so a large cache doesn't hold up launch.

@@ -215,11 +215,12 @@ extension DevelopRenderer {
         let extent = input.extent
         let temperature = mask.effective(.temperature), tint = mask.effective(.tint)
         if temperature != 0 || tint != 0 {
-            // A warmer target than the neutral warms the photo, as on the Basic panel.
+            // Core Image turns `neutral` into `targetNeutral`'s white, so treating a hotter (or
+            // more magenta) light as neutral warms (or adds magenta to) the photo, as in Lightroom.
             let filter = CIFilter.temperatureAndTint()
             filter.inputImage = image
-            filter.neutral = CIVector(x: 6500, y: 0)
-            filter.targetNeutral = CIVector(x: 6500 * pow(2, temperature / 100 * 0.8), y: tint)
+            filter.neutral = CIVector(x: 6500 * pow(2, temperature / 100 * 0.8), y: tint)
+            filter.targetNeutral = CIVector(x: 6500, y: 0)
             image = filter.outputImage ?? image
         }
         let exposure = mask.effective(.exposure)

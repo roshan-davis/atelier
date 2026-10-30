@@ -175,6 +175,41 @@ final class MaskTests: XCTestCase {
         XCTAssertGreaterThan(pixel.r, pixel.g + 0.1)
     }
 
+    /// As in Lightroom: a higher Temp warms (more red than blue) and a higher Tint adds magenta
+    /// (less green), on a mask and on the Basic panel of a non-RAW photo.
+    func testTempWarmsAndTintAddsMagenta() throws {
+        let file = workDir.appendingPathComponent("gray.jpg")
+        try makeJPEG(at: file, gray: 0.45)
+        let session = try XCTUnwrap(DevelopRenderer.shared.session(for: file, maxPixelSize: 64))
+        func pixel(_ settings: DevelopSettings) throws -> (r: Double, g: Double, b: Double) {
+            try rgb(XCTUnwrap(session.render(settings)), x: 32, y: 32)
+        }
+        func masked(_ parameter: DevelopSettings.LocalParameter, _ value: Double) -> DevelopSettings {
+            var settings = DevelopSettings()
+            var mask = Mask(name: "Mask 1", components: [
+                Component(.radial(.init(center: Point(x: 0.5, y: 0.5), radiusX: 2, radiusY: 2, feather: 0))),
+            ])
+            mask[parameter] = value
+            settings.masks = [mask]
+            return settings
+        }
+        let warm = try pixel(masked(.temperature, 60)), cool = try pixel(masked(.temperature, -60))
+        XCTAssertGreaterThan(warm.r - warm.b, 0.05, "mask Temp +60 warms: \(warm)")
+        XCTAssertGreaterThan(cool.b - cool.r, 0.05, "mask Temp -60 cools: \(cool)")
+        let magenta = try pixel(masked(.tint, 60)), green = try pixel(masked(.tint, -60))
+        XCTAssertLessThan(magenta.g, (magenta.r + magenta.b) / 2 - 0.02, "mask Tint +60 adds magenta: \(magenta)")
+        XCTAssertGreaterThan(green.g, (green.r + green.b) / 2 + 0.02, "mask Tint -60 adds green: \(green)")
+
+        var basic = DevelopSettings()
+        basic.temperature = 9000
+        let basicWarm = try pixel(basic)
+        XCTAssertGreaterThan(basicWarm.r - basicWarm.b, 0.05, "Temp 9000 K warms a JPEG: \(basicWarm)")
+        basic.temperature = nil
+        basic.tint = 40
+        let basicMagenta = try pixel(basic)
+        XCTAssertLessThan(basicMagenta.g, (basicMagenta.r + basicMagenta.b) / 2 - 0.02, "Tint +40 adds magenta: \(basicMagenta)")
+    }
+
     func testBrushReachesTheEndOfTheStroke() {
         // Mouse samples closer together than the dab spacing used to leave the end unpainted.
         let points = (0...40).map { CGPoint(x: Double($0) * 0.7, y: 0) }
