@@ -116,7 +116,10 @@ public final class Importer: Sendable {
     public func run(sources: [URL], options: ImportOptions, stager: ImportStager? = nil,
                     progress: @escaping @Sendable (ImportProgress) -> Void = { _ in }) async -> ImportProgress {
         await stager?.stop()
-        defer { stager?.discard() }
+        // In copy mode every file goes through a staged copy (made ahead or now), so a slow
+        // source is read once, start to end.
+        let staging = stager ?? Self.copyStager(for: options.mode)
+        defer { staging?.discard() }
         let files = Self.collectFiles(from: sources)
         let sizes = files.map { Int64((try? $0.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) }
         var state = ImportProgress()
@@ -138,7 +141,7 @@ public final class Importer: Sendable {
             for _ in 0..<min(Self.workers(for: options.mode), files.count) {
                 let index = next
                 next += 1
-                group.addTask { (index, Result { try self.importFile(files[index], options: options, stager: stager) }) }
+                group.addTask { (index, Result { try self.importFile(files[index], options: options, stager: staging) }) }
             }
             for await (index, outcome) in group {
                 let file = files[index]
@@ -173,7 +176,7 @@ public final class Importer: Sendable {
                     let index = next
                     next += 1
                     state.currentFile = files[index]
-                    group.addTask { (index, Result { try self.importFile(files[index], options: options, stager: stager) }) }
+                    group.addTask { (index, Result { try self.importFile(files[index], options: options, stager: staging) }) }
                 }
                 progress(state)
             }
@@ -199,6 +202,12 @@ public final class Importer: Sendable {
             progress(state)
         }
         return state
+    }
+
+    /// The stager an import makes for itself in copy mode, when culling didn't make one.
+    static func copyStager(for mode: ImportMode) -> ImportStager? {
+        if case .copy = mode { return ImportStager(mode: mode) }
+        return nil
     }
 
     /// Files handled at once. Copies are bound by the card or drive, hashing a referenced file
@@ -232,10 +241,16 @@ public final class Importer: Sendable {
         }
 
         try Task.checkCancellation()
-        let metadata = MetadataReader.read(source)
         let sourceValues = try source.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
-        let staged = stager?.take(source, size: Int64(sourceValues.fileSize ?? 0),
-                                  modified: sourceValues.contentModificationDate)
+        let size = Int64(sourceValues.fileSize ?? 0)
+        var staged = stager?.take(source, size: size, modified: sourceValues.contentModificationDate)
+        if case .copy = options.mode, staged?.url == nil, let stager,
+           let copy = try stager.copy(source, size: size, modified: sourceValues.contentModificationDate) {
+            staged = copy
+        }
+        // From the local copy when there is one: reading a raw file's metadata takes many small
+        // reads, each a round trip to the NAS.
+        let metadata = MetadataReader.read(staged?.url ?? source, sidecarFor: source)
         let hash: String
         var fileURL = source
 

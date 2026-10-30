@@ -122,31 +122,57 @@ public final class ImportStager: @unchecked Sendable {
         guard let values = try? source.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey]) else { return }
         let size = Int64(values.fileSize ?? 0)
         let modified = values.contentModificationDate
-        var copy: URL?
-        let hash: String
+        let record: Staged
         do {
-            if let directory, copiesOnSameVolume || !Importer.sameVolume(source, directory) {
-                let ext = source.pathExtension
-                let url = directory.appendingPathComponent(ext.isEmpty ? UUID().uuidString : "\(UUID().uuidString).\(ext)")
-                let fd = open(url.path, O_WRONLY | O_CREAT | O_EXCL, 0o644)
-                guard fd >= 0 else { return }
-                do {
-                    hash = try Importer.copyHashing(source, to: fd)
-                    guard try FileHasher.sha256(of: url) == hash else { throw CocoaError(.fileWriteUnknown) }
-                } catch {
-                    try? FileManager.default.removeItem(at: url)
-                    throw error
-                }
-                copy = url
+            if let copy = try copy(source, size: size, modified: modified) {
+                record = copy
             } else {
-                hash = try FileHasher.sha256(of: source)
+                record = Staged(url: nil, hash: try FileHasher.sha256(of: source), size: size, modified: modified)
             }
         } catch {
             return
         }
         lock.lock()
-        staged[Self.key(source)] = Staged(url: copy, hash: hash, size: size, modified: modified)
+        staged[Self.key(source)] = record
         lock.unlock()
+    }
+
+    /// Copies `source` into the staging folder now, for the importer: one straight read of the
+    /// file, so a slow source (the NAS, a card) is read once, and the photo's metadata is then
+    /// read from the fast local copy. nil when there is nothing to stage (a referenced import,
+    /// or the library's own volume, where Import clones).
+    func copy(_ source: URL, size: Int64, modified: Date?) throws -> Staged? {
+        guard let directory else { return nil }
+        try ensureDirectory()
+        guard copiesOnSameVolume || !Importer.sameVolume(source, directory) else { return nil }
+        let ext = source.pathExtension
+        let url = directory.appendingPathComponent(ext.isEmpty ? UUID().uuidString : "\(UUID().uuidString).\(ext)")
+        let fd = open(url.path, O_WRONLY | O_CREAT | O_EXCL, 0o644)
+        guard fd >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        do {
+            let hash = try Importer.copyHashing(source, to: fd)
+            guard try FileHasher.sha256(of: url) == hash else {
+                throw CocoaError(.fileWriteUnknown, userInfo: [
+                    NSFilePathErrorKey: source.path,
+                    NSLocalizedDescriptionKey: "Copy of \(source.lastPathComponent) failed hash verification.",
+                ])
+            }
+            return Staged(url: url, hash: hash, size: size, modified: modified)
+        } catch {
+            try? FileManager.default.removeItem(at: url)
+            throw error
+        }
+    }
+
+    private var directoryMade = false
+
+    private func ensureDirectory() throws {
+        guard let directory else { return }
+        lock.lock()
+        defer { lock.unlock() }
+        guard !directoryMade else { return }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        directoryMade = true
     }
 
     static func key(_ url: URL) -> String { url.standardizedFileURL.path }
