@@ -67,12 +67,10 @@ struct LibraryHistogram: View {
     }
 
     private func triangle(shadows: Bool) -> some View {
-        let share = shadows ? histogram?.shadowClipping : histogram?.highlightClipping
-        let name = shadows ? "Shadows" : "Highlights"
-        return HistogramGraph.triangle(shadows: shadows,
+        HistogramGraph.triangle(shadows: shadows,
                                        color: HistogramGraph.clipColor(shadows ? histogram?.shadowChannels : histogram?.highlightChannels))
             .padding(3)
-            .help(share.map { "\(name) clipped: \(String(format: "%.1f%%", $0 * 100)) of the photo" } ?? name)
+            .help(HistogramGraph.clipHelp(shadows: shadows, histogram: histogram))
     }
 
     /// The histogram of a preview file.

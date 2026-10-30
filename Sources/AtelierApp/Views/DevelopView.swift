@@ -884,10 +884,8 @@ private struct HistogramView: View {
     private func triangle(shadows: Bool) -> some View {
         let share = shadows ? histogram?.shadowClipping : histogram?.highlightClipping
         let channels = shadows ? histogram?.shadowChannels : histogram?.highlightChannels
-        let lit = (channels ?? []).contains { $0 >= 0.0005 }
         let color = HistogramGraph.clipColor(channels)
         let isOn = shadows ? develop.showShadowClipping : develop.showHighlightClipping
-        let name = shadows ? "Shadows" : "Highlights"
         let percent = share.map { String(format: "%.1f%%", $0 * 100) }
         return HStack(spacing: 3) {
             if !shadows, showClipping, let share, share >= 0.005, let percent { clipText(percent) }
@@ -901,8 +899,8 @@ private struct HistogramView: View {
             }
             .buttonStyle(.plain)
             .disabled(develop.assetID == nil)
-            .help(lit ? "\(name) clipped: \(percent ?? "") of the photo. Click to \(isOn ? "hide" : "show") it on the photo (J)."
-                  : "No \(name.lowercased()) clipped. Click to \(isOn ? "hide" : "show") \(name.lowercased()) clipping on the photo (J).")
+            .help(HistogramGraph.clipHelp(shadows: shadows, histogram: histogram)
+                  + " Click to \(isOn ? "hide" : "show") it on the photo (J).")
             if shadows, showClipping, let share, share >= 0.005, let percent { clipText(percent) }
         }
         .padding(3)
@@ -955,6 +953,21 @@ struct HistogramGraph: View {
         let clipped = (channels ?? [0, 0, 0]).map { $0 >= 0.0005 }
         guard clipped.contains(true) else { return Color.white.opacity(0.3) }
         return Color(red: clipped[0] ? 1 : 0.2, green: clipped[1] ? 1 : 0.2, blue: clipped[2] ? 1 : 0.2)
+    }
+
+    /// What a triangle's tooltip says: how much is pure black or white (what the overlay marks),
+    /// or that only some channels clip (saturated colors, which keep their detail).
+    static func clipHelp(shadows: Bool, histogram: Histogram?) -> String {
+        let tone = shadows ? "black" : "white"
+        let share = (shadows ? histogram?.shadowClipping : histogram?.highlightClipping) ?? 0
+        let channels = (shadows ? histogram?.shadowChannels : histogram?.highlightChannels) ?? []
+        if share > 0 {
+            return String(format: "%.1f%% of the photo is pure \(tone) (clipped).", share * 100)
+        }
+        if channels.contains(where: { $0 >= 0.0005 }) {
+            return "Nothing is pure \(tone), but some saturated colors have a channel at \(tone); the triangle's color shows which."
+        }
+        return "Nothing is pure \(tone)."
     }
 
     /// The triangle glyph, pointing into its corner.

@@ -10,7 +10,8 @@ public struct Histogram: Sendable, Hashable {
     public var green: [Double]
     public var blue: [Double]
     public var luminance: [Double]
-    /// Share of pixels at pure black or pure white in any channel, for clipping warnings.
+    /// Share of pixels that are pure black or pure white (all three channels clipped): detail
+    /// that is gone, which the clipping overlay marks.
     public var shadowClipping: Double
     public var highlightClipping: Double
     /// Share of pixels at pure black (shadows) or pure white (highlights) in red, green and blue,
@@ -49,8 +50,8 @@ public struct Histogram: Sendable, Hashable {
             b[blue / shift] += 1
             let luma = (red * 54 + green * 183 + blue * 19) >> 8
             l[min(255, luma) / shift] += 1
-            if red == 0 || green == 0 || blue == 0 { lowClipped += 1 }
-            if red == 255 || green == 255 || blue == 255 { highClipped += 1 }
+            if red == 0 && green == 0 && blue == 0 { lowClipped += 1 }
+            if red == 255 && green == 255 && blue == 255 { highClipped += 1 }
             if red == 0 { lowChannels[0] += 1 } else if red == 255 { highChannels[0] += 1 }
             if green == 0 { lowChannels[1] += 1 } else if green == 255 { highChannels[1] += 1 }
             if blue == 0 { lowChannels[2] += 1 } else if blue == 255 { highChannels[2] += 1 }

@@ -3,9 +3,11 @@ import CoreImage
 import CoreImage.CIFilterBuiltins
 import Foundation
 
-/// Lightroom's clipping overlay (J, or a click on a histogram triangle): pixels with any channel
-/// at pure white turn red and pixels with any channel at pure black turn blue, over the finished
-/// render. It works on the displayed 8-bit image, so it marks exactly what the histogram counts.
+/// Lightroom's clipping overlay (J, or a click on a histogram triangle): pure white pixels (all
+/// three channels at 255) turn red and pure black pixels (all three at 0) turn blue, over the
+/// finished render. A saturated color with only one channel at 0 or 255, such as a deep blue
+/// sky, still has detail and is left alone; the triangles' color shows those channels. It works
+/// on the displayed 8-bit image, so it marks exactly what the histogram's percentages count.
 public enum ClippingOverlay {
     public static let highlightColor = CIColor(red: 1, green: 0, blue: 0)
     public static let shadowColor = CIColor(red: 0, green: 0.3, blue: 1)
@@ -20,16 +22,16 @@ public enum ClippingOverlay {
         let extent = source.extent
         var result = source
         if highlights {
-            // White where the brightest channel is at 255.
-            let brightest = CIFilter.maximumComponent()
-            brightest.inputImage = source
-            result = paint(highlightColor, over: result, where: brightest.outputImage, above: 254.5 / 255, extent: extent)
-        }
-        if shadows {
-            // White where the darkest channel is above 0; the blue goes everywhere else.
+            // White where even the darkest channel is at 255.
             let darkest = CIFilter.minimumComponent()
             darkest.inputImage = source
-            let lifted = threshold(darkest.outputImage, at: 0.5 / 255)
+            result = paint(highlightColor, over: result, where: darkest.outputImage, above: 254.5 / 255, extent: extent)
+        }
+        if shadows {
+            // White where the brightest channel is above 0; the blue goes everywhere else.
+            let brightest = CIFilter.maximumComponent()
+            brightest.inputImage = source
+            let lifted = threshold(brightest.outputImage, at: 0.5 / 255)
             let blend = CIFilter.blendWithMask()
             blend.inputImage = result
             blend.backgroundImage = CIImage(color: shadowColor).cropped(to: extent)

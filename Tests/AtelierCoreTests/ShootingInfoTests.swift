@@ -87,22 +87,26 @@ final class ShootingInfoTests: XCTestCase {
         let histogram = try XCTUnwrap(Histogram(image: image))
         XCTAssertEqual(histogram.highlightChannels, [0.5, 0.25, 0.25])
         XCTAssertEqual(histogram.shadowChannels, [0.25, 0.25, 0.25])
-        XCTAssertEqual(histogram.highlightClipping, 0.5)
+        // Only pure white and pure black count as clipped; the red one still has detail.
+        XCTAssertEqual(histogram.highlightClipping, 0.25)
         XCTAssertEqual(histogram.shadowClipping, 0.25)
     }
 
     func testClippingOverlayPaintsOnlyClippedPixels() throws {
-        let image = try XCTUnwrap(Self.image([(255, 100, 100), (128, 128, 128), (0, 50, 50), (200, 200, 200)]))
+        // Pure white, a saturated red, mid gray, pure black, a deep cyan.
+        let image = try XCTUnwrap(Self.image([(255, 255, 255), (255, 100, 100), (128, 128, 128), (0, 0, 0), (0, 50, 50)]))
         let both = try XCTUnwrap(ClippingOverlay.apply(to: image, shadows: true, highlights: true))
         let pixels = Self.pixels(both)
         XCTAssertEqual(pixels[0], [255, 0, 0])
-        XCTAssertEqual(pixels[1], [128, 128, 128])
-        XCTAssertEqual(pixels[2][2], 255)
-        XCTAssertEqual(pixels[2][0], 0)
-        XCTAssertEqual(pixels[3], [200, 200, 200])
-        // Highlights only: the black pixel keeps its color.
+        // One channel at 255 or 0 is a saturated color with detail, not clipping.
+        XCTAssertEqual(pixels[1], [255, 100, 100])
+        XCTAssertEqual(pixels[2], [128, 128, 128])
+        XCTAssertEqual(pixels[3][2], 255)
+        XCTAssertEqual(pixels[3][0], 0)
+        XCTAssertEqual(pixels[4], [0, 50, 50])
+        // Highlights only: the black pixel stays black.
         let highlights = try XCTUnwrap(ClippingOverlay.apply(to: image, shadows: false, highlights: true))
-        XCTAssertEqual(Self.pixels(highlights)[2], [0, 50, 50])
+        XCTAssertEqual(Self.pixels(highlights)[3], [0, 0, 0])
     }
 
     /// A one-row sRGB image.
