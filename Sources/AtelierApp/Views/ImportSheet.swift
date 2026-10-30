@@ -655,8 +655,23 @@ struct ImportProgressStep: View {
 private struct ImportWall: View {
     let photos: [ImportWallPhoto]
     let done: Set<String>
+
+    var body: some View {
+        // The size comes from a GeometryReader, which always has it, not from measuring the
+        // scroll view after the fact.
+        GeometryReader { proxy in
+            ImportWallGrid(photos: photos, done: done, size: proxy.size)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+private struct ImportWallGrid: View {
+    let photos: [ImportWallPhoto]
+    let done: Set<String>
+    let size: CGSize
     @State private var position = ScrollPosition(edge: .top)
-    @State private var size: CGSize = .zero
 
     private static let spacing = 6.0
     private static let padding = 12.0
@@ -664,7 +679,7 @@ private struct ImportWall: View {
     private static let target = 128.0
 
     var body: some View {
-        let layout = Layout(width: size.width, count: photos.count)
+        let layout = Layout(width: Double(size.width), count: photos.count)
         ScrollView(.vertical, showsIndicators: false) {
             if layout.tile > 0 {
                 LazyVGrid(columns: Array(repeating: GridItem(.fixed(layout.tile), spacing: Self.spacing),
@@ -678,12 +693,10 @@ private struct ImportWall: View {
                 .padding(Self.padding)
             }
         }
+        .frame(width: size.width, height: size.height)
         .scrollDisabled(true)
         .scrollPosition($position)
-        .onGeometryChange(for: CGSize.self) { $0.size } action: { size = $0 }
         .onChange(of: firstWaiting) { _, index in follow(index, layout) }
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
     }
 
     /// The first photo not in yet: copies finish a few at a time, a little out of order.
@@ -697,8 +710,8 @@ private struct ImportWall: View {
         let row = Double(min(index, max(photos.count - 1, 0)) / layout.columns)
         let rowStride = layout.tileHeight + Self.spacing
         let content = Self.padding * 2 + Double(layout.rows) * rowStride - Self.spacing
-        let y = Self.padding + row * rowStride - size.height * 0.3
-        let clamped = min(max(0, content - size.height), max(0, y))
+        let y = Self.padding + row * rowStride - Double(size.height) * 0.3
+        let clamped = min(max(0, content - Double(size.height)), max(0, y))
         withAnimation(.easeInOut(duration: 0.8)) { position.scrollTo(y: clamped) }
     }
 
@@ -709,9 +722,9 @@ private struct ImportWall: View {
         var tileHeight: Double { (tile * 0.75).rounded() }
 
         init(width: Double, count: Int) {
-            let usable = width - ImportWall.padding * 2
-            columns = max(1, Int((usable + ImportWall.spacing) / (ImportWall.target + ImportWall.spacing)))
-            tile = usable > 40 ? ((usable - Double(columns - 1) * ImportWall.spacing) / Double(columns)).rounded(.down) : 0
+            let usable = width - ImportWallGrid.padding * 2
+            columns = max(1, Int((usable + ImportWallGrid.spacing) / (ImportWallGrid.target + ImportWallGrid.spacing)))
+            tile = usable > 40 ? ((usable - Double(columns - 1) * ImportWallGrid.spacing) / Double(columns)).rounded(.down) : 0
             rows = (count + columns - 1) / columns
         }
     }
