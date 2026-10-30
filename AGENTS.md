@@ -98,6 +98,31 @@ Agents run in one of two places. Know which one you are.
 
 Either way, GitHub is the only hand-off: Rosh sees a change after it's pushed and they pull or check out the branch in Xcode.
 
+## Pull requests
+
+Rosh reads PRs to decide what to test and merge, often days later and from several agents at once. Each PR must make sense on its own. [.github/pull_request_template.md](.github/pull_request_template.md) has the layout; GitHub fills it in when a PR is opened in the browser, and agents that open PRs another way copy it.
+
+### Title
+
+- `<Area>: <what changes for Rosh>`, in plain words, under about 80 characters. Examples from main: `Effects > Grain: Grain Type (Standard, Fine, Cubic, Tabular) set by film presets`, `Masking: Temp/Tint the Lightroom way, one Invert, draggable gradient lines`.
+- **Area** is where Rosh finds it in the app, with the app's own names (`Develop > Tone Curve`, `Import`, `Library > Filmstrip`). For work outside the app, use the file or system: `AGENTS.md`, `CI`, `Help`, `Presets`.
+- Say what the user gets or what is fixed, not how: `Crop: straighten no longer leaves streaks`, not `Fix CIAffineTransform extent in CropRenderer`.
+- PRs are squash-merged, so the title becomes the commit on main. Rename the PR if its scope changes.
+
+### Description
+
+1. **Agent:** first, which agent did the work: `Claude`, `Codex` or `Antigravity` (list each one if several worked on it), with a link to the session or thread when there is one. Claude project threads keep their two attribution lines above everything else.
+2. **Summary:** one or two sentences on what changes for Rosh and why (the request or bug it answers).
+3. **Changes:** bullet points, one per change, detailed enough that Rosh can test and review from them without reading the diff.
+   - Lead each bullet with what Rosh sees and where (panel, menu, key), then the technical note if it helps (type, file, algorithm).
+   - Group bullets under **Features**, **Fixes** and **Under the hood** when there are more than a few.
+   - Call out anything that changes existing photos or data: a different look for old edits, a `PreviewCache.version` bump, a catalog migration, a renamed setting or key.
+   - Say what was left out or is still known to be wrong, and which other places with the same pattern were or weren't changed (see [Fixing a bug: find its siblings](#fixing-a-bug-find-its-siblings)).
+4. **How to test:** the steps from [Handing off to Rosh](#handing-off-to-rosh): the git commands, then numbered click paths with what to expect at each one.
+5. **Checklist:** tick or strike each item in the template so Rosh can see what was done (PRD, Help, PreviewCache, snapshots, tests).
+
+Keep the description current: when you push more commits, update the bullets and test steps to match.
+
 ## UI changes
 
 Nobody but Rosh can see the running app, so don't guess at layout.
