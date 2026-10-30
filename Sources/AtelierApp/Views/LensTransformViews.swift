@@ -122,7 +122,9 @@ struct LensCorrectionsPanel: View {
             Text(lensLine)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .help(lensLine)
             ParameterGroups(panel: .lensCorrections, develop: develop)
         }
         .font(.callout)
