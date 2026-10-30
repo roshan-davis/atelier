@@ -36,11 +36,11 @@ Evidence baseline, October 30, 2026:
 
 ## AT-003 — Native catalog-open failure screen
 
-**Status:** In progress — approved by Rosh. **Owner:** Co. **Chat:** catalog-open recovery in Codex (session `01a18eaf-0df0-7ee0-afcb-04884e64a825`; app-specific reference). **Branch:** `codex/catalog-open-recovery`. **PR:** [#64](https://github.com/roshan-davis/atelier/pull/64). **Dependencies:** use AT-001 checks.
+**Status:** Done — merged in PR #64 (`17ea9c3`); manual acceptance limits below remain.  **Owner:** Co. **Chat:** catalog-open recovery in Codex (session `01a18eaf-0df0-7ee0-afcb-04884e64a825`; app-specific reference). **Branch:** `codex/catalog-open-recovery`. **PR:** [#64](https://github.com/roshan-davis/atelier/pull/64). **Dependencies:** use AT-001 checks.
 
 **Evidence:** `LibraryModel.swift` at `9ed894a` still calls `fatalError` on catalog-open failure (line 168). **Scope:** native “Couldn't Open Catalog” screen naming the path and reason, with Try Again / Show in Finder / Quit. Preserve files: no delete, replace, reset or automatic restore. Disable library commands until successful opening; avoid quit backup after failed opening.
 
-**Validation:** PR #64 records exact checked revisions and check logs. Baseline head `67f97e7` passed full-Xcode local checks: 211 XCTest tests (210 Core + 1 app), 2 missing-RAW-fixture skips, zero failures; toolchain, whitespace, script regressions, Help and build passed. Tests cover failure/retry/success, database/backup preservation, missing-database protection and no library/quit backup after failed launch. Light/Graphite snapshots and the Help page were inspected at that revision; a disposable native smoke check verified retry, Finder and Quit. Cl’s review follow-up adds interrupted-first-launch tests, preserves all non-Finder contents, clarifies the Backups message and moves Help to the workspace page. Follow-up checks and UI-review limitations are recorded in the PR. No render/cache/schema change. Normal-library/session acceptance remains for Rosh; do not mark Done until merged. Broader restore tooling remains AT-006/AT-012.
+**Validation:** PR #64 records exact checked revisions and check logs. Baseline head `67f97e7` passed full-Xcode local checks: 211 XCTest tests (210 Core + 1 app), 2 missing-RAW-fixture skips, zero failures; toolchain, whitespace, script regressions, Help and build passed. Tests cover failure/retry/success, database/backup preservation, missing-database protection and no library/quit backup after failed launch. Light/Graphite snapshots and the Help page were inspected at that revision; a disposable native smoke check verified retry, Finder and Quit. Cl’s review follow-up adds interrupted-first-launch tests, preserves all non-Finder contents, clarifies the Backups message and moves Help to the workspace page. Follow-up checks and UI-review limitations are recorded in the PR. No render/cache/schema change. Final tested head `ad8493a` passed 214 XCTest tests (213 Core + 1 app), 2 missing-RAW skips, zero failures. Normal-library/session acceptance and latest native visuals remain for Rosh. Broader restore tooling remains AT-006/AT-012.
 
 ## AT-004 — Develop settings and masks in XMP recovery
 
@@ -138,16 +138,18 @@ Evidence baseline, October 30, 2026:
 
 ## AT-016 — Track this list and the working agreement
 
-**Status:** In progress — documentation only, authorized by Rosh. **Owner:** Co. **Chat:** [this documentation chat](codex://threads/01a18eb2-5536-7c20-bd4b-3e8b8f528f14). **Branch:** `codex/backlog-working-agreement`. **PR:** [#63](https://github.com/roshan-davis/atelier/pull/63). **Dependencies:** none.
+**Status:** Done — documentation merged in PR #63 (`5781c54`). **Owner:** Co. **Chat:** [this documentation chat](codex://threads/01a18eb2-5536-7c20-bd4b-3e8b8f528f14). **Branch:** `codex/backlog-working-agreement`. **PR:** [#63](https://github.com/roshan-davis/atelier/pull/63). **Dependencies:** none.
 
 **Scope:** establish this list and AGENTS.md rules for keeping status/evidence current, bounded approved work, one App-project Codex chat per PR and no merges without instruction.
 
-**Acceptance:** `python3 Scripts/check_pr.py` passed on full Xcode at base `9ed894a` plus the staged documentation (206 tests, 2 missing-RAW skips, zero failures); logs under `.build/local-checks/20261030-142918-754419/`. The final PR validation records the follow-up check and CI status. No app behavior, product decision, Help, rendering or UI changes; implementation of AT-003 and all proposals is deferred to separate scoped PRs. Mark Done only after merge.
+**Acceptance:** `python3 Scripts/check_pr.py` passed on full Xcode at base `9ed894a` plus the staged documentation (206 tests, 2 missing-RAW skips, zero failures); logs under `.build/local-checks/20261030-142918-754419/`. The final PR validation records the follow-up check and CI status. No app behavior, product decision, Help, rendering or UI changes; implementation of AT-003 and all proposals is deferred to separate scoped PRs. Merged documentation establishes the working agreement; it does not accept app behavior.
 
 ## AT-017 — Local-check false failure on clean untracked files
 
-**Status:** Proposed / discuss. **Owner/chat/branch/PR:** unassigned. **Dependencies:** AT-001; keep any runner fix in a separate PR.
+**Status:** In progress — bounded fix explicitly authorized by Rosh. **Owner:** Co (Codex). **Chat:** [AT-017](codex://threads/01a18edb-1f08-7550-9c6a-0ee25e4503bc). **Branch:** `codex/at-017-new-file-whitespace`. **PR:** [#65](https://github.com/roshan-davis/atelier/pull/65). **Dependencies:** AT-001.
 
-**Evidence:** this documentation work at `9ed894a` reproduced `whitespace-new-1: FAIL (exit 1)` for clean untracked BACKLOG.md with an empty diagnostic log. `git diff --no-index --check` returns 1 for the new-file difference. PR #62's body describes a normalization fix and seven regressions, but its merged diff contains only six Swift test files; current runner does not normalize this case.
+**Evidence:** reproduced against `17ea9c3`: a clean untracked new file yields exit 1 with empty stdout/stderr from `git diff --no-index --check`. The runner treated every nonzero exit as failure. Search found one no-index execution path; ordinary tracked checks must retain their existing exit semantics.
 
-**Scope/acceptance to agree:** normalize only clean new-file differences while preserving actual whitespace/errors as failures; regression coverage for both. Staging the documentation avoids this case for this PR without changing the runner. Initial restricted build also failed on cache permissions, a separate environment issue; fresh check results belong in this PR's validation.
+**Scope:** accept only a silent exit 1 from the generated no-index whitespace command. Preserve diagnostics and all other failures. Regression coverage checks clean/dirty committed, staged, working and untracked files, including names with spaces, plus missing-file errors and silent non-difference error statuses. No app behavior, rendering, data or UI changes.
+
+**Validation/limits:** ten script regressions pass. Full Mac check passed at base `17ea9c3` plus this four-file patch: Help/build/whitespace and 214 XCTest tests, 2 missing-RAW skips, zero failures. Final committed-head validation and CI status are recorded in the PR. No desktop/UI actions needed or authorized; do not take over the desktop without asking Rosh and receiving explicit approval. Manual app/session acceptance is outside this script-only item.
