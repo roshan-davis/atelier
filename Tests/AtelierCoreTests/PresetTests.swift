@@ -34,7 +34,8 @@ final class PresetTests: XCTestCase {
     }
 
     func testPackPresetsCarryOnlyTheLook() {
-        let photoParts: Set<DevelopPreset.Part> = [.profile, .whiteBalance, .lensCorrections, .transform, .crop, .masks]
+        let photoParts: Set<DevelopPreset.Part> = [.profile, .whiteBalance, .lensCorrections, .transform, .crop, .masks,
+                                                   .detail]
         for preset in DevelopPreset.builtIn {
             XCTAssertTrue(preset.parts.isDisjoint(with: photoParts), preset.name)
             XCTAssertTrue(preset.parts.contains(.treatment), preset.name)
@@ -50,7 +51,7 @@ final class PresetTests: XCTestCase {
         XCTAssertEqual(result.exposure, 0.7)
         XCTAssertEqual(result.sharpening, 60)
         XCTAssertFalse(result.monochrome)
-        XCTAssertEqual(result.contrast, 20)
+        XCTAssertEqual(result.contrast, 28)
         let noir = DevelopPreset.builtIn.first { $0.name == "Noir" }!
         XCTAssertTrue(noir.applied(to: .neutral).monochrome)
     }
