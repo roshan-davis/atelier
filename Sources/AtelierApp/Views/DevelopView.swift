@@ -34,7 +34,8 @@ struct DevelopImageView: View {
                                           zoom: model.zoomState,
                                           onReport: onZoomReport,
                                           menu: { model.photoMenu(includeZoom: true) },
-                                          onPick: photoPick)
+                                          onPick: photoPick,
+                                          onPickDrag: photoDrag)
                         if let picker = develop.picker {
                             PickerHint(text: develop.pickerMessage ?? picker.hint, isWarning: develop.pickerMessage != nil)
                         }
@@ -134,8 +135,15 @@ struct DevelopImageView: View {
         case .whiteBalance: return { point in develop.findWhiteBalance(at: point) }
         case .fringe: return { point in develop.pickFringe(at: point) }
         case .gradeColor: return { point in develop.pickGradeColor(at: point) }
-        case nil: return nil
+        case .pointColor: return { point in develop.pickPointColor(at: point) }
+        case .targetCurve, .targetColor, .targetGray, nil: return nil
         }
+    }
+
+    /// What a drag on the photo does while the Targeted Adjustment Tool is out.
+    private var photoDrag: ((PhotoDrag) -> Void)? {
+        guard develop.picker?.isTargeted == true else { return nil }
+        return { drag in develop.targetedDrag(drag) }
     }
 
     private func onZoomReport(_ report: ZoomReport) {
@@ -205,6 +213,8 @@ private struct PickerHint: View {
 struct PickerButton: View {
     @ObservedObject var develop: DevelopController
     let kind: DevelopController.PhotoPicker
+    /// The eyedropper, or a target for the Targeted Adjustment Tool.
+    var symbol = "eyedropper"
     let help: String
     /// Runs before the picker comes out, to set what it picks for.
     var willPick: () -> Void = {}
@@ -218,7 +228,7 @@ struct PickerButton: View {
                 develop.picker = kind
             }
         } label: {
-            Image(systemName: "eyedropper")
+            Image(systemName: symbol)
         }
         .buttonStyle(.borderless)
         .foregroundStyle(develop.picker == kind ? Color.accentColor : Color.secondary)
@@ -410,6 +420,8 @@ struct DevelopPanel: View {
                                 HSLPanel(develop: develop)
                             case .colorGrading:
                                 ColorGradingPanel(develop: develop)
+                            case .effects:
+                                EffectsPanel(develop: develop)
                             default:
                                 VStack(alignment: .leading, spacing: 7) {
                                     ForEach(groups(in: panel), id: \.0) { group in
@@ -485,252 +497,6 @@ struct GroupHeading: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .padding(.top, 4)
-        }
-    }
-}
-
-/// Tone Curve: an editable point curve per channel, drawn over the histogram, with Lightroom's
-/// region sliders below.
-private struct ToneCurvePanel: View {
-    @ObservedObject var develop: DevelopController
-    @AppStorage("develop.curveChannel") private var channelName = "rgb"
-
-    private let regions: [DevelopSettings.Parameter] = [.curveHighlights, .curveLights, .curveDarks, .curveShadows]
-
-    private var channel: DevelopSettings.CurveChannel {
-        DevelopSettings.CurveChannel(rawValue: channelName) ?? .rgb
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Picker("Channel", selection: $channelName) {
-                    ForEach(DevelopSettings.CurveChannel.allCases, id: \.self) { Text($0.label).tag($0.rawValue) }
-                }
-                .pickerStyle(.segmented)
-                .controlSize(.small)
-                .labelsHidden()
-                Button {
-                    develop.setPoints([], for: channel)
-                } label: {
-                    Image(systemName: "arrow.uturn.backward")
-                }
-                .buttonStyle(.borderless)
-                .help("Reset the \(channel.label) curve")
-                .disabled(develop.settings.points(for: channel) == DevelopSettings.CurvePoint.identity)
-            }
-            CurveEditor(develop: develop, channel: channel)
-                .aspectRatio(1, contentMode: .fit)
-            Text("Click the curve to add a point and drag it. Double-click a point to remove it.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            GroupHeading(title: "Region") { develop.reset(group: "Region", parameters: regions) }
-            ForEach(regions, id: \.self) { parameter in
-                ParameterSlider(parameter: parameter, develop: develop)
-            }
-        }
-    }
-}
-
-private struct CurveEditor: View {
-    @ObservedObject var develop: DevelopController
-    let channel: DevelopSettings.CurveChannel
-    @State private var dragIndex: Int?
-    @State private var lastTap: (index: Int, time: Date)?
-
-    private typealias Point = DevelopSettings.CurvePoint
-
-    private var points: [Point] { develop.settings.points(for: channel) }
-
-    private var color: Color {
-        switch channel {
-        case .rgb: return .white
-        case .red: return Color(red: 1, green: 0.35, blue: 0.35)
-        case .green: return Color(red: 0.35, green: 0.9, blue: 0.4)
-        case .blue: return Color(red: 0.4, green: 0.55, blue: 1)
-        }
-    }
-
-    var body: some View {
-        GeometryReader { geometry in
-            let size = geometry.size
-            Canvas { context, size in
-                var grid = Path()
-                for i in 1..<4 {
-                    let x = size.width * CGFloat(i) / 4, y = size.height * CGFloat(i) / 4
-                    grid.move(to: CGPoint(x: x, y: 0)); grid.addLine(to: CGPoint(x: x, y: size.height))
-                    grid.move(to: CGPoint(x: 0, y: y)); grid.addLine(to: CGPoint(x: size.width, y: y))
-                }
-                context.stroke(grid, with: .color(.white.opacity(0.12)), lineWidth: 1)
-                if let histogram = develop.histogram {
-                    let bins = channel == .red ? histogram.red : channel == .green ? histogram.green
-                        : channel == .blue ? histogram.blue : histogram.luminance
-                    var area = Path()
-                    area.move(to: CGPoint(x: 0, y: size.height))
-                    for (i, value) in bins.enumerated() {
-                        let x = size.width * CGFloat(i) / CGFloat(bins.count - 1)
-                        area.addLine(to: CGPoint(x: x, y: size.height * (1 - CGFloat(value) * 0.9)))
-                    }
-                    area.addLine(to: CGPoint(x: size.width, y: size.height))
-                    context.fill(area, with: .color(color.opacity(0.14)))
-                }
-                var diagonal = Path()
-                diagonal.move(to: CGPoint(x: 0, y: size.height))
-                diagonal.addLine(to: CGPoint(x: size.width, y: 0))
-                context.stroke(diagonal, with: .color(.white.opacity(0.2)), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-
-                // The overall result, including Basic and the region sliders, faintly.
-                if channel == .rgb, DevelopRenderer.hasToneCurve(develop.settings) {
-                    context.stroke(curvePath(size: size) { DevelopRenderer.pointCurveValue(points, at: DevelopRenderer.toneCurveValue(develop.settings, at: $0)) },
-                                   with: .color(.white.opacity(0.3)), lineWidth: 1)
-                }
-                context.stroke(curvePath(size: size) { DevelopRenderer.pointCurveValue(points, at: $0) },
-                               with: .color(color), lineWidth: 1.5)
-                for (index, point) in points.enumerated() {
-                    let center = position(of: point, in: size)
-                    let rect = CGRect(x: center.x - 4.5, y: center.y - 4.5, width: 9, height: 9)
-                    context.fill(Path(ellipseIn: rect), with: .color(index == dragIndex ? color : .black))
-                    context.stroke(Path(ellipseIn: rect), with: .color(color), lineWidth: 1.5)
-                }
-            }
-            .background(Color.black.opacity(0.85), in: RoundedRectangle(cornerRadius: 4))
-            .contentShape(Rectangle())
-            .gesture(DragGesture(minimumDistance: 0)
-                .onChanged { value in drag(value, size: size) }
-                .onEnded { value in endDrag(value, size: size) })
-            // A hand on a point; elsewhere a click adds one, as with Lightroom's point curve.
-            .cursor { location in nearestPoint(to: location, in: size) == nil ? .crosshair : .grab }
-        }
-    }
-
-    /// The point a drag starting at `location` picks up, if any.
-    private func nearestPoint(to location: CGPoint, in size: CGSize) -> Int? {
-        let points = self.points
-        let nearest = points.indices.min { a, b in
-            distance(position(of: points[a], in: size), location) < distance(position(of: points[b], in: size), location)
-        }
-        guard let nearest, distance(position(of: points[nearest], in: size), location) < 12 else { return nil }
-        return nearest
-    }
-
-    private func curvePath(size: CGSize, _ f: (Double) -> Double) -> Path {
-        var path = Path()
-        let samples = 128
-        for i in 0...samples {
-            let x = Double(i) / Double(samples)
-            let point = CGPoint(x: size.width * x, y: size.height * (1 - f(x)))
-            if i == 0 { path.move(to: point) } else { path.addLine(to: point) }
-        }
-        return path
-    }
-
-    private func position(of point: Point, in size: CGSize) -> CGPoint {
-        CGPoint(x: size.width * point.x, y: size.height * (1 - point.y))
-    }
-
-    private func drag(_ value: DragGesture.Value, size: CGSize) {
-        var points = self.points
-        if dragIndex == nil {
-            // Grab the nearest point, or add one on the curve where the drag began.
-            let start = value.startLocation
-            if let nearest = nearestPoint(to: start, in: size) {
-                dragIndex = nearest
-            } else {
-                let x = value.value(at: start, in: size).x
-                let new = Point(x: x, y: DevelopRenderer.pointCurveValue(points, at: x))
-                guard !points.contains(where: { abs($0.x - x) < 0.02 }) else { return }
-                points.append(new)
-                points.sort { $0.x < $1.x }
-                dragIndex = points.firstIndex(of: new)
-            }
-        }
-        guard let index = dragIndex else { return }
-        var moved = value.value(at: value.location, in: size)
-        // Keep points in order.
-        let low = index == 0 ? 0 : points[index - 1].x + 0.01
-        let high = index == points.count - 1 ? 1 : points[index + 1].x - 0.01
-        moved.x = min(max(moved.x, low), high)
-        points[index] = Point(x: moved.x, y: moved.y)
-        develop.setPoints(points, for: channel)
-    }
-
-    private func endDrag(_ value: DragGesture.Value, size: CGSize) {
-        defer { dragIndex = nil }
-        guard let index = dragIndex, distance(value.startLocation, value.location) < 3 else { return }
-        // Double-click removes an inner point.
-        if let lastTap, lastTap.index == index, Date().timeIntervalSince(lastTap.time) < 0.4 {
-            self.lastTap = nil
-            var points = self.points
-            guard index > 0, index < points.count - 1 else { return }
-            points.remove(at: index)
-            develop.setPoints(points, for: channel)
-        } else {
-            lastTap = (index, Date())
-        }
-    }
-
-    private func distance(_ a: CGPoint, _ b: CGPoint) -> CGFloat {
-        hypot(a.x - b.x, a.y - b.y)
-    }
-}
-
-private extension DragGesture.Value {
-    func value(at location: CGPoint, in size: CGSize) -> DevelopSettings.CurvePoint {
-        DevelopSettings.CurvePoint(x: Double(location.x / max(1, size.width)), y: Double(1 - location.y / max(1, size.height)))
-    }
-}
-
-/// HSL / Color: eight color bands, shown one channel at a time or all at once; in Black & White,
-/// the B&W Mix instead.
-private struct HSLPanel: View {
-    @ObservedObject var develop: DevelopController
-    @AppStorage("develop.hslChannel") private var channel = "Hue"
-
-    private var channels: [DevelopSettings.HSLChannel] {
-        channel == "All" ? DevelopSettings.HSLChannel.allCases
-            : [DevelopSettings.HSLChannel(rawValue: channel) ?? .hue]
-    }
-
-    var body: some View {
-        if develop.settings.monochrome {
-            // Black & White: the B&W Mix takes HSL's place, as in Lightroom.
-            VStack(alignment: .leading, spacing: 7) {
-                GroupHeading(title: "B&W Mix") {
-                    develop.reset(group: "B&W Mix", parameters: DevelopSettings.ColorBand.allCases.map { .gray($0) })
-                }
-                ForEach(DevelopSettings.ColorBand.allCases, id: \.self) { band in
-                    ParameterSlider(parameter: .gray(band), develop: develop)
-                }
-                Text("Each slider makes that color lighter or darker in gray.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        } else {
-            colorBody
-        }
-    }
-
-    private var colorBody: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Picker("Channel", selection: $channel) {
-                ForEach(DevelopSettings.HSLChannel.allCases, id: \.self) { Text($0.rawValue).tag($0.rawValue) }
-                Text("All").tag("All")
-            }
-            .pickerStyle(.segmented)
-            .controlSize(.small)
-            .labelsHidden()
-            ForEach(channels, id: \.self) { channel in
-                if channels.count > 1 {
-                    GroupHeading(title: channel.rawValue) {
-                        develop.reset(group: channel.rawValue,
-                                      parameters: DevelopSettings.ColorBand.allCases.map { .hsl(channel, $0) })
-                    }
-                }
-                ForEach(DevelopSettings.ColorBand.allCases, id: \.self) { band in
-                    ParameterSlider(parameter: .hsl(channel, band), develop: develop)
-                }
-            }
         }
     }
 }

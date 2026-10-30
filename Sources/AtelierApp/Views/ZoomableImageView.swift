@@ -98,6 +98,14 @@ final class ZoomViewport: ObservableObject {
     }
 }
 
+/// A drag with the Targeted Adjustment Tool: where it began (0...1 across and down the photo),
+/// how far it has moved up since (points; negative is down), and its end.
+enum PhotoDrag {
+    case began(CGPoint)
+    case moved(Double)
+    case ended
+}
+
 /// A photo that zooms with pinch, the zoom bar, ⌘/⌥-scroll or a double-click, and pans by dragging.
 struct ZoomableImageView: NSViewRepresentable {
     let image: NSImage?
@@ -113,6 +121,9 @@ struct ZoomableImageView: NSViewRepresentable {
     /// Set while a picker is out (the Fringe Color Selector): a click reports the point
     /// (0...1 across and down the photo) instead of zooming; dragging still pans.
     var onPick: ((CGPoint) -> Void)? = nil
+    /// Set while the Targeted Adjustment Tool is out: dragging up or down on the photo reports
+    /// the drag instead of panning.
+    var onPickDrag: ((PhotoDrag) -> Void)? = nil
     /// A tool drawn over the photo (Masking), given where the photo is as it zooms and scrolls.
     /// It stays the same size on screen; scroll and pinch on it still zoom and pan the photo.
     var overlay: ((PhotoFrame) -> AnyView)? = nil
@@ -128,6 +139,7 @@ struct ZoomableImageView: NSViewRepresentable {
         view.menuProvider = menu
         view.onReport = onReport
         view.onPick = onPick
+        view.onPickDrag = onPickDrag
         let zoom = self.zoom
         view.onZoomChange = { level in
             if zoom.level != level { zoom.level = level }
@@ -188,6 +200,12 @@ final class ZoomScrollView: NSScrollView {
     var onPick: ((CGPoint) -> Void)? {
         didSet {
             if (onPick == nil) != (oldValue == nil) { Cursors.shared.refresh() }
+        }
+    }
+    /// Takes drags instead of panning; see `ZoomableImageView.onPickDrag`.
+    var onPickDrag: ((PhotoDrag) -> Void)? {
+        didSet {
+            if (onPickDrag == nil) != (oldValue == nil) { Cursors.shared.refresh() }
         }
     }
     /// Told what part of the photo is in view, for the Navigator.
@@ -556,6 +574,8 @@ final class ZoomCanvasView: NSView {
     weak var scrollView: ZoomScrollView?
     private var dragStart: NSPoint?
     private var dragged = false
+    /// Where a Targeted Adjustment drag began, in window coordinates.
+    private var pressStart: NSPoint?
     private var currentImage: NSImage?
 
     override init(frame: NSRect) {
@@ -584,6 +604,7 @@ final class ZoomCanvasView: NSView {
     /// Under a tool (Masking) the tool decides.
     private var cursorShape: CursorShape? {
         guard let scrollView, !scrollView.hasOverlay else { return nil }
+        if scrollView.onPickDrag != nil { return .rowResize }
         if scrollView.onPick != nil { return .eyedropper }
         return scrollView.canPan ? .grab : .zoomIn
     }
@@ -616,9 +637,22 @@ final class ZoomCanvasView: NSView {
     override func mouseDown(with event: NSEvent) {
         dragStart = event.locationInWindow
         dragged = false
+        if let onPickDrag = scrollView?.onPickDrag {
+            let point = convert(event.locationInWindow, from: nil)
+            guard bounds.width > 0, bounds.height > 0, bounds.contains(point) else { return }
+            pressStart = event.locationInWindow
+            Cursors.shared.press(self, shape: .rowResize, window: window)
+            onPickDrag(.began(CGPoint(x: point.x / bounds.width, y: point.y / bounds.height)))
+        }
     }
 
     override func mouseDragged(with event: NSEvent) {
+        if let onPickDrag = scrollView?.onPickDrag {
+            guard let pressStart else { return }
+            // Up is more, in points on screen.
+            onPickDrag(.moved(Double(event.locationInWindow.y - pressStart.y)))
+            return
+        }
         guard let start = dragStart, let scrollView, scrollView.canPan else { return }
         let location = event.locationInWindow
         let delta = NSPoint(x: location.x - start.x, y: location.y - start.y)
@@ -630,6 +664,13 @@ final class ZoomCanvasView: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
+        if pressStart != nil {
+            pressStart = nil
+            Cursors.shared.release(self)
+            scrollView?.onPickDrag?(.ended)
+            dragStart = nil
+            return
+        }
         if dragged {
             Cursors.shared.release(self)
         } else if let onPick = scrollView?.onPick {

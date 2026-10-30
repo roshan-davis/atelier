@@ -13,18 +13,19 @@
 
 <div class="eyebrow">Develop panel</div>
 <h1>HSL / Color and B&amp;W Mix</h1>
-<p class="lede">Change one color without touching the others: make greens more golden, calm down orange skin, darken a blue sky. In Black &amp; White, the same panel decides how bright each color becomes in gray.</p>
+<p class="lede">Change one color without touching the others: make greens more golden, calm down orange skin, darken a blue sky. Point Color does the same for one exact color you pick. In Black &amp; White, the same panel decides how bright each color becomes in gray.</p>
 
-<div class="chips"><a href="#bands">The eight colors</a><a href="#hue">Hue</a><a href="#saturation">Saturation</a><a href="#luminance">Luminance</a><a href="#bw-mix">B&amp;W Mix</a></div>
+<div class="chips"><a href="#bands">The eight colors</a><a href="#hue">Hue</a><a href="#saturation">Saturation</a><a href="#luminance">Luminance</a><a href="#targeted">Targeted Adjustment</a><a href="#point-color">Point Color</a><a href="#bw-mix">B&amp;W Mix</a></div>
 
 <h2 id="bands">The eight colors</h2>
-<p>Red, Orange, Yellow, Green, Aqua, Blue, Purple and Magenta each have three sliders. Neighboring colors blend smoothly, and grays and whites are never affected.</p>
+<p>Pick <b>Mixer</b> at the top of the panel. Red, Orange, Yellow, Green, Aqua, Blue, Purple and Magenta each have three sliders. Neighboring colors blend smoothly, and grays, whites and the faint color noise in dark areas are never affected.</p>
 <figure>
   <div class="pins pinned">
   <div class="panel">
     <div class="ph"><span class="chev">›</span>HSL / Color<span class="dot"></span><span class="grow"></span><span class="reset">↺</span><span class="switch"></span></div>
     <div class="pb">
-      <div class="row" data-pin="1"><span class="seg"><span class="sel">Hue</span><span>Saturation</span><span>Luminance</span><span>All</span></span></div>
+      <div class="row"><span class="seg"><span class="sel">Mixer</span><span>Point Color</span></span></div>
+      <div class="row" data-pin="1"><span style="color:var(--app-text-2)">◎</span><span class="seg"><span class="sel">Hue</span><span>Saturation</span><span>Luminance</span><span>All</span></span></div>
       <div class="sl" data-name="Red" data-value="0" data-at="0.5" data-gradient="hue-0"></div>
       <div class="sl" data-name="Orange" data-value="0" data-at="0.5" data-gradient="hue-30"></div>
       <div class="sl" data-name="Yellow" data-value="−18" data-at="0.41" data-gradient="hue-60"></div>
@@ -38,7 +39,7 @@
   </div>
 </figure>
 <ol class="legend">
-  <li>Show <b>Hue</b>, <b>Saturation</b> or <b>Luminance</b> one at a time, or <b>All</b> 24 sliders.</li>
+  <li><b>Targeted Adjustment</b> (◎), then show <b>Hue</b>, <b>Saturation</b> or <b>Luminance</b> one at a time, or <b>All</b> 24 sliders.</li>
   <li>Each track is painted with the colors that end of the slider gives, so you can see which way to drag.</li>
 </ol>
 
@@ -49,7 +50,7 @@
 </figure>
 
 <h2 id="saturation">Saturation</h2>
-<p>Makes one color stronger or weaker. Turning down Orange and Red calms skin and wood; turning up Blue deepens a sky.</p>
+<p>Makes one color stronger or weaker. Turning down Orange and Red calms skin and wood; turning up Blue deepens a sky. At −100 a color turns gray at the brightness you saw it, so a deep blue sky becomes a dark gray, not a pale one.</p>
 <figure>
   <div class="frame compare" data-before="treatment-before.jpg" data-after="hsl-sat-after.jpg" data-labels="Before|Orange −70, Red −50" style="max-width:420px;margin:0 auto"></div>
 </figure>
@@ -60,6 +61,41 @@
   <div class="frame compare" data-before="redwoods.jpg" data-after="hsl-lum-after.jpg" data-labels="Before|Green and Yellow Luminance −"></div>
 </figure>
 
+<h2 id="targeted">Targeted Adjustment</h2>
+<p>Click ◎ next to the channel buttons, then drag up or down on the photo over the color you want to change: the sliders for that color move together (a sky moves Blue and a little Aqua, say). In <b>All</b>, ◎ is a menu: choose Hue, Saturation or Luminance first. Each drag is one step in History; <kbd>Esc</kbd> puts the tool away. It works the same way in <a href="tone-curve.html#targeted">Tone Curve</a> and the B&amp;W Mix.</p>
+
+<h2 id="point-color">Point Color</h2>
+<p>For one exact color rather than a whole band: a skin tone, a jacket, the green of one plant.</p>
+<figure>
+  <div class="pins pinned">
+  <div class="panel">
+    <div class="ph"><span class="chev">›</span>HSL / Color<span class="dot"></span><span class="grow"></span><span class="reset">↺</span><span class="switch"></span></div>
+    <div class="pb">
+      <div class="row"><span class="seg"><span>Mixer</span><span class="sel">Point Color</span></span></div>
+      <div class="row" data-pin="1"><span style="color:var(--app-text-2)">✎</span> <span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:#d9a080;outline:2px solid var(--accent, #3d8bfd);outline-offset:1px"></span> <span style="display:inline-block;width:14px;height:14px;border-radius:50%;border:1px dashed #888"></span> <span style="display:inline-block;width:14px;height:14px;border-radius:50%;border:1px dashed #888"></span> <span style="display:inline-block;width:14px;height:14px;border-radius:50%;border:1px dashed #888"></span></div>
+      <div class="gh">Point Color 1</div>
+      <div class="sl" data-name="Hue" data-value="0" data-at="0.5"></div>
+      <div class="sl" data-name="Saturation" data-value="−20" data-at="0.4"></div>
+      <div class="sl" data-name="Luminance" data-value="+10" data-at="0.55"></div>
+      <div class="gh" data-pin="2">Range</div>
+      <div class="sl" data-name="Range" data-value="50" data-at="0.5" data-def="0.5"></div>
+      <div class="sl" data-name="Uniformity" data-value="40" data-at="0.4" data-def="0"></div>
+      <div class="row" data-pin="3"><span>☐ Visualize Range</span></div>
+    </div>
+  </div>
+  </div>
+</figure>
+<ol class="legend">
+  <li><b>Eyedropper and swatches</b>: click the eyedropper, then the color in the photo. Up to four swatches; click one to edit it, right-click it to delete it.</li>
+  <li><b>Range</b> widens or narrows which colors count as “this color”. <b>Uniformity</b> pulls them toward the picked color, evening out blotchy skin or a patchy sky (beyond Lightroom, after Capture One's skin tone tool).</li>
+  <li><b>Visualize Range</b> shows only the colors the swatch changes; the rest of the photo turns gray.</li>
+</ol>
+<dl class="defs">
+  <dt>Hue</dt><dd>Turns the picked color toward its neighbors, up to 30°.</dd>
+  <dt>Saturation</dt><dd>Makes it stronger or weaker.</dd>
+  <dt>Luminance</dt><dd>Makes it brighter or darker.</dd>
+</dl>
+
 <h2 id="bw-mix">B&amp;W Mix</h2>
 <p>When <a href="basic.html#treatment">Treatment</a> is Black &amp; White (press <kbd>V</kbd>), this panel shows the <b>B&amp;W Mix</b> instead of HSL: eight sliders that set how light or dark each color becomes in gray, like colored filters on black and white film.</p>
 <div class="duo">
@@ -68,7 +104,7 @@
 </div>
 <figcaption>The same conversion with the foliage lifted and the warm wood darkened.</figcaption>
 <div class="tip"><p><span class="label">Classic filters.</span> Darken Blue for a dramatic sky (a red filter). Lighten Orange and Red for smooth skin. Lighten Green and Yellow for bright foliage.</p></div>
-<p>Vibrance and Saturation have no effect in Black &amp; White. <a href="color-grading.html">Color Grading</a> still works, for toned prints (Sepia, Selenium in the <a href="presets.html#built-in">Black &amp; White presets</a>).</p>
+<p>◎ works here too: drag up or down on a color in the photo to make its gray lighter or darker. Vibrance and Saturation have no effect in Black &amp; White. <a href="color-grading.html">Color Grading</a> still works, for toned prints (Sepia, Selenium in the <a href="presets.html#built-in">Black &amp; White presets</a>).</p>
 
 <div class="see-also">See also: <a href="basic.html#vibrance-saturation">Vibrance and Saturation</a> · <a href="color-grading.html">Color Grading</a></div>
 
