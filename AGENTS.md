@@ -77,6 +77,15 @@ Rosh's most common complaint is the same bug showing up tool by tool. Before you
 - Measure before optimizing: time it (Instruments, `os_signpost`, or a timed test) and put the numbers in the PR. Don't add caches, threads or lower-quality paths on a guess.
 - Keep the main thread free: rendering, analysis, file and network work run in the background with progress and Cancel (PRD UX principle 4). Slider and handle drags must stay smooth: renders are coalesced (one in flight plus one follow-up, see `DevelopController`), so never queue a render per event.
 
+## Action list and ways of working
+
+- [BACKLOG.md](BACKLOG.md) is the canonical action/status list in Git. The PRD remains the product specification; the backlog does not replace it or approve a product change.
+- Keep the backlog current in the same PR as the work. Use stable IDs; record evidence and its revision, scope, dependencies, acceptance criteria, and PR links. Distinguish approved actions, proposals awaiting discussion, and implementation that still needs acceptance.
+- When work starts, record the owner, chat, branch and PR (once one exists). When it ends, record validation, limitations and deferred work. Do not mark acceptance complete from source inspection or a build alone.
+- Pick one bounded approved item at a time. Discuss a proposal's scope with Rosh before implementing it; a review recommendation is not blanket approval for an architecture rewrite.
+- Use one separate Codex chat in the App project for each new PR, carrying the relevant context and backlog IDs. Title it `PR planning: <topic>` until GitHub assigns the actual number, then prefix its title with `PR #N`. Never invent or reserve PR numbers. Further PRs get their own chats for discussion; do not create chats merely for internal subtasks.
+- Do not merge a PR without Rosh's instruction.
+
 ## Git workflow
 
 Several agents open PRs on this repo at the same time.
