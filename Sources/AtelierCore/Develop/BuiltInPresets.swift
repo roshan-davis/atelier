@@ -73,7 +73,6 @@ extension DevelopPreset {
             s.vibrance = 12
             s[.curveLights] = 10
             s[.curveDarks] = -5
-            s.sharpening = 50
         },
         // True paper whites and pigment fidelity without hue shifts, for watercolor and artwork.
         look("Atelier", 6, "Fine Art & Pigments") { s in
@@ -88,8 +87,6 @@ extension DevelopPreset {
             s.saturation = 5
             s[.curveLights] = 12
             s[.curveDarks] = -6
-            s.sharpening = 45
-            s[.sharpenDetail] = 35
         },
         // Bold tonal bite, anchored blacks and rich color separation.
         look("Atelier", 2, "Punchy") { s in
@@ -101,8 +98,8 @@ extension DevelopPreset {
             s.texture = 10
             s.clarity = 22
             s.dehaze = 10
-            s.vibrance = 30
-            s.saturation = 6
+            s.vibrance = 25
+            s.saturation = 4
             s.setPoints(curve((0, 0), (0.22, 0.17), (0.78, 0.84), (1, 1)), for: .rgb)
         },
         // Everyday analog warmth with gentle red/blue crossover and a cyan-tinted shadow toe.
@@ -143,33 +140,26 @@ extension DevelopPreset {
     /// Color film, by what each stock is known for, using per-channel RGB curves for authentic
     /// emulsion toe and shoulder crossover. Names describe the look, never the brand.
     private static let filmPack: [DevelopPreset] = [
-        // Portrait negative (Portra 400): creamy highlight roll-off, golden-peach skin, celadon
-        // greens, and subtle blue-channel toe warmth without a gray veil.
+        // Portrait negative (Portra 400): soft contrast and roll-off, warm skin, olive greens,
+        // slightly cyan blues, fine grain.
         look("Film", 1, "Portrait 400") { s in
-            s.contrast = 14
-            s.highlights = -24
-            s.shadows = 18
-            s.whites = 10
-            s.blacks = -8
-            s.vibrance = 14
-            s.setPoints(curve((0, 0.02), (0.24, 0.22), (0.55, 0.58), (0.85, 0.86), (1, 0.98)), for: .rgb)
-            s.setPoints(curve((0, 0), (0.5, 0.51), (1, 0.99)), for: .red)
-            s.setPoints(curve((0, 0.01), (0.5, 0.49), (1, 0.98)), for: .blue)
-            s[.hsl(.hue, .red)] = 5
-            s[.hsl(.hue, .orange)] = 4
-            s[.hsl(.saturation, .orange)] = 4
-            s[.hsl(.luminance, .orange)] = 10
+            s.contrast = -5
+            s.highlights = -25
+            s.shadows = 15
+            s.saturation = -8
+            s.setPoints(curve((0, 0.03), (0.25, 0.26), (0.75, 0.76), (1, 0.97)), for: .rgb)
+            s[.hsl(.hue, .orange)] = 3
+            s[.hsl(.saturation, .orange)] = -5
+            s[.hsl(.luminance, .orange)] = 8
             s[.hsl(.hue, .yellow)] = -10
-            s[.hsl(.saturation, .yellow)] = -8
-            s[.hsl(.hue, .green)] = -16
-            s[.hsl(.saturation, .green)] = -18
+            s[.hsl(.saturation, .yellow)] = -10
+            s[.hsl(.hue, .green)] = -15
+            s[.hsl(.saturation, .green)] = -20
             s[.hsl(.hue, .blue)] = -8
-            s[.hsl(.saturation, .blue)] = -8
-            grade(&s, .shadows, hue: 210, saturation: 6)
-            grade(&s, .midtones, hue: 36, saturation: 6, luminance: 2)
-            grade(&s, .highlights, hue: 44, saturation: 12)
-            s.grain = 14
-            s.grainSize = 22
+            s[.hsl(.saturation, .blue)] = -10
+            grade(&s, .highlights, hue: 45, saturation: 10)
+            grade(&s, .global, hue: 40, saturation: 5)
+            s.grain = 15
         },
         // Consumer gold (Kodak Gold 200): nostalgic golden-amber warmth, punchy reds and anchored
         // shadows while keeping skies clean.
@@ -193,32 +183,27 @@ extension DevelopPreset {
             grade(&s, .shadows, hue: 30, saturation: 6)
             s.grain = 22
         },
-        // Pastel portrait negative (Fuji Pro 400H): airy overexposed brightness, mint-emerald
-        // greens, cool cyan shadows and delicate peach skin with anchored darks.
+        // Pastel portrait negative (Fuji 400H): bright, low contrast, mint greens, cyan shadows,
+        // a touch of pink in the highlights.
         look("Film", 7, "Pastel 400") { s in
-            s.contrast = 12
+            s.contrast = -15
             s.highlights = -20
-            s.shadows = 20
-            s.whites = 18
-            s.blacks = -8
-            s.vibrance = 12
-            s.saturation = -6
-            s[.curveLights] = 12
-            s.setPoints(curve((0, 0.02), (0.25, 0.23), (0.65, 0.70), (1, 0.99)), for: .rgb)
-            s[.hsl(.hue, .orange)] = 4
-            s[.hsl(.saturation, .orange)] = -4
-            s[.hsl(.luminance, .orange)] = 12
-            s[.hsl(.hue, .yellow)] = 12
-            s[.hsl(.saturation, .yellow)] = -14
-            s[.hsl(.hue, .green)] = 26
-            s[.hsl(.saturation, .green)] = -18
+            s.shadows = 25
+            s.saturation = -10
+            s.vibrance = 5
+            s.setPoints(curve((0, 0.04), (0.5, 0.53), (1, 0.97)), for: .rgb)
+            s[.hsl(.saturation, .orange)] = -5
+            s[.hsl(.luminance, .orange)] = 10
+            s[.hsl(.hue, .yellow)] = 10
+            s[.hsl(.saturation, .yellow)] = -15
+            s[.hsl(.hue, .green)] = 25
+            s[.hsl(.saturation, .green)] = -20
             s[.hsl(.luminance, .green)] = 10
-            s[.hsl(.hue, .aqua)] = 10
-            s[.hsl(.hue, .blue)] = -12
-            s[.hsl(.saturation, .blue)] = -8
-            s[.hsl(.luminance, .blue)] = 6
-            grade(&s, .shadows, hue: 180, saturation: 10)
-            grade(&s, .highlights, hue: 340, saturation: 8, luminance: 4)
+            s[.hsl(.hue, .blue)] = -10
+            s[.hsl(.saturation, .blue)] = -10
+            s[.hsl(.luminance, .blue)] = 5
+            grade(&s, .shadows, hue: 175, saturation: 10)
+            grade(&s, .highlights, hue: 330, saturation: 6)
             s.grain = 12
         },
         // Vivid fine-grain negative (Ektar 100): high micro-contrast, deep blacks, rich reds and
@@ -258,8 +243,8 @@ extension DevelopPreset {
             s.whites = 12
             s.blacks = -14
             s.clarity = 10
-            s.vibrance = 18
-            s.saturation = 12
+            s.vibrance = 12
+            s.saturation = 8
             s.setPoints(curve((0, 0), (0.22, 0.16), (0.5, 0.50), (0.78, 0.84), (1, 1)), for: .rgb)
             s[.hsl(.saturation, .red)] = 15
             s[.hsl(.saturation, .orange)] = -8
@@ -303,67 +288,59 @@ extension DevelopPreset {
             grade(&s, .shadows, hue: 220, saturation: 8, luminance: -4)
             s.grain = 10
         },
-        // Tungsten cinema film (CineStill 800T): electric cyan-teal cast, halation-inspired
-        // warm red-amber highlights, and rich cinema grain.
+        // Tungsten cinema film in daylight (CineStill 800T): cool cast, teal shadows, warm
+        // glowing highlights, soft and grainy.
         look("Film", 4, "Tungsten 800T") { s in
-            s.contrast = 22
-            s.highlights = -20
-            s.shadows = 8
-            s.whites = 18
-            s.blacks = -12
-            s.clarity = -8
-            s.vibrance = 15
-            s.setPoints(curve((0, 0.02), (0.22, 0.18), (0.78, 0.83), (1, 0.99)), for: .rgb)
-            s.setPoints(curve((0, 0), (0.65, 0.64), (1, 1)), for: .red)
-            s.setPoints(curve((0, 0.02), (0.4, 0.45), (1, 0.97)), for: .blue)
-            s[.hsl(.hue, .red)] = 8
-            s[.hsl(.saturation, .red)] = 25
-            s[.hsl(.luminance, .red)] = 10
-            s[.hsl(.saturation, .orange)] = 16
-            s[.hsl(.luminance, .orange)] = 10
-            s[.hsl(.hue, .green)] = 25
-            s[.hsl(.hue, .aqua)] = 10
-            s[.hsl(.saturation, .aqua)] = 20
-            s[.hsl(.hue, .blue)] = -14
-            s[.hsl(.saturation, .blue)] = 18
-            grade(&s, .shadows, hue: 200, saturation: 28, luminance: -6)
-            grade(&s, .midtones, hue: 205, saturation: 14)
-            grade(&s, .highlights, hue: 18, saturation: 24, luminance: 8)
-            s[.gradeBalance] = -15
-            s.grain = 30
-            s.grainSize = 35
-            s.grainRoughness = 55
-        },
-        // Instant film (Polaroid SX-70): creamy border-warm highlights, emerald-teal shadows,
-        // soft micro-contrast and optical corner falloff without yellowing skies.
-        look("Film", 6, "Instant") { s in
-            s.contrast = 16
-            s.highlights = -22
-            s.shadows = 14
-            s.whites = 8
-            s.blacks = -6
-            s.texture = -8
+            s.contrast = 10
+            s.highlights = -30
+            s.shadows = 10
             s.clarity = -10
-            s.vibrance = 12
-            s.setPoints(curve((0, 0.05), (0.24, 0.23), (0.76, 0.80), (1, 0.96)), for: .rgb)
-            s.setPoints(curve((0, 0), (0.5, 0.51), (1, 0.99)), for: .red)
-            s.setPoints(curve((0, 0.03), (0.5, 0.49), (1, 0.96)), for: .blue)
-            s[.hsl(.saturation, .red)] = 12
-            s[.hsl(.hue, .yellow)] = -10
-            s[.hsl(.hue, .green)] = 18
-            s[.hsl(.saturation, .green)] = -10
-            s[.hsl(.hue, .blue)] = -12
-            grade(&s, .shadows, hue: 190, saturation: 14)
-            grade(&s, .midtones, hue: 42, saturation: 6)
-            grade(&s, .highlights, hue: 45, saturation: 14)
-            s.vignette = -26
+            s.setPoints(curve((0, 0.025), (1, 0.97)), for: .rgb)
+            s[.hsl(.saturation, .red)] = 15
+            s[.hsl(.hue, .blue)] = -10
+            s[.hsl(.saturation, .blue)] = 10
+            grade(&s, .global, hue: 210, saturation: 12)
+            grade(&s, .shadows, hue: 195, saturation: 18)
+            grade(&s, .highlights, hue: 25, saturation: 10)
+            s.grain = 35
+            s.grainSize = 40
+            s.grainRoughness = 60
+        },
+        // Expired film: faded and low contrast, green shadows, magenta highlights, heavy grain.
+        look("Film", 5, "Expired") { s in
+            s.contrast = -20
+            s.saturation = -20
+            s.setPoints(curve((0, 0.12), (0.5, 0.5), (1, 0.9)), for: .rgb)
+            grade(&s, .shadows, hue: 150, saturation: 18)
+            grade(&s, .highlights, hue: 340, saturation: 12)
+            grade(&s, .global, hue: 45, saturation: 6)
+            s.grain = 45
+            s.grainSize = 45
+            s.vignette = -15
+        },
+        // Instant film: lifted blacks, soft highlights, teal greens, warm cast, dark corners.
+        look("Film", 6, "Instant") { s in
+            s.highlights = -25
+            s.shadows = 10
+            s.clarity = -10
+            s.saturation = -10
+            s.setPoints(curve((0, 0.12), (0.3, 0.33), (0.7, 0.72), (1, 0.9)), for: .rgb)
+            s[.hsl(.hue, .green)] = 15
+            s[.hsl(.hue, .blue)] = -10
+            grade(&s, .shadows, hue: 190, saturation: 10)
+            grade(&s, .highlights, hue: 45, saturation: 15)
+            s.vignette = -25
             s.vignetteMidpoint = 40
-            s.grain = 15
         },
     ]
 
     /// Black & White treatment, with B&W Mix filters and darkroom toning.
     private static let blackAndWhitePack: [DevelopPreset] = [
+        // A plain conversion to start from: the default B&W Mix and a little contrast.
+        look("Black & White", 1, "Neutral") { s in
+            s.monochrome = true
+            s.contrast = 15
+        },
         // Darkroom fiber print (Ansel Adams / Ilford Multigrade): deep Dmax blacks, luminous
         // paper whites and a subtle cool-shadow / warm-highlight gallery tone.
         look("Black & White", 9, "Silver Gelatin") { s in
@@ -513,27 +490,16 @@ extension DevelopPreset {
     /// Skin first: orange and red are skin's hue bands, shaped gently while surrounding colors
     /// and tonal contrast set the mood.
     private static let portraitPack: [DevelopPreset] = [
-        // Flattering editorial skin: smooth texture, softened redness, luminous peach tones and
-        // gentle midtone lift.
+        // Everyday skin: smoother texture, less redness, a little brighter and warmer in the highlights.
         look("Portrait", 1, "Natural Skin") { s in
-            s.contrast = 12
-            s.highlights = -20
-            s.shadows = 18
-            s.whites = 12
-            s.blacks = -6
-            s.texture = -14
-            s.clarity = -6
-            s.vibrance = 12
-            s[.curveLights] = 8
-            s[.hsl(.hue, .red)] = 6
-            s[.hsl(.saturation, .red)] = -10
-            s[.hsl(.luminance, .red)] = 6
-            s[.hsl(.hue, .orange)] = 4
-            s[.hsl(.saturation, .orange)] = -6
-            s[.hsl(.luminance, .orange)] = 12
-            s[.hsl(.saturation, .green)] = -12
-            grade(&s, .midtones, hue: 34, saturation: 6, luminance: 4)
-            grade(&s, .highlights, hue: 40, saturation: 10)
+            s.texture = -10
+            s.clarity = -5
+            s.vibrance = 5
+            s[.hsl(.saturation, .red)] = -5
+            s[.hsl(.hue, .orange)] = 3
+            s[.hsl(.saturation, .orange)] = -8
+            s[.hsl(.luminance, .orange)] = 8
+            grade(&s, .highlights, hue: 35, saturation: 5)
         },
         // Luminous wedding & lifestyle look: open shadows, glowing upper-midtones, mint-sage
         // foliage and creamy skin with anchored darks.
@@ -645,7 +611,6 @@ extension DevelopPreset {
             s[.hsl(.saturation, .orange)] = -6
             s[.hsl(.luminance, .orange)] = 8
             s[.hsl(.saturation, .blue)] = -15
-            s.sharpening = 45
         },
         // Editorial chiaroscuro portrait: deep sculpted shadows, muted forest/background colors,
         // and luminous skin standing out from the frame.
@@ -818,6 +783,15 @@ extension DevelopPreset {
             grade(&s, .midtones, hue: 34, saturation: 12)
             grade(&s, .highlights, hue: 40, saturation: 16)
         },
+        // Clears distant haze: Dehaze with a touch of clarity and contrast, highlights held back.
+        look("Landscape", 5, "Haze Cut") { s in
+            s.contrast = 10
+            s.highlights = -15
+            s.blacks = -5
+            s.clarity = 15
+            s.dehaze = 30
+            s.vibrance = 10
+        },
         // Wildlife, birds & action: feather/fur micro-contrast, eye/beak golden pop, and clean
         // background separation.
         look("Landscape", 8, "Wildlife & Detail") { s in
@@ -840,10 +814,6 @@ extension DevelopPreset {
             s[.hsl(.luminance, .green)] = -10
             s[.hsl(.saturation, .blue)] = -8
             s[.hsl(.luminance, .blue)] = -10
-            s.sharpening = 60
-            s[.sharpenDetail] = 45
-            s[.sharpenMasking] = 30
-            s.luminanceNoise = 15
             s.vignette = -14
         },
     ]
@@ -1190,7 +1160,7 @@ extension DevelopPreset {
             s.contrast = 32
             s.highlights = -12
             s.blacks = -12
-            s.vibrance = 18
+            s.vibrance = 8
             s.saturation = 12
             s.setPoints(curve((0, 0.02), (0.25, 0.20), (0.75, 0.83), (1, 0.99)), for: .rgb)
             s.setPoints(curve((0, 0), (0.3, 0.22), (0.7, 0.82), (1, 1)), for: .red)

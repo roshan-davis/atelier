@@ -34,7 +34,8 @@ final class PresetTests: XCTestCase {
     }
 
     func testPackPresetsCarryOnlyTheLook() {
-        let photoParts: Set<DevelopPreset.Part> = [.profile, .whiteBalance, .lensCorrections, .transform, .crop, .masks]
+        let photoParts: Set<DevelopPreset.Part> = [.profile, .whiteBalance, .lensCorrections, .transform, .crop, .masks,
+                                                   .detail]
         for preset in DevelopPreset.builtIn {
             XCTAssertTrue(preset.parts.isDisjoint(with: photoParts), preset.name)
             XCTAssertTrue(preset.parts.contains(.treatment), preset.name)
