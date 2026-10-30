@@ -38,8 +38,34 @@ From a terminal: `swift build`, `swift test`, `swift run AtelierApp`.
 
 ## CI
 
-Every pull request and push to `main` runs [.github/workflows/build.yml](.github/workflows/build.yml) on a macOS runner: build, the `AtelierCoreTests` suite (including a camera-match check against sample Nikon Z RAWs), and layout snapshots of the main screens, uploaded as an artifact and published to the `layout-snapshots` branch.
+[.github/workflows/build.yml](.github/workflows/build.yml) is configured for main pushes and PRs: macOS build, tests and layout snapshots. Check the actual run status; configuration alone does not prove Actions is available or passing. The local command below works without GitHub setup. RAW sample tests can skip when fixtures are unavailable.
 
 ## Not built yet
 
 Smart collections, perceptual-hash duplicates, watch folders, App Sandbox, model registry and license gate for AI outputs, PSD round-trip, Core ML and MLX backends. See the PRD for the phase plan.
+
+## Local pre-PR checks (Mac agents)
+
+Run from your task branch before opening or updating a PR:
+
+```sh
+git fetch origin main
+python3 Scripts/check_pr.py
+# Optional existing RAW fixtures (no automatic downloads):
+python3 Scripts/check_pr.py --samples /absolute/path/to/sample-raws
+```
+
+Requires full Xcode and Python 3; the first Swift build may resolve dependencies over the network.
+The script checks committed and working-tree whitespace against the merge base with `origin/main`
+(and untracked files), runs its regression tests, validates Help and its generated index without rewriting it,
+builds the app, and runs the tests. It exits nonzero if any check fails and retains individual
+logs plus `summary.txt` in `.build/local-checks/<run>/`, including the tested commit and working changes.
+It honors `DEVELOPER_DIR`, otherwise uses selected Xcode or `/Applications/Xcode.app` when only
+Command Line Tools are selected. It never changes the global Xcode selection.
+
+Report failures and skipped RAW tests in the PR; a successful run does not certify real-RAW
+coverage or visual layout. For UI changes, render and inspect layout snapshots separately.
+This local check requires no GitHub configuration and leaves the existing Actions workflow intact.
+Use `--base <ref>` to check against a different fetched PR base. Agent workspace and environment
+rules are in [AGENTS.md](AGENTS.md#where-you-work). Cloud Claude cannot execute this Mac-only
+command; its PR must disclose that and receive a Mac check before validation is complete.
