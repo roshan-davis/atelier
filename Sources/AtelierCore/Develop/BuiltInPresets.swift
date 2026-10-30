@@ -13,7 +13,8 @@ import Foundation
 /// Grading, per-channel RGB curves, Tone Curve regions and the new grain). Each look is
 /// distinct — redundant filler presets were retired in favor of high-impact looks tailored to
 /// wildlife, fine-art reproduction, landscapes, street and cinema. `Scripts/presets/preset_sheets.py`
-/// renders every pack on test photos so changes can be judged before they ship.
+/// renders every pack on test photos so changes can be judged before they ship. Looks named for
+/// a film stock set the Grain Type that fits it (Oct 30, 2026); the rest keep Standard.
 extension DevelopPreset {
     /// The built-in packs, in panel order. The user's groups can't take these names.
     public static let builtInGroups = ["Atelier", "Film", "Black & White", "Portrait", "Landscape", "Street",
@@ -160,6 +161,7 @@ extension DevelopPreset {
             grade(&s, .highlights, hue: 45, saturation: 10)
             grade(&s, .global, hue: 40, saturation: 5)
             s.grain = 15
+            s.grainType = .tabular
         },
         // Consumer gold (Kodak Gold 200): nostalgic golden-amber warmth, punchy reds and anchored
         // shadows while keeping skies clean.
@@ -182,6 +184,7 @@ extension DevelopPreset {
             grade(&s, .highlights, hue: 44, saturation: 14)
             grade(&s, .shadows, hue: 30, saturation: 6)
             s.grain = 22
+            s.grainType = .cubic
         },
         // Pastel portrait negative (Fuji 400H): bright, low contrast, mint greens, cyan shadows,
         // a touch of pink in the highlights.
@@ -205,6 +208,7 @@ extension DevelopPreset {
             grade(&s, .shadows, hue: 175, saturation: 10)
             grade(&s, .highlights, hue: 330, saturation: 6)
             s.grain = 12
+            s.grainType = .tabular
         },
         // Vivid fine-grain negative (Ektar 100): high micro-contrast, deep blacks, rich reds and
         // cyan-shifted skies.
@@ -232,6 +236,7 @@ extension DevelopPreset {
             grade(&s, .shadows, hue: 225, saturation: 8, luminance: -4)
             grade(&s, .highlights, hue: 42, saturation: 8)
             s.grain = 8
+            s.grainType = .fine
             s.grainSize = 15
         },
         // Slide film (Velvia 50): ink-deep blacks, rich greens, cobalt skies and clean rock/cloud
@@ -287,6 +292,7 @@ extension DevelopPreset {
             grade(&s, .global, hue: 45, saturation: 6)
             grade(&s, .shadows, hue: 220, saturation: 8, luminance: -4)
             s.grain = 10
+            s.grainType = .fine
         },
         // Tungsten cinema film in daylight (CineStill 800T): cool cast, teal shadows, warm
         // glowing highlights, soft and grainy.
@@ -303,6 +309,7 @@ extension DevelopPreset {
             grade(&s, .shadows, hue: 195, saturation: 18)
             grade(&s, .highlights, hue: 25, saturation: 10)
             s.grain = 35
+            s.grainType = .tabular
             s.grainSize = 40
             s.grainRoughness = 60
         },
@@ -315,6 +322,7 @@ extension DevelopPreset {
             grade(&s, .highlights, hue: 340, saturation: 12)
             grade(&s, .global, hue: 45, saturation: 6)
             s.grain = 45
+            s.grainType = .cubic
             s.grainSize = 45
             s.vignette = -15
         },
@@ -382,6 +390,7 @@ extension DevelopPreset {
             s[.gray(.green)] = -6
             s[.gray(.blue)] = -25
             s.grain = 26
+            s.grainType = .cubic
             s.grainSize = 32
         },
         // Red filter monochrome: dramatic dark skies, sculpted clouds and bright skin tones.
@@ -414,6 +423,7 @@ extension DevelopPreset {
             s[.gray(.orange)] = 14
             s[.gray(.blue)] = -25
             s.grain = 45
+            s.grainType = .cubic
             s.grainSize = 44
             s.grainRoughness = 68
         },
@@ -864,6 +874,7 @@ extension DevelopPreset {
             grade(&s, .shadows, hue: 210, saturation: 10, luminance: -8)
             s.vignette = -22
             s.grain = 22
+            s.grainType = .cubic
         },
         // Magnum / Alex Webb colorist style: deep dramatic shadows against saturated primary reds,
         // yellows and blues in direct sun.
@@ -915,6 +926,7 @@ extension DevelopPreset {
             grade(&s, .midtones, hue: 30, saturation: 6)
             grade(&s, .highlights, hue: 42, saturation: 10)
             s.grain = 18
+            s.grainType = .cubic
         },
         // Everyday consumer 400 negative (Fuji Superia 400): fourth-layer emerald-cyan shadow
         // tint, punchy magenta-reds and lively grain.
@@ -935,6 +947,7 @@ extension DevelopPreset {
             grade(&s, .shadows, hue: 162, saturation: 12)
             grade(&s, .highlights, hue: 42, saturation: 10)
             s.grain = 24
+            s.grainType = .cubic
             s.grainSize = 28
         },
     ]
@@ -1016,6 +1029,7 @@ extension DevelopPreset {
             grade(&s, .shadows, hue: 200, saturation: 10, luminance: -8)
             grade(&s, .highlights, hue: 48, saturation: 8)
             s.grain = 18
+            s.grainType = .tabular
         },
         // High-contrast chiaroscuro B&W with deep spotlight vignetting and silver highlights.
         look("Cinematic", 3, "Noir") { s in
@@ -1033,6 +1047,7 @@ extension DevelopPreset {
             s.vignette = -42
             s.vignetteMidpoint = 35
             s.grain = 22
+            s.grainType = .cubic
         },
         // Neon-lit cyberpunk & urban night: controlled sign highlights, electric cyan and magenta
         // neon reflections, and deep midnight shadows.
@@ -1122,6 +1137,7 @@ extension DevelopPreset {
             grade(&s, .shadows, hue: 75, saturation: 14)
             grade(&s, .highlights, hue: 42, saturation: 20)
             s.grain = 26
+            s.grainType = .cubic
             s.vignette = -16
         },
         // Early color negative (Agfacolor / 1950s hand-tinted postcard): soft turquoise skies,
@@ -1153,6 +1169,7 @@ extension DevelopPreset {
             grade(&s, .midtones, hue: 36, saturation: 10)
             grade(&s, .highlights, hue: 46, saturation: 22)
             s.grain = 18
+            s.grainType = .cubic
         },
         // Slide film processed in C-41 chemicals (E-6 in C-41): high-contrast skewed channel
         // curves, emerald-cyan shadows and acid-yellow highlights.

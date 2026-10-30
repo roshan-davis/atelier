@@ -161,6 +161,10 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         get { GlowStyle(rawValue: Int(self[.glowStyle].rounded())) ?? .diffusion }
         set { self[.glowStyle] = Double(newValue.rawValue) }
     }
+    public var grainType: GrainType {
+        get { GrainType(rawValue: Int(self[.grainType].rounded())) ?? .standard }
+        set { self[.grainType] = Double(newValue.rawValue) }
+    }
 
     /// How many Point Color swatches a photo can have.
     public static let pointColorCount = 4
@@ -391,6 +395,21 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         }
     }
 
+    /// Effects > Grain > Type: the grain of a kind of film, after DxO FilmPack's per-stock grain.
+    /// Standard is Lightroom's grain.
+    public enum GrainType: Int, CaseIterable, Sendable {
+        case standard, fine, cubic, tabular
+
+        public var title: String {
+            switch self {
+            case .standard: return "Standard"
+            case .fine: return "Fine"
+            case .cubic: return "Cubic"
+            case .tabular: return "Tabular"
+            }
+        }
+    }
+
     /// The color grading wheels.
     public enum GradeRegion: String, CaseIterable, Sendable {
         case shadows = "Shadows", midtones = "Midtones", highlights = "Highlights", global = "Global"
@@ -447,7 +466,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         case lensVignette, lensVignetteMidpoint
         case transformVertical, transformHorizontal, transformRotate, transformAspect, transformScale
         case transformOffsetX, transformOffsetY
-        case vignette, vignetteMidpoint, grain, grainSize, grainRoughness
+        case vignette, vignetteMidpoint, grain, grainSize, grainRoughness, grainType
         case vignetteStyle, vignetteRoundness, vignetteFeather, vignetteHighlights
         case glowAmount, glowStyle, glowRange, glowSpread, glowWarmth
 
@@ -482,7 +501,8 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         /// picked Point Colors are positions or choices, so they jump instead.
         public var blendsLinearly: Bool {
             switch self {
-            case .gradeShadowsHue, .gradeMidtonesHue, .gradeHighlightsHue, .gradeGlobalHue, .vignetteStyle, .glowStyle:
+            case .gradeShadowsHue, .gradeMidtonesHue, .gradeHighlightsHue, .gradeGlobalHue, .vignetteStyle, .glowStyle,
+                 .grainType:
                 return false
             default:
                 return pointColor.map { !$0.setting.isTarget } ?? true
@@ -539,6 +559,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             case .curveRefineSaturation, .vignetteFeather, .vignetteHighlights, .glowAmount, .glowRange, .glowSpread:
                 return 0...100
             case .vignetteStyle, .glowStyle: return 0...2
+            case .grainType: return 0...3
             default:
                 switch pointColor?.setting {
                 case .hue: return 0...360
@@ -574,6 +595,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             case .vignetteMidpoint: return "Midpoint"
             case .grainSize: return "Size"
             case .grainRoughness: return "Roughness"
+            case .grainType: return "Type"
             case .curveHighlights: return "Highlights"
             case .curveLights: return "Lights"
             case .curveDarks: return "Darks"
@@ -611,7 +633,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             if rawValue.hasPrefix("transform") { return .transform }
             switch self {
             case .sharpening, .sharpenRadius, .sharpenDetail, .sharpenMasking, .luminanceNoise, .colorNoise: return .detail
-            case .vignette, .vignetteMidpoint, .grain, .grainSize, .grainRoughness, .vignetteStyle, .vignetteRoundness,
+            case .vignette, .vignetteMidpoint, .grain, .grainSize, .grainRoughness, .grainType, .vignetteStyle, .vignetteRoundness,
                  .vignetteFeather, .vignetteHighlights, .glowAmount, .glowStyle, .glowRange, .glowSpread, .glowWarmth:
                 return .effects
             default: return .basic
@@ -635,7 +657,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             case .vignette, .vignetteMidpoint, .vignetteStyle, .vignetteRoundness, .vignetteFeather, .vignetteHighlights:
                 return "Post-Crop Vignetting"
             case .glowAmount, .glowStyle, .glowRange, .glowSpread, .glowWarmth: return "Glow"
-            case .grain, .grainSize, .grainRoughness: return "Grain"
+            case .grain, .grainSize, .grainRoughness, .grainType: return "Grain"
             case .lensDistortion: return "Distortion"
             case .lensDefringePurpleAmount, .lensDefringePurpleHueLow, .lensDefringePurpleHueHigh,
                  .lensDefringeGreenAmount, .lensDefringeGreenHueLow, .lensDefringeGreenHueHigh: return "Defringe"

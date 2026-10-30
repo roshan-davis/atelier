@@ -28,6 +28,7 @@ SOURCE = os.path.join(ROOT, "Sources/AtelierCore/Develop/BuiltInPresets.swift")
 CELL = 360
 
 HSL = {"hue": "hue", "saturation": "sat", "luminance": "lum"}
+GRAIN_TYPES = ["standard", "fine", "cubic", "tabular"]  # DevelopSettings.GrainType order
 
 
 def parse_presets(path=SOURCE):
@@ -44,6 +45,8 @@ def parse_presets(path=SOURCE):
                 continue
             if mm := re.fullmatch(r"s\.(\w+) = (true|false|-?[\d.]+)", line):
                 s[mm.group(1)] = mm.group(2) == "true" if mm.group(2) in ("true", "false") else float(mm.group(2))
+            elif mm := re.fullmatch(r"s\.grainType = \.(\w+)", line):
+                s["grainType"] = GRAIN_TYPES.index(mm.group(1))
             elif mm := re.fullmatch(r"s\[\.hsl\(\.(\w+), \.(\w+)\)\] = (-?[\d.]+)", line):
                 s[HSL[mm.group(1)] + mm.group(2).capitalize()] = float(mm.group(3))
             elif mm := re.fullmatch(r"s\[\.gray\(\.(\w+)\)\] = (-?[\d.]+)", line):

@@ -243,7 +243,8 @@ public final class DevelopRenderer: @unchecked Sendable {
         }
         if settings.grain > 0 {
             image = FilmGrain.apply(image, amount: settings.grain / 100, size: settings.grainSize / 100,
-                                    roughness: settings.grainRoughness / 100, scale: scale, extent: extent)
+                                    roughness: settings.grainRoughness / 100, type: settings.grainType,
+                                    scale: scale, extent: extent)
         }
         if let overlay, let mask = settings.masks.first(where: { $0.id == overlay }) {
             image = self.overlay(mask, on: image, base: beforeMasks, provider: masks)
