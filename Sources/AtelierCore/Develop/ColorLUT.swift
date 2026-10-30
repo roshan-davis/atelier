@@ -1,9 +1,16 @@
+import CoreGraphics
 import Foundation
 
-/// Builds the color cube for the HSL / Color and Color Grading panels. Both are per-pixel color
-/// mappings, so one 3D lookup table applies them together on the GPU.
+/// Builds the color cube for the HSL / Color and Color Grading panels. All of them are per-pixel
+/// color mappings, so one 3D lookup table applies them together on the GPU.
+///
+/// The cube spans Display P3 (the screen's gamut, with sRGB's tone curve), not sRGB: a cube's
+/// lookup clamps its input to the cube, so an sRGB cube flattened every color beyond sRGB (deep
+/// reds, magentas, cyan water) the moment an HSL slider or a wheel moved. The adjustments
+/// themselves work on sRGB-encoded values that may fall outside 0...1 for those colors.
 enum ColorLUT {
     static let dimension = 32
+    static let space = CGColorSpace(name: CGColorSpace.displayP3)!
 
     private static let lock = NSLock()
     nonisolated(unsafe) private static var cachedKey: [Double]?
@@ -21,16 +28,11 @@ enum ColorLUT {
         lock.lock()
         defer { lock.unlock() }
         if key == cachedKey, let cachedCube { return cachedCube }
-        let hsl = HSLAdjustment(settings), bw = settings.monochrome ? BWMix(settings) : nil, grade = ColorGrade(settings)
-        // In Black & White, the B&W Mix replaces HSL; color grading then tones the grays.
-        let cube = build { color in
-            var rgb = color
-            if let bw {
-                rgb = bw.apply(rgb)
-            } else if hsl.isActive {
-                rgb = hsl.apply(rgb)
-            }
-            return grade.isActive ? grade.apply(rgb) : rgb
+        let color = ColorMix(settings), grade = ColorGrade(settings)
+        // In Black & White, the B&W Mix replaces HSL and Point Color; color grading then tones the grays.
+        let cube = build { rgb in
+            let mixed = color.apply(rgb)
+            return grade.isActive ? grade.apply(mixed) : mixed
         }
         cachedKey = key
         cachedCube = cube
@@ -40,18 +42,24 @@ enum ColorLUT {
     /// Color Grading Balance's Option-drag view: the colors after HSL, mapped to the color of the
     /// tonal range each falls in (see `ColorGrade.regionMap`).
     static func regionMapCube(for settings: DevelopSettings) -> Data {
-        let hsl = HSLAdjustment(settings), bw = settings.monochrome ? BWMix(settings) : nil, grade = ColorGrade(settings)
-        return build { color in
-            var rgb = color
-            if let bw {
-                rgb = bw.apply(rgb)
-            } else if hsl.isActive {
-                rgb = hsl.apply(rgb)
-            }
-            return grade.regionMap(rgb)
+        let color = ColorMix(settings), grade = ColorGrade(settings)
+        return build { grade.regionMap(color.apply($0)) }
+    }
+
+    /// Point Color's Visualize Range: the colors after HSL, kept where `swatch` selects them
+    /// and gray elsewhere.
+    static func pointRangeCube(for settings: DevelopSettings, swatch: Int) -> Data {
+        let hsl = HSLAdjustment(settings)
+        let selection = PointColorAdjustment.Swatch(settings, index: swatch)
+        return build { rgb in
+            let lab = Oklab.fromEncoded(hsl.isActive && !settings.monochrome ? hsl.apply(rgb) : rgb)
+            let weight = selection.map { $0.selection(lab) } ?? 0
+            return Oklab.toEncodedExtended(SIMD3(lab.x, lab.y * weight, lab.z * weight))
         }
     }
 
+    /// `map` takes and gives sRGB-encoded colors, which may lie outside 0...1; the cube's own
+    /// grid and output are Display P3-encoded.
     private static func build(_ map: (RGB) -> RGB) -> Data {
         let n = dimension
         var values = [Float](repeating: 0, count: n * n * n * 4)
@@ -60,7 +68,8 @@ enum ColorLUT {
         for b in 0..<n {
             for g in 0..<n {
                 for r in 0..<n {
-                    let rgb = map((Double(r) / Double(n - 1), Double(g) / Double(n - 1), Double(b) / Double(n - 1)))
+                    let node: RGB = (Double(r) / Double(n - 1), Double(g) / Double(n - 1), Double(b) / Double(n - 1))
+                    let rgb = Oklab.encodedP3(fromSRGB: map(Oklab.encodedSRGB(fromP3: node)))
                     values[index] = Float(min(1, max(0, rgb.0)))
                     values[index + 1] = Float(min(1, max(0, rgb.1)))
                     values[index + 2] = Float(min(1, max(0, rgb.2)))
@@ -114,53 +123,213 @@ func hslToRGB(_ h: Double, _ s: Double, _ l: Double) -> RGB {
     return (rgb.0 + m, rgb.1 + m, rgb.2 + m)
 }
 
-/// Lightroom-style HSL: eight overlapping hue bands, each shifting hue, scaling saturation and
-/// raising or lowering luminance of the colors it covers. Grays are never touched.
+/// The HSL / Color panel as one mapping: HSL then Point Color, or in Black & White the B&W Mix.
+struct ColorMix {
+    let hsl: HSLAdjustment
+    let points: PointColorAdjustment
+    let bw: BWMix?
+
+    init(_ settings: DevelopSettings) {
+        hsl = HSLAdjustment(settings)
+        points = PointColorAdjustment(settings)
+        bw = settings.monochrome ? BWMix(settings) : nil
+    }
+
+    func apply(_ rgb: RGB) -> RGB {
+        if let bw { return bw.apply(rgb) }
+        guard hsl.isActive || points.isActive else { return rgb }
+        var lab = Oklab.fromEncoded(rgb)
+        if hsl.isActive { lab = hsl.apply(lab) }
+        if points.isActive { lab = points.apply(lab) }
+        return Oklab.toEncodedExtended(lab)
+    }
+}
+
+/// Lightroom-style HSL: eight overlapping hue bands, each turning the hue, scaling the
+/// saturation and raising or lowering the luminance of the colors it covers.
+///
+/// It works in Oklab's lightness, chroma and hue, so the sliders act the way the eye sees:
+/// Saturation -100 leaves a color's brightness as it was (in HSL math pure blue turned 50% gray),
+/// Luminance moves perceived brightness, and grays, near-blacks and near-whites (whose noise
+/// HSL math counted as colorful) are left alone. A change that would leave Display P3 lowers the
+/// color's chroma instead of clipping it, so it keeps its hue.
 struct HSLAdjustment {
     typealias Band = DevelopSettings.ColorBand
-    private let hue: [Double]
+    private let hueShift: [Double]
     private let saturation: [Double]
     private let luminance: [Double]
     let isActive: Bool
 
     init(_ settings: DevelopSettings) {
-        hue = Band.allCases.map { settings[.hsl(.hue, $0)] / 100 }
+        hueShift = Band.allCases.map { settings[.hsl(.hue, $0)] / 100 }
         saturation = Band.allCases.map { settings[.hsl(.saturation, $0)] / 100 }
         luminance = Band.allCases.map { settings[.hsl(.luminance, $0)] / 100 }
-        isActive = (hue + saturation + luminance).contains { $0 != 0 }
+        isActive = (hueShift + saturation + luminance).contains { $0 != 0 }
     }
 
-    /// Weights of the eight bands for a hue: linear between neighboring band centers, so they
-    /// always sum to 1.
-    static func weights(for h: Double) -> [Double] {
-        let centers = Band.allCases.map(\.hue)
-        var weights = [Double](repeating: 0, count: centers.count)
-        for i in centers.indices {
+    /// Each band's center as an Oklab hue: where its namesake (the pure sRGB red, orange, yellow
+    /// ... at full HSL saturation) sits. Rising, from red at about 29°.
+    static let centers: [Double] = Band.allCases.map { band in
+        Oklab.chromaHue(Oklab.fromEncoded(hslToRGB(band.hue, 1, 0.5))).hue
+    }
+
+    /// Weights of the eight bands for an Oklab hue: linear between neighboring band centers, so
+    /// they always sum to 1.
+    static func weights(for hue: Double) -> [Double] {
+        let count = centers.count
+        var h = hue
+        if h < centers[0] { h += 360 }
+        var weights = [Double](repeating: 0, count: count)
+        for i in 0..<count {
             let start = centers[i]
-            let end = i + 1 < centers.count ? centers[i + 1] : 360
+            let end = i + 1 < count ? centers[i + 1] : centers[0] + 360
             guard h >= start, h < end else { continue }
             let t = (h - start) / (end - start)
             weights[i] = 1 - t
-            weights[(i + 1) % centers.count] = t
+            weights[(i + 1) % count] = t
         }
         return weights
     }
 
-    func apply(_ color: RGB) -> RGB {
-        let (h, s, l) = rgbToHSL(color)
-        guard s > 0.001 else { return color }
-        let weights = Self.weights(for: h)
-        var hueShift = 0.0, satScale = 0.0, lumShift = 0.0
+    /// Degrees a band's Hue slider turns its colors at +100 (toward the next band) or -100
+    /// (toward the previous one): three quarters of the way to that band's center.
+    static func hueReach(_ band: Int, positive: Bool) -> Double {
+        let count = centers.count
+        let gap = positive
+            ? (band + 1 < count ? centers[band + 1] : centers[0] + 360) - centers[band]
+            : centers[band] - (band > 0 ? centers[band - 1] : centers[count - 1] - 360)
+        return 0.75 * gap
+    }
+
+    /// How fully a color of this Oklab chroma is treated as a color: 0 for grays and the faint
+    /// tints of noise, 1 from a pastel's chroma up.
+    static func colorfulness(_ chroma: Double) -> Double {
+        let t = min(1, chroma / 0.03)
+        return t * t * (3 - 2 * t)
+    }
+
+    /// How strongly Luminance (and the B&W Mix) moves a color of this chroma: in proportion to
+    /// how vivid it is, full from about skin-tone strength up.
+    static func strength(_ chroma: Double) -> Double {
+        min(1, chroma / 0.15)
+    }
+
+    func apply(_ lab: SIMD3<Double>) -> SIMD3<Double> {
+        let (chroma, hue) = Oklab.chromaHue(lab)
+        let gate = Self.colorfulness(chroma)
+        guard gate > 0 else { return lab }
+        let weights = Self.weights(for: hue)
+        var turn = 0.0, scale = 0.0, lift = 0.0
         for i in weights.indices where weights[i] > 0 {
-            hueShift += weights[i] * hue[i]
-            satScale += weights[i] * saturation[i]
-            lumShift += weights[i] * luminance[i]
+            turn += weights[i] * hueShift[i] * Self.hueReach(i, positive: hueShift[i] > 0)
+            scale += weights[i] * saturation[i]
+            lift += weights[i] * luminance[i]
         }
-        let newHue = h + hueShift * 30
-        let newSat = min(1, max(0, s * (1 + satScale)))
-        // Luminance acts in proportion to how colorful the pixel is.
-        let newLum = min(1, max(0, l + lumShift * 0.25 * s * (lumShift > 0 ? 1 - l : l) * 2))
-        return hslToRGB(newHue, newSat, newLum)
+        let lightness = lab.x
+        let newLightness = lightness + lift * 0.5 * Self.strength(chroma) * (lift > 0 ? 1 - lightness : lightness)
+        let newChroma = chroma * max(0, 1 + scale * gate)
+        let result = Oklab.lab(lightness: min(1, max(0, newLightness)), chroma: newChroma, hue: hue + turn * gate)
+        return Oklab.fittedToDisplayP3(result)
+    }
+
+    /// The same on an sRGB-encoded color.
+    func apply(_ color: RGB) -> RGB {
+        let lab = Oklab.fromEncoded(color)
+        let result = apply(lab)
+        return result == lab ? color : Oklab.toEncodedExtended(result)
+    }
+}
+
+/// Lightroom's Point Color: pick a color, then shift the hue, saturation and luminance of the
+/// colors near it. Range widens or narrows which colors count as near (by hue, lightness and
+/// chroma, with a soft edge). Uniformity, from Capture One's skin tone tool, pulls the selected
+/// colors toward the picked one, evening out blotchy skin or a patchy sky.
+struct PointColorAdjustment {
+    struct Swatch {
+        var lightness: Double
+        var chroma: Double
+        var hue: Double
+        var hueShift: Double
+        var satShift: Double
+        var lumShift: Double
+        var range: Double
+        var uniformity: Double
+
+        /// Swatch `index` of `settings`, or nil when it has no picked color.
+        init?(_ settings: DevelopSettings, index: Int) {
+            guard settings.hasPointColor(index) else { return nil }
+            func value(_ setting: DevelopSettings.PointColorSetting) -> Double {
+                settings[.pointColor(index, setting)]
+            }
+            lightness = value(.lightness) / 100
+            chroma = value(.chroma) / 100
+            hue = value(.hue)
+            hueShift = value(.hueShift) / 100
+            satShift = value(.satShift) / 100
+            lumShift = value(.lumShift) / 100
+            range = value(.range) / 100
+            uniformity = value(.uniformity) / 100
+        }
+
+        var isActive: Bool { hueShift != 0 || satShift != 0 || lumShift != 0 || uniformity != 0 }
+
+        /// How much a color belongs to this swatch, 0...1: full near the picked color, fading to
+        /// nothing at the edge of the range.
+        func selection(_ lab: SIMD3<Double>) -> Double {
+            let (c, h) = Oklab.chromaHue(lab)
+            var dh = abs(h - hue).truncatingRemainder(dividingBy: 360)
+            if dh > 180 { dh = 360 - dh }
+            let hueWidth = 10 + 50 * range
+            let lightWidth = 0.12 + 0.5 * range
+            let chromaWidth = 0.6 * chroma + 0.1 * range + 0.02
+            return Self.falloff(dh / hueWidth) * Self.falloff(abs(lab.x - lightness) / lightWidth)
+                * Self.falloff(abs(c - chroma) / chromaWidth) * HSLAdjustment.colorfulness(c)
+        }
+
+        static func falloff(_ t: Double) -> Double {
+            guard t < 1 else { return 0 }
+            let u = 1 - t * t
+            return u * u
+        }
+
+        func apply(_ lab: SIMD3<Double>) -> SIMD3<Double> {
+            let w = selection(lab)
+            guard w > 0 else { return lab }
+            var (c, h) = Oklab.chromaHue(lab)
+            var l = lab.x
+            if uniformity != 0 {
+                var dh = (h - hue).truncatingRemainder(dividingBy: 360)
+                if dh > 180 { dh -= 360 } else if dh < -180 { dh += 360 }
+                h -= w * uniformity * dh
+                c += w * uniformity * (chroma - c)
+                // Lightness evens out less, so the shading that gives a face its shape stays.
+                l += w * uniformity * 0.35 * (lightness - l)
+            }
+            h += w * hueShift * 30
+            c *= max(0, 1 + w * satShift)
+            l += w * lumShift * 0.5 * (lumShift > 0 ? 1 - l : l)
+            return Oklab.fittedToDisplayP3(Oklab.lab(lightness: min(1, max(0, l)), chroma: c, hue: h))
+        }
+    }
+
+    let swatches: [Swatch]
+    var isActive: Bool { !swatches.isEmpty }
+
+    init(_ settings: DevelopSettings) {
+        swatches = (0..<DevelopSettings.pointColorCount).compactMap { Swatch(settings, index: $0) }.filter(\.isActive)
+    }
+
+    func apply(_ lab: SIMD3<Double>) -> SIMD3<Double> {
+        swatches.reduce(lab) { $1.apply($0) }
+    }
+
+    /// The color a swatch picks from an sRGB-encoded sample: Oklab hue, chroma ×100 and
+    /// lightness ×100, as stored. Nil for a gray, which has no color to pick.
+    static func target(of sample: SIMD3<Double>) -> (hue: Double, chroma: Double, lightness: Double)? {
+        let lab = Oklab.fromEncoded((sample.x, sample.y, sample.z))
+        let (chroma, hue) = Oklab.chromaHue(lab)
+        guard chroma >= 0.02 else { return nil }
+        return ((hue * 10).rounded() / 10, min(50, (chroma * 1000).rounded() / 10), min(100, (lab.x * 1000).rounded() / 10))
     }
 }
 
@@ -176,14 +345,15 @@ struct BWMix {
 
     func apply(_ color: RGB) -> RGB {
         let y = luma(color)
-        let (h, s, _) = rgbToHSL(color)
+        let (chroma, hue) = Oklab.chromaHue(Oklab.fromEncoded(color))
         var shift = 0.0
-        if s > 0.001 {
-            let weights = HSLAdjustment.weights(for: h)
+        let strength = HSLAdjustment.strength(chroma) * HSLAdjustment.colorfulness(chroma)
+        if strength > 0 {
+            let weights = HSLAdjustment.weights(for: hue)
             for i in weights.indices where weights[i] > 0 { shift += weights[i] * mix[i] }
         }
         // At +100 a saturated color moves most of the way to white; at -100 most of the way to black.
-        let gray = min(1, max(0, y + shift * s * 0.8 * (shift > 0 ? 1 - y : y)))
+        let gray = min(1, max(0, y + shift * strength * 0.8 * (shift > 0 ? 1 - y : y)))
         return (gray, gray, gray)
     }
 }
@@ -194,7 +364,7 @@ struct BWMix {
 /// The hue numbers are Lightroom's (0 red, 60 yellow, 120 green, 240 blue), but each tint is
 /// built in Oklab, so the same Saturation looks equally strong at every hue. Luminance raises or
 /// lowers lightness with a roll-off toward white and black, so it never clips; a tint that would
-/// leave the screen's colors is shortened instead of clipped, so it keeps its hue.
+/// leave the screen's colors (Display P3) is shortened instead of clipped, so it keeps its hue.
 public struct ColorGrade {
     public typealias Region = DevelopSettings.GradeRegion
     /// Oklab chroma a wheel adds at Saturation 100 where its range has full weight.
@@ -251,17 +421,12 @@ public struct ColorGrade {
         let lightness = lab.x
         lab.x = min(1, max(0, lightness + lift * Self.luminanceStrength * (lift > 0 ? 1 - lightness : lightness)))
         // A new lightness can put a vivid color out of gamut: keep its hue and lower its chroma.
-        if !Oklab.inGamut(lab) {
-            let base = lab
-            let scale = Self.largestFraction { Oklab.inGamut(SIMD3(base.x, base.y * $0, base.z * $0)) }
-            lab.y *= scale
-            lab.z *= scale
-        }
+        lab = Oklab.fittedToDisplayP3(lab)
         let start = lab
-        let reach = Self.largestFraction { Oklab.inGamut(SIMD3(start.x, start.y + shift.x * $0, start.z + shift.y * $0)) }
+        let reach = Self.largestFraction { Oklab.inDisplayP3(SIMD3(start.x, start.y + shift.x * $0, start.z + shift.y * $0)) }
         lab.y += shift.x * reach
         lab.z += shift.y * reach
-        return Oklab.toEncoded(lab)
+        return Oklab.toEncodedExtended(lab)
     }
 
     /// The largest t in 0...1 for which `fits` holds, given it holds at 0 and fails past some point.
@@ -326,7 +491,7 @@ public struct ColorGrade {
         settings[.gradeGlobalHue] = hue
         settings[.gradeGlobalSat] = saturation
         let color = ColorGrade(settings).apply((0.5, 0.5, 0.5))
-        return (color.0, color.1, color.2)
+        return (min(1, max(0, color.0)), min(1, max(0, color.1)), min(1, max(0, color.2)))
     }
 
     // MARK: Views and tools

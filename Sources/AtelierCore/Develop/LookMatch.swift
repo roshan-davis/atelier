@@ -100,10 +100,6 @@ public struct LookSample: Sendable {
     var b: [Float] = []
     /// sRGB-encoded luma, as the tone curve sees it.
     var luma: [Float] = []
-    /// Hue (degrees), saturation and lightness of the sRGB-encoded color, as the HSL panel sees it.
-    var hue: [Float] = []
-    var hslSaturation: [Float] = []
-    var hslLightness: [Float] = []
     var weight: [Double] = []
 
     public init?(image: CGImage, area: CGRect? = nil) {
@@ -130,9 +126,6 @@ public struct LookSample: Sendable {
         a.reserveCapacity(count)
         b.reserveCapacity(count)
         luma.reserveCapacity(count)
-        hue.reserveCapacity(count)
-        hslSaturation.reserveCapacity(count)
-        hslLightness.reserveCapacity(count)
         var inside = [Bool](repeating: false, count: count)
         let linear = Self.linearTable
         for i in 0..<count {
@@ -142,10 +135,6 @@ public struct LookSample: Sendable {
             a.append(Float(lab.1))
             b.append(Float(lab.2))
             luma.append(Float((0.2126 * Double(r8) + 0.7152 * Double(g8) + 0.0722 * Double(b8)) / 255))
-            let hsl = rgbToHSL((Double(r8) / 255, Double(g8) / 255, Double(b8) / 255))
-            hue.append(Float(hsl.h))
-            hslSaturation.append(Float(hsl.s))
-            hslLightness.append(Float(hsl.l))
             if let area {
                 let x = (Double(i % width) + 0.5) / Double(width), y = (Double(i / width) + 0.5) / Double(height)
                 inside[i] = area.contains(CGPoint(x: x, y: y))
@@ -235,36 +224,34 @@ public struct LookSample: Sendable {
         return sum / Double(count)
     }
 
-    /// One HSL band's share of the image and the average color of the pixels it covers.
+    /// One HSL band's share of the image and the average color of the pixels it covers: Oklab
+    /// hue in degrees, chroma and lightness, as the HSL panel sees them.
     struct BandStats {
         var share = 0.0
         var hue = 0.0
-        var saturation = 0.0
+        var chroma = 0.0
         var lightness = 0.0
     }
 
     /// Per HSL band, weighted the way the HSL panel weights a pixel's hue between two band centers.
     /// Grays and near-black or near-white pixels are left out, as the panel barely moves them.
     func bandStats() -> [BandStats] {
-        let centers = DevelopSettings.ColorBand.allCases.map(\.hue)
-        let bands = centers.count
+        let bands = DevelopSettings.ColorBand.allCases.count
         var weightSum = [Double](repeating: 0, count: bands), cosSum = weightSum, sinSum = weightSum,
-            satSum = weightSum, lightSum = weightSum
+            chromaSum = weightSum, lightSum = weightSum
         let total = weight.reduce(0, +)
         for i in 0..<count {
-            let s = Double(hslSaturation[i]), l = Double(hslLightness[i])
-            guard s > 0.12, l > 0.08, l < 0.92 else { continue }
-            let h = Double(hue[i])
-            var lower = bands - 1
-            for k in 0..<bands where h >= centers[k] { lower = k }
-            let start = centers[lower], end = lower + 1 < bands ? centers[lower + 1] : 360
-            let t = h >= start ? (h - start) / (end - start) : 0
-            for (band, share) in [(lower, 1 - t), ((lower + 1) % bands, t)] where share > 0 {
+            let l = Double(lightness[i]), da = Double(a[i]), db = Double(b[i])
+            let c = (da * da + db * db).squareRoot()
+            guard c > 0.03, l > 0.2, l < 0.95 else { continue }
+            var h = atan2(db, da) * 180 / .pi
+            if h < 0 { h += 360 }
+            for (band, share) in HSLAdjustment.weights(for: h).enumerated() where share > 0 {
                 let w = weight[i] * share
                 weightSum[band] += w
                 cosSum[band] += cos(h * .pi / 180) * w
                 sinSum[band] += sin(h * .pi / 180) * w
-                satSum[band] += s * w
+                chromaSum[band] += c * w
                 lightSum[band] += l * w
             }
         }
@@ -273,7 +260,7 @@ public struct LookSample: Sendable {
             guard w > 0, total > 0 else { return BandStats() }
             var degrees = atan2(sinSum[band], cosSum[band]) * 180 / .pi
             if degrees < 0 { degrees += 360 }
-            return BandStats(share: w / total, hue: degrees, saturation: satSum[band] / w, lightness: lightSum[band] / w)
+            return BandStats(share: w / total, hue: degrees, chroma: chromaSum[band] / w, lightness: lightSum[band] / w)
         }
     }
 
@@ -506,18 +493,19 @@ public enum LookMatcher {
                 let luminance = DevelopSettings.Parameter.hsl(.luminance, band)
                 var dh = (t.hue - p.hue).truncatingRemainder(dividingBy: 360)
                 if dh > 180 { dh -= 360 } else if dh < -180 { dh += 360 }
-                // A band's Hue slider at 100 turns its colors 30°.
+                // A band's Hue slider at 100 turns its colors most of the way to the next band.
+                let reach = HSLAdjustment.hueReach(i, positive: dh > 0)
                 if abs(dh) > 2 {
-                    settings[hue] = min(maxHSLHue, max(-maxHSLHue, settings[hue] + dh / 30 * 100 * damping)).rounded()
+                    settings[hue] = min(maxHSLHue, max(-maxHSLHue, settings[hue] + dh / reach * 100 * damping)).rounded()
                 }
-                if p.saturation > 0.03 {
-                    let ratio = 1 + (t.saturation / p.saturation - 1) * damping
+                if p.chroma > 0.03 {
+                    let ratio = 1 + (t.chroma / p.chroma - 1) * damping
                     let value = ((1 + settings[saturation] / 100) * ratio - 1) * 100
                     settings[saturation] = min(maxHSLSaturation, max(-maxHSLSaturation, value)).rounded()
                 }
-                // Luminance moves a color by about amount × 0.5 × saturation × its room to move.
+                // Luminance moves a color by about amount × 0.5 × its strength × its room to move.
                 let dl = t.lightness - p.lightness
-                let room = 0.5 * p.saturation * (dl > 0 ? 1 - p.lightness : p.lightness)
+                let room = 0.5 * HSLAdjustment.strength(p.chroma) * (dl > 0 ? 1 - p.lightness : p.lightness)
                 if abs(dl) > 0.01, room > 0.01 {
                     let value = settings[luminance] + dl / room * 100 * damping
                     settings[luminance] = min(maxHSLLuminance, max(-maxHSLLuminance, value)).rounded()

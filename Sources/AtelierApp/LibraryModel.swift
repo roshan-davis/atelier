@@ -833,6 +833,17 @@ final class LibraryModel: ObservableObject {
             }
             return true
         }
+        // Arrow keys over the point curve nudge its selected point, as in Lightroom.
+        if mode == .develop, develop.hoveredCurvePoint != nil, (123...126).contains(event.keyCode) {
+            let large = event.modifierFlags.contains(.shift)
+            switch event.keyCode {
+            case 123: develop.nudgeCurvePoint(dx: -1, dy: 0, large: large)   // left
+            case 124: develop.nudgeCurvePoint(dx: 1, dy: 0, large: large)    // right
+            case 125: develop.nudgeCurvePoint(dx: 0, dy: -1, large: large)   // down
+            default: develop.nudgeCurvePoint(dx: 0, dy: 1, large: large)     // up
+            }
+            return true
+        }
         if mode == .develop, handleTransformKey(event) { return true }
         if mode == .develop, handleMaskingKey(event) { return true }
 

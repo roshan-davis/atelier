@@ -16,69 +16,101 @@
 <h1>Tone Curve</h1>
 <p class="lede">Reshape brightness exactly where you want it. The curve maps each tone of the photo (along the bottom) to a new brightness (up the side).</p>
 
-<div class="chips"><a href="#curve">Edit the curve</a><a href="#shapes">Common shapes</a><a href="#channels">RGB, Red, Green, Blue</a><a href="#region">Region sliders</a></div>
+<div class="chips"><a href="#parametric">Parametric curve</a><a href="#curve">Point curve</a><a href="#shapes">Common shapes</a><a href="#channels">RGB, Red, Green, Blue</a><a href="#refine">Refine Saturation</a><a href="#targeted">Targeted Adjustment</a></div>
 
-<h2 id="curve">Edit the curve</h2>
+<h2 id="parametric">Parametric curve</h2>
+<p>The quick way to shape tones without placing points. Pick <b>Parametric</b> at the top of the panel.</p>
 <figure>
   <div class="pins pinned">
   <div class="panel">
     <div class="ph"><span class="chev">›</span>Tone Curve<span class="dot"></span><span class="grow"></span><span class="reset">↺</span><span class="switch"></span></div>
     <div class="pb">
-      <div class="row" data-pin="1"><span class="seg"><span class="sel">RGB</span><span>Red</span><span>Green</span><span>Blue</span></span><span style="color:var(--app-text-2)">↺</span></div>
+      <div class="row" data-pin="1"><span style="color:var(--app-text-2)">◎</span><span class="seg"><span class="sel">Parametric</span><span>Point</span></span></div>
+      <div class="canvas" style="aspect-ratio:1" data-pin="2">
+        <canvas class="histogram" data-channel="l" style="position:absolute;inset:0;width:100%;height:100%"></canvas>
+        <svg viewBox="0 0 100 100" style="position:absolute;inset:0;width:100%;height:100%">
+          <rect x="0" y="0" width="25" height="100" fill="#fff" fill-opacity=".08"/>
+          <g stroke="#fff" stroke-opacity=".12" stroke-width=".4"><path d="M25 0V100M50 0V100M75 0V100M0 25H100M0 50H100M0 75H100"/></g>
+          <path d="M0 100L100 0" stroke="#fff" stroke-opacity=".25" stroke-width=".5" stroke-dasharray="1.5 1.5"/>
+          <path d="M0,100 C6,90 10,80 12.5,76 C22,66 30,62 37.5,60 C50,50 60,40 62.5,37.5 C75,26 82,16 87.5,12.5 C94,7 97,3 100,0" fill="none" stroke="#fff" stroke-width="1"/>
+        </svg>
+      </div>
+      <div class="row" data-pin="3" style="justify-content:space-between;padding:0 22% 0 23%;color:var(--app-text-2)"><span>▲</span><span>▲</span><span>▲</span></div>
+      <div class="gh">Region</div>
+      <div class="sl" data-name="Highlights" data-value="0" data-at="0.5"></div>
+      <div class="sl" data-name="Lights" data-value="0" data-at="0.5"></div>
+      <div class="sl" data-name="Darks" data-value="0" data-at="0.5"></div>
+      <div class="sl" data-name="Shadows" data-value="+50" data-at="0.75"></div>
+    </div>
+  </div>
+  </div>
+</figure>
+<ol class="legend">
+  <li><b>Targeted Adjustment</b> (◎), then <b>Parametric</b> or <b>Point</b>.</li>
+  <li><b>The curve</b> over the histogram. Drag up or down on it to move the region under the pointer, which is shaded.</li>
+  <li><b>Split points</b>: drag a triangle to move where one region ends and the next begins. Right-click the graph to reset regions or splits.</li>
+</ol>
+<dl class="defs">
+  <dt>Highlights</dt><dd>The brightest tones, above the right triangle.</dd>
+  <dt>Lights</dt><dd>Between the middle and right triangles.</dd>
+  <dt>Darks</dt><dd>Between the left and middle triangles.</dd>
+  <dt>Shadows</dt><dd>The darkest tones, below the left triangle.</dd>
+</dl>
+<p>Each goes from −100 to +100. Black and white never move, so Shadows +100 opens up dark areas without turning black gray. Lights up and Darks down is a gentle S-curve. The region curve works on top of Basic tone, as in Lightroom.</p>
+
+<h2 id="curve">Point curve</h2>
+<figure>
+  <div class="pins pinned">
+  <div class="panel">
+    <div class="ph"><span class="chev">›</span>Tone Curve<span class="dot"></span><span class="grow"></span><span class="reset">↺</span><span class="switch"></span></div>
+    <div class="pb">
+      <div class="row" data-pin="1"><span class="seg"><span class="sel">RGB</span><span>Red</span><span>Green</span><span>Blue</span></span><span style="color:var(--app-text-2)">⋯</span></div>
       <div class="canvas" style="aspect-ratio:1" data-pin="2">
         <canvas class="histogram" data-channel="l" style="position:absolute;inset:0;width:100%;height:100%"></canvas>
         <svg viewBox="0 0 100 100" style="position:absolute;inset:0;width:100%;height:100%">
           <g stroke="#fff" stroke-opacity=".12" stroke-width=".4"><path d="M25 0V100M50 0V100M75 0V100M0 25H100M0 50H100M0 75H100"/></g>
           <path d="M0 100L100 0" stroke="#fff" stroke-opacity=".25" stroke-width=".5" stroke-dasharray="1.5 1.5"/>
           <path d="M0,100 C12,96 18,86 25,82 C35,76 42,56 50,50 C58,44 66,22 75,17 C84,12 92,4 100,0" fill="none" stroke="#fff" stroke-width="1"/>
-          <g fill="#000" stroke="#fff" stroke-width=".9"><circle cx="0" cy="100" r="2"/><circle cx="25" cy="82" r="2"/><circle cx="50" cy="50" r="2"/><circle cx="75" cy="17" r="2"/><circle cx="100" cy="0" r="2"/></g>
+          <g fill="#000" stroke="#fff" stroke-width=".9"><circle cx="0" cy="100" r="2"/><circle cx="25" cy="82" r="2" fill="#fff"/><circle cx="50" cy="50" r="2"/><circle cx="75" cy="17" r="2"/><circle cx="100" cy="0" r="2"/></g>
         </svg>
       </div>
-      <div class="muted">Click the curve to add a point and drag it. Double-click a point to remove it.</div>
-      <div class="gh" data-pin="3">Region</div>
-      <div class="sl" data-name="Highlights" data-value="0" data-at="0.5"></div>
-      <div class="sl" data-name="Lights" data-value="0" data-at="0.5"></div>
-      <div class="sl" data-name="Darks" data-value="0" data-at="0.5"></div>
-      <div class="sl" data-name="Shadows" data-value="0" data-at="0.5"></div>
+      <div class="row" data-pin="3"><span style="color:var(--app-text-2)">Input</span> <b>64</b> <span style="color:var(--app-text-2)">Output</span> <b>46</b></div>
     </div>
   </div>
   </div>
 </figure>
 <ol class="legend">
-  <li><b>Channel</b>: RGB changes brightness; Red, Green and Blue change one color each. ↺ resets the channel shown.</li>
+  <li><b>Channel</b>: RGB changes brightness; Red, Green and Blue change one color each. The ⋯ menu (also on right-click) has Linear, Medium Contrast and Strong Contrast, your saved curves, Save Curve…, Copy and Paste a channel, Reset, Snap to Grid and Show All Curves.</li>
   <li><b>The curve</b>, over the photo's histogram. The dashed diagonal is “no change”. Left is black, right is white.</li>
-  <li><b>Region sliders</b>: a quick way to bend the RGB curve without placing points.</li>
+  <li><b>Input and Output</b> of the selected point, 0 to 255. Type a number to move it.</li>
 </ol>
 <ol class="steps">
-  <li><b>Add a point:</b> click anywhere on the curve, then drag it. Up brightens those tones, down darkens them.</li>
-  <li><b>Move a point:</b> drag it. Points stay in order from left to right.</li>
-  <li><b>Remove a point:</b> double-click it. The two end points always stay.</li>
+  <li><b>Add a point:</b> click anywhere on the curve, then drag it. Up brightens those tones, down darkens them. A curve holds up to 16 points.</li>
+  <li><b>Move a point:</b> drag it, or with the pointer over the graph press the arrow keys (<kbd>⇧</kbd> for bigger steps). Points stay in order from left to right.</li>
+  <li><b>Remove a point:</b> drag it off the graph, or double-click it. The two end points always stay.</li>
 </ol>
 
 <h2 id="shapes">Common shapes</h2>
 <div class="duo">
   <figure>
     <div class="frame compare" data-before="redwoods-flat.jpg" data-after="tone-curve-after.jpg" data-labels="Before|S-curve"></div>
-    <figcaption><b>S-curve</b> (like the one drawn above): darks down, lights up. More contrast in the midtones.</figcaption>
+    <figcaption><b>S-curve</b> (like the one drawn above, or Medium Contrast in the ⋯ menu): darks down, lights up. More contrast in the midtones.</figcaption>
   </figure>
   <figure>
     <div class="frame compare" data-before="redwoods.jpg" data-after="tone-curve-matte.jpg" data-labels="Before|Matte"></div>
     <figcaption><b>Matte</b>: raise the left end point so black becomes dark gray, and lower the right end a little. A faded film look.</figcaption>
   </figure>
 </div>
-<p>Basic tone, the region sliders and the RGB curve keep each color's hue, as Lightroom does: a curve makes colors brighter or darker, never a different color. The faint second line under the RGB curve shows the combined result of Basic tone and the region sliders.</p>
+<p>Basic tone, the region curve and the RGB curve keep each color's hue, as Lightroom does: a curve makes colors brighter or darker, never a different color. The faint second line under the RGB curve shows the combined result of Basic tone and the region curve.</p>
 
 <h2 id="channels">Red, Green and Blue curves</h2>
-<p>These work on one channel at a time, so they <i>do</i> shift color, on purpose. Raise the Blue curve's left end to put blue into the shadows; lower its right end for yellow highlights. For tinting by tone, <a href="color-grading.html">Color Grading</a> is usually easier.</p>
+<p>These work on one channel at a time, so they <i>do</i> shift color, on purpose. Raise the Blue curve's left end to put blue into the shadows; lower its right end for yellow highlights. Turn on <b>Show All Curves</b> to see the other channels faintly. For tinting by tone, <a href="color-grading.html">Color Grading</a> is usually easier.</p>
 
-<h2 id="region">Region sliders</h2>
-<dl class="defs">
-  <dt>Highlights</dt><dd>The brightest quarter of tones.</dd>
-  <dt>Lights</dt><dd>Bright midtones.</dd>
-  <dt>Darks</dt><dd>Dark midtones.</dd>
-  <dt>Shadows</dt><dd>The darkest quarter.</dd>
-</dl>
-<p>Each goes from −100 to +100 and bends the curve smoothly in its range. Lights up and Darks down is a gentle S-curve.</p>
+<h2 id="refine">Refine Saturation</h2>
+<p>Shown under the Point curve once the RGB curve is bent. A steep curve makes colors more saturated as well as more contrasty, as in Lightroom (100, the default). Lower it to keep the contrast but hold back the extra saturation; at 0 the curve changes brightness only.</p>
+
+<h2 id="targeted">Targeted Adjustment</h2>
+<p>Click ◎ at the top of the panel, then drag up or down on the photo over the tone you want to change. In Parametric it moves the region sliders for that tone; in Point it adds a point for that tone on the channel shown (or moves the one already there). Each drag is one step in History. Click ◎ again or press <kbd>Esc</kbd> to put it away.</p>
 
 <div class="see-also">See also: <a href="basic.html#contrast">Contrast</a> · <a href="develop.html#histogram">Histogram</a> · <a href="color-grading.html">Color Grading</a></div>
 

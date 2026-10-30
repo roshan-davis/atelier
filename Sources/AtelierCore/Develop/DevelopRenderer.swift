@@ -126,18 +126,21 @@ public final class DevelopRenderer: @unchecked Sendable {
                                           scale: scale)
 
         // Tone curve, applied in sRGB-encoded values so contrast behaves perceptually. Basic tone,
-        // the region sliders and the RGB curve keep each color's hue, as Lightroom does; the
+        // the region curve and the RGB curve keep each color's hue, as Lightroom does; the
         // Red, Green and Blue curves then work on their own channel, as color curves should.
-        if let lut = masterCurveLUT(settings) {
+        // Refine Saturation below 100 runs the RGB point curve on its own, so it can hold back
+        // the saturation the point curve adds without changing Basic tone or the regions.
+        let refine = settings[.curveRefineSaturation] / 100
+        let master = settings.points(for: .rgb)
+        let refinesPointCurve = refine < 1 && master != DevelopSettings.CurvePoint.identity
+        if let lut = masterCurveLUT(settings, includingPointCurve: !refinesPointCurve) {
             image = ToneCurve.apply(lut, to: image)
         }
+        if refinesPointCurve {
+            image = ToneCurve.apply(pointCurveLUT(master), to: image, refine: refine)
+        }
         if let lut = channelCurvesLUT(settings) {
-            let filter = CIFilter.colorCurves()
-            filter.inputImage = image
-            filter.curvesData = lut.withUnsafeBufferPointer { Data(buffer: $0) }
-            filter.curvesDomain = CIVector(x: 0, y: 1)
-            filter.colorSpace = sRGB
-            image = filter.outputImage ?? image
+            image = ToneCurve.applyChannels(lut, to: image)
         }
 
         if settings.dehaze != 0 {
@@ -167,23 +170,19 @@ public final class DevelopRenderer: @unchecked Sendable {
             image = filter.outputImage ?? image
         }
 
-        // HSL (or the B&W Mix) and color grading share one color cube in sRGB-encoded values.
-        if preview == .gradeRegions {
+        // HSL, Point Color (or the B&W Mix) and color grading share one color cube (see ColorLUT).
+        switch preview {
+        case .gradeRegions:
             // Balance's view stops here: what matters is which tones fall in which range.
-            let filter = CIFilter.colorCubeWithColorSpace()
-            filter.inputImage = image
-            filter.cubeDimension = Float(ColorLUT.dimension)
-            filter.cubeData = ColorLUT.regionMapCube(for: settings)
-            filter.colorSpace = sRGB
-            return filter.outputImage ?? image
+            return colorCube(ColorLUT.regionMapCube(for: settings), on: image)
+        case .pointColorRange(let swatch):
+            // So does Point Color's Visualize Range: the colors the swatch selects, the rest gray.
+            return colorCube(ColorLUT.pointRangeCube(for: settings, swatch: swatch), on: image)
+        default:
+            break
         }
         if let cube = ColorLUT.cube(for: settings) {
-            let filter = CIFilter.colorCubeWithColorSpace()
-            filter.inputImage = image
-            filter.cubeDimension = Float(ColorLUT.dimension)
-            filter.cubeData = cube
-            filter.colorSpace = sRGB
-            image = filter.outputImage ?? image
+            image = colorCube(cube, on: image)
         }
 
         // Detail
@@ -235,16 +234,12 @@ public final class DevelopRenderer: @unchecked Sendable {
             image = applyMasks(settings, to: image, scale: scale, masks: masks)
         }
 
-        // Effects
+        // Effects: Glow, then Post-Crop Vignetting and Grain, as in Lightroom.
+        if settings[.glowAmount] > 0 {
+            image = Glow.apply(image, settings: settings, extent: extent)
+        }
         if settings.vignette != 0 {
-            let filter = CIFilter.vignetteEffect()
-            filter.inputImage = image
-            filter.center = CGPoint(x: extent.midX, y: extent.midY)
-            let diagonal = (extent.width * extent.width + extent.height * extent.height).squareRoot() / 2
-            filter.radius = Float(diagonal * (0.35 + settings.vignetteMidpoint / 100 * 0.6))
-            filter.falloff = 0.6
-            filter.intensity = Float(-settings.vignette / 100)
-            image = filter.outputImage?.cropped(to: extent) ?? image
+            image = PostCropVignette.apply(image, settings: settings, extent: extent)
         }
         if settings.grain > 0 {
             image = FilmGrain.apply(image, amount: settings.grain / 100, size: settings.grainSize / 100,
@@ -260,6 +255,16 @@ public final class DevelopRenderer: @unchecked Sendable {
         default: break
         }
         return image
+    }
+
+    /// The HSL and grading cube on `image`; see `ColorLUT`.
+    static func colorCube(_ data: Data, on image: CIImage) -> CIImage {
+        let filter = CIFilter.colorCubeWithColorSpace()
+        filter.inputImage = image
+        filter.cubeDimension = Float(ColorLUT.dimension)
+        filter.cubeData = data
+        filter.colorSpace = ColorLUT.space
+        return filter.outputImage ?? image
     }
 
     /// Removes (positive) or adds (negative) haze; see `Dehaze`.
@@ -313,12 +318,37 @@ public final class DevelopRenderer: @unchecked Sendable {
         ]
     }
 
-    static let curveRegions: [(DevelopSettings.Parameter, Double)] = [
-        (.curveShadows, 0.125), (.curveDarks, 0.375), (.curveLights, 0.625), (.curveHighlights, 0.875),
-    ]
+    /// The Tone Curve panel's region sliders, from dark to light.
+    public static let curveRegions: [DevelopSettings.Parameter] = [.curveShadows, .curveDarks, .curveLights, .curveHighlights]
+
+    /// The three split points between the regions (Lightroom's triangles under the curve), 0...1,
+    /// kept in order at least 5% apart.
+    public static func curveSplits(_ settings: DevelopSettings) -> (Double, Double, Double) {
+        let middle = min(0.85, max(0.15, settings[.curveMidtoneSplit] / 100))
+        let low = min(middle - 0.05, max(0.05, settings[.curveShadowSplit] / 100))
+        let high = max(middle + 0.05, min(0.95, settings[.curveHighlightSplit] / 100))
+        return (low, middle, high)
+    }
+
+    /// Control points of the region curve (Lightroom's parametric curve): each slider moves the
+    /// middle of its region by up to 12% of the range, and the curve passes through them with
+    /// the monotone spline. Black and white stay where they are, and the points are kept rising,
+    /// so the curve never fogs black, dims white or turns tones over. Nil when every slider is 0.
+    public static func regionCurvePoints(_ settings: DevelopSettings) -> [CGPoint]? {
+        let amounts = curveRegions.map { settings[$0] / 100 }
+        guard amounts.contains(where: { $0 != 0 }) else { return nil }
+        let (low, middle, high) = curveSplits(settings)
+        let centers = [low / 2, (low + middle) / 2, (middle + high) / 2, (high + 1) / 2]
+        var ys = [0.0] + zip(centers, amounts).map { min(1, max(0, $0 + $1 * 0.12)) } + [1.0]
+        let gap = 0.001
+        for i in 1..<(ys.count - 1) { ys[i] = max(ys[i], ys[i - 1] + gap) }
+        for i in stride(from: ys.count - 2, through: 1, by: -1) { ys[i] = min(ys[i], ys[i + 1] - gap) }
+        let xs = [0.0] + centers + [1.0]
+        return zip(xs, ys).map { CGPoint(x: $0, y: $1) }
+    }
 
     public static func hasToneCurve(_ settings: DevelopSettings) -> Bool {
-        toneCurvePoints(settings) != nil || curveRegions.contains { settings[$0.0] != 0 } || settings.hasPointCurve
+        toneCurvePoints(settings) != nil || regionCurvePoints(settings) != nil || settings.hasPointCurve
     }
 
     /// A point curve evaluated with the same monotone spline as the tone curve.
@@ -327,25 +357,26 @@ public final class DevelopRenderer: @unchecked Sendable {
         return evaluateCurve(points.map { CGPoint(x: $0.x, y: $0.y) }, at: x)
     }
 
-    /// The full tone curve at `x` (sRGB-encoded 0...1): Basic tone plus the Tone Curve panel's
-    /// region sliders, each a smooth bump over its quarter of the range.
+    /// The region curve alone at `x` (sRGB-encoded 0...1).
+    public static func regionCurveValue(_ settings: DevelopSettings, at x: Double) -> Double {
+        regionCurvePoints(settings).map { evaluateCurve($0, at: x) } ?? x
+    }
+
+    /// The full tone curve at `x` (sRGB-encoded 0...1): Basic tone, then the Tone Curve panel's
+    /// region curve on its result, as Lightroom applies its parametric curve after Basic.
     public static func toneCurveValue(_ settings: DevelopSettings, at x: Double) -> Double {
-        var y = toneCurvePoints(settings).map { evaluateCurve($0, at: x) } ?? x
-        for (parameter, center) in curveRegions {
-            let amount = settings[parameter] / 100
-            guard amount != 0 else { continue }
-            var weight = max(0, 1 - abs(x - center) / 0.25)
-            weight = weight * weight * (3 - 2 * weight)
-            y += amount * 0.12 * weight
-        }
-        return min(1, max(0, y))
+        let basic = toneCurvePoints(settings).map { evaluateCurve($0, at: x) } ?? x
+        let regions = regionCurvePoints(settings)
+        return min(1, max(0, regions.map { evaluateCurve($0, at: basic) } ?? basic))
     }
 
     /// Basic and region tone (never decreasing, so tones keep their order), then the RGB point
-    /// curve, sampled from 0 to 1; nil when it is a straight line.
-    static func masterCurveLUT(_ settings: DevelopSettings, samples: Int = 1024) -> [Float]? {
-        let master = settings.points(for: .rgb)
-        guard toneCurvePoints(settings) != nil || curveRegions.contains(where: { settings[$0.0] != 0 })
+    /// curve unless `includingPointCurve` is false, sampled from 0 to 1; nil when it is a
+    /// straight line.
+    static func masterCurveLUT(_ settings: DevelopSettings, samples: Int = 1024,
+                               includingPointCurve: Bool = true) -> [Float]? {
+        let master = includingPointCurve ? settings.points(for: .rgb) : DevelopSettings.CurvePoint.identity
+        guard toneCurvePoints(settings) != nil || regionCurvePoints(settings) != nil
                 || master != DevelopSettings.CurvePoint.identity else { return nil }
         var lut = [Float]()
         lut.reserveCapacity(samples)
@@ -356,6 +387,11 @@ public final class DevelopRenderer: @unchecked Sendable {
             lut.append(Float(pointCurveValue(master, at: base)))
         }
         return lut
+    }
+
+    /// A point curve alone, sampled from 0 to 1.
+    static func pointCurveLUT(_ points: [DevelopSettings.CurvePoint], samples: Int = 1024) -> [Float] {
+        (0..<samples).map { Float(pointCurveValue(points, at: Double($0) / Double(samples - 1))) }
     }
 
     /// The Red, Green and Blue point curves sampled as RGB triples for CIColorCurves; nil when

@@ -13,15 +13,27 @@
 
 <div class="eyebrow">Develop panel</div>
 <h1>Effects</h1>
-<p class="lede">Finishing touches: a vignette that follows your crop, and film grain.</p>
+<p class="lede">Finishing touches: a vignette that follows your crop, a glow from the highlights, and film grain.</p>
+
+<div class="chips"><a href="#vignette">Post-Crop Vignetting</a><a href="#glow">Glow</a><a href="#grain">Grain</a></div>
 
 <figure>
   <div class="panel narrow" style="margin:0 auto">
     <div class="ph"><span class="chev">›</span>Effects<span class="dot"></span><span class="grow"></span><span class="reset">↺</span><span class="switch"></span></div>
     <div class="pb">
       <div class="gh">Post-Crop Vignetting</div>
+      <div class="row"><span style="color:var(--app-text-2);width:78px;display:inline-block">Style</span><span>Highlight Priority ⌄</span></div>
       <div class="sl" data-name="Amount" data-value="−50" data-at="0.25"></div>
       <div class="sl" data-name="Midpoint" data-value="50" data-at="0.5" data-def="0.5"></div>
+      <div class="sl" data-name="Roundness" data-value="0" data-at="0.5"></div>
+      <div class="sl" data-name="Feather" data-value="50" data-at="0.5" data-def="0.5"></div>
+      <div class="sl" data-name="Highlights" data-value="0" data-at="0" data-def="0"></div>
+      <div class="gh">Glow</div>
+      <div class="row"><span style="color:var(--app-text-2);width:78px;display:inline-block">Style</span><span>Diffusion ⌄</span></div>
+      <div class="sl" data-name="Amount" data-value="0" data-at="0" data-def="0"></div>
+      <div class="sl" data-name="Range" data-value="50" data-at="0.5" data-def="0.5"></div>
+      <div class="sl" data-name="Spread" data-value="50" data-at="0.5" data-def="0.5"></div>
+      <div class="sl" data-name="Warmth" data-value="0" data-at="0.5"></div>
       <div class="gh">Grain</div>
       <div class="sl" data-name="Amount" data-value="45" data-at="0.45" data-def="0"></div>
       <div class="sl" data-name="Size" data-value="25" data-at="0.25" data-def="0.25"></div>
@@ -32,13 +44,27 @@
 
 <h2 id="vignette">Post-Crop Vignetting</h2>
 <dl class="defs">
+  <dt>Style</dt><dd><b>Highlight Priority</b> (default) darkens like lower exposure but keeps bright areas bright. <b>Color Priority</b> keeps colors as they are while darkening. <b>Paint Overlay</b> mixes the edges toward black or white: flat and soft.</dd>
   <dt>Amount</dt><dd>Negative darkens the edges and draws the eye in; positive lightens them for a soft, airy look.</dd>
   <dt>Midpoint</dt><dd>How far toward the middle it reaches. Lower reaches further in.</dd>
+  <dt>Roundness</dt><dd>At 0 the vignette has the crop's proportions. Positive makes it rounder, toward a circle; negative squarer, toward a rounded rectangle.</dd>
+  <dt>Feather <span class="range">default 50</span></dt><dd>How soft the edge is. 0 gives a hard edge.</dd>
+  <dt>Highlights</dt><dd>With a negative Amount in Highlight or Color Priority, brings bright areas in the darkened corners back, such as a lamp or the sun.</dd>
 </dl>
 <figure>
   <div class="frame compare" data-before="redwoods-flat.jpg" data-after="post-crop-vignette-after.jpg" data-labels="Before|Amount −50"></div>
   <figcaption>It's applied to the cropped photo, so it always frames what you kept. To fix a lens's dark corners instead, use <a href="lens-corrections.html#vignetting">Lens Corrections › Vignetting</a>.</figcaption>
 </figure>
+
+<h2 id="glow">Glow</h2>
+<p>Light spilling from the bright parts of the photo. Not in Lightroom Classic (Camera Raw and Luminar have one).</p>
+<dl class="defs">
+  <dt>Style</dt><dd><b>Diffusion</b>: a soft, dreamy haze, like a diffusion filter. <b>Bloom</b>: highlights spill light onto what is around them. <b>Halation</b>: the red-orange glow film shows around bright lights, as on CineStill 800T.</dd>
+  <dt>Amount</dt><dd>How strong the glow is. 0 is off.</dd>
+  <dt>Range <span class="range">default 50</span></dt><dd>Which tones glow. Higher lets darker tones glow too.</dd>
+  <dt>Spread <span class="range">default 50</span></dt><dd>How far the light reaches, as a share of the photo's size, so a preview and an export match.</dd>
+  <dt>Warmth</dt><dd>Tints the glow warmer (positive) or cooler (negative).</dd>
+</dl>
 
 <h2 id="grain">Grain</h2>
 <p>Film-like grain. It changes brightness, not color, and is strongest in the midtones, so pure black and white stay clean.</p>

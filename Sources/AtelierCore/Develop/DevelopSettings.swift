@@ -153,6 +153,22 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         get { self[.grainRoughness] }
         set { self[.grainRoughness] = newValue }
     }
+    public var vignetteStyle: VignetteStyle {
+        get { VignetteStyle(rawValue: Int(self[.vignetteStyle].rounded())) ?? .highlightPriority }
+        set { self[.vignetteStyle] = Double(newValue.rawValue) }
+    }
+    public var glowStyle: GlowStyle {
+        get { GlowStyle(rawValue: Int(self[.glowStyle].rounded())) ?? .diffusion }
+        set { self[.glowStyle] = Double(newValue.rawValue) }
+    }
+
+    /// How many Point Color swatches a photo can have.
+    public static let pointColorCount = 4
+
+    /// Whether Point Color swatch `swatch` has a picked color.
+    public func hasPointColor(_ swatch: Int) -> Bool {
+        self[.pointColor(swatch, .chroma)] > 0
+    }
 
     public subscript(parameter: Parameter) -> Double {
         get {
@@ -326,6 +342,55 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         }
     }
 
+    /// What each of a Point Color swatch's parameters holds. The first three are the color that
+    /// was picked, in Oklab (hue in degrees, chroma and lightness ×100); the rest are its sliders.
+    public enum PointColorSetting: String, CaseIterable, Sendable {
+        case hue = "Hue", chroma = "Chroma", lightness = "Lightness"
+        case hueShift = "HueShift", satShift = "SatShift", lumShift = "LumShift", range = "Range", uniformity = "Uniformity"
+
+        /// The picked color, set by the eyedropper rather than a slider.
+        public var isTarget: Bool { self == .hue || self == .chroma || self == .lightness }
+
+        public var label: String {
+            switch self {
+            case .hue: return "Hue"
+            case .chroma: return "Chroma"
+            case .lightness: return "Lightness"
+            case .hueShift: return "Hue"
+            case .satShift: return "Saturation"
+            case .lumShift: return "Luminance"
+            case .range: return "Range"
+            case .uniformity: return "Uniformity"
+            }
+        }
+    }
+
+    /// Effects > Post-Crop Vignetting > Style, as in Lightroom.
+    public enum VignetteStyle: Int, CaseIterable, Sendable {
+        case highlightPriority, colorPriority, paintOverlay
+
+        public var title: String {
+            switch self {
+            case .highlightPriority: return "Highlight Priority"
+            case .colorPriority: return "Color Priority"
+            case .paintOverlay: return "Paint Overlay"
+            }
+        }
+    }
+
+    /// Effects > Glow > Style.
+    public enum GlowStyle: Int, CaseIterable, Sendable {
+        case diffusion, bloom, halation
+
+        public var title: String {
+            switch self {
+            case .diffusion: return "Diffusion"
+            case .bloom: return "Bloom"
+            case .halation: return "Halation"
+            }
+        }
+    }
+
     /// The color grading wheels.
     public enum GradeRegion: String, CaseIterable, Sendable {
         case shadows = "Shadows", midtones = "Midtones", highlights = "Highlights", global = "Global"
@@ -340,6 +405,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         case exposure, contrast, highlights, shadows, whites, blacks
         case texture, clarity, dehaze, vibrance, saturation
         case curveHighlights, curveLights, curveDarks, curveShadows
+        case curveShadowSplit, curveMidtoneSplit, curveHighlightSplit, curveRefineSaturation
         case hueRed
         case hueOrange
         case hueYellow
@@ -365,6 +431,10 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         case lumPurple
         case lumMagenta
         case grayRed, grayOrange, grayYellow, grayGreen, grayAqua, grayBlue, grayPurple, grayMagenta
+        case point1Hue, point1Chroma, point1Lightness, point1HueShift, point1SatShift, point1LumShift, point1Range, point1Uniformity
+        case point2Hue, point2Chroma, point2Lightness, point2HueShift, point2SatShift, point2LumShift, point2Range, point2Uniformity
+        case point3Hue, point3Chroma, point3Lightness, point3HueShift, point3SatShift, point3LumShift, point3Range, point3Uniformity
+        case point4Hue, point4Chroma, point4Lightness, point4HueShift, point4SatShift, point4LumShift, point4Range, point4Uniformity
         case gradeShadowsHue, gradeShadowsSat, gradeShadowsLum
         case gradeMidtonesHue, gradeMidtonesSat, gradeMidtonesLum
         case gradeHighlightsHue, gradeHighlightsSat, gradeHighlightsLum
@@ -378,6 +448,8 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         case transformVertical, transformHorizontal, transformRotate, transformAspect, transformScale
         case transformOffsetX, transformOffsetY
         case vignette, vignetteMidpoint, grain, grainSize, grainRoughness
+        case vignetteStyle, vignetteRoundness, vignetteFeather, vignetteHighlights
+        case glowAmount, glowStyle, glowRange, glowSpread, glowWarmth
 
         public static func hsl(_ channel: HSLChannel, _ band: ColorBand) -> Parameter {
             Parameter(rawValue: channel.prefix + band.rawValue)!
@@ -393,6 +465,30 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             rawValue.hasPrefix("gray") ? ColorBand(rawValue: String(rawValue.dropFirst(4))) : nil
         }
 
+        /// The Point Color swatch (0...3) and setting of a Point Color parameter.
+        public var pointColor: (swatch: Int, setting: PointColorSetting)? {
+            guard rawValue.hasPrefix("point"), rawValue.count > 6,
+                  let number = Int(String(rawValue[rawValue.index(rawValue.startIndex, offsetBy: 5)])),
+                  let setting = PointColorSetting(rawValue: String(rawValue.dropFirst(6))) else { return nil }
+            return (number - 1, setting)
+        }
+
+        /// A Point Color swatch's parameter.
+        public static func pointColor(_ swatch: Int, _ setting: PointColorSetting) -> Parameter {
+            Parameter(rawValue: "point\(swatch + 1)\(setting.rawValue)")!
+        }
+
+        /// Whether a preset's Amount and other blends move it in proportion. Hues, styles and the
+        /// picked Point Colors are positions or choices, so they jump instead.
+        public var blendsLinearly: Bool {
+            switch self {
+            case .gradeShadowsHue, .gradeMidtonesHue, .gradeHighlightsHue, .gradeGlobalHue, .vignetteStyle, .glowStyle:
+                return false
+            default:
+                return pointColor.map { !$0.setting.isTarget } ?? true
+            }
+        }
+
         /// The band and channel of an HSL parameter.
         public var hslBand: (HSLChannel, ColorBand)? {
             for channel in HSLChannel.allCases where rawValue.hasPrefix(channel.prefix) {
@@ -406,14 +502,20 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             case .temperature: return 5500
             case .sharpenRadius: return 1
             case .sharpenDetail: return 25
-            case .vignetteMidpoint, .gradeBlending, .lensVignetteMidpoint, .grainRoughness: return 50
-            case .transformScale: return 100
+            case .vignetteMidpoint, .gradeBlending, .lensVignetteMidpoint, .grainRoughness, .vignetteFeather,
+                 .glowRange, .glowSpread: return 50
+            case .transformScale, .curveRefineSaturation: return 100
+            case .curveShadowSplit: return 25
+            case .curveMidtoneSplit: return 50
+            case .curveHighlightSplit: return 75
             case .grainSize: return 25
             case .lensDefringePurpleHueLow: return 30
             case .lensDefringePurpleHueHigh: return 70
             case .lensDefringeGreenHueLow: return 40
             case .lensDefringeGreenHueHigh: return 60
-            default: return 0
+            default:
+                if pointColor?.setting == .range { return 50 }
+                return 0
             }
         }
 
@@ -433,7 +535,17 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             case .lensDefringePurpleAmount, .lensDefringeGreenAmount: return 0...20
             case .lensDefringePurpleHueLow, .lensDefringePurpleHueHigh, .lensDefringeGreenHueLow,
                  .lensDefringeGreenHueHigh: return 0...100
-            default: return -100...100
+            case .curveShadowSplit, .curveMidtoneSplit, .curveHighlightSplit: return 5...95
+            case .curveRefineSaturation, .vignetteFeather, .vignetteHighlights, .glowAmount, .glowRange, .glowSpread:
+                return 0...100
+            case .vignetteStyle, .glowStyle: return 0...2
+            default:
+                switch pointColor?.setting {
+                case .hue: return 0...360
+                case .chroma: return 0...50
+                case .lightness, .range, .uniformity: return 0...100
+                default: return -100...100
+                }
             }
         }
 
@@ -466,9 +578,22 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             case .curveLights: return "Lights"
             case .curveDarks: return "Darks"
             case .curveShadows: return "Shadows"
+            case .curveShadowSplit: return "Shadow Split"
+            case .curveMidtoneSplit: return "Midtone Split"
+            case .curveHighlightSplit: return "Highlight Split"
+            case .curveRefineSaturation: return "Refine Saturation"
+            case .vignetteStyle, .glowStyle: return "Style"
+            case .vignetteRoundness: return "Roundness"
+            case .vignetteFeather: return "Feather"
+            case .vignetteHighlights: return "Highlights"
+            case .glowAmount: return "Amount"
+            case .glowRange: return "Range"
+            case .glowSpread: return "Spread"
+            case .glowWarmth: return "Warmth"
             case .gradeBlending: return "Blending"
             case .gradeBalance: return "Balance"
             default:
+                if let point = pointColor { return point.setting.label }
                 if rawValue.hasPrefix("grade") {
                     if rawValue.hasSuffix("Hue") { return "Hue" }
                     if rawValue.hasSuffix("Sat") { return "Saturation" }
@@ -479,14 +604,16 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         }
 
         public var panel: Panel {
-            if hslBand != nil || grayBand != nil { return .hsl }
+            if hslBand != nil || grayBand != nil || pointColor != nil { return .hsl }
             if rawValue.hasPrefix("grade") { return .colorGrading }
             if rawValue.hasPrefix("curve") { return .toneCurve }
             if rawValue.hasPrefix("lens") { return .lensCorrections }
             if rawValue.hasPrefix("transform") { return .transform }
             switch self {
             case .sharpening, .sharpenRadius, .sharpenDetail, .sharpenMasking, .luminanceNoise, .colorNoise: return .detail
-            case .vignette, .vignetteMidpoint, .grain, .grainSize, .grainRoughness: return .effects
+            case .vignette, .vignetteMidpoint, .grain, .grainSize, .grainRoughness, .vignetteStyle, .vignetteRoundness,
+                 .vignetteFeather, .vignetteHighlights, .glowAmount, .glowStyle, .glowRange, .glowSpread, .glowWarmth:
+                return .effects
             default: return .basic
             }
         }
@@ -495,14 +622,19 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         public var group: String {
             if let channel = hslBand?.0 { return channel.rawValue }
             if grayBand != nil { return "B&W Mix" }
+            if pointColor != nil { return "Point Color" }
             switch self {
             case .temperature, .tint: return "White Balance"
             case .exposure, .contrast, .highlights, .shadows, .whites, .blacks: return "Tone"
             case .texture, .clarity, .dehaze, .vibrance, .saturation: return "Presence"
-            case .curveHighlights, .curveLights, .curveDarks, .curveShadows: return "Region"
+            case .curveHighlights, .curveLights, .curveDarks, .curveShadows, .curveShadowSplit, .curveMidtoneSplit,
+                 .curveHighlightSplit: return "Region"
+            case .curveRefineSaturation: return "Point Curve"
             case .sharpening, .sharpenRadius, .sharpenDetail, .sharpenMasking: return "Sharpening"
             case .luminanceNoise, .colorNoise: return "Noise Reduction"
-            case .vignette, .vignetteMidpoint: return "Post-Crop Vignetting"
+            case .vignette, .vignetteMidpoint, .vignetteStyle, .vignetteRoundness, .vignetteFeather, .vignetteHighlights:
+                return "Post-Crop Vignetting"
+            case .glowAmount, .glowStyle, .glowRange, .glowSpread, .glowWarmth: return "Glow"
             case .grain, .grainSize, .grainRoughness: return "Grain"
             case .lensDistortion: return "Distortion"
             case .lensDefringePurpleAmount, .lensDefringePurpleHueLow, .lensDefringePurpleHueHigh,

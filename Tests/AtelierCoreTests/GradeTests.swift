@@ -48,18 +48,6 @@ final class GradeTests: XCTestCase {
         XCTAssertGreaterThan(lifted.0, lifted.2, "and tints it")
     }
 
-    /// A vivid color pushed by a strong tint stays inside sRGB and keeps a sensible result.
-    func testTintsStayInGamut() {
-        var settings = DevelopSettings()
-        settings[.gradeGlobalHue] = 180
-        settings[.gradeGlobalSat] = 100
-        let out = ColorGrade(settings).apply((0.9, 0.05, 0.05))
-        for channel in [out.0, out.1, out.2] {
-            XCTAssertGreaterThanOrEqual(channel, 0)
-            XCTAssertLessThanOrEqual(channel, 1)
-        }
-    }
-
     func testSwitchTurnsGradingOff() {
         var settings = DevelopSettings()
         settings[.gradeShadowsSat] = 50

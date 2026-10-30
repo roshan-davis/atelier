@@ -64,6 +64,7 @@ enum LayoutSnapshots {
         await snapshotClipping(model: model, into: folder)
         await snapshotSliderPreviews(model: model, into: folder)
         await snapshotColorGrading(model: model, into: folder)
+        await snapshotColorTools(model: model, into: folder)
         await snapshotMatchLook(model: model, into: folder)
         await snapshotMasking(model: model, into: folder)
         await snapshotTransform(model: model, into: folder)
@@ -299,6 +300,61 @@ enum LayoutSnapshots {
         develop.setPanelOn(.effects, true)
         develop.reset(.gradeMidtonesLum)
         develop.reset(.gradeBalance)
+    }
+
+    /// Tone Curve (Parametric and Point), HSL / Color (Mixer and Point Color) and Effects, each
+    /// panel alone at the panel's width, plus the Targeted Adjustment Tool's hint on the photo.
+    private static func snapshotColorTools(model: LibraryModel, into folder: URL) async {
+        let develop = model.develop
+        func panel(_ view: some View, _ name: String, height: CGFloat) async {
+            await capture(AnyView(view.padding(12).frame(width: 320).background(Color(nsColor: .windowBackgroundColor))),
+                          size: CGSize(width: 320, height: height), to: folder.appendingPathComponent("\(name)-320.png"))
+        }
+        develop.set(.curveShadows, to: 30)
+        develop.set(.curveHighlights, to: -20)
+        develop.set(.curveMidtoneSplit, to: 45)
+        UserDefaults.standard.set("parametric", forKey: DevelopController.curveModeKey)
+        try? await Task.sleep(for: .seconds(1))
+        await panel(ToneCurvePanel(develop: develop), "tone-curve-parametric", height: 520)
+        develop.setPoints([.init(x: 0, y: 0.05), .init(x: 0.3, y: 0.24), .init(x: 0.7, y: 0.78), .init(x: 1, y: 1)], for: .rgb)
+        develop.set(.curveRefineSaturation, to: 60)
+        UserDefaults.standard.set("point", forKey: DevelopController.curveModeKey)
+        UserDefaults.standard.set("rgb", forKey: DevelopController.curveChannelKey)
+        try? await Task.sleep(for: .seconds(1))
+        await panel(ToneCurvePanel(develop: develop), "tone-curve-point", height: 560)
+
+        develop.set(.hsl(.saturation, .blue), to: 30)
+        develop.set(.hsl(.luminance, .blue), to: -25)
+        UserDefaults.standard.set("mixer", forKey: "develop.colorMixerView")
+        UserDefaults.standard.set("Saturation", forKey: "develop.hslChannel")
+        await panel(HSLPanel(develop: develop), "hsl-mixer", height: 340)
+        develop.setValues([.pointColor(0, .hue): 55, .pointColor(0, .chroma): 8, .pointColor(0, .lightness): 72,
+                           .pointColor(0, .satShift): -20, .pointColor(0, .uniformity): 40], step: "Point Color 1")
+        develop.pointColorSwatch = 0
+        UserDefaults.standard.set("point", forKey: "develop.colorMixerView")
+        try? await Task.sleep(for: .seconds(1))
+        await panel(HSLPanel(develop: develop), "hsl-point-color", height: 360)
+        UserDefaults.standard.set("mixer", forKey: "develop.colorMixerView")
+
+        develop.set(.vignetteRoundness, to: -30)
+        develop.set(.glowAmount, to: 40)
+        develop.set(.glowStyle, to: Double(DevelopSettings.GlowStyle.halation.rawValue))
+        try? await Task.sleep(for: .seconds(1))
+        await panel(EffectsPanel(develop: develop), "effects", height: 420)
+        await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
+                      to: folder.appendingPathComponent("develop-effects-1280x800.png"))
+
+        develop.picker = .targetColor
+        try? await Task.sleep(for: .seconds(1))
+        await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
+                      to: folder.appendingPathComponent("develop-targeted-1280x800.png"))
+        develop.picker = nil
+        for parameter in [DevelopSettings.Parameter.curveShadows, .curveHighlights, .curveMidtoneSplit, .curveRefineSaturation,
+                          .vignetteRoundness, .glowAmount, .glowStyle] {
+            develop.reset(parameter)
+        }
+        develop.setPoints([], for: .rgb)
+        develop.reset(.hsl)
     }
 
     private static func snapshotMasking(model: LibraryModel, into folder: URL) async {

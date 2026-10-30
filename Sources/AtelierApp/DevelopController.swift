@@ -44,25 +44,35 @@ final class DevelopController: ObservableObject {
     /// The camera's tint, which the stored Tint is relative to; shown added, as Lightroom does.
     @Published private(set) var asShotTint: Double = 0
     /// The color pickers (eyedroppers) that act on a click on the photo, as in Lightroom: the
-    /// White Balance Selector, Defringe's Fringe Color Selector and Color Grading's color picker.
-    /// One is out at a time; each works on the same zoomable photo with a hint at the top, and
-    /// Esc or a second click on its button puts it away.
+    /// White Balance Selector, Defringe's Fringe Color Selector, Color Grading's color picker and
+    /// Point Color's eyedropper; and the Targeted Adjustment Tool for the Tone Curve, HSL and the
+    /// B&W Mix, which acts on a drag. One is out at a time; each works on the same zoomable photo
+    /// with a hint at the top, and Esc or a second click on its button puts it away.
     enum PhotoPicker {
-        case whiteBalance, fringe, gradeColor
+        case whiteBalance, fringe, gradeColor, pointColor
+        case targetCurve, targetColor, targetGray
 
         var hint: String {
             switch self {
             case .whiteBalance: return "Click something that should be neutral gray or white. Esc to cancel."
             case .fringe: return "Click a purple or green fringe. Zoom in to see it clearly. Esc to cancel."
             case .gradeColor: return "Click a spot whose color cast should turn neutral. Esc to cancel."
+            case .pointColor: return "Click the color you want to change. Esc to cancel."
+            case .targetCurve: return "Drag up or down on a tone to lighten or darken it. Esc when done."
+            case .targetColor: return "Drag up or down on a color to change it. Esc when done."
+            case .targetGray: return "Drag up or down on a color to make its gray lighter or darker. Esc when done."
             }
         }
+
+        /// The Targeted Adjustment Tool, which acts on a drag rather than a click.
+        var isTargeted: Bool { self == .targetCurve || self == .targetColor || self == .targetGray }
     }
 
     @Published var picker: PhotoPicker? {
         didSet {
             guard picker != oldValue else { return }
             pickerMessage = nil
+            targetDrag = nil
             guard picker != nil else { return }
             isCropping = false
             isAIOpen = false
@@ -73,7 +83,32 @@ final class DevelopController: ObservableObject {
         }
     }
     /// Why the last click with the picker that is out set nothing.
-    @Published private(set) var pickerMessage: String?
+    @Published var pickerMessage: String?
+
+    /// The HSL channel the Targeted Adjustment Tool changes (HSL / Color's view, or the one
+    /// chosen from its menu in the All view).
+    @Published var targetChannel: DevelopSettings.HSLChannel = .saturation
+    /// A Targeted Adjustment drag in progress; see DevelopController+ColorTools.
+    var targetDrag: TargetDrag?
+    /// The Point Color swatch (0...3) the panel shows and the eyedropper fills.
+    @Published var pointColorSwatch = 0 {
+        didSet { if pointColorSwatch != oldValue, visualizesPointRange { sliderPreview = .pointColorRange(pointColorSwatch) } }
+    }
+    /// Point Color's Visualize Range: the photo gray except the colors the swatch selects.
+    @Published var visualizesPointRange = false {
+        didSet {
+            guard visualizesPointRange != oldValue else { return }
+            sliderPreview = visualizesPointRange ? .pointColorRange(pointColorSwatch) : nil
+        }
+    }
+    /// The point curve under the pointer and its selected point, which the arrow keys nudge.
+    var hoveredCurvePoint: (channel: DevelopSettings.CurveChannel, index: Int)?
+    /// The Tone Curve's Copy Channel Settings, for Paste.
+    @Published var copiedCurve: [DevelopSettings.CurvePoint]?
+    /// Curves saved from the Tone Curve's menu, kept across photos and launches.
+    @Published var savedCurves: [SavedCurve] = SavedCurve.load() {
+        didSet { SavedCurve.save(savedCurves) }
+    }
 
     /// The White Balance Selector is out: the next click on the photo makes that spot neutral.
     var isPickingWhiteBalance: Bool {
@@ -784,6 +819,32 @@ final class DevelopController: ObservableObject {
         changed(step: "Tone Curve (\(channel.label))")
     }
 
+    /// Several settings changed as one history step (the Targeted Adjustment Tool, Point Color).
+    func setValues(_ values: [DevelopSettings.Parameter: Double], step: String) {
+        guard assetID != nil else { return }
+        for (parameter, value) in values { settings[parameter] = value }
+        changed(step: step)
+    }
+
+    /// The finished photo's sRGB-encoded color around `point` (0...1 from the top left), rendered
+    /// with `settings`, off the main thread; `done` runs on the main actor, unless another photo
+    /// has opened by then.
+    func sampleColor(at point: CGPoint, settings: DevelopSettings,
+                     done: @escaping @MainActor (SIMD3<Double>?) -> Void) {
+        let sharp = wantsFullResolution ? fullSession : nil
+        guard let session = sharp ?? self.session, let assetID else { return }
+        let pickQueue = sharp != nil ? fullQueue : queue
+        pickQueue.async {
+            let sample = session.color(at: point, settings: settings)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard self.assetID == assetID else { return }
+                    done(sample)
+                }
+            }
+        }
+    }
+
     func reset(_ panel: DevelopSettings.Panel) {
         guard assetID != nil else { return }
         switch panel {
@@ -1458,6 +1519,7 @@ final class DevelopController: ObservableObject {
 
     private static func parameterName(_ parameter: DevelopSettings.Parameter) -> String {
         if let pair = parameter.hslBand { return "\(pair.0.rawValue) \(pair.1.rawValue)" }
+        if let point = parameter.pointColor { return "Point Color \(point.swatch + 1) \(point.setting.label)" }
         if let band = parameter.grayBand { return "B&W \(band.rawValue)" }
         switch parameter.panel {
         case .colorGrading, .detail, .effects, .toneCurve, .lensCorrections:
@@ -1474,6 +1536,8 @@ final class DevelopController: ObservableObject {
         case .exposure: formatted = String(format: "%+.2f", value)
         case .sharpenRadius: formatted = String(format: "%.1f", value)
         case .transformRotate: formatted = String(format: "%+.1f°", value)
+        case .vignetteStyle: formatted = DevelopSettings.VignetteStyle(rawValue: Int(value))?.title ?? ""
+        case .glowStyle: formatted = DevelopSettings.GlowStyle(rawValue: Int(value))?.title ?? ""
         default:
             formatted = parameter.range.lowerBound >= 0 ? "\(Int(value.rounded()))" : String(format: "%+.0f", value)
         }

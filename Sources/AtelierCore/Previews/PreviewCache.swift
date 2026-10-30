@@ -26,7 +26,9 @@ public final class PreviewCache: Sendable {
     /// 6: Color Grading tints in Oklab with gamut-safe Luminance (`ColorGrade`).
     /// 7: Temp and Tint on masks and on JPEG/TIFF photos went the wrong way (higher Temp
     ///    cooled, higher Tint went green); they now match Lightroom.
-    public static let version = 7
+    /// 8: HSL in Oklab and a Display P3 color cube (`ColorLUT`), region curve that keeps black
+    ///    and white, unclipped Red/Green/Blue curves, and the crop-shaped post-crop vignette.
+    public static let version = 8
 
     /// Clears previews written by an older version. The old folder is moved aside at once and
     /// deleted in the background, so a large cache doesn't hold up launch.

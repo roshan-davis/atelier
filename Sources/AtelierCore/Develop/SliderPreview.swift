@@ -27,6 +27,8 @@ public enum SliderPreview: Hashable, Sendable {
     case gradeRegions
     /// Color Grading's eye button: the photo graded by one wheel alone.
     case gradeSolo(DevelopSettings.GradeRegion)
+    /// Point Color's Visualize Range: the colors the swatch (0...3) selects, everything else gray.
+    case pointColorRange(Int)
     /// Defringe Amount: white, with the fringes being turned neutral shown in their color.
     case defringeAmount(DevelopSettings.FringeColor)
     /// Defringe Hue: black outside the Hue range, so it shows which colors can be affected.
@@ -64,6 +66,7 @@ public enum SliderPreview: Hashable, Sendable {
         case .blendingSaturation: return "Hold Option while dragging to see the tints at full saturation"
         case .gradeRegions: return "Hold Option while dragging to see the shadows (blue), midtones (gray) and highlights (yellow)"
         case .gradeSolo(let region): return "Press and hold to see the photo with only the \(region.rawValue) wheel"
+        case .pointColorRange: return "Shows the colors this swatch changes; the rest turns gray"
         case .defringeAmount: return "Hold Option while dragging to see the fringes being removed (in color, on white)"
         case .defringeHue: return "Hold Option while dragging to see which colors the range covers (the rest turns black)"
         }
