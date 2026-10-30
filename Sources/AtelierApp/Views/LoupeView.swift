@@ -13,6 +13,8 @@ struct LoupeView: View {
     /// Full-resolution render, loaded once the photo is zoomed past fit.
     @State private var fullImage: NSImage?
     @State private var fullKey: FullKey?
+    /// The focused photo's camera settings, for the info overlay.
+    @State private var info: ShootingInfo?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -32,7 +34,7 @@ struct LoupeView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
                 if let detail = model.detail {
-                    LoupeInfo(detail: detail, copyName: model.virtualCopyName(detail.asset.id))
+                    LoupeInfo(detail: detail, copyName: model.virtualCopyName(detail.asset.id), info: info)
                         .padding(14)
                         .allowsHitTesting(false)
                 }
@@ -64,6 +66,12 @@ struct LoupeView: View {
         }
         .task(id: wantedFullKey) {
             await loadFullResolution()
+        }
+        .task(id: model.detail?.fileURL) {
+            info = nil
+            guard let url = model.detail?.fileURL else { return }
+            let loaded = await ShootingInfoCache.info(for: url)
+            if !Task.isCancelled { info = loaded }
         }
     }
 
@@ -121,31 +129,59 @@ struct LoupeView: View {
     }
 }
 
+/// Lightroom's Loupe info overlay: the file, when it was taken and its size, then how it was
+/// taken ("1/250 sec at ƒ/2.8, ISO 400, 50 mm" and the lens), then rating, flag and label.
 private struct LoupeInfo: View {
     let detail: AssetDetail
     let copyName: String?
+    let info: ShootingInfo?
+
+    private var captureLine: String? {
+        var parts: [String] = []
+        if let date = detail.asset.captureTime { parts.append(date.formatted(date: .abbreviated, time: .standard)) }
+        if let width = detail.asset.width, let height = detail.asset.height { parts.append("\(width) × \(height)") }
+        return parts.isEmpty ? nil : parts.joined(separator: "  ·  ")
+    }
+
+    private var settingsLine: String? {
+        let parts = [info?.summary, info?.lens ?? detail.asset.lens].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: "  ·  ")
+    }
+
+    private var hasStatus: Bool {
+        detail.metadata.rating > 0 || detail.metadata.flag != Flag.none || detail.metadata.colorLabel != nil || detail.fileURL == nil
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(detail.asset.filename + (copyName.map { " · \($0)" } ?? "")).font(.headline)
-            HStack(spacing: 8) {
-                if detail.metadata.rating > 0 {
-                    Text(String(repeating: "★", count: detail.metadata.rating))
-                }
-                switch detail.metadata.flag {
-                case .picked: Text("Picked")
-                case .rejected: Text("Rejected")
-                case .none: EmptyView()
-                }
-                if let label = detail.metadata.colorLabel {
-                    Text(label.rawValue)
-                }
-                if detail.fileURL == nil {
-                    Text("Offline").foregroundStyle(.orange)
+            if let captureLine {
+                Text(captureLine).foregroundStyle(.secondary)
+            }
+            if let settingsLine {
+                Text(settingsLine).foregroundStyle(.secondary)
+            }
+            if hasStatus {
+                HStack(spacing: 8) {
+                    if detail.metadata.rating > 0 {
+                        Text(String(repeating: "★", count: detail.metadata.rating))
+                    }
+                    switch detail.metadata.flag {
+                    case .picked: Text("Picked")
+                    case .rejected: Text("Rejected")
+                    case .none: EmptyView()
+                    }
+                    if let label = detail.metadata.colorLabel {
+                        Text(label.rawValue)
+                    }
+                    if detail.fileURL == nil {
+                        Text("Offline").foregroundStyle(.orange)
+                    }
                 }
             }
-            .font(.callout)
         }
+        .font(.callout.monospacedDigit())
+        .lineLimit(1)
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 6))

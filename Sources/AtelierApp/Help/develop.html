@@ -164,10 +164,15 @@
   <div class="panel narrow" style="margin:0 auto">
     <div class="ph"><span class="chev">›</span>Histogram</div>
     <div class="pb"><canvas class="histogram" style="width:100%;height:90px;background:rgba(0,0,0,.85);border-radius:4px"></canvas>
-      <div class="row" style="justify-content:space-between;font-size:11px;color:#f5a623"><span>⚠ Shadows clipped 0.8%</span><span></span></div></div>
+      <div class="row" style="justify-content:space-between;font-size:11px;color:#999"><span>ISO 400</span><span>50 mm</span><span>ƒ/2.8</span><span>1/250 sec</span></div></div>
   </div>
-  <figcaption>When more than half a percent of the photo is pure black or pure white, an orange warning says how much. Turn the warnings off in <span class="path">Settings › Develop</span>.</figcaption>
+  <figcaption>Under the graph: the ISO, focal length, aperture and shutter speed the photo was taken with. Hover over them for the camera, lens and exposure compensation.</figcaption>
 </figure>
+<ul>
+  <li><b>Clipping triangles.</b> The small triangles in the top corners light up when a color channel reaches pure black (left) or pure white (right), in the color of those channels; white means all three. Click a triangle to see on the photo what is really lost: pure white turns red and pure black turns blue. Saturated colors with only one channel at the end, like a deep blue sky, keep their detail and are not marked. <kbd>J</kbd> or <span class="path">Develop › Show Clipping</span> turns both on or off. The colors are only on screen, never in exports.</li>
+  <li><b>How much is clipped.</b> Hover over a triangle to read the share of the photo it counts. <span class="path">Settings › Develop › Panels</span> can show it next to the triangle as well, from half a percent.</li>
+  <li><b>Drag to adjust.</b> Hover over the graph and the part under the pointer lights up: Blacks, Shadows, Exposure, Highlights or Whites, from left to right. The line underneath shows that slider and its value. Drag left or right to change it, or double-click to reset it.</li>
+</ul>
 
 <div class="see-also">Next: <a href="basic.html">Basic</a> · <a href="crop.html">Crop &amp; Straighten</a> · <a href="masking.html">Masking</a></div>
 

@@ -318,7 +318,7 @@ private struct DevelopSettingsTab: View {
             }
             Section("Panels") {
                 Toggle("Solo mode: opening a panel closes the others", isOn: $soloMode)
-                Toggle("Show shadow and highlight clipping under the histogram", isOn: $showClipping)
+                Toggle("Show how much is clipped next to the histogram's triangles", isOn: $showClipping)
             }
         }
         .formStyle(.grouped)

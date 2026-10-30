@@ -363,7 +363,7 @@ struct DevelopPanel: View {
                 VStack(spacing: 0) {
                     PanelSection(title: "Histogram", isExpanded: isExpanded("histogram"), soloMode: $soloMode,
                                  expandAll: expandAll, collapseAll: collapseAll) {
-                        HistogramView(histogram: develop.histogram)
+                        HistogramView(develop: develop)
                     }
                     ToolStrip(develop: develop)
                     if develop.isCropping {
@@ -793,56 +793,234 @@ struct PanelSection<Content: View>: View {
     }
 }
 
-/// RGB histogram of the current render, with clipping warnings.
+/// Lightroom's histogram: RGB from the current render, with clipping triangles in the top corners
+/// (click one to show that clipping on the photo, J for both) and the tone regions under the
+/// pointer: hover to see which slider a region is, drag left or right to change it, double-click
+/// to reset it. The photo's ISO, focal length, aperture and shutter speed sit underneath.
 private struct HistogramView: View {
-    let histogram: Histogram?
+    @ObservedObject var develop: DevelopController
     @AppStorage("develop.showClipping") private var showClipping = true
+    @State private var hovered: ToneRegion?
+    /// The region being dragged and its slider's value when the drag began.
+    @State private var drag: (region: ToneRegion, start: Double)?
+
+    private var histogram: Histogram? { develop.histogram }
+    private var active: ToneRegion? { drag?.region ?? hovered }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Canvas { context, size in
-                guard let histogram else { return }
-                context.blendMode = .plusLighter
-                let channels: [([Double], Color)] = [
-                    (histogram.red, Color(red: 0.9, green: 0.2, blue: 0.2)),
-                    (histogram.green, Color(red: 0.2, green: 0.8, blue: 0.3)),
-                    (histogram.blue, Color(red: 0.25, green: 0.4, blue: 1.0)),
-                ]
-                for (bins, color) in channels {
-                    var path = Path()
-                    path.move(to: CGPoint(x: 0, y: size.height))
-                    for (index, value) in bins.enumerated() {
-                        let x = size.width * CGFloat(index) / CGFloat(bins.count - 1)
-                        path.addLine(to: CGPoint(x: x, y: size.height * (1 - CGFloat(value))))
-                    }
-                    path.addLine(to: CGPoint(x: size.width, y: size.height))
-                    path.closeSubpath()
-                    context.fill(path, with: .color(color.opacity(0.7)))
-                }
+            GeometryReader { geometry in
+                graph(width: geometry.size.width)
             }
             .frame(height: 90)
             .background(Color.black.opacity(0.85), in: RoundedRectangle(cornerRadius: 4))
             .overlay {
-                if histogram == nil { ProgressView().controlSize(.small) }
+                if histogram == nil, develop.assetID != nil { ProgressView().controlSize(.small) }
             }
-            HStack {
-                clipping("Shadows", histogram?.shadowClipping)
-                Spacer()
-                clipping("Highlights", histogram?.highlightClipping)
+            .overlay(alignment: .topLeading) {
+                triangle(shadows: true)
             }
-            .font(.caption)
-            .foregroundStyle(.secondary)
+            .overlay(alignment: .topTrailing) {
+                triangle(shadows: false)
+            }
+            infoLine
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, minHeight: 14)
         }
     }
 
-    @ViewBuilder
-    private func clipping(_ name: String, _ share: Double?) -> some View {
-        if showClipping, let share, share >= 0.005 {
-            Label("\(name) clipped \(String(format: "%.1f", share * 100))%", systemImage: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
-        } else {
-            Text(" ")
+    private func graph(width: CGFloat) -> some View {
+        HistogramGraph(histogram: histogram, highlight: active?.span)
+        .contentShape(Rectangle())
+        .onContinuousHover { phase in
+            switch phase {
+            case .active(let point): hovered = canAdjust ? ToneRegion.at(point.x / max(1, width)) : nil
+            case .ended: hovered = nil
+            }
         }
+        .gesture(
+            DragGesture(minimumDistance: 2)
+                .onChanged { value in
+                    guard canAdjust else { return }
+                    let current: (region: ToneRegion, start: Double)
+                    if let drag {
+                        current = drag
+                    } else {
+                        let region = ToneRegion.at(value.startLocation.x / max(1, width))
+                        current = (region, develop.sliderValue(region.parameter))
+                        drag = current
+                    }
+                    develop.setSlider(current.region.parameter,
+                                      to: current.region.value(from: current.start, moved: value.translation.width / max(1, width)))
+                }
+                .onEnded { _ in drag = nil }
+        )
+        .onTapGesture(count: 2, coordinateSpace: .local) { point in
+            guard canAdjust else { return }
+            develop.reset(ToneRegion.at(point.x / max(1, width)).parameter)
+        }
+        .cursor(.columnResize)
+        .help("Drag a tone region left or right to change it: Blacks, Shadows, Exposure, Highlights or Whites. "
+              + "Double-click a region to reset it.")
+    }
+
+    private var canAdjust: Bool { develop.assetID != nil && histogram != nil }
+
+    /// What the line under the graph says: the region under the pointer and its value, or how
+    /// the photo was taken, spread across the width as in Lightroom.
+    @ViewBuilder
+    private var infoLine: some View {
+        if let active {
+            Text("\(active.parameter.label)  \(active.format(develop.sliderValue(active.parameter)))")
+                .foregroundStyle(.primary)
+        } else {
+            ShootingInfoLine(info: develop.shootingInfo)
+        }
+    }
+
+    /// Lightroom's clipping triangle: dim when nothing clips, lit in the color of the clipped
+    /// channels (white when all three clip). Click to show that clipping on the photo.
+    private func triangle(shadows: Bool) -> some View {
+        let share = shadows ? histogram?.shadowClipping : histogram?.highlightClipping
+        let channels = shadows ? histogram?.shadowChannels : histogram?.highlightChannels
+        let color = HistogramGraph.clipColor(channels)
+        let isOn = shadows ? develop.showShadowClipping : develop.showHighlightClipping
+        let percent = share.map { String(format: "%.1f%%", $0 * 100) }
+        return HStack(spacing: 3) {
+            if !shadows, showClipping, let share, share >= 0.005, let percent { clipText(percent) }
+            Button {
+                if shadows { develop.showShadowClipping.toggle() } else { develop.showHighlightClipping.toggle() }
+            } label: {
+                HistogramGraph.triangle(shadows: shadows, color: color)
+                    .background(isOn ? Color.white.opacity(0.22) : .clear, in: RoundedRectangle(cornerRadius: 3))
+                    .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(isOn ? Color.white.opacity(0.7) : .clear))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(develop.assetID == nil)
+            .help(HistogramGraph.clipHelp(shadows: shadows, histogram: histogram)
+                  + " Click to \(isOn ? "hide" : "show") it on the photo (J).")
+            if shadows, showClipping, let share, share >= 0.005, let percent { clipText(percent) }
+        }
+        .padding(3)
+    }
+
+    private func clipText(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 9).monospacedDigit())
+            .foregroundStyle(.white.opacity(0.75))
+    }
+}
+
+/// The RGB graph itself, shared by Develop and the Library's right panel. `highlight` lights a
+/// band of it (a tone region under the pointer), as a fraction of its width.
+struct HistogramGraph: View {
+    let histogram: Histogram?
+    var highlight: ClosedRange<CGFloat>?
+
+    var body: some View {
+        Canvas { context, size in
+            if let highlight {
+                let band = CGRect(x: size.width * highlight.lowerBound, y: 0,
+                                  width: size.width * (highlight.upperBound - highlight.lowerBound), height: size.height)
+                context.fill(Path(band), with: .color(.white.opacity(0.12)))
+            }
+            guard let histogram else { return }
+            context.blendMode = .plusLighter
+            let channels: [([Double], Color)] = [
+                (histogram.red, Color(red: 0.9, green: 0.2, blue: 0.2)),
+                (histogram.green, Color(red: 0.2, green: 0.8, blue: 0.3)),
+                (histogram.blue, Color(red: 0.25, green: 0.4, blue: 1.0)),
+            ]
+            for (bins, color) in channels {
+                var path = Path()
+                path.move(to: CGPoint(x: 0, y: size.height))
+                for (index, value) in bins.enumerated() {
+                    let x = size.width * CGFloat(index) / CGFloat(bins.count - 1)
+                    path.addLine(to: CGPoint(x: x, y: size.height * (1 - CGFloat(value))))
+                }
+                path.addLine(to: CGPoint(x: size.width, y: size.height))
+                path.closeSubpath()
+                context.fill(path, with: .color(color.opacity(0.7)))
+            }
+        }
+    }
+
+    /// Lightroom's clipping triangle color: dim when nothing clips, else the clipped channels'
+    /// color (white when all three clip).
+    static func clipColor(_ channels: [Double]?) -> Color {
+        let clipped = (channels ?? [0, 0, 0]).map { $0 >= 0.0005 }
+        guard clipped.contains(true) else { return Color.white.opacity(0.3) }
+        return Color(red: clipped[0] ? 1 : 0.2, green: clipped[1] ? 1 : 0.2, blue: clipped[2] ? 1 : 0.2)
+    }
+
+    /// What a triangle's tooltip says: how much is pure black or white (what the overlay marks),
+    /// or that only some channels clip (saturated colors, which keep their detail).
+    static func clipHelp(shadows: Bool, histogram: Histogram?) -> String {
+        let tone = shadows ? "black" : "white"
+        let share = (shadows ? histogram?.shadowClipping : histogram?.highlightClipping) ?? 0
+        let channels = (shadows ? histogram?.shadowChannels : histogram?.highlightChannels) ?? []
+        if share > 0 {
+            return String(format: "%.1f%% of the photo is pure \(tone) (clipped).", share * 100)
+        }
+        if channels.contains(where: { $0 >= 0.0005 }) {
+            return "Nothing is pure \(tone), but some saturated colors have a channel at \(tone); the triangle's color shows which."
+        }
+        return "Nothing is pure \(tone)."
+    }
+
+    /// The triangle glyph, pointing into its corner.
+    static func triangle(shadows: Bool, color: Color) -> some View {
+        Image(systemName: "triangle.fill")
+            .font(.system(size: 7, weight: .bold))
+            .rotationEffect(.degrees(shadows ? -45 : 45))
+            .foregroundStyle(color)
+            .frame(width: 14, height: 14)
+    }
+}
+
+/// The histogram's tone regions, left to right, as in Lightroom: each is a Basic Tone slider.
+private enum ToneRegion: CaseIterable {
+    case blacks, shadows, exposure, highlights, whites
+
+    var parameter: DevelopSettings.Parameter {
+        switch self {
+        case .blacks: return .blacks
+        case .shadows: return .shadows
+        case .exposure: return .exposure
+        case .highlights: return .highlights
+        case .whites: return .whites
+        }
+    }
+
+    /// Where the region sits, as a fraction of the histogram's width.
+    var span: ClosedRange<CGFloat> {
+        switch self {
+        case .blacks: return 0...0.12
+        case .shadows: return 0.12...0.35
+        case .exposure: return 0.35...0.65
+        case .highlights: return 0.65...0.88
+        case .whites: return 0.88...1
+        }
+    }
+
+    static func at(_ fraction: CGFloat) -> ToneRegion {
+        allCases.first { fraction < $0.span.upperBound } ?? .whites
+    }
+
+    /// A drag across the whole histogram moves the slider by half its range (5 stops of
+    /// Exposure, 100 on the others), in the slider's own steps.
+    func value(from start: Double, moved fraction: CGFloat) -> Double {
+        let range = parameter.range
+        let step = self == .exposure ? 0.01 : 1
+        let raw = start + Double(fraction) * (range.upperBound - range.lowerBound) / 2
+        return min(range.upperBound, max(range.lowerBound, (raw / step).rounded() * step))
+    }
+
+    func format(_ value: Double) -> String {
+        if self == .exposure { return String(format: "%+.2f", value) }
+        return value == 0 ? "0" : String(format: "%+.0f", value)
     }
 }
 

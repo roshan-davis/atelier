@@ -155,6 +155,8 @@ struct AtelierApp: App {
                 Divider()
                 Button("Show Before (\\)") { model.develop.showingBefore.toggle() }
                     .disabled(model.mode != .develop)
+                Button("Show Clipping (J)") { model.perform(.clipping) }
+                    .disabled(model.mode != .develop || model.develop.assetID == nil)
                 Menu("Before and After (Y)") {
                     ForEach(CompareMode.allCases, id: \.self) { mode in
                         Button(mode.label) { model.develop.compareMode = mode }
