@@ -3,10 +3,12 @@ import GRDB
 
 public enum CatalogError: Error, LocalizedError {
     case notFound(String)
+    case missingDatabase(URL)
 
     public var errorDescription: String? {
         switch self {
         case .notFound(let what): return "\(what) not found in the catalog."
+        case .missingDatabase(let url): return "The catalog database is missing at \(url.path). Restore it from a backup before trying again."
         }
     }
 }
@@ -25,8 +27,15 @@ public final class Catalog: Sendable {
 
     /// Opens or creates the catalog package at `packageURL`.
     public init(packageURL: URL) throws {
+        let databaseURL = packageURL.appendingPathComponent("catalog.sqlite")
+        // An existing package without its database may be damaged or incompletely restored.
+        // Never silently turn that library into an empty catalog. First launch still creates one.
+        if FileManager.default.fileExists(atPath: packageURL.path),
+           !FileManager.default.fileExists(atPath: databaseURL.path) {
+            throw CatalogError.missingDatabase(databaseURL)
+        }
         try FileManager.default.createDirectory(at: packageURL, withIntermediateDirectories: true)
-        let dbPath = packageURL.appendingPathComponent("catalog.sqlite").path
+        let dbPath = databaseURL.path
         var config = Configuration()
         config.foreignKeysEnabled = true
         // DatabasePool runs SQLite in WAL mode.

@@ -17,6 +17,7 @@ enum LayoutSnapshots {
 
     static func run(model: LibraryModel, into folder: URL) async {
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        await snapshotCatalogRecovery(into: folder)
         await importSamplePhoto(into: model)
         let panels = ["histogram"] + DevelopSettings.Panel.allCases.map(\.rawValue)
         UserDefaults.standard.set(panels.joined(separator: ","), forKey: "develop.expandedPanels")
@@ -133,6 +134,30 @@ enum LayoutSnapshots {
 
     /// Exposure pushed until the sky clips, with the clipping overlay (J) on: the histogram's
     /// highlight triangle lit and the clipped area red on the photo.
+    /// Uses a disposable damaged database, never the user's catalog.
+    static func snapshotCatalogRecovery(into folder: URL) async {
+        let savedTheme = UserDefaults.standard.object(forKey: Theme.defaultsKey)
+        defer {
+            if let savedTheme { UserDefaults.standard.set(savedTheme, forKey: Theme.defaultsKey) }
+            else { UserDefaults.standard.removeObject(forKey: Theme.defaultsKey) }
+            Theme.current.apply()
+        }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let package = root.appendingPathComponent("Atelier Catalog.atelier")
+        try? FileManager.default.createDirectory(at: package, withIntermediateDirectories: true)
+        try? Data("Damaged catalog fixture".utf8).write(to: package.appendingPathComponent("catalog.sqlite"))
+        let opening = CatalogOpening(packageURL: package)
+        await opening.open()
+        for theme in [Theme.light, .graphite] {
+            UserDefaults.standard.set(theme.rawValue, forKey: Theme.defaultsKey)
+            theme.apply()
+            await capture(AnyView(CatalogRecoveryView(opening: opening, retry: {}).frame(width: 1000, height: 640)),
+                          size: CGSize(width: 1000, height: 640),
+                          to: folder.appendingPathComponent("catalog-recovery-\(theme.rawValue).png"))
+        }
+    }
+
     private static func snapshotClipping(model: LibraryModel, into folder: URL) async {
         let develop = model.develop
         let exposure = develop.settings[.exposure]

@@ -15,7 +15,7 @@
 <h1>Settings</h1>
 <p class="lede">Open <span class="path">Atelier › Settings…</span> (<kbd>⌘,</kbd>). Changes take effect at once.</p>
 
-<div class="chips"><a href="#general">General</a><a href="#appearance">Appearance</a><a href="#import">Import</a><a href="#develop">Develop</a><a href="#export">Export</a><a href="#edit-in">Edit In</a><a href="#ai">AI</a><a href="#metadata">Metadata</a><a href="#keyboard">Keyboard</a></div>
+<div class="chips"><a href="#general">General</a><a href="#catalog-recovery">Catalog recovery</a><a href="#appearance">Appearance</a><a href="#import">Import</a><a href="#develop">Develop</a><a href="#export">Export</a><a href="#edit-in">Edit In</a><a href="#ai">AI</a><a href="#metadata">Metadata</a><a href="#keyboard">Keyboard</a></div>
 
 <h2 id="general">General</h2>
 <dl class="defs">
@@ -25,6 +25,16 @@
   <dt>Feedback</dt><dd>Play a sound and a puff of smoke when deleting.</dd>
   <dt>Previews</dt><dd>How much space thumbnails and previews use.</dd>
 </dl>
+
+<h2 id="catalog-recovery">If the catalog cannot open</h2>
+<figure><div class="panel wide" role="img" aria-label="Catalog recovery controls: Show in Finder, Quit, Try Again"><div class="pb">
+  <p><strong>⚠ Couldn’t Open Catalog</strong></p>
+  <p>~/Pictures/Atelier/Atelier Catalog.atelier</p>
+  <p>The reason appears here.</p>
+  <div class="row" style="gap:8px"><span class="btn">Show in Finder</span><span style="flex:1"></span><span class="btn">Quit</span><span class="btn on">Try Again ↵</span></div>
+</div></div></figure>
+<p>If Atelier cannot open its catalog, this screen replaces the splash. It names the location and reason. <b>Try Again</b> retries the same location after you resolve the problem, such as unavailable storage or access permissions. <b>Show in Finder</b> reveals the catalog, or its nearest available parent folder. <b>Quit</b> closes Atelier without making a catalog backup for the failed launch.</p>
+<p>Atelier does not delete, replace or reset the catalog, or automatically restore a backup. An existing catalog folder missing its database is reported as a problem instead of opening an empty library. Keep the package and its Backups folder safe. Library commands and settings become available once the catalog opens. <span class="path">Help › Atelier Help</span> remains available while you resolve the problem.</p>
 
 <h2 id="appearance">Appearance</h2>
 <p>Pick a theme from small previews. It changes every window at once.</p>

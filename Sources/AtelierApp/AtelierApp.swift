@@ -5,37 +5,61 @@ import SwiftUI
 @main
 struct AtelierApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @StateObject private var model = AtelierApp.launch()
-
-    /// The library opens and reports each step to the splash, which the app delegate puts up
-    /// as launch begins.
-    private static func launch() -> LibraryModel {
-        let splash = SplashController.shared
-        let model = LibraryModel(report: { splash.report($0, progress: $1) })
-        model.onLibraryLoaded = { sidebar in
-            var text = sidebar.totalCount == 0 ? "Ready" : "Ready · \(sidebar.totalCount.formatted()) photo\(sidebar.totalCount == 1 ? "" : "s")"
-            let offline = sidebar.volumes.filter { !$0.isOnline }.map(\.name)
-            if !offline.isEmpty {
-                text += " · \(ListFormatter.localizedString(byJoining: offline)) offline"
-            }
-            splash.finishLaunch(text)
-        }
-        return model
-    }
+    @StateObject private var launch = CatalogLaunch()
 
     var body: some Scene {
         WindowGroup("Atelier") {
-            ContentView()
-                .environmentObject(model)
-                .frame(minWidth: 1000, minHeight: 640)
-                .onAppear {
-                    appDelegate.model = model
-                    if let folder = LayoutSnapshots.outputFolder {
-                        Task { await LayoutSnapshots.run(model: model, into: folder) }
-                    }
+            Group {
+                if let model = launch.model {
+                    ContentView()
+                        .environmentObject(model)
+                        .onAppear {
+                            appDelegate.model = model
+                            if let folder = LayoutSnapshots.outputFolder {
+                                Task { await LayoutSnapshots.run(model: model, into: folder) }
+                            }
+                        }
+                } else {
+                    CatalogRecoveryView(opening: launch.opening, retry: { launch.open() })
                 }
+            }
+            .frame(minWidth: 1000, minHeight: 640)
+            .task { launch.open() }
         }
         .commands {
+            LibraryCommands(model: launch.model)
+            CommandGroup(replacing: .help) {
+                Button("Atelier Help") { HelpWindow.shared.show() }
+                    .keyboardShortcut("?", modifiers: [.command])
+                Button("Keyboard Shortcuts") { launch.model?.showingShortcuts = true }
+                    .keyboardShortcut("/", modifiers: [.command])
+                    .disabled(launch.model == nil)
+            }
+        }
+        Settings {
+            if let model = launch.model {
+                SettingsView().environmentObject(model)
+            } else {
+                CatalogRecoveryView(opening: launch.opening, retry: { launch.open() })
+                    .frame(width: 680, height: 480)
+            }
+        }
+    }
+}
+
+/// Commands that require a catalog are installed only after a successful open.
+struct LibraryCommands: Commands {
+    var model: LibraryModel?
+
+    var body: some Commands {
+        if let model { ReadyLibraryCommands(model: model) }
+    }
+}
+
+private struct ReadyLibraryCommands: Commands {
+    @ObservedObject var model: LibraryModel
+
+    var body: some Commands {
             CommandGroup(after: .newItem) {
                 Button("Import Photos…") { model.beginImport() }
                     .keyboardShortcut("i", modifiers: [.command, .shift])
@@ -123,12 +147,6 @@ struct AtelierApp: App {
                         .disabled(model.focusedID == nil)
                 }
             }
-            CommandGroup(replacing: .help) {
-                Button("Atelier Help") { HelpWindow.shared.show() }
-                    .keyboardShortcut("?", modifiers: [.command])
-                Button("Keyboard Shortcuts") { model.showingShortcuts = true }
-                    .keyboardShortcut("/", modifiers: [.command])
-            }
             CommandMenu("Develop") {
                 Button("Copy Settings") { model.copyDevelopSettings() }
                     .keyboardShortcut("c", modifiers: [.command, .shift])
@@ -170,13 +188,6 @@ struct AtelierApp: App {
                 Button("Manage Presets…") { model.develop.showingManagePresets = true }
                     .disabled(model.mode != .develop)
             }
-        }
-
-        // Atelier > Settings… (⌘,)
-        Settings {
-            SettingsView()
-                .environmentObject(model)
-        }
     }
 }
 

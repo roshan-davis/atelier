@@ -36,7 +36,7 @@ Evidence baseline, October 30, 2026:
 
 ## AT-003 — Native catalog-open failure screen
 
-**Status:** Approved / ready — Rosh approved in the source chat; not implemented by this documentation PR. **Owner/chat/branch/PR:** unassigned. **Dependencies:** use AT-001 checks.
+**Status:** In progress — approved by Rosh. **Owner:** Co. **Chat:** [catalog-open recovery](codex://threads/01a18eaf-0df0-7ee0-afcb-04884e64a825). **Branch:** `codex/catalog-open-recovery`. **PR:** pending. **Dependencies:** use AT-001 checks.
 
 **Evidence:** `LibraryModel.swift` at `9ed894a` still calls `fatalError` on catalog-open failure (line 168). **Scope:** native “Couldn't Open Catalog” screen naming the path and reason, with Try Again / Show in Finder / Quit. Preserve files: no delete, replace, reset or automatic restore. Disable library commands until successful opening; avoid quit backup after failed opening.
 

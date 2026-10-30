@@ -22,6 +22,10 @@ let package = Package(
             resources: [.process("Resources"), .copy("Help")]
         ),
         .testTarget(
+            name: "AtelierAppTests",
+            dependencies: ["AtelierApp"]
+        ),
+        .testTarget(
             name: "AtelierCoreTests",
             dependencies: ["AtelierCore", .product(name: "GRDB", package: "GRDB.swift")]
         ),
