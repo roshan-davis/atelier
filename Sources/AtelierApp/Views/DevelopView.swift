@@ -831,31 +831,7 @@ private struct HistogramView: View {
     }
 
     private func graph(width: CGFloat) -> some View {
-        Canvas { context, size in
-            if let active {
-                let band = CGRect(x: size.width * active.span.lowerBound, y: 0,
-                                  width: size.width * (active.span.upperBound - active.span.lowerBound), height: size.height)
-                context.fill(Path(band), with: .color(.white.opacity(0.12)))
-            }
-            guard let histogram else { return }
-            context.blendMode = .plusLighter
-            let channels: [([Double], Color)] = [
-                (histogram.red, Color(red: 0.9, green: 0.2, blue: 0.2)),
-                (histogram.green, Color(red: 0.2, green: 0.8, blue: 0.3)),
-                (histogram.blue, Color(red: 0.25, green: 0.4, blue: 1.0)),
-            ]
-            for (bins, color) in channels {
-                var path = Path()
-                path.move(to: CGPoint(x: 0, y: size.height))
-                for (index, value) in bins.enumerated() {
-                    let x = size.width * CGFloat(index) / CGFloat(bins.count - 1)
-                    path.addLine(to: CGPoint(x: x, y: size.height * (1 - CGFloat(value))))
-                }
-                path.addLine(to: CGPoint(x: size.width, y: size.height))
-                path.closeSubpath()
-                context.fill(path, with: .color(color.opacity(0.7)))
-            }
-        }
+        HistogramGraph(histogram: histogram, highlight: active?.span)
         .contentShape(Rectangle())
         .onContinuousHover { phase in
             switch phase {
@@ -898,19 +874,8 @@ private struct HistogramView: View {
         if let active {
             Text("\(active.parameter.label)  \(active.format(develop.sliderValue(active.parameter)))")
                 .foregroundStyle(.primary)
-        } else if let info = develop.shootingInfo, !info.isEmpty {
-            HStack(spacing: 0) {
-                ForEach(Array(info.parts.enumerated()), id: \.offset) { index, part in
-                    if index > 0 { Spacer(minLength: 6) }
-                    Text(part).lineLimit(1)
-                }
-            }
-            .padding(.horizontal, 2)
-            .help(info.details)
-        } else if develop.shootingInfo != nil {
-            Text("No camera settings in this file").foregroundStyle(.tertiary)
         } else {
-            Text(" ")
+            ShootingInfoLine(info: develop.shootingInfo)
         }
     }
 
@@ -918,12 +883,9 @@ private struct HistogramView: View {
     /// channels (white when all three clip). Click to show that clipping on the photo.
     private func triangle(shadows: Bool) -> some View {
         let share = shadows ? histogram?.shadowClipping : histogram?.highlightClipping
-        let channels = (shadows ? histogram?.shadowChannels : histogram?.highlightChannels) ?? [0, 0, 0]
-        let clipped = channels.map { $0 >= 0.0005 }
-        let lit = clipped.contains(true)
-        let color = lit
-            ? Color(red: clipped[0] ? 1 : 0.2, green: clipped[1] ? 1 : 0.2, blue: clipped[2] ? 1 : 0.2)
-            : Color.white.opacity(0.3)
+        let channels = shadows ? histogram?.shadowChannels : histogram?.highlightChannels
+        let lit = (channels ?? []).contains { $0 >= 0.0005 }
+        let color = HistogramGraph.clipColor(channels)
         let isOn = shadows ? develop.showShadowClipping : develop.showHighlightClipping
         let name = shadows ? "Shadows" : "Highlights"
         let percent = share.map { String(format: "%.1f%%", $0 * 100) }
@@ -932,11 +894,7 @@ private struct HistogramView: View {
             Button {
                 if shadows { develop.showShadowClipping.toggle() } else { develop.showHighlightClipping.toggle() }
             } label: {
-                Image(systemName: "triangle.fill")
-                    .font(.system(size: 7, weight: .bold))
-                    .rotationEffect(.degrees(shadows ? -45 : 45))
-                    .foregroundStyle(color)
-                    .frame(width: 14, height: 14)
+                HistogramGraph.triangle(shadows: shadows, color: color)
                     .background(isOn ? Color.white.opacity(0.22) : .clear, in: RoundedRectangle(cornerRadius: 3))
                     .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(isOn ? Color.white.opacity(0.7) : .clear))
                     .contentShape(Rectangle())
@@ -954,6 +912,58 @@ private struct HistogramView: View {
         Text(text)
             .font(.system(size: 9).monospacedDigit())
             .foregroundStyle(.white.opacity(0.75))
+    }
+}
+
+/// The RGB graph itself, shared by Develop and the Library's right panel. `highlight` lights a
+/// band of it (a tone region under the pointer), as a fraction of its width.
+struct HistogramGraph: View {
+    let histogram: Histogram?
+    var highlight: ClosedRange<CGFloat>?
+
+    var body: some View {
+        Canvas { context, size in
+            if let highlight {
+                let band = CGRect(x: size.width * highlight.lowerBound, y: 0,
+                                  width: size.width * (highlight.upperBound - highlight.lowerBound), height: size.height)
+                context.fill(Path(band), with: .color(.white.opacity(0.12)))
+            }
+            guard let histogram else { return }
+            context.blendMode = .plusLighter
+            let channels: [([Double], Color)] = [
+                (histogram.red, Color(red: 0.9, green: 0.2, blue: 0.2)),
+                (histogram.green, Color(red: 0.2, green: 0.8, blue: 0.3)),
+                (histogram.blue, Color(red: 0.25, green: 0.4, blue: 1.0)),
+            ]
+            for (bins, color) in channels {
+                var path = Path()
+                path.move(to: CGPoint(x: 0, y: size.height))
+                for (index, value) in bins.enumerated() {
+                    let x = size.width * CGFloat(index) / CGFloat(bins.count - 1)
+                    path.addLine(to: CGPoint(x: x, y: size.height * (1 - CGFloat(value))))
+                }
+                path.addLine(to: CGPoint(x: size.width, y: size.height))
+                path.closeSubpath()
+                context.fill(path, with: .color(color.opacity(0.7)))
+            }
+        }
+    }
+
+    /// Lightroom's clipping triangle color: dim when nothing clips, else the clipped channels'
+    /// color (white when all three clip).
+    static func clipColor(_ channels: [Double]?) -> Color {
+        let clipped = (channels ?? [0, 0, 0]).map { $0 >= 0.0005 }
+        guard clipped.contains(true) else { return Color.white.opacity(0.3) }
+        return Color(red: clipped[0] ? 1 : 0.2, green: clipped[1] ? 1 : 0.2, blue: clipped[2] ? 1 : 0.2)
+    }
+
+    /// The triangle glyph, pointing into its corner.
+    static func triangle(shadows: Bool, color: Color) -> some View {
+        Image(systemName: "triangle.fill")
+            .font(.system(size: 7, weight: .bold))
+            .rotationEffect(.degrees(shadows ? -45 : 45))
+            .foregroundStyle(color)
+            .frame(width: 14, height: 14)
     }
 }
 

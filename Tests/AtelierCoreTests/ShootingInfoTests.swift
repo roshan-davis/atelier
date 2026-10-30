@@ -127,3 +127,30 @@ final class ShootingInfoTests: XCTestCase {
         return (0..<(image.width * image.height)).map { i in [Int(bytes[i * 4]), Int(bytes[i * 4 + 1]), Int(bytes[i * 4 + 2])] }
     }
 }
+
+final class ShootingInfoDetailsTests: XCTestCase {
+    func testLightroomStyleLines() {
+        let properties: [CFString: Any] = [kCGImagePropertyExifDictionary: [
+            kCGImagePropertyExifISOSpeedRatings: [400], kCGImagePropertyExifFocalLength: 35.0,
+            kCGImagePropertyExifFocalLenIn35mmFilm: 52, kCGImagePropertyExifFNumber: 2.8,
+            kCGImagePropertyExifExposureTime: 0.004, kCGImagePropertyExifFlash: 16,
+            kCGImagePropertyExifExposureProgram: 3, kCGImagePropertyExifMeteringMode: 5,
+        ] as [CFString: Any]]
+        let info = ShootingInfo(properties: properties)
+        XCTAssertEqual(info.exposure, "1/250 sec at ƒ/2.8")
+        XCTAssertEqual(info.summary, "1/250 sec at ƒ/2.8, ISO 400, 35 mm")
+        XCTAssertEqual(info.focalLengthDescription, "35 mm (52 mm in 35 mm terms)")
+        XCTAssertEqual(info.flash, "Did not fire")
+        XCTAssertEqual(info.exposureProgram, "Aperture priority")
+        XCTAssertEqual(info.meteringMode, "Matrix")
+    }
+
+    func testFullFrameFocalLengthHasNoEquivalent() {
+        let info = ShootingInfo(properties: [kCGImagePropertyExifDictionary: [
+            kCGImagePropertyExifFocalLength: 50.0, kCGImagePropertyExifFocalLenIn35mmFilm: 50,
+        ] as [CFString: Any]])
+        XCTAssertEqual(info.focalLengthDescription, "50 mm")
+        XCTAssertNil(info.exposure)
+        XCTAssertEqual(info.summary, "50 mm")
+    }
+}

@@ -15,6 +15,14 @@ public struct ShootingInfo: Sendable, Hashable {
     public var exposureCompensation: Double?
     public var camera: String?
     public var lens: String?
+    /// 35 mm equivalent, when the file gives one.
+    public var focalLength35: Double?
+    /// "Fired", "Did not fire"; nil when the file doesn't say.
+    public var flash: String?
+    /// "Aperture priority", "Manual"…
+    public var exposureProgram: String?
+    /// "Matrix", "Center-weighted average", "Spot"…
+    public var meteringMode: String?
 
     public init(iso: Double? = nil, focalLength: Double? = nil, aperture: Double? = nil, shutterSpeed: Double? = nil,
                 exposureCompensation: Double? = nil, camera: String? = nil, lens: String? = nil) {
@@ -55,6 +63,10 @@ public struct ShootingInfo: Sendable, Hashable {
             ?? number(exif[kCGImagePropertyExifApertureValue]).map { pow(2, $0 / 2) }
         shutterSpeed = number(exif[kCGImagePropertyExifExposureTime])
         exposureCompensation = (exif[kCGImagePropertyExifExposureBiasValue] as? NSNumber)?.doubleValue
+        focalLength35 = number(exif[kCGImagePropertyExifFocalLenIn35mmFilm])
+        flash = (exif[kCGImagePropertyExifFlash] as? NSNumber).map { $0.intValue & 1 == 1 ? "Fired" : "Did not fire" }
+        exposureProgram = (exif[kCGImagePropertyExifExposureProgram] as? NSNumber).flatMap { Self.programs[$0.intValue] }
+        meteringMode = (exif[kCGImagePropertyExifMeteringMode] as? NSNumber).flatMap { Self.metering[$0.intValue] }
         let make = (tiff[kCGImagePropertyTIFFMake] as? String)?.trimmingCharacters(in: .whitespaces)
         let model = (tiff[kCGImagePropertyTIFFModel] as? String)?.trimmingCharacters(in: .whitespaces)
         camera = Self.cameraName(make: make, model: model)
@@ -64,9 +76,16 @@ public struct ShootingInfo: Sendable, Hashable {
         if lens?.isEmpty == true { lens = nil }
     }
 
+    /// EXIF ExposureProgram values, in Lightroom's words.
+    static let programs: [Int: String] = [1: "Manual", 2: "Normal program", 3: "Aperture priority", 4: "Shutter priority",
+                                          5: "Creative program", 6: "Action program", 7: "Portrait mode", 8: "Landscape mode"]
+    /// EXIF MeteringMode values; Nikon's Matrix is EXIF's Pattern.
+    static let metering: [Int: String] = [1: "Average", 2: "Center-weighted average", 3: "Spot", 4: "Multi-spot",
+                                          5: "Matrix", 6: "Partial"]
+
     /// "NIKON CORPORATION" + "NIKON Z f" reads "NIKON Z f": the make is left out when the model
     /// already starts with its first word, as most cameras' models do.
-    static func cameraName(make: String?, model: String?) -> String? {
+    public static func cameraName(make: String?, model: String?) -> String? {
         guard let model, !model.isEmpty else { return make?.isEmpty == false ? make : nil }
         guard let make, !make.isEmpty,
               let brand = make.split(separator: " ").first,
@@ -81,6 +100,30 @@ public struct ShootingInfo: Sendable, Hashable {
     public var parts: [String] {
         [iso.map(Self.formatISO), focalLength.map(Self.formatFocalLength),
          aperture.map(Self.formatAperture), shutterSpeed.map(Self.formatShutterSpeed)].compactMap { $0 }
+    }
+
+    /// Lightroom's Exposure line: "1/250 sec at ƒ/2.8".
+    public var exposure: String? {
+        switch (shutterSpeed, aperture) {
+        case let (speed?, fNumber?): return "\(Self.formatShutterSpeed(speed)) at \(Self.formatAperture(fNumber))"
+        case let (speed?, nil): return Self.formatShutterSpeed(speed)
+        case let (nil, fNumber?): return Self.formatAperture(fNumber)
+        default: return nil
+        }
+    }
+
+    /// "50 mm", or "35 mm (52 mm in 35 mm terms)" on a smaller sensor.
+    public var focalLengthDescription: String? {
+        guard let focalLength else { return nil }
+        let base = Self.formatFocalLength(focalLength)
+        guard let focalLength35, abs(focalLength35 - focalLength) >= 1 else { return base }
+        return "\(base) (\(Self.formatFocalLength(focalLength35)) in 35 mm terms)"
+    }
+
+    /// The Loupe overlay's settings line: "1/250 sec at ƒ/2.8, ISO 400, 50 mm".
+    public var summary: String? {
+        let parts = [exposure, iso.map(Self.formatISO), focalLength.map(Self.formatFocalLength)].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: ", ")
     }
 
     /// Camera, lens and exposure compensation, one per line, for the tooltip.

@@ -75,6 +75,11 @@ enum LayoutSnapshots {
             await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1000, height: 584),
                           to: folder.appendingPathComponent("theme-\(theme.rawValue).png"))
         }
+        // Loupe (E): the info overlay on the photo and the right panel's histogram, File and Camera sections.
+        model.openLoupe()
+        try? await Task.sleep(for: .seconds(2))
+        await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
+                      to: folder.appendingPathComponent("loupe-1280x800.png"))
         model.mode = .grid
         // Edit In end to end, with Preview standing in for Photoshop: the copy is stacked next to the original.
         model.selection = Set(model.rows.map(\.id))

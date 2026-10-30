@@ -25,6 +25,9 @@ private struct DetailForm: View {
     @State private var keywords = ""
     @State private var title = ""
     @State private var caption = ""
+    @State private var info: ShootingInfo?
+    @State private var histogram: Histogram?
+    @State private var loading = true
 
     private var appliesTo: String {
         let count = model.targetIDs.count
@@ -33,33 +36,65 @@ private struct DetailForm: View {
 
     var body: some View {
         Form {
-            Section("Photo") {
-                LabeledContent("File", value: detail.asset.filename)
+            Section {
+                LibraryHistogram(histogram: histogram, info: info, isLoading: loading)
+            }
+
+            Section("File") {
+                LabeledContent("File Name", value: detail.asset.filename)
                 if let formats = model.rows.first(where: { $0.id == detail.asset.id })?.pairedFormats {
-                    LabeledContent("Shot with", value: formats.split(separator: ",").map {
+                    LabeledContent("Paired With", value: formats.split(separator: ",").map {
                         (detail.asset.filename as NSString).deletingPathExtension + "." + $0
                     }.joined(separator: ", "))
-                    .help("Shown as one photo with its RAW. Settings > Import changes this.")
+                    .help("Files shot together with this RAW, such as the camera's JPEG. They are shown as one photo; "
+                          + "Settings > Import changes this.")
                 }
                 if let copy = model.virtualCopyName(detail.asset.id) {
-                    LabeledContent("Version", value: "Virtual copy (\(copy))")
+                    LabeledContent("Copy Name", value: copy)
                 }
+                LabeledContent("Folder", value: detail.folder.displayName)
                 LabeledContent("Volume") {
                     Text(detail.volume.name + (detail.volume.isOnline ? "" : " (offline)"))
                 }
-                LabeledContent("Folder", value: detail.folder.displayName)
-                if let date = detail.asset.captureTime {
-                    LabeledContent("Captured", value: date.formatted(date: .abbreviated, time: .shortened))
-                }
                 if let width = detail.asset.width, let height = detail.asset.height {
-                    LabeledContent("Size", value: "\(width) × \(height)")
+                    LabeledContent("Dimensions", value: "\(width) × \(height)" + Self.megapixels(width, height))
                 }
-                if let camera = [detail.asset.cameraMake, detail.asset.cameraModel]
-                    .compactMap({ $0 }).joined(separator: " ").nilIfEmpty {
+                LabeledContent("File Size", value: ByteCountFormatter.string(fromByteCount: detail.asset.fileSize, countStyle: .file))
+            }
+
+            Section("Camera") {
+                if let date = detail.asset.captureTime {
+                    LabeledContent("Capture Time", value: date.formatted(date: .abbreviated, time: .standard))
+                }
+                if let camera = info?.camera ?? ShootingInfo.cameraName(make: detail.asset.cameraMake, model: detail.asset.cameraModel) {
                     LabeledContent("Camera", value: camera)
                 }
-                if let lens = detail.asset.lens {
+                if let lens = info?.lens ?? detail.asset.lens {
                     LabeledContent("Lens", value: lens)
+                }
+                if let exposure = info?.exposure {
+                    LabeledContent("Exposure", value: exposure)
+                }
+                if let iso = info?.iso {
+                    LabeledContent("ISO Speed", value: ShootingInfo.formatISO(iso))
+                }
+                if let focal = info?.focalLengthDescription {
+                    LabeledContent("Focal Length", value: focal)
+                }
+                if let bias = info?.exposureCompensation {
+                    LabeledContent("Exposure Bias", value: ShootingInfo.formatExposureCompensation(bias))
+                }
+                if let flash = info?.flash {
+                    LabeledContent("Flash", value: flash)
+                }
+                if let program = info?.exposureProgram {
+                    LabeledContent("Exposure Program", value: program)
+                }
+                if let metering = info?.meteringMode {
+                    LabeledContent("Metering Mode", value: metering)
+                }
+                if info?.isEmpty == true, detail.asset.cameraModel == nil {
+                    Text("No camera settings in this file").foregroundStyle(.secondary)
                 }
             }
 
@@ -130,6 +165,33 @@ private struct DetailForm: View {
         .scrollContentBackground(.hidden)
         .onAppear(perform: syncFields)
         .onChange(of: detail) { syncFields() }
+        .task(id: InfoKey(id: detail.asset.id, revision: model.previewRevision, url: detail.fileURL)) {
+            await loadInfo()
+        }
+    }
+
+    private struct InfoKey: Equatable {
+        var id: Int64?
+        var revision: Int
+        var url: URL?
+    }
+
+    /// The camera settings from the file and the histogram from the preview, which shows the edits.
+    private func loadInfo() async {
+        loading = true
+        defer { loading = false }
+        if let url = detail.fileURL {
+            info = await ShootingInfoCache.info(for: url)
+        }
+        guard let id = detail.asset.id,
+              let preview = model.thumbnailURL(for: id, size: .preview) ?? model.thumbnailURL(for: id, size: .thumbnail) else { return }
+        let loaded = await Task.detached(priority: .userInitiated) { LibraryHistogram.load(from: preview) }.value
+        if !Task.isCancelled { histogram = loaded }
+    }
+
+    private static func megapixels(_ width: Int, _ height: Int) -> String {
+        let mp = Double(width * height) / 1_000_000
+        return mp >= 1 ? String(format: " (%.1f MP)", mp) : ""
     }
 
     private func syncFields() {
@@ -137,8 +199,4 @@ private struct DetailForm: View {
         title = detail.metadata.title ?? ""
         caption = detail.metadata.caption ?? ""
     }
-}
-
-private extension String {
-    var nilIfEmpty: String? { isEmpty ? nil : self }
 }
