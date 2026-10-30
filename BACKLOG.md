@@ -146,7 +146,7 @@ Evidence baseline, October 30, 2026:
 
 ## AT-017 — Local-check false failure on clean untracked files
 
-**Status:** In progress — bounded fix explicitly authorized by Rosh. **Owner:** Co (Codex). **Chat:** [AT-017](codex://threads/01a18edb-1f08-7550-9c6a-0ee25e4503bc). **Branch:** `codex/at-017-new-file-whitespace`. **PR:** pending. **Dependencies:** AT-001.
+**Status:** In progress — bounded fix explicitly authorized by Rosh. **Owner:** Co (Codex). **Chat:** [AT-017](codex://threads/01a18edb-1f08-7550-9c6a-0ee25e4503bc). **Branch:** `codex/at-017-new-file-whitespace`. **PR:** [#65](https://github.com/roshan-davis/atelier/pull/65). **Dependencies:** AT-001.
 
 **Evidence:** reproduced against `17ea9c3`: a clean untracked new file yields exit 1 with empty stdout/stderr from `git diff --no-index --check`. The runner treated every nonzero exit as failure. Search found one no-index execution path; ordinary tracked checks must retain their existing exit semantics.
 
