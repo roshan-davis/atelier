@@ -57,7 +57,7 @@ python3 Scripts/check_pr.py --samples /absolute/path/to/sample-raws
 
 Requires full Xcode and Python 3; the first Swift build may resolve dependencies over the network.
 The script checks committed and working-tree whitespace against the merge base with `origin/main`
-(and untracked files), runs its regression tests, validates Help and its generated index without rewriting it,
+(and untracked files, accepting Git’s silent new-file difference status while retaining whitespace and command failures), runs its regression tests, validates Help and its generated index without rewriting it,
 builds the app, and runs the tests. It exits nonzero if any check fails and retains individual
 logs plus `summary.txt` in `.build/local-checks/<run>/`, including the tested commit and working changes.
 It honors `DEVELOPER_DIR`, otherwise uses selected Xcode or `/Applications/Xcode.app` when only

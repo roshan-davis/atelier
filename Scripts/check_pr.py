@@ -21,6 +21,14 @@ def whitespace_commands(root, base):
     return merge_base, commands
 
 
+def check_exit_code(command, code, has_output):
+    """Only no-index's silent difference status is a successful whitespace check."""
+    if (command[:5] == ["git", "diff", "--no-index", "--check", "--"]
+            and code == 1 and not has_output):
+        return 0
+    return code
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--samples", type=Path, help="Existing sample RAW directory (no downloads)")
@@ -74,15 +82,17 @@ def main():
     results = []
     def check(name, command):
         print("\n== " + name + " ==", flush=True)
+        has_output = False
         try:
             with (out / (name + ".log")).open("w") as log:
                 process = subprocess.Popen(command, cwd=root, env=env, stdout=subprocess.PIPE,
                                            stderr=subprocess.STDOUT, text=True)
                 try:
                     for line in process.stdout:
+                        has_output = True
                         print(line, end="", flush=True)
                         log.write(line)
-                    code = process.wait()
+                    code = check_exit_code(command, process.wait(), has_output)
                 except KeyboardInterrupt:
                     process.terminate()
                     process.wait()

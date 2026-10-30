@@ -28,7 +28,9 @@ class WhitespaceTests(unittest.TestCase):
 
     def codes(self):
         _, commands = check_pr.whitespace_commands(self.root, "base")
-        return [subprocess.run(c, cwd=self.root, capture_output=True).returncode for c in commands]
+        results = [subprocess.run(c, cwd=self.root, capture_output=True) for c in commands]
+        return [check_pr.check_exit_code(c, r.returncode, bool(r.stdout or r.stderr))
+                for c, r in zip(commands, results)]
 
     def test_clean_committed_change_passes(self):
         (self.root / "photo.txt").write_text("changed\n")
@@ -50,6 +52,43 @@ class WhitespaceTests(unittest.TestCase):
     def test_new_file_whitespace_fails(self):
         (self.root / "new file.txt").write_text("bad  \n")
         self.assertTrue(any(self.codes()))
+
+    def test_clean_new_file_passes_untracked_staged_and_committed(self):
+        (self.root / "new file.txt").write_text("clean new file\n")
+        _, commands = check_pr.whitespace_commands(self.root, "base")
+        raw = subprocess.run(commands[-1], cwd=self.root, capture_output=True)
+        self.assertEqual((raw.returncode, raw.stdout, raw.stderr), (1, b"", b""))
+        self.assertFalse(any(self.codes()))
+        self.git("add", ".")
+        self.assertFalse(any(self.codes()))
+        self.git("commit", "-qm", "new file")
+        self.assertFalse(any(self.codes()))
+
+    def test_clean_working_and_staged_change_passes(self):
+        (self.root / "photo.txt").write_text("changed\n")
+        self.assertFalse(any(self.codes()))
+        self.git("add", ".")
+        self.assertFalse(any(self.codes()))
+
+    def test_dirty_new_file_fails_staged_and_committed(self):
+        (self.root / "new file.txt").write_text("bad  \n")
+        self.git("add", ".")
+        self.assertTrue(any(self.codes()))
+        self.git("commit", "-qm", "dirty new file")
+        self.assertTrue(any(self.codes()))
+
+    def test_no_index_command_error_fails(self):
+        command = ["git", "diff", "--no-index", "--check", "--", "/dev/null", "missing"]
+        result = subprocess.run(command, cwd=self.root, capture_output=True)
+        self.assertNotEqual(check_pr.check_exit_code(
+            command, result.returncode, bool(result.stdout or result.stderr)), 0)
+
+    def test_only_silent_no_index_difference_is_normalized(self):
+        command = ["git", "diff", "--no-index", "--check", "--", "/dev/null", "new"]
+        for code, output in [(1, True), (2, False), (128, False)]:
+            with self.subTest(code=code, output=output):
+                self.assertEqual(check_pr.check_exit_code(command, code, output), code)
+        self.assertEqual(check_pr.check_exit_code(["git", "diff", "--check", "base"], 1, False), 1)
 
     def test_unrelated_base_branch_whitespace_is_excluded(self):
         (self.root / "photo.txt").write_text("feature\n")
