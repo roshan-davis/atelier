@@ -60,6 +60,8 @@ public struct ImportProgress: Sendable {
     public var bytesDone: Int64 = 0
     /// The file most recently started.
     public var currentFile: URL?
+
+    public init() {}
 }
 
 enum ImportOutcome {
