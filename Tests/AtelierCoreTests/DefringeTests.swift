@@ -159,10 +159,37 @@ final class DefringeTests: XCTestCase {
         let image = white.composited(over: CIImage(color: CIColor(red: 0, green: 0, blue: 0)).cropped(to: extent))
         // Red drawn 1% smaller: its edge sits 1.6 px nearer the center than green's.
         let shifted = LateralCA(red: 0.01, blue: 0).apply(to: image)
-        let fixed = LateralCA(red: -0.01, blue: 0).apply(to: shifted)
+        let fixed = LateralCA(red: 1 / 1.01 - 1, blue: 0).apply(to: shifted)
         let x = 359  // just left of the edge
         XCTAssertGreaterThan(Double(try pixel(shifted, x: x, y: 150).x), 0.2, "red bleeds across the edge")
-        XCTAssertLessThan(Double(try pixel(fixed, x: x, y: 150).x), 0.1, "and is pulled back")
+        // Two subpixel resamplings blur a hard step; its immediately neighboring
+        // pixel cannot be expected to return to black. Measure edge alignment
+        // using the gradient centroid, retaining a subpixel accuracy requirement.
+        func edge(_ image: CIImage, channel: Int) throws -> Double {
+            // Resampling interpolates linear working-space values. Gamma encoding
+            // before finding the centroid would bias the blurred edge's location.
+            var samples = [Float](repeating: 0, count: 21 * 4)
+            samples.withUnsafeMutableBytes { buffer in
+                DevelopRenderer.shared.context.render(image, toBitmap: buffer.baseAddress!, rowBytes: 21 * 16,
+                                                      bounds: CGRect(x: 350, y: 150, width: 21, height: 1),
+                                                      format: .RGBAf, colorSpace: DevelopRenderer.workingSpace)
+            }
+            var total = 0.0, weighted = 0.0
+            var previous = Double(samples[channel])
+            for x in 351...370 {
+                let current = Double(samples[(x - 350) * 4 + channel])
+                let gradient = current - previous
+                total += gradient
+                weighted += Double(x) * gradient
+                previous = current
+            }
+            XCTAssertGreaterThan(total, 0.9, "the edge is retained")
+            return weighted / total
+        }
+        XCTAssertGreaterThan(abs(try edge(shifted, channel: 0) - edge(shifted, channel: 1)), 1,
+                             "the fixture has a displaced red edge")
+        XCTAssertEqual(try edge(fixed, channel: 0), try edge(fixed, channel: 1), accuracy: 0.15,
+                       "the correction aligns the red edge to green")
         XCTAssertEqual(try pixel(fixed, x: x, y: 150).y, try pixel(image, x: x, y: 150).y, accuracy: 1e-3, "green untouched")
     }
 

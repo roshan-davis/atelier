@@ -40,7 +40,8 @@ final class LocalContrastTests: XCTestCase {
             context.draw(image, in: CGRect(x: 0, y: 0, width: 1, height: 1))
             return Double(pixel[1]) / 255
         }
-        let dark = 0.04, bright = 0.55
+        // The tone-region bumps target perceptual shadows/highlights, not midtones.
+        let dark = 0.15, bright = 0.85
         XCTAssertGreaterThan(try render(dark, shadows: 100), try render(dark) + 0.1, "shadows lift dark tones")
         XCTAssertEqual(try render(bright, shadows: 100), try render(bright), accuracy: 0.03, "and barely touch bright ones")
         XCTAssertLessThan(try render(bright, highlights: -100), try render(bright) - 0.08, "highlights pull bright tones down")
@@ -52,20 +53,20 @@ final class LocalContrastTests: XCTestCase {
 
     // MARK: Helpers
 
-    /// Left: stripes 4 px wide between linear 0.16 and 0.24. Right: a flat dark area, then a
+    /// Left: low-contrast stripes 4 px wide between encoded grays 0.19 and 0.21. Right: a flat dark area, then a
     /// bright one past x = 96.
     private func measure(_ settings: DevelopSettings) throws -> (stripes: Double, nearEdge: Double) {
         var input = CIImage(color: CIColor(red: 0.05, green: 0.05, blue: 0.05)).cropped(to: CGRect(x: 0, y: 0, width: 128, height: 64))
         for x in stride(from: 0, to: 48, by: 8) {
-            input = CIImage(color: CIColor(red: 0.16, green: 0.16, blue: 0.16)).cropped(to: CGRect(x: x, y: 0, width: 4, height: 64))
-                .composited(over: CIImage(color: CIColor(red: 0.24, green: 0.24, blue: 0.24))
+            input = CIImage(color: CIColor(red: 0.19, green: 0.19, blue: 0.19)).cropped(to: CGRect(x: x, y: 0, width: 4, height: 64))
+                .composited(over: CIImage(color: CIColor(red: 0.21, green: 0.21, blue: 0.21))
                     .cropped(to: CGRect(x: x + 4, y: 0, width: 4, height: 64)))
                 .composited(over: input)
         }
         input = CIImage(color: CIColor(red: 0.8, green: 0.8, blue: 0.8)).cropped(to: CGRect(x: 96, y: 0, width: 32, height: 64))
             .composited(over: input)
-        // At a tenth of full size, Clarity's window is 7 px and Texture's 1.5 px.
-        let output = DevelopRenderer.applyAdjustments(settings, to: input, scale: 0.1)
+        // At quarter size, Clarity's window is 17.5 px and Texture's 3.75 px.
+        let output = DevelopRenderer.applyAdjustments(settings, to: input, scale: 0.25)
         let image = try XCTUnwrap(DevelopRenderer.shared.cgImage(output, colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!))
         var data = [UInt8](repeating: 0, count: image.width * image.height * 4)
         let context = try XCTUnwrap(CGContext(data: &data, width: image.width, height: image.height, bitsPerComponent: 8,

@@ -77,7 +77,10 @@ final class ColorTests: XCTestCase {
         for band in DevelopSettings.ColorBand.allCases { settings[.hsl(.saturation, band)] = -100 }
         let hsl = HSLAdjustment(settings)
         let gray = hsl.apply((0.4, 0.4, 0.4))
-        XCTAssertEqual(gray.0, 0.4, accuracy: 1e-9)
+        // Oklab round trips include Float-precision matrix coefficients.
+        for channel in [gray.0, gray.1, gray.2] {
+            XCTAssertEqual(channel, 0.4, accuracy: 1e-7)
+        }
         let red = hsl.apply((0.8, 0.2, 0.2))
         XCTAssertEqual(red.0, red.1, accuracy: 0.01, "fully desaturated")
     }

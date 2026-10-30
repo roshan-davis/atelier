@@ -26,7 +26,17 @@ final class StackTests: XCTestCase {
         let catalog = try Catalog()
         let importer = Importer(catalog: catalog, previews: nil)
         let result = await importer.run(sources: [workDir], options: ImportOptions(buildPreviews: false))
-        let (a, b) = (result.importedAssetIDs[0], result.importedAssetIDs[1])
+        // Concurrent imports finish out of filename order. Test stacking relative to
+        // the catalog's actual chronological order, not worker completion IDs.
+        try await catalog.writer.write { db in
+            for (url, id) in result.assetIDsBySource {
+                let offset = url.lastPathComponent == "A.jpg" ? 0.0 : 1.0
+                try db.execute(sql: "UPDATE asset SET captureTime = ? WHERE id = ?",
+                               arguments: [Date(timeIntervalSince1970: offset), id])
+            }
+        }
+        let ordered = try catalog.assetRows(filter: LibraryFilter()).map(\.id)
+        let (a, b) = (ordered[0], ordered[1])
         let group = try XCTUnwrap(result.importGroupId)
         try catalog.setRating(4, for: [a])
         try catalog.setKeywords(["harbor"], for: [a])
@@ -62,7 +72,20 @@ final class StackTests: XCTestCase {
         let result = await Importer(catalog: catalog, previews: nil)
             .run(sources: [workDir], options: ImportOptions(buildPreviews: false))
         let group = try XCTUnwrap(result.importGroupId)
-        let ids = result.importedAssetIDs
+        // Give the synthetic shoot explicit capture times; import workers are concurrent.
+        XCTAssertEqual(result.failures, [])
+        let byName = Dictionary(uniqueKeysWithValues: result.assetIDsBySource.map {
+            ($0.key.lastPathComponent, $0.value)
+        })
+        let ids = try ["A.jpg", "B.jpg", "C.jpg"].map {
+            try XCTUnwrap(byName[$0], "imported filenames: \(byName.keys.sorted())")
+        }
+        try await catalog.writer.write { db in
+            for (index, id) in ids.enumerated() {
+                try db.execute(sql: "UPDATE asset SET captureTime = ? WHERE id = ?",
+                               arguments: [Date(timeIntervalSince1970: Double(index)), id])
+            }
+        }
         XCTAssertEqual(result.assetIDsBySource.count, 3)
         // C was culled out before import, so it is not in the entry.
         try catalog.removeAssets([ids[2]], fromImportGroup: group)
@@ -87,7 +110,17 @@ final class StackTests: XCTestCase {
         let catalog = try Catalog()
         let importer = Importer(catalog: catalog, previews: nil)
         let result = await importer.run(sources: [workDir], options: ImportOptions(buildPreviews: false))
-        let (a, b) = (result.importedAssetIDs[0], result.importedAssetIDs[1])
+        // Concurrent imports finish out of filename order. Test stacking relative to
+        // the catalog's actual chronological order, not worker completion IDs.
+        try await catalog.writer.write { db in
+            for (url, id) in result.assetIDsBySource {
+                let offset = url.lastPathComponent == "A.jpg" ? 0.0 : 1.0
+                try db.execute(sql: "UPDATE asset SET captureTime = ? WHERE id = ?",
+                               arguments: [Date(timeIntervalSince1970: offset), id])
+            }
+        }
+        let ordered = try catalog.assetRows(filter: LibraryFilter()).map(\.id)
+        let (a, b) = (ordered[0], ordered[1])
         let group = try XCTUnwrap(result.importGroupId)
         try catalog.setRating(3, for: [a])
         try catalog.setKeywords(["harbor"], for: [a])
