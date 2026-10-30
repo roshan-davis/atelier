@@ -9,9 +9,22 @@ import subprocess
 import sys
 
 
+def whitespace_commands(root, base):
+    """Check the PR's net changes, including tracked worktree and new files."""
+    merge_base = subprocess.check_output(
+        ["git", "merge-base", "HEAD", base], cwd=root, text=True).strip()
+    commands = [["git", "diff", "--check", merge_base]]
+    names = subprocess.check_output(
+        ["git", "ls-files", "--others", "--exclude-standard", "-z"], cwd=root).decode().split("\0")
+    commands += [["git", "diff", "--no-index", "--check", "--", "/dev/null", name]
+                 for name in names if name and (root / name).is_file()]
+    return merge_base, commands
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--samples", type=Path, help="Existing sample RAW directory (no downloads)")
+    parser.add_argument("--base", default="origin/main", help="Fetched PR base ref (default: origin/main)")
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     if sys.platform != "darwin":
@@ -45,6 +58,10 @@ def main():
     def fingerprint():
         return (git("rev-parse", "HEAD"), git("diff", "HEAD", "--", ".", ":(exclude)Package.resolved"))
 
+    try:
+        merge_base, whitespace = whitespace_commands(root, args.base)
+    except subprocess.CalledProcessError:
+        parser.error("Cannot resolve PR base. Fetch origin main or supply --base <ref>.")
     before = fingerprint()
     working_status = git("status", "--short")
     # Untracked task files also form part of the tested state. SwiftPM may create
@@ -76,12 +93,15 @@ def main():
         results.append((name, code))
 
     print("Revision: " + before[0].strip())
+    print("PR base: " + args.base + " (merge base " + merge_base + ")")
     print("Worktree: " + str(root))
     print("Xcode: " + env["DEVELOPER_DIR"])
     print("Logs: " + str(out))
     print("Working changes:\n" + working_status)
     check("toolchain", ["xcrun", "swift", "--version"])
-    check("whitespace", ["git", "diff", "--check", "HEAD"])
+    for index, command in enumerate(whitespace):
+        check("whitespace" if index == 0 else "whitespace-new-" + str(index), command)
+    check("script-tests", [sys.executable, "-m", "unittest", "discover", "-s", "Scripts/tests"])
     check("help", [sys.executable, str(root / "Scripts/help/build_help_index.py"), "--check"])
     check("build", ["xcrun", "swift", "build"])
     check("tests", ["xcrun", "swift", "test"])
@@ -92,6 +112,7 @@ def main():
     if not samples:
         notes.append("No sample RAW directory supplied; real-RAW tests may skip.")
     summary = "Revision: " + before[0].strip() + "\n"
+    summary += "PR base: " + args.base + " (merge base " + merge_base + ")\n"
     summary += "Working changes at start:\n" + (working_status or "(clean)\n")
     summary += "Working changes at end:\n" + (git("status", "--short") or "(clean)\n")
     summary += "Xcode: " + env["DEVELOPER_DIR"] + "\n"

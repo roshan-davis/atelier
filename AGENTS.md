@@ -81,30 +81,28 @@ Rosh's most common complaint is the same bug showing up tool by tool. Before you
 
 Several agents open PRs on this repo at the same time.
 
-1. Start every task from a fresh main: `git checkout main && git pull`.
+1. Fetch `origin/main` and start a separate task worktree from it. Leave Rosh's active Xcode checkout untouched.
 2. Create a branch for the task. Never commit to `main`.
 3. Keep each PR small and on one topic.
 4. Push the branch and open a PR against `main`.
-5. GitHub Actions CI (`.github/workflows/build.yml`) builds, runs `AtelierCoreTests` and renders layout snapshots on every PR. Check it passes and fix failures yourself; don't ask Rosh to paste build errors.
+5. Run the checks available in your execution environment (see below) and report results. The repository has a GitHub Actions workflow, but do not assume a run exists or passed; verify its status when available. Fix failures or report the specific blocker; don't ask Rosh to paste build errors.
 
 ### Where you work
 
 Agents run in one of two places. Know which one you are.
 
-- **On Rosh's Mac** (e.g. Antigravity): work in the existing clone at `~/RoshProjects/Atelier/App`; don't clone again. This is also the folder Rosh runs in Xcode, so:
-  - Before switching branches, check `git status`. Never discard uncommitted changes you didn't make; stash them and tell Rosh.
-  - When your PR is open, run `git checkout main` so Rosh's Xcode isn't left on your branch.
-- **In the cloud** (e.g. Claude project threads): work in your own clone and push from there. Never write files into Rosh's App folder, even if you have folder access: Rosh gets cloud changes only by pulling.
+- **On Rosh's Mac** (Co/Codex, Antigravity): use a separate worktree and task branch from the existing repository; do not clone again. Never switch branches, stash, or edit files in `~/RoshProjects/Atelier/App`, Rosh's active Xcode checkout. Branch switches and cleanup apply only to your own task worktree; preserve other agents' changes.
+- **In the cloud** (Cl/Claude project threads): use your own clone and branch, then push. Do not write into Rosh's Mac checkout. A non-Mac cloud environment cannot run the macOS/Xcode checks: report this limitation explicitly and arrange a Mac check of the same revision before treating validation as complete.
 
 Either way, GitHub is the only hand-off: Rosh sees a change after it's pushed and they pull or check out the branch in Xcode.
 
 ## Local checks before a PR
 
-- Every agent running on a Mac (Co/Codex, Cl/Claude, Antigravity) runs `python3 Scripts/check_pr.py` from the task worktree before opening or updating a PR.
+- Mac agents run `python3 Scripts/check_pr.py` in the task worktree before opening or updating a PR. Cl/Claude in the cloud follows the environment rule above. Command options, logs and prerequisites are documented in [README.md > Local pre-PR checks](README.md#local-pre-pr-checks-mac-agents).
 - Include the checked commit, working changes, summary/log location, failures and skipped tests in the PR. A failed build/test is not a pass. Resolve failures or explicitly report the blocker.
-- Optional real RAW fixtures: `python3 Scripts/check_pr.py --samples /absolute/path/to/raws`. Inspect the test log for skips; the script does not download samples.
+- Fetch the PR base first. Whitespace validation compares the working tree to the merge base with `origin/main`, including committed changes and new files; use `--base <ref>` for another base. Inspect test logs for skipped RAW fixtures.
 - The local check does not render or inspect GUI snapshots. UI changes still require the snapshot review below. No GitHub setup is needed for the local check.
-- Work in a separate worktree/branch from freshly fetched `origin/main` on Rosh's Mac. Do not switch branches, stash, or edit files in Rosh's active Xcode checkout. The earlier checkout instructions apply only to the agent's own task checkout.
+
 
 ## Pull requests
 
@@ -135,8 +133,8 @@ Keep the description current: when you push more commits, update the bullets and
 
 Nobody but Rosh can see the running app, so don't guess at layout.
 
-- CI runs the app with `ATELIER_SNAPSHOTS` (see `Sources/AtelierApp/LayoutSnapshots.swift`) and force-pushes the PNGs to the `layout-snapshots` branch; its commit message names the PR head SHA.
-- Before saying a UI change works, fetch that branch for your PR's latest commit and look at the images.
+- The Actions workflow is configured to render with `ATELIER_SNAPSHOTS` and publish PR PNGs to `layout-snapshots`. Confirm the run and head SHA before using them. If Actions is unavailable, render locally on a Mac with `ATELIER_SNAPSHOTS` (see `Sources/AtelierApp/LayoutSnapshots.swift`).
+- Before saying a UI change works, inspect snapshots generated for the latest PR commit, from Actions or a local Mac run. Report which revision produced them.
 - If a new screen or state matters, add it to `LayoutSnapshots.swift`.
 
 ## Handing off to Rosh
