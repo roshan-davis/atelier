@@ -158,15 +158,9 @@ final class LibraryModel: ObservableObject {
     /// Called once, when the library's first sidebar data has loaded.
     var onLibraryLoaded: ((SidebarData) -> Void)?
 
-    /// `report` gets each startup step (text, then progress 0 to 1) for the splash screen.
-    init(report: (String, Double) -> Void = { _, _ in }) {
-        let packageURL = Catalog.defaultPackageURL
-        report("Opening catalog “\(packageURL.deletingPathExtension().lastPathComponent)”…", 0.15)
-        do {
-            catalog = try Catalog(packageURL: packageURL)
-        } catch {
-            fatalError("Could not open the catalog at \(packageURL.path): \(error)")
-        }
+    /// The catalog has opened successfully before any library observers or tools are installed.
+    init(catalog: Catalog, report: (String, Double) -> Void = { _, _ in }) {
+        self.catalog = catalog
         report("Checking previews…", 0.35)
         previews = PreviewCache(rootURL: catalog.previewsURL!)
         previews.discardIfOutdated()

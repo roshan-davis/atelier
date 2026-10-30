@@ -36,11 +36,11 @@ Evidence baseline, October 30, 2026:
 
 ## AT-003 — Native catalog-open failure screen
 
-**Status:** Approved / ready — Rosh approved in the source chat; not implemented by this documentation PR. **Owner/chat/branch/PR:** unassigned. **Dependencies:** use AT-001 checks.
+**Status:** In progress — approved by Rosh. **Owner:** Co. **Chat:** catalog-open recovery in Codex (session `01a18eaf-0df0-7ee0-afcb-04884e64a825`; app-specific reference). **Branch:** `codex/catalog-open-recovery`. **PR:** [#64](https://github.com/roshan-davis/atelier/pull/64). **Dependencies:** use AT-001 checks.
 
 **Evidence:** `LibraryModel.swift` at `9ed894a` still calls `fatalError` on catalog-open failure (line 168). **Scope:** native “Couldn't Open Catalog” screen naming the path and reason, with Try Again / Show in Finder / Quit. Preserve files: no delete, replace, reset or automatic restore. Disable library commands until successful opening; avoid quit backup after failed opening.
 
-**Acceptance:** tests for failure/retry/success, preserved files and command/backup gating; snapshot of the failure state inspected at the PR revision; Help and PRD updated. Recovery UI acceptance remains pending. Broader restore tooling belongs to AT-006/AT-012.
+**Validation:** PR #64 records exact checked revisions and check logs. Baseline head `67f97e7` passed full-Xcode local checks: 211 XCTest tests (210 Core + 1 app), 2 missing-RAW-fixture skips, zero failures; toolchain, whitespace, script regressions, Help and build passed. Tests cover failure/retry/success, database/backup preservation, missing-database protection and no library/quit backup after failed launch. Light/Graphite snapshots and the Help page were inspected at that revision; a disposable native smoke check verified retry, Finder and Quit. Cl’s review follow-up adds interrupted-first-launch tests, preserves all non-Finder contents, clarifies the Backups message and moves Help to the workspace page. Follow-up checks and UI-review limitations are recorded in the PR. No render/cache/schema change. Normal-library/session acceptance remains for Rosh; do not mark Done until merged. Broader restore tooling remains AT-006/AT-012.
 
 ## AT-004 — Develop settings and masks in XMP recovery
 

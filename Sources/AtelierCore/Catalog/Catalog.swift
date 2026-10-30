@@ -3,10 +3,12 @@ import GRDB
 
 public enum CatalogError: Error, LocalizedError {
     case notFound(String)
+    case missingDatabase(URL)
 
     public var errorDescription: String? {
         switch self {
         case .notFound(let what): return "\(what) not found in the catalog."
+        case .missingDatabase(let url): return "The catalog database is missing at \(url.path). Use Show in Finder to check the Backups folder inside this catalog. Atelier does not restore backups automatically."
         }
     }
 }
@@ -25,8 +27,22 @@ public final class Catalog: Sendable {
 
     /// Opens or creates the catalog package at `packageURL`.
     public init(packageURL: URL) throws {
+        let databaseURL = packageURL.appendingPathComponent("catalog.sqlite")
+        // An interrupted first launch can leave an empty directory (or Finder's .DS_Store).
+        // Any other contents may belong to a damaged/incompletely restored library; preserve them.
+        if FileManager.default.fileExists(atPath: packageURL.path),
+           !FileManager.default.fileExists(atPath: databaseURL.path) {
+            let contents = try FileManager.default.contentsOfDirectory(
+                at: packageURL, includingPropertiesForKeys: nil)
+            let hasCatalogContents = try contents.contains { url in
+                guard url.lastPathComponent == ".DS_Store" else { return true }
+                let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+                return attributes[.type] as? FileAttributeType != .typeRegular
+            }
+            if hasCatalogContents { throw CatalogError.missingDatabase(databaseURL) }
+        }
         try FileManager.default.createDirectory(at: packageURL, withIntermediateDirectories: true)
-        let dbPath = packageURL.appendingPathComponent("catalog.sqlite").path
+        let dbPath = databaseURL.path
         var config = Configuration()
         config.foreignKeysEnabled = true
         // DatabasePool runs SQLite in WAL mode.
