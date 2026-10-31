@@ -10,6 +10,8 @@ struct LoupeView: View {
     @Environment(\.theme) private var theme
     @State private var image: NSImage?
     @State private var loadedID: Int64?
+    /// The full-size photo's size for `image`, which can still be the previous photo's.
+    @State private var imagePixelSize: CGSize?
     /// Full-resolution render, loaded once the photo is zoomed past fit.
     @State private var fullImage: NSImage?
     @State private var fullKey: FullKey?
@@ -22,7 +24,7 @@ struct LoupeView: View {
                 Color(nsColor: theme.surround)
                 if let image {
                     ZoomableImageView(image: fullKey == currentFullKey ? fullImage ?? image : image,
-                                      pixelSize: pixelSize,
+                                      pixelSize: imagePixelSize,
                                       zoom: zoom,
                                       dimmed: model.detail?.metadata.flag == .rejected,
                                       onReport: { report in
@@ -101,17 +103,41 @@ struct LoupeView: View {
     private func load() async {
         guard let id = model.focusedID else {
             image = nil
+            loadedID = nil
             return
         }
-        if loadedID != id { image = nil }
-        // Fall back to the thumbnail while the full preview is missing or being built.
-        let url = model.thumbnailURL(for: id, size: .preview) ?? model.thumbnailURL(for: id, size: .thumbnail)
-        guard let url else { return }
-        let loaded = await Task.detached(priority: .userInitiated) { NSImage(contentsOf: url) }.value
-        if model.focusedID == id {
-            image = loaded
-            loadedID = id
+        let previewURL = model.thumbnailURL(for: id, size: .preview)
+        if loadedID != id {
+            // Never clear to the background: keep the last photo until this one is ready, and
+            // show its decoded preview or its grid thumbnail at once when they're in memory.
+            if let previewURL, let cached = PreviewImages.shared.cached(id, at: previewURL) {
+                show(cached, for: id)
+            } else if let thumbnail = ThumbnailLoader.shared.cached(id) {
+                show(thumbnail, for: id)
+            }
         }
+        // Fall back to the thumbnail while the full preview is missing or being built.
+        let loaded: NSImage?
+        if let previewURL {
+            loaded = await PreviewImages.shared.load(id, at: previewURL)
+        } else if let url = model.thumbnailURL(for: id, size: .thumbnail) {
+            loaded = await Task.detached(priority: .userInitiated) { ThumbnailLoader.decode(url) }.value
+        } else {
+            // Nothing to show until its previews are built; don't leave the last photo up.
+            if loadedID != id {
+                image = nil
+                loadedID = nil
+            }
+            return
+        }
+        guard model.focusedID == id, let loaded, loaded !== image else { return }
+        show(loaded, for: id)
+    }
+
+    private func show(_ shown: NSImage, for id: Int64) {
+        image = shown
+        imagePixelSize = pixelSize
+        loadedID = id
     }
 
     /// Renders the original with its develop settings at full size.

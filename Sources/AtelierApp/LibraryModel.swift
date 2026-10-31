@@ -87,13 +87,20 @@ final class LibraryModel: ObservableObject {
             guard focusedID != oldValue else { return }
             zoomForNextPhoto(leaving: oldValue)
             reloadDetail()
-            if mode == .develop { develop.open(focusedID) }
+            if mode == .develop {
+                develop.open(focusedID)
+                if let image = develop.image, !develop.showsPreviousPhoto, let width = detail?.asset.width, let height = detail?.asset.height {
+                    zoomState.showNow(image, pixelSize: develop.croppedPixelSize(assetSize: CGSize(width: width, height: height)))
+                }
+            }
+            prefetchNeighbourPreviews()
         }
     }
     @Published var detail: AssetDetail?
     @Published var mode: ViewMode = .grid {
         didSet {
             if mode == .develop { develop.open(focusedID) } else if oldValue == .develop { develop.flushSave() }
+            prefetchNeighbourPreviews()
         }
     }
     @Published var status: String?
@@ -801,6 +808,24 @@ final class LibraryModel: ObservableObject {
                                      settings: settings)
         }
         return nil
+    }
+
+    /// Decodes the previews of the photos before and after the focused one, in Loupe and
+    /// Develop, so the arrow keys show them at once. A missing preview (for the focused photo
+    /// too) is queued to be built, so the next visit shows it sharp instead of the thumbnail.
+    private func prefetchNeighbourPreviews() {
+        guard mode == .loupe || mode == .develop, let focusedID,
+              let index = rows.firstIndex(where: { $0.id == focusedID }) else { return }
+        let ids = [index + 1, index - 1].filter { rows.indices.contains($0) }.map { rows[$0].id }
+        var ready: [(id: Int64, url: URL)] = []
+        for id in [focusedID] + ids {
+            if previews.has(.preview, for: id) {
+                if id != focusedID { ready.append((id: id, url: previews.url(for: id, size: .preview))) }
+            } else if let source = try? catalog.fileURL(for: id) {
+                previewScheduler.request(.preview, for: id, source: source, settings: try? catalog.developSettings(for: id))
+            }
+        }
+        PreviewImages.shared.prefetch(ready)
     }
 
     /// A grid cell scrolled away before its thumbnail started.
