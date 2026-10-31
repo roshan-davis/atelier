@@ -315,7 +315,7 @@ struct CullTile: View {
                     }
                 }
                 .frame(width: Self.width, height: 104)
-                .opacity(dimsWhenDropped && !isKept ? 0.4 : 1)
+                .opacity(dimsWhenDropped && !isKept ? ThumbnailState.rejectedOpacity : 1)
                 if dimsWhenDropped {
                     Image(systemName: isKept ? "checkmark.circle.fill" : "circle")
                         .font(.system(size: 18, weight: .semibold))
@@ -339,10 +339,15 @@ struct CullTile: View {
             }
             .frame(width: Self.width, height: 104)
             .background(Color.black.opacity(0.25))
-            .clipShape(RoundedRectangle(cornerRadius: 5))
-            .overlay(RoundedRectangle(cornerRadius: 5)
-                .strokeBorder(isFocused ? Color.accentColor : (isKept && dimsWhenDropped ? Color.green.opacity(0.8) : Color.clear),
-                              lineWidth: isFocused ? 3 : 2))
+            .clipShape(RoundedRectangle(cornerRadius: ThumbnailState.cornerRadius))
+            // The same focus ring as the grid and Filmstrip; kept photos get a green one.
+            .thumbnailFrame(isFocused ? .focused : .unselected)
+            .overlay {
+                if isKept && dimsWhenDropped && !isFocused {
+                    RoundedRectangle(cornerRadius: ThumbnailState.cornerRadius)
+                        .strokeBorder(Color.green.opacity(0.8), lineWidth: 2)
+                }
+            }
             Text(photo.name)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
@@ -360,12 +365,7 @@ struct PairBadge: View {
     let text: String
 
     var body: some View {
-        Text(text)
-            .font(.system(size: 9, weight: .bold))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 4)
-            .padding(.vertical, 1)
-            .background(Color.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 3))
+        OverlayPill { Text(text) }
             .help("Culled with the files shot alongside it; keeping or dropping applies to all of them")
     }
 }

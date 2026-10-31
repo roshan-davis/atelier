@@ -15,7 +15,7 @@
 <h1>Organize and find</h1>
 <p class="lede">Browse in the grid, look closely in the loupe, rate and flag with single keys, and find any photo with the filter bar.</p>
 
-<div class="chips"><a href="#sidebar">Sidebar</a><a href="#grid-loupe">Grid and Loupe</a><a href="#rate">Rate, flag, label</a><a href="#badges">Grid badges</a><a href="#filter">Filter and search</a><a href="#inspector">Inspector</a><a href="#collections">Collections and imports</a><a href="#filmstrip">Filmstrip</a><a href="#xmp">XMP sidecars</a><a href="#volumes">Drives and the NAS</a></div>
+<div class="chips"><a href="#sidebar">Sidebar</a><a href="#grid-loupe">Grid and Loupe</a><a href="#rate">Rate, flag, label</a><a href="#badges">Thumbnail badges</a><a href="#filter">Filter and search</a><a href="#inspector">Inspector</a><a href="#collections">Collections and imports</a><a href="#filmstrip">Filmstrip</a><a href="#xmp">XMP sidecars</a><a href="#volumes">Drives and the NAS</a></div>
 
 <h2 id="sidebar">Sidebar</h2>
 <dl class="defs">
@@ -55,23 +55,28 @@
 </table>
 </div>
 
-<h2 id="badges">Grid badges</h2>
-<p>Under each thumbnail, a line of small marks tells you about the photo:</p>
+<h2 id="badges">Thumbnail badges</h2>
+<p>Thumbnails in the grid and the Filmstrip carry small badges in their corners, as in Lightroom's grid:</p>
 <dl class="defs">
-  <dt><span class="badge">⚑</span> <span class="badge">✕</span> <span class="badge">★★★</span></dt><dd>Picked, rejected, rating. A colored strip shows the label.</dd>
-  <dt><span class="badge">▤ 3</span></dt><dd>An original with versions stacked on it (edits, AI results, virtual copies): 3 photos in all. See <a href="photos.html#stacks">Stacks</a>.</dd>
+  <dt>Top left: <span class="badge">2 ⚑</span> <span class="badge">✕</span></dt><dd>The photo's number in the Filmstrip, and its flag: picked, or rejected (the photo is also dimmed).</dd>
+  <dt>Top right: <span class="badge">▤ 3</span></dt><dd>An original with versions stacked on it (edits, AI results, virtual copies): 3 photos in all. See <a href="photos.html#stacks">Stacks</a>.</dd>
   <dt><span class="badge">◪ Edit</span> <span class="badge">✦ AI</span> <span class="badge">⧉ Copy 1</span></dt><dd>An <a href="edit-in.html">Edit In</a> version, an <a href="ai.html">AI</a> result, a <a href="photos.html#virtual-copies">virtual copy</a>.</dd>
   <dt><span class="badge">RAW+JPG</span></dt><dd>A RAW shown with the JPEG shot alongside it, as one photo.</dd>
   <dt><span class="badge">◫ 4</span></dt><dd>Culled with 3 other shots. <kbd>⇧⌘G</kbd> shows the group (see <a href="cull.html#review">Cull</a>).</dd>
+  <dt>Bottom left: <span class="badge">★★★★</span> <span style="color:#ff453a">●</span></dt><dd>The rating and the color label.</dd>
+  <dt>Bottom right</dt><dd>Edited in Develop (sliders icon), cropped or straightened (crop icon), has masks (dashed circle), and <span style="color:#ff9f0a">⚠</span> the original's drive is offline.</dd>
 </dl>
+<p>Small thumbnails show names as icons and stars as “★ 4”. At the Filmstrip's smallest height only the flag, the label, the rating and one mark (offline first) remain. Hover over a thumbnail to read its file name and what its badges mean.</p>
+<p>The photo you're working on has a solid accent ring with a thin white line inside; the other selected photos have a lighter ring. This is the same in the grid, the Filmstrip and Cull, in every theme.</p>
 
 <h2 id="filter">Filter and search</h2>
 <p>The bar above the photos narrows the current list:</p>
 <ul>
   <li><b>Search</b>: type part of a filename, title, caption or keyword.</li>
-  <li><b>Filters</b>: a minimum <b>Rating</b> (★ + to ★★★★★ +), a <b>Flag</b> (Picked, Unflagged, Rejected) and a <b>Label</b>. The button shows how many are on.</li>
+  <li><b>Filters</b>: a minimum <b>Rating</b> (★ + to ★★★★★ +), a <b>Flag</b> (Picked, Unflagged, Rejected), a <b>Label</b> and <b>Edits</b> (Edited or Unedited in Develop). The button shows how many are on.</li>
+  <li>In the grid, the <b>− +</b> slider at the right of the bar makes thumbnails smaller or larger.</li>
 </ul>
-<p>Filters apply to whatever is selected in the sidebar, and to the Filmstrip.</p>
+<p>Filters apply to whatever is selected in the sidebar, and to the Filmstrip. The Filmstrip's <a href="#filmstrip">Filters</a> button sets the same rules.</p>
 
 <h2 id="inspector">Inspector</h2>
 <p>The right panel in Grid and Loupe (toggle it with the <b>Inspector</b> toolbar button). Its sections open and close like Develop's panels: click a header, or right-click one for Solo Mode, Expand All and Collapse All. Long names end in “…”; hover to read them in full. From the top:</p>
@@ -87,7 +92,13 @@
 <p>The <b>Organize</b> toolbar menu works on the selected photos: <span class="path">New Collection with Selection…</span>, <span class="path">Add to</span> a collection, <span class="path">Add to Import</span>, and, when you're in a collection or import, <span class="path">Remove from This Collection</span> or <span class="path">Remove from This Import</span>. Removing from a list never removes the photo from the catalog.</p>
 
 <h2 id="filmstrip">Filmstrip</h2>
-<p>The strip of thumbnails along the bottom, in every view, showing the current list in the same order as the grid. Its header shows the list's name, how many photos, how many are selected, which one you're on, and its filename.</p>
+<p>The strip of thumbnails along the bottom, in every view, showing the current list in the same order as the grid. Its header, from the left:</p>
+<ul>
+  <li><b>Source</b>: the list's name and how many photos it shows. Click it to switch to <b>All Photographs</b>, one of the recent imports, a collection, or a folder (under its drive) without leaving the view you're in.</li>
+  <li>How many photos are selected, which one you're on (“2 of 12”) and its file name.</li>
+  <li><b>Filters</b>: the same Flag, Rating, Color Label and Edits rules as the bar above the photos. When any are on, the button turns blue and lists them (“Picked · ★3+”); the <b>ⓧ</b> next to it clears them.</li>
+  <li><b>Sort</b>: Capture Time, Import Order, File Name, Rating or Edit Time. The arrow button next to it switches between ascending and descending. Versions stacked on a photo always stay right after it. The grid uses the same order, and Atelier remembers it.</li>
+</ul>
 <ul>
   <li>Click, <kbd>⌘</kbd>-click and <kbd>⇧</kbd>-click select, as in the grid. Right-click for the photo menu.</li>
   <li>Drag its top edge to make thumbnails bigger or smaller.</li>

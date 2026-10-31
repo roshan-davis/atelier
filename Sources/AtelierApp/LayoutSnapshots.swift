@@ -94,6 +94,7 @@ enum LayoutSnapshots {
                       to: folder.appendingPathComponent("theme-neutralGray-grid.png"))
         await snapshotVirtualCopy(model: model, into: folder)
         await snapshotCulling(model: model, into: folder)
+        await snapshotFilmstrip(model: model, into: folder)
         await snapshotRawPair(model: model, into: folder)
         await snapshotMetadata(into: folder)
         await capture(AnyView(ImportSettings().frame(width: 560)), size: CGSize(width: 560, height: 420),
@@ -539,6 +540,64 @@ enum LayoutSnapshots {
             model.menuTargets = nil
             model.mode = .grid
         }
+    }
+
+    /// The Filmstrip's header and thumbnail badges (AT-018): flags, stars, labels, an edit and a
+    /// multiple selection, in Develop for two themes and at the smallest Filmstrip height, and
+    /// the grid at its largest thumbnail size.
+    private static func snapshotFilmstrip(model: LibraryModel, into folder: URL) async {
+        model.sidebarSelection = .all
+        for _ in 0..<20 where model.rows.count < 4 { try? await Task.sleep(for: .milliseconds(250)) }
+        let ids = model.rows.map(\.id)
+        guard ids.count >= 4 else {
+            print("SNAPSHOT: filmstrip needs 4 photos, has \(ids.count)")
+            return
+        }
+        try? model.catalog.setFlag(.picked, for: [ids[0], ids[2]])
+        try? model.catalog.setFlag(.rejected, for: [ids[3]])
+        try? model.catalog.setRating(4, for: [ids[0]])
+        try? model.catalog.setRating(5, for: [ids[1]])
+        try? model.catalog.toggleColorLabel(.red, for: [ids[0]])
+        try? model.catalog.toggleColorLabel(.green, for: [ids[1]])
+        model.filter.minRating = 0
+        model.selection = [ids[0], ids[1], ids[2]]
+        model.focusedID = ids[1]
+        model.mode = .develop
+        model.develop.set(.exposure, to: 0.4)
+        model.develop.flushSave()
+        try? await Task.sleep(for: .seconds(2))
+        print("SNAPSHOT: filmstrip badges \(model.rows.prefix(6).map { "\($0.filename) edits=\($0.hasEdits) crop=\($0.isCropped) masks=\($0.hasMasks) offline=\($0.isOffline)" })")
+        print("SNAPSHOT: source menu \(model.filmstripSourceMenu().items.map { $0.isSeparatorItem ? "—" : $0.title })")
+        print("SNAPSHOT: filter menu \(model.filmstripFilterMenu().items.count) items, sort menu \(model.filmstripSortMenu().items.map(\.title))")
+        let size = CGSize(width: 1280, height: 800)
+        for theme in [Theme.graphite, .light] {
+            UserDefaults.standard.set(theme.rawValue, forKey: Theme.defaultsKey)
+            theme.apply()
+            for height in [Filmstrip.minHeight, 150.0] {
+                UserDefaults.standard.set(height, forKey: Filmstrip.heightKey)
+                try? await Task.sleep(for: .milliseconds(500))
+                await capture(AnyView(ContentView().environmentObject(model)), size: size,
+                              to: folder.appendingPathComponent("filmstrip-\(theme.rawValue)-\(Int(height)).png"))
+            }
+        }
+        // Filtered to picks and sorted by rating, newest first: the header shows both.
+        model.filter.flag = .picked
+        model.filter.sort = .rating
+        model.filter.ascending = false
+        try? await Task.sleep(for: .seconds(1))
+        await capture(AnyView(ContentView().environmentObject(model)), size: size,
+                      to: folder.appendingPathComponent("filmstrip-filtered.png"))
+        model.filter = model.filter.cleared
+        model.filter.sort = .captureTime
+        model.filter.ascending = true
+        // The grid at its largest thumbnails.
+        model.mode = .grid
+        UserDefaults.standard.set(GridThumbnails.sizeRange.upperBound, forKey: GridThumbnails.sizeKey)
+        try? await Task.sleep(for: .seconds(1))
+        await capture(AnyView(ContentView().environmentObject(model)), size: size,
+                      to: folder.appendingPathComponent("grid-large-thumbnails.png"))
+        UserDefaults.standard.removeObject(forKey: GridThumbnails.sizeKey)
+        UserDefaults.standard.set(Filmstrip.defaultHeight, forKey: Filmstrip.heightKey)
     }
 
     /// Culling before an import: three takes of one scene (one soft), two of another, and a

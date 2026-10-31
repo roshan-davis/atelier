@@ -1,10 +1,12 @@
 import AtelierCore
 import SwiftUI
 
-/// Search and filters above the photos. When the column is narrow, the three filters fold into
-/// one Filters menu so the bar never pushes past its column.
+/// Search and filters above the photos, and in the grid the thumbnail size slider. When the
+/// column is narrow, the filters fold into one Filters menu so the bar never pushes past its
+/// column. The Filmstrip's Filter pop-up sets the same rules.
 struct FilterBar: View {
     @EnvironmentObject private var model: LibraryModel
+    @AppStorage(GridThumbnails.sizeKey) private var thumbnailSize = GridThumbnails.defaultSize
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
@@ -13,7 +15,9 @@ struct FilterBar: View {
                 ratingPicker.fixedSize()
                 flagPicker.fixedSize()
                 labelPicker.fixedSize()
+                editedPicker.fixedSize()
                 Spacer(minLength: 0)
+                sizeSlider
             }
             HStack(spacing: 10) {
                 search.frame(minWidth: 120, maxWidth: 320)
@@ -21,12 +25,14 @@ struct FilterBar: View {
                     ratingPicker
                     flagPicker
                     labelPicker
+                    editedPicker
                 } label: {
                     Label(activeCount == 0 ? "Filters" : "Filters (\(activeCount))",
                           systemImage: "line.3.horizontal.decrease.circle")
                 }
                 .fixedSize()
                 Spacer(minLength: 0)
+                sizeSlider
             }
             search
         }
@@ -36,6 +42,7 @@ struct FilterBar: View {
 
     private var activeCount: Int {
         (model.filter.minRating > 0 ? 1 : 0) + (model.filter.flag != nil ? 1 : 0) + (model.filter.colorLabel != nil ? 1 : 0)
+            + (model.filter.edited != nil ? 1 : 0)
     }
 
     private var search: some View {
@@ -58,6 +65,32 @@ struct FilterBar: View {
             Text("Picked").tag(Flag?.some(.picked))
             Text("Unflagged").tag(Flag?.some(Flag.none))
             Text("Rejected").tag(Flag?.some(.rejected))
+        }
+    }
+
+    private var editedPicker: some View {
+        Picker("Edits", selection: $model.filter.edited) {
+            Text("Any").tag(Bool?.none)
+            Text("Edited").tag(Bool?.some(true))
+            Text("Unedited").tag(Bool?.some(false))
+        }
+    }
+
+    /// Lightroom's grid toolbar slider: smaller to larger thumbnails. The Filmstrip resizes by
+    /// dragging its top edge instead.
+    @ViewBuilder private var sizeSlider: some View {
+        if model.mode == .grid {
+            HStack(spacing: 5) {
+                Image(systemName: "minus")
+                Slider(value: $thumbnailSize, in: GridThumbnails.sizeRange)
+                    .controlSize(.small)
+                    .frame(width: 90)
+                Image(systemName: "plus")
+            }
+            .font(.system(size: 9, weight: .semibold))
+            .foregroundStyle(.secondary)
+            .fixedSize()
+            .help("Thumbnail size")
         }
     }
 
