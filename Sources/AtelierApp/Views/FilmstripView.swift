@@ -12,6 +12,8 @@ struct FilmstripView: View {
     @AppStorage(Filmstrip.visibleKey) private var isVisible = true
     @AppStorage(Filmstrip.heightKey) private var height = Filmstrip.defaultHeight
     @State private var startHeight: Double?
+    /// The thumbnails fully in view, so changing photo scrolls only when the new one is not.
+    @State private var visibleIDs: Set<Int64> = []
 
     var body: some View {
         VStack(spacing: 0) {
@@ -49,12 +51,13 @@ struct FilmstripView: View {
 
     private var strip: some View {
         GeometryReader { geometry in
-            let cell = max(40, geometry.size.height - 10)
+            let cellHeight = max(40, geometry.size.height - 2 * Filmstrip.stripPadding.height)
             ScrollViewReader { proxy in
                 ScrollView(.horizontal, showsIndicators: true) {
-                    LazyHStack(spacing: 4) {
+                    LazyHStack(spacing: Filmstrip.cellSpacing) {
                         ForEach(Array(model.rows.enumerated()), id: \.element.id) { index, row in
-                            FilmstripCell(row: row, index: index + 1, size: cell,
+                            FilmstripCell(row: row, index: index + 1,
+                                          size: CGSize(width: (cellHeight * Filmstrip.cellAspect).rounded(), height: cellHeight),
                                           state: ThumbnailState(isFocused: model.focusedID == row.id,
                                                                 isSelected: model.selection.contains(row.id)),
                                           revision: model.previewRevision)
@@ -68,13 +71,17 @@ struct FilmstripView: View {
                                 .overlay(RightClickMenu { model.filmstripMenu(for: row.id) })
                         }
                     }
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 4)
+                    .scrollTargetLayout()
+                    .padding(.horizontal, Filmstrip.stripPadding.width)
+                    .padding(.vertical, Filmstrip.stripPadding.height)
+                }
+                .onScrollTargetVisibilityChange(idType: Int64.self, threshold: 0.95) { ids in
+                    visibleIDs = Set(ids)
                 }
                 .onAppear { if let id = model.focusedID { proxy.scrollTo(id, anchor: .center) } }
                 .onChange(of: model.focusedID) { _, id in
-                    guard let id else { return }
-                    withAnimation(.easeInOut(duration: 0.2)) { proxy.scrollTo(id, anchor: .center) }
+                    guard let id, let anchor = revealAnchor(for: id) else { return }
+                    withAnimation(.easeInOut(duration: 0.2)) { proxy.scrollTo(id, anchor: anchor) }
                 }
             }
         }
@@ -106,6 +113,19 @@ struct FilmstripView: View {
 
     // MARK: Behaviour
 
+    /// Where to scroll so `id` shows, or nil when it is already fully in view (as in Lightroom,
+    /// the strip stays put). Moving right brings the photo in at the right edge, moving left
+    /// at the left edge; a jump from far away centers it.
+    private func revealAnchor(for id: Int64) -> UnitPoint? {
+        guard !visibleIDs.contains(id) else { return nil }
+        guard let new = model.rows.firstIndex(where: { $0.id == id }) else { return nil }
+        let shown = model.rows.indices.filter { visibleIDs.contains(model.rows[$0].id) }
+        guard let first = shown.first, let last = shown.last else { return .center }
+        if new == last + 1 { return .trailing }
+        if new == first - 1 { return .leading }
+        return .center
+    }
+
     /// Click selects the photo; ⌘-click adds or removes it; ⇧-click selects a run.
     private func select(_ id: Int64) {
         let flags = NSEvent.modifierFlags
@@ -132,9 +152,15 @@ struct FilmstripView: View {
 enum Filmstrip {
     static let visibleKey = "filmstrip.visible"
     static let heightKey = "filmstrip.height"
-    static let defaultHeight = 92.0
+    /// The thumbnails' strip, under the header. The default gives 92 pt tall cells, as in the
+    /// AT-018 design (138 × 92).
+    static let defaultHeight = 104.0
     static let minHeight = 56.0
     static let maxHeight = 220.0
+    /// Cells are landscape 3:2, filled with the photo.
+    static let cellAspect: CGFloat = 1.5
+    static let cellSpacing: CGFloat = 8
+    static let stripPadding = CGSize(width: 8, height: 6)
 
 }
 
@@ -148,13 +174,14 @@ struct FilmstripMenuItem: View {
     }
 }
 
-/// One square thumbnail with the shared ring for focus and selection and the shared corner
-/// badges (see ThumbnailCell.swift); dimmed when rejected.
+/// One landscape 3:2 thumbnail filled edge to edge with the photo, with the shared ring for
+/// focus and selection and the shared corner badges (see ThumbnailCell.swift); dimmed when
+/// rejected.
 private struct FilmstripCell: View {
     @EnvironmentObject private var model: LibraryModel
     let row: AssetRow
     let index: Int
-    let size: CGFloat
+    let size: CGSize
     let state: ThumbnailState
     let revision: Int
     @State private var image: NSImage?
@@ -165,13 +192,15 @@ private struct FilmstripCell: View {
                 Image(nsImage: image)
                     .resizable()
                     .interpolation(.medium)
-                    .aspectRatio(contentMode: .fit)
-                    .padding(4)
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: size.width, height: size.height)
+                    .clipped()
                     .opacity(row.flag == .rejected ? ThumbnailState.rejectedOpacity : 1)
             }
-            ThumbnailBadges(row: row, width: size, index: index)
+            ThumbnailBadges(row: row, size: size, index: index, isFocused: state == .focused)
         }
-        .frame(width: size, height: size)
+        .frame(width: size.width, height: size.height)
+        .clipShape(RoundedRectangle(cornerRadius: ThumbnailState.cornerRadius))
         .thumbnailFrame(state)
         .contentShape(Rectangle())
         .help(ThumbnailBadges.help(for: row))

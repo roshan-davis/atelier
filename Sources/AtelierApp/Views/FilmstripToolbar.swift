@@ -12,11 +12,8 @@ struct FilmstripHeader: View {
     static let height: CGFloat = 28
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
             sourceButton
-            Rectangle()
-                .fill(Color.secondary.opacity(0.25))
-                .frame(width: 1, height: 12)
             position
                 .layoutPriority(-1)
             Spacer(minLength: 8)
@@ -24,7 +21,7 @@ struct FilmstripHeader: View {
             sortButtons
         }
         .font(.system(size: 11))
-        .padding(.horizontal, 10)
+        .padding(.horizontal, 12)
         .frame(height: Self.height)
         .background(Color(nsColor: theme.chrome))
         .overlay(alignment: .bottom) {
@@ -39,29 +36,24 @@ struct FilmstripHeader: View {
             HStack(spacing: 5) {
                 Image(systemName: model.sourceSymbol)
                     .foregroundStyle(.secondary)
-                Text(model.sourceTitle)
+                Text(model.sourceTitle.truncatedMiddle(36) + " (\(model.rows.count))")
                     .fontWeight(.semibold)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Text("(\(model.rows.count))")
                     .monospacedDigit()
-                    .foregroundStyle(.secondary)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .bold))
-                    .foregroundStyle(.secondary)
+                HeaderChevron()
             }
-            .frame(maxWidth: 260)
-            .fixedSize(horizontal: false, vertical: true)
+            .fixedSize()
+            .headerPill()
         }
         .help("Choose the photos to show: All Photographs, a recent import, a collection or a folder")
     }
 
-    /// "3 selected · 2 of 12 · DSC_0101.NEF · Copy 1".
+    /// "· 3 selected · 2 of 12 · DSC_0101.NEF · Copy 1".
     private var position: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 5) {
             if model.selection.count > 1 {
                 Text("\(model.selection.count) selected")
                     .foregroundStyle(Color.accentColor)
+                    .fontWeight(.medium)
                 Text("·").foregroundStyle(.tertiary)
             }
             if let id = model.focusedID, let index = model.rows.firstIndex(where: { $0.id == id }) {
@@ -69,12 +61,13 @@ struct FilmstripHeader: View {
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
                 Text("·").foregroundStyle(.tertiary)
-                let name = model.rows[index].filename + (model.virtualCopyName(id).map { " · \($0)" } ?? "")
-                Text(name)
-                    .fontWeight(.medium)
-                    .lineLimit(1)
+                Text(model.rows[index].filename)
+                    .fontWeight(.semibold)
                     .truncationMode(.middle)
-                    .help(name)
+                    .help(model.rows[index].filename)
+                if let copy = model.virtualCopyName(id) {
+                    Text("· \(copy)").foregroundStyle(.secondary)
+                }
             }
         }
         .lineLimit(1)
@@ -88,40 +81,33 @@ struct FilmstripHeader: View {
             PopUpMenuButton(menu: { model.filmstripFilterMenu() }) {
                 HStack(spacing: 4) {
                     Image(systemName: "line.3.horizontal.decrease.circle")
+                        .foregroundStyle(summary.isEmpty ? Color.secondary : Color.accentColor)
                     if summary.isEmpty {
                         Text("Filters")
                     } else {
-                        Text("Filters:").foregroundStyle(.secondary)
-                        Text(summary.joined(separator: " · "))
-                            .fontWeight(.semibold)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
+                        Text("Filters:")
+                        Text(summary.joined(separator: " · ").truncatedMiddle(40)).fontWeight(.semibold)
                     }
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(.secondary)
+                    HeaderChevron()
                 }
-                .frame(maxWidth: 240)
-                .fixedSize(horizontal: false, vertical: true)
+                .fixedSize()
+                .headerPill(active: !summary.isEmpty, joinsTrailing: !summary.isEmpty)
             }
             .help(summary.isEmpty ? "Show only some photos: by flag, rating, color label or edits"
                                   : "Filters: \(summary.joined(separator: ", "))")
             if !summary.isEmpty {
+                // Attached to the Filters button, as one control.
                 Button {
                     model.filter = model.filter.cleared
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
-                        .padding(.leading, 5)
+                        .padding(.horizontal, -2)
+                        .headerPill(active: true, joinsLeading: true)
                 }
                 .buttonStyle(.plain)
                 .help("Clear filters and show every photo in this source")
             }
         }
-        .padding(.horizontal, 7)
-        .frame(height: 20)
-        .background(summary.isEmpty ? Color.primary.opacity(0.06) : Color.accentColor.opacity(0.22),
-                    in: RoundedRectangle(cornerRadius: 5))
     }
 
     private var sortButtons: some View {
@@ -132,29 +118,58 @@ struct FilmstripHeader: View {
                         .foregroundStyle(.secondary)
                     Text("Sort:").foregroundStyle(.secondary)
                     Text(model.filter.sort.title).fontWeight(.medium)
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(.secondary)
+                    HeaderChevron()
                 }
                 .fixedSize()
+                .headerPill()
             }
-            .padding(.horizontal, 7)
-            .frame(height: 20)
-            .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 5))
             .help("Sort photos by capture time, import order, file name, rating or edit time")
             Button {
                 model.filter.ascending.toggle()
             } label: {
                 Image(systemName: model.filter.ascending ? "arrow.up" : "arrow.down")
                     .font(.system(size: 10, weight: .semibold))
-                    .frame(width: 22, height: 20)
-                    .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 5))
-                    .contentShape(Rectangle())
+                    .padding(.horizontal, -2)
+                    .headerPill()
             }
             .buttonStyle(.plain)
             .help(model.filter.ascending ? "Ascending: oldest, A to Z, fewest stars first. Click for descending."
                                          : "Descending: newest, Z to A, most stars first. Click for ascending.")
         }
+    }
+}
+
+/// The small ▾ on the header's pop-up buttons.
+private struct HeaderChevron: View {
+    var body: some View {
+        Image(systemName: "chevron.down")
+            .font(.system(size: 7, weight: .bold))
+            .foregroundStyle(.secondary)
+    }
+}
+
+extension View {
+    /// The Filmstrip header's button shape: a 20 pt rounded pill with a hairline border, tinted
+    /// with the accent color while it holds an active setting. `joinsLeading`/`joinsTrailing`
+    /// square off a side so two pills read as one control.
+    fileprivate func headerPill(active: Bool = false, joinsLeading: Bool = false, joinsTrailing: Bool = false) -> some View {
+        let shape = UnevenRoundedRectangle(topLeadingRadius: joinsLeading ? 0 : 5, bottomLeadingRadius: joinsLeading ? 0 : 5,
+                                           bottomTrailingRadius: joinsTrailing ? 0 : 5, topTrailingRadius: joinsTrailing ? 0 : 5)
+        return self
+            .padding(.horizontal, 8)
+            .frame(height: 20)
+            .background(active ? Color.accentColor.opacity(0.18) : Color.primary.opacity(0.08), in: shape)
+            .overlay(shape.strokeBorder(active ? Color.accentColor.opacity(0.6) : Color.primary.opacity(0.14), lineWidth: 1))
+            .contentShape(shape)
+    }
+}
+
+extension String {
+    /// At most `limit` characters, cutting from the middle: "2026-10-30 Beach…Portraits".
+    func truncatedMiddle(_ limit: Int) -> String {
+        guard count > limit, limit > 1 else { return self }
+        let head = (limit - 1) / 2
+        return String(prefix(head)) + "…" + String(suffix(limit - 1 - head))
     }
 }
 

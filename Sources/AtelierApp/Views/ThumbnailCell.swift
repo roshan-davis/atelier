@@ -84,7 +84,7 @@ struct OverlayPill<Content: View>: View {
 
     var body: some View {
         HStack(spacing: 3) { content }
-            .font(.system(size: 9, weight: .semibold))
+            .font(.system(size: 8.5, weight: .semibold))
             .foregroundStyle(tint)
             .lineLimit(1)
             .padding(.horizontal, 4)
@@ -103,10 +103,12 @@ struct OverlayPill<Content: View>: View {
 /// Used by the grid and the Filmstrip; the Cull view uses the same pill and ring.
 struct ThumbnailBadges: View {
     let row: AssetRow
-    /// The thumbnail's width in points, which decides how much is spelled out.
-    let width: CGFloat
+    /// The thumbnail's size in points, which decides how much is spelled out.
+    let size: CGSize
     /// The photo's place in the strip, 1-based; nil hides it.
     var index: Int?
+    /// The focused photo's number sits on an accent-colored circle.
+    var isFocused = false
 
     enum Density {
         /// Flag, label dot, "★ 3" and one edit or offline mark.
@@ -116,15 +118,19 @@ struct ThumbnailBadges: View {
         /// Every badge, with names ("Copy 1", "RAW+JPG") and a row of stars.
         case regular
 
-        init(width: CGFloat) {
-            self = width < ThumbnailBadges.compactWidth ? .compact : (width < 120 ? .small : .regular)
+        init(size: CGSize) {
+            if min(size.width, size.height) < ThumbnailBadges.compactSize {
+                self = .compact
+            } else {
+                self = size.width < 120 ? .small : .regular
+            }
         }
     }
 
-    /// Below this width (the Filmstrip dragged to its smallest) only the essentials show.
-    static let compactWidth: CGFloat = 64
+    /// Below this height or width (the Filmstrip dragged to its smallest) only the essentials show.
+    static let compactSize: CGFloat = 64
 
-    private var density: Density { Density(width: width) }
+    private var density: Density { Density(size: size) }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -140,24 +146,29 @@ struct ThumbnailBadges: View {
                 bottomTrailing
             }
         }
-        .padding(density == .compact ? 4 : 5)
+        .padding(density == .compact ? 3 : 4)
         .allowsHitTesting(false)
     }
 
     // MARK: Corners
 
     @ViewBuilder private var topLeading: some View {
-        let number = density == .compact ? nil : index
-        if number != nil || row.flag != .none {
-            OverlayPill {
-                if let number {
-                    Text("\(number)").monospacedDigit().foregroundStyle(Color.white.opacity(0.88))
-                }
-                switch row.flag {
-                case .picked: Image(systemName: "flag.fill")
-                case .rejected: Image(systemName: "xmark.circle.fill").foregroundStyle(Color(nsColor: .systemRed))
-                case .none: EmptyView()
-                }
+        HStack(spacing: 3) {
+            if density != .compact, let index {
+                Text("\(index)")
+                    .font(.system(size: 9, weight: .bold).monospacedDigit())
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .padding(.horizontal, index > 9 ? 3 : 0)
+                    .frame(minWidth: 16, minHeight: 16)
+                    .background(isFocused ? Color.accentColor : Color.black.opacity(0.6), in: Capsule())
+                    .fixedSize()
+            }
+            switch row.flag {
+            case .picked: OverlayPill { Image(systemName: "flag.fill") }
+            case .rejected:
+                OverlayPill(tint: Color(nsColor: .systemRed)) { Image(systemName: "xmark.circle.fill") }
+            case .none: EmptyView()
             }
         }
     }
@@ -166,10 +177,11 @@ struct ThumbnailBadges: View {
         let items = Self.groupBadges(for: row)
         if !items.isEmpty {
             OverlayPill {
-                ForEach(items, id: \.symbol) { item in
+                ForEach(items.indices, id: \.self) { position in
+                    let item = items[position]
                     HStack(spacing: 2) {
-                        Image(systemName: item.symbol)
-                        if let text = density == .regular ? item.text : item.shortText { Text(text) }
+                        if let symbol = item.symbol { Image(systemName: symbol) }
+                        if let text = density == .regular ? item.text : item.shortText { Text(text).monospaced() }
                     }
                 }
             }
@@ -179,16 +191,19 @@ struct ThumbnailBadges: View {
     @ViewBuilder private var bottomLeading: some View {
         HStack(spacing: 3) {
             if row.rating > 0 {
-                OverlayPill(tint: Self.gold) {
+                // Gold stars straight on the photo, with a shadow so they read on light pictures.
+                HStack(spacing: 1) {
                     if density == .regular {
-                        HStack(spacing: 1) {
-                            ForEach(0..<min(row.rating, 5), id: \.self) { _ in Image(systemName: "star.fill") }
-                        }
+                        ForEach(0..<min(row.rating, 5), id: \.self) { _ in Image(systemName: "star.fill") }
                     } else {
                         Image(systemName: "star.fill")
                         Text("\(row.rating)").monospacedDigit()
                     }
                 }
+                .font(.system(size: 8, weight: .bold))
+                .foregroundStyle(Self.gold)
+                .shadow(color: .black.opacity(0.9), radius: 1.5)
+                .fixedSize()
             }
             if let label = row.colorLabel {
                 Circle()
@@ -215,7 +230,8 @@ struct ThumbnailBadges: View {
     static let gold = Color(red: 1, green: 0.84, blue: 0.04)
 
     struct GroupBadge: Equatable {
-        var symbol: String
+        /// Nil shows the text alone.
+        var symbol: String?
         /// Spelled out on large thumbnails.
         var text: String?
         /// On smaller thumbnails; nil shows the icon alone.
@@ -236,8 +252,9 @@ struct ThumbnailBadges: View {
             }
         }
         if let formats = row.pairedFormats {
-            badges.append(GroupBadge(symbol: "camera.aperture",
-                                     text: "RAW+" + formats.replacingOccurrences(of: ",", with: "+"), shortText: nil))
+            // Text only, as in the design: an icon on every photo of a RAW+JPEG shoot is noise.
+            badges.append(GroupBadge(symbol: nil, text: "RAW+" + formats.replacingOccurrences(of: ",", with: "+"),
+                                     shortText: "RAW+" + formats.replacingOccurrences(of: ",", with: "+")))
         }
         if let size = row.cullGroupSize, size > 1 {
             badges.append(GroupBadge(symbol: "square.on.square", text: "\(size)", shortText: "\(size)"))

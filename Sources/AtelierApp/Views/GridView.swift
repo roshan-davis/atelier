@@ -113,9 +113,13 @@ struct GridView: NSViewRepresentable {
                 applyingSelection = true
                 collectionView.selectionIndexPaths = wanted
                 applyingSelection = false
+                // Scroll only when the focused photo is not fully in view, as the Filmstrip does.
                 if let focused = model.focusedID, let index = indexByID[focused] {
-                    collectionView.scrollToItems(at: [IndexPath(item: index, section: 0)],
-                                                 scrollPosition: .nearestHorizontalEdge)
+                    let indexPath = IndexPath(item: index, section: 0)
+                    let frame = collectionView.layoutAttributesForItem(at: indexPath)?.frame
+                    if frame.map({ !collectionView.visibleRect.contains($0) }) ?? true {
+                        collectionView.scrollToItems(at: [indexPath], scrollPosition: .nearestHorizontalEdge)
+                    }
                 }
             }
         }
@@ -352,7 +356,7 @@ struct GridBadges: View {
     var width: CGFloat = 0
 
     var body: some View {
-        if let row { ThumbnailBadges(row: row, width: width) }
+        if let row { ThumbnailBadges(row: row, size: CGSize(width: width, height: width)) }
     }
 }
 
