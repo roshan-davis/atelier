@@ -211,7 +211,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Launched from `swift run` the process has no bundle; make it a regular foreground app.
         NSApp.setActivationPolicy(.regular)
-        if let iconURL = Bundle.module.url(forResource: "AppIcon", withExtension: "icns"),
+        if let iconURL = AtelierResources.bundle.url(forResource: "AppIcon", withExtension: "icns"),
            let icon = NSImage(contentsOf: iconURL) {
             NSApp.applicationIconImage = icon
         }

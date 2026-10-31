@@ -37,12 +37,11 @@ final class ProcessorDesktopSessions {
                 var request = try await Task.detached { () -> ProcessorDocument in
                     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
                     if let association = try catalog.processorAssociation(for: sourceID) {
-                        let project = try HDRProjectStore.open(association.projectURL)
-                        let manifest = await project.manifest
+                        let manifest = try HDRProjectStore.metadata(at: association.projectURL)
                         guard manifest.projectID == association.projectID, manifest.outputID == association.outputID else {
                             throw ProcessorDocumentError.invalidRequest
                         }
-                        let ownedSource = await project.sourceURL()
+                        let ownedSource = association.projectURL.appendingPathComponent("Sources").appendingPathComponent(manifest.sourceName)
                         return ProcessorDocument(sourceAssetID: association.sourceAssetID, sourceURL: try catalog.fileURL(for: association.sourceAssetID) ?? ownedSource,
                             sourceHash: association.sourceHash, projectURL: association.projectURL,
                             expectedProjectID: association.projectID, outputID: association.outputID)

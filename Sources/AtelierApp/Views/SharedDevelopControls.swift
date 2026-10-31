@@ -253,4 +253,3 @@ struct DevelopSlider: View {
         .frame(height: 16)
     }
 }
-

@@ -103,7 +103,7 @@ struct HDRWorkspace: View {
                 Text("From Atelier · \(editor.sourceName)").foregroundStyle(.secondary).lineLimit(1)
                 if editor.dirty { Text("Edited").font(.caption).foregroundStyle(.secondary) }
                 Spacer()
-                if editor.busy { ProgressView().controlSize(.small); Button("Cancel", action: editor.cancel) }
+                if editor.busy { ProgressView().controlSize(.small); Button("Cancel", action: editor.cancel).keyboardShortcut(.cancelAction) }
                 Button("Save & Return to Atelier") { editor.save(returnToAtelier: true) }
                     .buttonStyle(.borderedProminent).disabled(editor.before == nil || editor.busy)
             }.padding(12).background(Color(nsColor: theme.chrome))
@@ -128,7 +128,7 @@ struct HDRWorkspace: View {
                     HStack {
                         Picker("Compare", selection: $compare) {
                             Text("Off").tag("Off"); Text("Side by Side").tag("Side by Side"); Text("Split").tag("Split")
-                        }.pickerStyle(.segmented).labelsHidden().frame(width: 270)
+                        }.pickerStyle(.segmented).labelsHidden().frame(width: 300)
                         Text("⌥ Original").font(.caption).foregroundStyle(.secondary)
                         Spacer(minLength: 8)
                         ZoomControls(zoom: editor.zoom, compact: true)
@@ -173,7 +173,7 @@ struct HDRWorkspace: View {
         }
         .onChange(of: toneExpanded) { _, expanded in if expanded && solo { artifactsExpanded = false } }
         .onChange(of: artifactsExpanded) { _, expanded in if expanded && solo { toneExpanded = false } }
-        .onReceive(editor.zoom.$level) { _ in editor.zoomChanged() }
+        .onReceive(editor.zoom.$level) { _ in Task { @MainActor in editor.zoomChanged() } }
         .alert("HDR needs attention", isPresented: Binding(get: { editor.error != nil }, set: { if !$0 { editor.error = nil } })) {
             Button("OK") { editor.error = nil }
         } message: { Text(editor.error ?? "") }

@@ -52,7 +52,7 @@ public actor HDRProjectStore {
         }
     }
 
-    public static func open(_ url: URL) throws -> HDRProjectStore {
+    public static func metadata(at url: URL) throws -> HDRProjectManifest {
         let manifest = try JSONDecoder().decode(HDRProjectManifest.self, from: Data(contentsOf: url.appendingPathComponent("project.json")))
         guard manifest.schemaVersion == 1, manifest.engineVersion == "1",
               manifest.sourceName == "source." + URL(fileURLWithPath: manifest.sourceName).pathExtension,
@@ -60,6 +60,11 @@ public actor HDRProjectStore {
             throw HDRError.invalidProject("Unsupported or invalid manifest.")
         }
         try manifest.settings.validate()
+        return manifest
+    }
+
+    public static func open(_ url: URL) throws -> HDRProjectStore {
+        let manifest = try metadata(at: url)
         let source = url.appendingPathComponent("Sources").appendingPathComponent(manifest.sourceName)
         try regularFile(source)
         guard try hash(source) == manifest.sourceHash else {

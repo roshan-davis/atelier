@@ -15,7 +15,7 @@ let package = Package(
     ],
     targets: [
         .target(name: "AtelierHDRCore", swiftSettings: [.unsafeFlags(["-O"], .when(configuration: .debug))]),
-        .executableTarget(name: "AtelierHDRApp", dependencies: ["AtelierHDRCore", "AtelierCore"], resources: [.copy("Help")]),
+        .executableTarget(name: "AtelierHDRApp", dependencies: ["AtelierHDRCore", "AtelierCore"], resources: [.copy("Resources")], swiftSettings: [.define("ATELIER_HDR_APP")]),
         .executableTarget(name: "HDRQualification", dependencies: ["AtelierHDRCore", "AtelierCore"]),
         .testTarget(name: "AtelierHDRCoreTests", dependencies: ["AtelierHDRCore"]),
         .target(

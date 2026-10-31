@@ -56,6 +56,7 @@ final class HDRController: ObservableObject {
     }
 
     func chooseOpen() {
+        guard confirmReplacingProject() else { return }
         let panel = NSOpenPanel(); panel.canChooseDirectories = true
         panel.title = "Open HDR Project"
         guard panel.runModal() == .OK, let url = panel.url else { return }
@@ -64,6 +65,7 @@ final class HDRController: ObservableObject {
     }
 
     func openURL(_ url: URL) {
+        guard confirmReplacingProject() else { return }
         if url.pathExtension == "json" { openRequest(url) }
         else if url.pathExtension == "atelierhdr" {
             request = nil; requestURL = nil
@@ -71,9 +73,20 @@ final class HDRController: ObservableObject {
         }
     }
 
-    private func openProject(_ url: URL, originalName: String) {
+    private func confirmReplacingProject() -> Bool {
+        guard dirty else { return true }
+        let alert = NSAlert(); alert.messageText = "Open another project without saving these HDR changes?"
+        alert.informativeText = "Keep Editing lets you save first. The last saved project is preserved."
+        alert.addButton(withTitle: "Keep Editing"); alert.addButton(withTitle: "Open Without Saving")
+        return alert.runModal() == .alertSecondButtonReturn
+    }
+
+    private func openProject(_ url: URL, originalName: String, restoring: HDRSettings? = nil) {
         guard !busy else { return }
         projectURL = url
+        store = nil; input = nil; detailInput = nil; sourceURL = nil
+        before = nil; after = nil; renderRevision += 1; error = nil
+        sourceName = originalName
         busy = true; status = "Opening verified project…"
         task = Task {
             do {
@@ -85,13 +98,14 @@ final class HDRController: ObservableObject {
                     return (store, manifest, input, try io.preview(input))
                 }.value
                 try Task.checkCancellation()
-                store = loaded.0; settings = loaded.1.settings; savedSettings = settings
+                store = loaded.0; settings = restoring ?? loaded.1.settings; savedSettings = loaded.1.settings
                 input = loaded.2; before = NSImage(cgImage: loaded.3, size: .zero)
                 sourceURL = await loaded.0.sourceURL()
                 if let sourceURL { pixelSize = try HDRImageIO.dimensions(sourceURL) }
                 detailInput = nil
-                projectURL = url; sourceName = originalName; dirty = false
-                undoStack = []; redoStack = []; updateHistory()
+                projectURL = url; sourceName = originalName; dirty = settings != savedSettings
+                if restoring == nil { undoStack = []; redoStack = [] }
+                updateHistory()
                 if loaded.1.revision > 0, let request, let requestURL {
                     let m = loaded.1
                     let receipt = ProcessorReceipt(jobID: request.jobID, projectID: m.projectID, outputID: m.outputID,
@@ -108,11 +122,12 @@ final class HDRController: ObservableObject {
         guard let projectURL, !busy else { return }
         let panel = NSOpenPanel(); panel.title = "Relink HDR Source"; panel.prompt = "Verify and Relink"
         guard panel.runModal() == .OK, let replacement = panel.url else { return }
+        let unsaved = dirty ? settings : nil
         busy = true; status = "Verifying replacement source…"
         Task {
             do {
                 try await Task.detached { try HDRProjectStore.relink(projectURL, from: replacement) }.value
-                busy = false; openProject(projectURL, originalName: sourceName)
+                busy = false; openProject(projectURL, originalName: sourceName, restoring: unsaved)
             } catch { busy = false; self.error = error.localizedDescription }
         }
     }

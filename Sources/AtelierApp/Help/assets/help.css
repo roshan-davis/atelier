@@ -393,7 +393,7 @@ ol.legend > li::before {
 
 /* A slider row: name, slim track with a default mark and fill, knob, value */
 .sl { display: flex; align-items: center; gap: 8px; height: 22px; font-size: 13px; color: var(--app-text); }
-.sl .name { width: 82px; flex: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sl .name { width: var(--slider-label-width, 82px); flex: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sl .track { flex: 1; position: relative; height: 16px; cursor: pointer; touch-action: none; }
 .sl .track .bar { position: absolute; left: 0; right: 0; top: 6.5px; height: 3px; border-radius: 2px; background: var(--app-track); }
 .sl .track .fill { position: absolute; top: 6.5px; height: 3px; background: var(--app-accent); }

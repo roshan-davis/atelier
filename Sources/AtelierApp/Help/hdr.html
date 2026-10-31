@@ -10,11 +10,11 @@
 <li>Adjust tone and texture, compare, then click <b>Save &amp; Return to Atelier</b>. The original and returned TIFF appear together in Atelier; the TIFF opens in Develop.</li></ol>
 <p>This version processes one image. It does not align or merge captured brackets, remove moving subjects, or add scene information by synthesizing exposures.</p>
 <h2 id="controls">Tone and texture</h2>
-<figure><div class="diagram"><div class="panel"><div class="ph">Tone Mapping</div>
+<figure><div class="diagram"><div class="panel" style="--slider-label-width:100px"><div class="ph">Tone Mapping</div>
 <div class="sl" data-name="Exposure" data-value="0.50" data-at="0.55" data-def="0.5"></div>
-<div class="sl" data-name="Range" data-value="0.50" data-at="0.5" data-def="0.5"></div>
-<div class="gh">Texture</div><div class="sl" data-name="Microcontrast" data-value="0.30" data-at="0.65" data-def="0.5"></div>
-<div class="sl" data-name="Detail" data-value="0.20" data-at="0.6" data-def="0.5"></div>
+<div class="sl" data-name="Range" data-value="0.65" data-at="0.65" data-def="0.65"></div>
+<div class="gh">Texture</div><div class="sl" data-name="Microcontrast" data-value="0.60" data-at="0.8" data-def="0.8"></div>
+<div class="sl" data-name="Detail" data-value="0.35" data-at="0.675" data-def="0.675"></div>
 <div class="ph">Artifacts</div><div class="sl" data-name="Shadows" data-value="0.50" data-at="0.5" data-def="0.5"></div>
 <div class="sl" data-name="Highlights" data-value="0.50" data-at="0.5" data-def="0.5"></div></div></div>
 <figcaption>The first controls focus on tone compression, texture and protection.</figcaption></figure>
@@ -29,7 +29,7 @@
 <h2 id="compare">Compare and zoom</h2><p>Choose Off, Side by Side or Split below the photo. Drag the split handle to move the divider. Hold <kbd>⌥</kbd> for the original. Use the zoom menu for Fit, Fill, 100% or 200%; pinch, double-click, scroll with a zoom modifier, or drag to pan using the same photo controls as Atelier.</p>
 <h2 id="save">Save, reopen and new versions</h2><p><span class="path">File › Save</span> (<kbd>⌘S</kbd>) saves a full-resolution, profiled 16-bit sRGB TIFF and the durable project beside it. Ordinary saves update the same result in Atelier. The saved project retains its source and settings; a TIFF alone cannot reconstruct HDR adjustments.</p>
 <p>To re-edit, select the returned HDR TIFF in Atelier and choose <span class="path">Photo › Edit In › HDR App (Original)…</span> again. It reopens the associated project. <span class="path">File › Save As New…</span> (<kbd>⇧⌘S</kbd>) creates a separate project and result identity, preserving the earlier result. Color grading remains in Atelier Develop.</p>
-<h2 id="recovery">Cancellation and recovery</h2><p>Cancel stops a save before its next commit boundary and preserves the last committed generation. Closing with unsaved changes asks before discarding them. Reopening validates the owned source and saved generation. A missing or changed source stops with an explanation; click <b>Relink Source…</b> and select a byte-identical backup of the original. The app checks its saved hash before copying it into the project; a different photo is rejected.</p>
+<h2 id="recovery">Cancellation and recovery</h2><p>Cancel (or <kbd>Esc</kbd>) stops a save before its next commit boundary and preserves the last committed generation. Closing with unsaved changes asks before discarding them. Reopening validates the owned source and saved generation. A missing or changed source stops with an explanation; click <b>Relink Source…</b> and select a byte-identical backup of the original. The app checks its saved hash before copying it into the project; a different photo is rejected.</p>
 <p>Interrupted file publication is rebuilt from the committed generation when reopened. Atelier rechecks saved completion receipts after relaunch and rejects mismatched or stale results. Keep the project and its private sources when backing up; the catalog backup alone does not contain them.</p>
 <div class="see-also">See also: <a href="edit-in.html">Edit In</a> · <a href="photos.html#stacks">Stacks</a> · <a href="develop.html">Develop basics</a></div>
 </main></body></html>

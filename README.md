@@ -99,3 +99,14 @@ swift test --filter AtelierHDRCoreTests
 The engine is optimized in Debug builds: the first unoptimized full-resolution UI
 trial exceeded two minutes at one CPU core. Revised timing and final-head validation
 will be recorded in the PR before this work is considered ready.
+
+
+To build a movable native app with the HDR companion included:
+
+~~~sh
+python3 Scripts/build_macos_app.py
+~~~
+
+The generated app is at .build/Applications/Atelier.app. Earlier generated apps
+are renamed and preserved when rebuilding. This is a local ad-hoc-signed build,
+not a notarized distribution.

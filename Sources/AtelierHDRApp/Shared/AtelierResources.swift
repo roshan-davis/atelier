@@ -1,0 +1,1 @@
+../../AtelierApp/AtelierResources.swift

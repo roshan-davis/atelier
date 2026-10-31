@@ -57,4 +57,43 @@ final class HDRProjectTests: XCTestCase {
         XCTAssertThrowsError(try HDRProjectStore.open(projectURL))
         XCTAssertEqual(try String(contentsOf: source, encoding: .utf8), "original")
     }
+    func testRelinkAndStaleWriterPreserveCommittedWork() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("original.tif")
+        try HDRImageIO().writeTIFF(HDRImage(width: 8, height: 6, rgb: Array(repeating: 0.18, count: 144)), to: source)
+        let hash = try HDRProjectStore.hash(source)
+        let url = root.appendingPathComponent("project.atelierhdr")
+        let first = try HDRProjectStore.create(at: url, source: source)
+        let stale = try HDRProjectStore.open(url)
+        let committed = try await first.save(settings: HDRSettings())
+        do {
+            _ = try await stale.save(settings: HDRSettings())
+            XCTFail("A stale writer must not replace the newer revision")
+        } catch HDRError.invalidProject {}
+        let owned = await first.sourceURL()
+        try FileManager.default.moveItem(at: owned, to: root.appendingPathComponent("missing-source.tif"))
+        XCTAssertThrowsError(try HDRProjectStore.open(url))
+        XCTAssertEqual(try HDRProjectStore.metadata(at: url).projectID, committed.projectID)
+        let wrong = root.appendingPathComponent("wrong.tif")
+        try Data("different source".utf8).write(to: wrong)
+        XCTAssertThrowsError(try HDRProjectStore.relink(url, from: wrong))
+        try HDRProjectStore.relink(url, from: source)
+        let reopened = try HDRProjectStore.open(url)
+        let recovered = await reopened.manifest
+        XCTAssertEqual(recovered, committed)
+        XCTAssertEqual(try HDRProjectStore.hash(source), hash)
+        var checks = 0
+        do {
+            _ = try await reopened.save(settings: HDRSettings(), cancellation: {
+                checks += 1
+                if checks == 5 { throw CancellationError() }
+            })
+            XCTFail("Mid-processing cancellation must stop publication")
+        } catch is CancellationError {}
+        let after = try HDRProjectStore.metadata(at: url)
+        XCTAssertEqual(after, committed)
+    }
+
 }

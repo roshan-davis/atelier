@@ -12,7 +12,15 @@ final class HelpWindow: NSObject, WKNavigationDelegate {
     private var webView: WKWebView?
 
     /// The Help folder in the app's resources.
-    static var folder: URL? { Bundle.module.url(forResource: "Help", withExtension: nil) }
+    static var folder: URL? {
+        let hostApp = Bundle.main.bundleURL.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let candidates = [
+            AtelierResources.bundle.url(forResource: "Help", withExtension: nil),
+            AtelierResources.bundle.bundleURL.deletingLastPathComponent().appendingPathComponent("Atelier_AtelierApp.bundle/Help"),
+            hostApp.appendingPathComponent("Contents/Resources/Atelier_AtelierApp.bundle/Help")
+        ].compactMap { $0 }
+        return candidates.first { FileManager.default.fileExists(atPath: $0.path) }
+    }
 
     /// The help page and section for a Develop panel or tool, by the title its header shows.
     static func topic(forPanel title: String) -> (page: String, section: String?)? {

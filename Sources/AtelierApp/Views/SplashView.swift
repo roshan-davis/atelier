@@ -213,8 +213,8 @@ final class SplashController {
 
     /// The built-in images, copied into the Splash folder the first time.
     static var builtInImages: [URL] {
-        let urls = (Bundle.module.urls(forResourcesWithExtension: "jpg", subdirectory: nil) ?? [])
-            + (Bundle.module.urls(forResourcesWithExtension: "jpg", subdirectory: "Splash") ?? [])
+        let urls = (AtelierResources.bundle.urls(forResourcesWithExtension: "jpg", subdirectory: nil) ?? [])
+            + (AtelierResources.bundle.urls(forResourcesWithExtension: "jpg", subdirectory: "Splash") ?? [])
         return urls.filter { $0.lastPathComponent.hasPrefix("splash-") }
     }
 
