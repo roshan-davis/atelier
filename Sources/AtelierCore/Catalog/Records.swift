@@ -221,6 +221,12 @@ public struct AssetRow: Codable, Hashable, Identifiable, Sendable, FetchableReco
     /// On a RAW shown for a RAW+JPEG pair: the other files' extensions, such as "JPG" or
     /// "JPG,HEIC". Nil when the photo has no hidden siblings.
     public var pairedFormats: String? = nil
+    /// The thumbnail's status badges: Develop settings changed, cropped or straightened, local
+    /// masks, and the original's drive offline.
+    public var hasEdits = false
+    public var isCropped = false
+    public var hasMasks = false
+    public var isOffline = false
 }
 
 /// Everything the inspector and loupe need for one photo.

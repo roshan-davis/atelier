@@ -21,6 +21,10 @@ public struct SavedSession: Codable, Equatable, Sendable {
     public var flag: Flag?
     public var colorLabel: ColorLabel?
     public var text = ""
+    /// Added later, so optional: sessions saved before them still decode.
+    public var edited: Bool?
+    public var sort: LibrarySort?
+    public var descending: Bool?
     public var selection: [Int64] = []
     public var focusedID: Int64?
     public var zoom: Zoom = .fit
@@ -35,6 +39,9 @@ public struct SavedSession: Codable, Equatable, Sendable {
         flag = filter.flag
         colorLabel = filter.colorLabel
         text = filter.text
+        edited = filter.edited
+        sort = filter.sort
+        descending = !filter.ascending
         self.selection = selection.count <= Self.maxSavedSelection ? selection.sorted() : focusedID.map { [$0] } ?? []
         self.focusedID = focusedID
         self.zoom = zoom
@@ -50,6 +57,9 @@ public struct SavedSession: Codable, Equatable, Sendable {
         filter.flag = flag
         filter.colorLabel = colorLabel
         filter.text = text
+        filter.edited = edited
+        filter.sort = sort ?? .captureTime
+        filter.ascending = !(descending ?? false)
         return filter
     }
 
