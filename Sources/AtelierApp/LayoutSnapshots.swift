@@ -664,28 +664,33 @@ enum LayoutSnapshots {
     }
 
     /// The RAW+JPEG Test import made private: shown (lock after its name, Hide Private in the
-    /// sidebar header), then hidden (gone from Imports, All Photographs counts two photos fewer).
+    /// sidebar header), then View > Show Only Private Photos, then hidden (gone from Imports, All Photographs counts two photos fewer).
     private static func snapshotPrivate(model: LibraryModel, into folder: URL) async {
         guard let entry = model.sidebar.imports.first(where: { $0.name == "RAW+JPEG Test" }) else {
             print("SNAPSHOT: private import entry missing")
             return
         }
         model.mode = .grid
-        model.filter.showsPrivate = true
+        model.filter.privacy = .shown
         model.setPrivate(true, importGroup: entry.id)
         model.sidebarSelection = .importGroup(entry.id)
         try? await Task.sleep(for: .seconds(2))
         print("SNAPSHOT: private shown imports \(model.sidebar.imports.map { "\($0.name) private=\($0.isPrivate)" }) total \(model.sidebar.totalCount)")
         await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1000, height: 584),
                       to: folder.appendingPathComponent("private-shown.png"))
+        model.privatePhotos.choose(.only)
+        try? await Task.sleep(for: .seconds(2))
+        print("SNAPSHOT: private only imports \(model.sidebar.imports.map(\.name)) total \(model.sidebar.totalCount) rows \(model.rows.map(\.filename))")
+        await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1000, height: 584),
+                      to: folder.appendingPathComponent("private-only.png"))
         model.privatePhotos.hide()
         try? await Task.sleep(for: .seconds(2))
         print("SNAPSHOT: private hidden imports \(model.sidebar.imports.map(\.name)) total \(model.sidebar.totalCount) scope \(String(describing: model.sidebarSelection)) rows \(model.rows.map(\.filename))")
         await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1000, height: 584),
                       to: folder.appendingPathComponent("private-hidden.png"))
-        model.filter.showsPrivate = true
+        model.filter.privacy = .shown
         model.setPrivate(false, importGroup: entry.id)
-        model.filter.showsPrivate = false
+        model.filter.privacy = .hidden
         try? await Task.sleep(for: .seconds(1))
     }
 

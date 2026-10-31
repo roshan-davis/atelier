@@ -56,7 +56,7 @@ struct SidebarData: Equatable, Sendable {
     var collections: [PhotoCollection] = []
     var imports: [ImportGroupSummary] = []
     var totalCount = 0
-    /// Private import entries and collections, shown or not, for Library > Show Private Photos.
+    /// Private import entries and collections, shown or not, for View > Show Private Photos.
     var privateListCount = 0
 }
 
@@ -84,7 +84,7 @@ final class LibraryModel: ObservableObject {
         didSet {
             guard filter != oldValue else { return }
             observeRows()
-            if filter.groupsRawPairs != oldValue.groupsRawPairs || filter.showsPrivate != oldValue.showsPrivate {
+            if filter.groupsRawPairs != oldValue.groupsRawPairs || filter.privacy != oldValue.privacy {
                 observeSidebar()
             }
         }
@@ -252,14 +252,14 @@ final class LibraryModel: ObservableObject {
     private func observeSidebar() {
         sidebarTask?.cancel()
         let pairs = filter.groupsRawPairs
-        let showingPrivate = filter.showsPrivate
+        let privacy = filter.privacy
         let observation = ValueObservation.tracking { db in
             SidebarData(
                 volumes: try Volume.order(Column("name")).fetchAll(db),
-                folders: try Catalog.fetchFolders(db, showingPrivate: showingPrivate),
-                collections: try Catalog.fetchCollections(db, showingPrivate: showingPrivate),
-                imports: try Catalog.fetchImportGroupSummaries(db, groupingRawPairs: pairs, showingPrivate: showingPrivate),
-                totalCount: try Catalog.fetchPhotoCount(db, groupingRawPairs: pairs, showingPrivate: showingPrivate),
+                folders: try Catalog.fetchFolders(db, privacy: privacy),
+                collections: try Catalog.fetchCollections(db, privacy: privacy),
+                imports: try Catalog.fetchImportGroupSummaries(db, groupingRawPairs: pairs, privacy: privacy),
+                totalCount: try Catalog.fetchPhotoCount(db, groupingRawPairs: pairs, privacy: privacy),
                 privateListCount: try Catalog.fetchPrivateListCount(db))
         }
         let writer = catalog.writer
@@ -267,9 +267,11 @@ final class LibraryModel: ObservableObject {
             do {
                 for try await data in observation.values(in: writer) {
                     // A replaced observation can still deliver; it may list hidden private lists.
-                    guard let self, !Task.isCancelled, self.filter.showsPrivate == showingPrivate else { return }
+                    guard let self, !Task.isCancelled, self.filter.privacy == privacy else { return }
                     self.sidebar = data
                     self.checkRestoredScope(data)
+                    // The last private list was made not private: nothing is left to show or hide.
+                    if data.privateListCount == 0, privacy != .hidden { self.privatePhotos.reset() }
                     if self.leavesHiddenScope {
                         self.leavesHiddenScope = false
                         self.leaveMissingScope(data)

@@ -61,9 +61,12 @@ final class PrivateListTests: XCTestCase {
 
         let hidden = LibraryFilter(groupsRawPairs: false)
         var shown = hidden
-        shown.showsPrivate = true
+        shown.privacy = .shown
         XCTAssertEqual(try ids(catalog, hidden), [lib.landscape])
         XCTAssertEqual(try ids(catalog, shown), [lib.raw, lib.jpeg, lib.portrait, lib.landscape])
+        var only = hidden
+        only.privacy = .only
+        XCTAssertEqual(try ids(catalog, only), [lib.raw, lib.jpeg, lib.portrait])
         var inCollection = hidden
         inCollection.scope = .collection(favourites)
         XCTAssertEqual(try ids(catalog, inCollection), [lib.landscape])
@@ -76,16 +79,21 @@ final class PrivateListTests: XCTestCase {
 
         try await catalog.writer.read { db in
             XCTAssertEqual(try Catalog.fetchPhotoCount(db, groupingRawPairs: false), 1)
-            XCTAssertEqual(try Catalog.fetchPhotoCount(db, groupingRawPairs: false, showingPrivate: true), 4)
+            XCTAssertEqual(try Catalog.fetchPhotoCount(db, groupingRawPairs: false, privacy: .shown), 4)
             let summaries = try Catalog.fetchImportGroupSummaries(db)
             XCTAssertEqual(summaries.map(\.id), [lib.publicGroup])
-            let all = try Catalog.fetchImportGroupSummaries(db, showingPrivate: true)
+            let all = try Catalog.fetchImportGroupSummaries(db, privacy: .shown)
             XCTAssertEqual(Set(all.map(\.id)), [lib.shootGroup, lib.publicGroup])
             XCTAssertEqual(all.first { $0.id == lib.shootGroup }?.isPrivate, true)
             // The Shoot folder holds only private photos, so its name is hidden too.
             XCTAssertEqual(try Catalog.fetchFolders(db).map(\.displayName).filter { $0.contains("Shoot") }, [])
-            XCTAssertEqual(try Catalog.fetchFolders(db, showingPrivate: true).map(\.displayName).filter { $0.contains("Shoot") }.count, 1)
+            XCTAssertEqual(try Catalog.fetchFolders(db, privacy: .shown).map(\.displayName).filter { $0.contains("Shoot") }.count, 1)
             XCTAssertEqual(try Catalog.fetchPrivateListCount(db), 1)
+            // Show Only: just the private entry, its photos and its folder.
+            XCTAssertEqual(try Catalog.fetchImportGroupSummaries(db, privacy: .only).map(\.id), [lib.shootGroup])
+            XCTAssertEqual(try Catalog.fetchPhotoCount(db, groupingRawPairs: false, privacy: .only), 3)
+            XCTAssertEqual(try Catalog.fetchFolders(db, privacy: .only).map(\.displayName).filter { !$0.contains("Shoot") }, [])
+            XCTAssertEqual(try Catalog.fetchCollections(db, privacy: .only).map(\.name), [])
         }
         XCTAssertEqual(try catalog.privatePhotoIDs(among: [lib.portrait, lib.landscape]), [lib.portrait])
 
@@ -109,7 +117,7 @@ final class PrivateListTests: XCTestCase {
         XCTAssertEqual(try catalog.privatePhotoIDs(among: [lib.jpeg, copy, lib.landscape]), [lib.jpeg, copy])
         try await catalog.writer.read { db in
             XCTAssertEqual(try Catalog.fetchCollections(db).map(\.name), [])
-            XCTAssertEqual(try Catalog.fetchCollections(db, showingPrivate: true).map(\.name), ["Model shoot"])
+            XCTAssertEqual(try Catalog.fetchCollections(db, privacy: .shown).map(\.name), ["Model shoot"])
         }
     }
 

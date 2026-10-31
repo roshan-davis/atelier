@@ -38,7 +38,7 @@ struct SidebarView: View {
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(Color.accentColor)
-                        .help("Private photos are shown. Click to hide them again (Library > Hide Private Photos).")
+                        .help("Private photos are shown. Click to hide them again (View > Hide Private Photos).")
                     }
                 }
             }
@@ -180,39 +180,17 @@ struct SidebarView: View {
                 makingPrivate = nil
             }
             Button("Cancel", role: .cancel) { makingPrivate = nil }
-        } message: {
-            Text(privateMessage)
         }
     }
 
     private var privateTitle: String {
         switch makingPrivate {
         case .importGroup(let id):
-            return "Make the import \u{201C}\(model.sidebar.imports.first { $0.id == id }?.name ?? "")\u{201D} private?"
+            return "Make \u{201C}\(model.sidebar.imports.first { $0.id == id }?.name ?? "")\u{201D} private?"
         case .collection(let id):
-            return "Make the collection \u{201C}\(model.sidebar.collections.first { $0.id == id }?.name ?? "")\u{201D} private?"
+            return "Make \u{201C}\(model.sidebar.collections.first { $0.id == id }?.name ?? "")\u{201D} private?"
         case nil:
             return "Make private?"
-        }
-    }
-
-    private var privateMessage: String {
-        let minutes = PrivatePhotos.hideAfterMinutes
-        let idle = minutes > 0 ? "after \(minutes) minutes without using Atelier, " : ""
-        let now = model.filter.showsPrivate
-            ? "Private photos are shown now, so it stays in view until you choose Library > Hide Private Photos."
-            : "It disappears now."
-        return "Its photos won't appear anywhere in Atelier, including All Photographs, other imports and collections, search and counts, until you choose Library > Show Private Photos… and use Touch ID or your Mac's password. They hide again \(idle)when your Mac sleeps, and every time Atelier opens. \(now) Files and previews on disk aren't encrypted."
-    }
-
-    private var deleteTitle: String {
-        switch deleting {
-        case .importGroup(let id):
-            return "Delete the import \"\(model.sidebar.imports.first { $0.id == id }?.name ?? "")\"?"
-        case .collection(let id):
-            return "Delete the collection \"\(model.sidebar.collections.first { $0.id == id }?.name ?? "")\"?"
-        case nil:
-            return "Delete?"
         }
     }
 
@@ -228,7 +206,7 @@ private struct PrivateMark: View {
         Image(systemName: "lock.fill")
             .imageScale(.small)
             .foregroundStyle(.secondary)
-            .help("Private: hidden everywhere until Library > Show Private Photos…")
+            .help("Private: hidden until View > Show Private Photos…")
     }
 }
 

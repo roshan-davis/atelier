@@ -178,7 +178,7 @@ struct GeneralSettings: View {
             } header: {
                 Text("Private Photos")
             } footer: {
-                Text("Right-click an import or collection > Make Private… to hide its photos everywhere in Atelier. Library > Show Private Photos… shows them after Touch ID or your Mac's password. They hide again with Library > Hide Private Photos, after this long, when the Mac sleeps or locks, and every time Atelier opens. Files and previews aren't encrypted.")
+                Text("Private photos also hide when the Mac sleeps or locks, and every time Atelier opens.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

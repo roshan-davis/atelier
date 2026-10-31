@@ -42,6 +42,15 @@ extension Catalog {
         """
     }
 
+    /// The condition that leaves out (hidden) or keeps only (only) private photos; nil when shown.
+    public static func privacyCondition(_ privacy: PrivateVisibility, _ alias: String = "asset") -> String? {
+        switch privacy {
+        case .hidden: return "NOT " + privateCondition(alias)
+        case .shown: return nil
+        case .only: return privateCondition(alias)
+        }
+    }
+
     /// Right-click an import entry > Make Private / Make Not Private.
     public func setImportGroup(_ id: Int64, isPrivate: Bool) throws {
         _ = try writer.write { db in
@@ -58,7 +67,8 @@ extension Catalog {
         }
     }
 
-    /// How many import entries and collections are private, to enable Show Private Photos.
+    /// How many import entries and collections are private: the View menu's private photo
+    /// commands appear only when there is one.
     public static func fetchPrivateListCount(_ db: Database) throws -> Int {
         try Int.fetchOne(db, sql: """
             SELECT (SELECT COUNT(*) FROM importGroup WHERE isPrivate)
@@ -77,21 +87,25 @@ extension Catalog {
         }
     }
 
-    /// Collections by name. Without `showingPrivate`, private ones are left out.
-    public static func fetchCollections(_ db: Database, showingPrivate: Bool = false) throws -> [PhotoCollection] {
+    /// Collections by name: without private ones (hidden), all (shown) or only private ones (only).
+    public static func fetchCollections(_ db: Database, privacy: PrivateVisibility = .hidden) throws -> [PhotoCollection] {
         var request = PhotoCollection.order(Column("name"))
-        if !showingPrivate { request = request.filter(Column("isPrivate") == false) }
+        switch privacy {
+        case .hidden: request = request.filter(Column("isPrivate") == false)
+        case .shown: break
+        case .only: request = request.filter(Column("isPrivate") == true)
+        }
         return try request.fetchAll(db)
     }
 
-    /// Folders by path. Without `showingPrivate`, a folder whose photos are all private is left
-    /// out, so its name doesn't show either. Empty folders stay.
-    public static func fetchFolders(_ db: Database, showingPrivate: Bool = false) throws -> [Folder] {
-        guard !showingPrivate else { return try Folder.order(Column("relativePath")).fetchAll(db) }
+    /// Folders by path. Hidden: a folder whose photos are all private is left out, so its name
+    /// doesn't show either (empty folders stay). Only: just folders holding a private photo.
+    public static func fetchFolders(_ db: Database, privacy: PrivateVisibility = .hidden) throws -> [Folder] {
+        guard let condition = privacyCondition(privacy) else { return try Folder.order(Column("relativePath")).fetchAll(db) }
+        let keepsEmpty = privacy == .hidden ? "NOT EXISTS (SELECT 1 FROM asset WHERE asset.folderId = folder.id) OR " : ""
         return try Folder.fetchAll(db, sql: """
             SELECT folder.* FROM folder
-            WHERE NOT EXISTS (SELECT 1 FROM asset WHERE asset.folderId = folder.id)
-               OR EXISTS (SELECT 1 FROM asset WHERE asset.folderId = folder.id AND NOT \(privateCondition()))
+            WHERE \(keepsEmpty)EXISTS (SELECT 1 FROM asset WHERE asset.folderId = folder.id AND \(condition))
             ORDER BY folder.relativePath
             """)
     }

@@ -146,7 +146,7 @@ public struct PhotoCollection: Codable, Identifiable, Hashable, Sendable, Fetcha
     public var parentId: Int64?
     /// Collection sets group collections and hold no photos themselves.
     public var isSet: Bool
-    /// Its photos are hidden everywhere until Library > Show Private Photos (see `Catalog+Private`).
+    /// Its photos are hidden everywhere until View > Show Private Photos (see `Catalog+Private`).
     public var isPrivate: Bool
 
     public init(id: Int64? = nil, name: String, parentId: Int64? = nil, isSet: Bool = false, isPrivate: Bool = false) {
@@ -177,7 +177,7 @@ public struct ImportGroup: Codable, Identifiable, Hashable, Sendable, FetchableR
     public var id: Int64?
     public var name: String
     public var createdAt: Date
-    /// Its photos are hidden everywhere until Library > Show Private Photos (see `Catalog+Private`).
+    /// Its photos are hidden everywhere until View > Show Private Photos (see `Catalog+Private`).
     public var isPrivate: Bool
 
     public init(id: Int64? = nil, name: String, createdAt: Date = Date(), isPrivate: Bool = false) {

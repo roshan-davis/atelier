@@ -3,10 +3,11 @@ import AtelierCore
 import LocalAuthentication
 
 /// Private import entries and collections (AT-023): their photos appear nowhere in Atelier until
-/// Library > Show Private Photos… and Touch ID or the Mac's login password. Every launch starts
-/// with them hidden, and they hide again from Library > Hide Private Photos, after a while
-/// without using Atelier (Settings > General > Private Photos), and when the Mac sleeps or locks.
-/// It's for seeing those shoots only on purpose, not security: files and previews aren't encrypted.
+/// View > Show Private Photos… (with everything else) or Show Only Private Photos…, after Touch ID
+/// or the Mac's login password. Every launch starts with them hidden, and they hide again from
+/// View > Hide Private Photos, after a while without using Atelier (Settings > General > Private
+/// Photos), and when the Mac sleeps or locks. The View menu lists these only when something is
+/// private. It's for seeing those shoots on purpose, not security: nothing is encrypted.
 @MainActor
 final class PrivatePhotos {
     private weak var model: LibraryModel?
@@ -29,14 +30,25 @@ final class PrivatePhotos {
         self.model = model
     }
 
-    var isShowing: Bool { model?.filter.showsPrivate == true }
+    var visibility: PrivateVisibility { model?.filter.privacy ?? .hidden }
+    var isShowing: Bool { visibility != .hidden }
+
+    /// The View menu's choice. Leaving Hidden asks for Touch ID or the password; switching
+    /// between Show and Show Only doesn't.
+    func choose(_ choice: PrivateVisibility) {
+        guard choice != visibility else { return }
+        switch choice {
+        case .hidden: hide()
+        case .shown, .only:
+            if isShowing { apply(choice) } else { unlock(then: choice) }
+        }
+    }
 
     // MARK: Show
 
-    /// Library > Show Private Photos…: asks for Touch ID or the login password, as macOS does
-    /// for its own hidden album.
-    func show() {
-        guard model != nil, !isShowing, !asking else { return }
+    /// Asks for Touch ID or the login password with macOS's own prompt, as for its Hidden album.
+    private func unlock(then choice: PrivateVisibility) {
+        guard model != nil, !asking else { return }
         let context = LAContext()
         context.localizedCancelTitle = "Cancel"
         var error: NSError?
@@ -48,21 +60,21 @@ final class PrivatePhotos {
             // No login password on this Mac, so there is nothing to ask for: confirm instead.
             let alert = NSAlert()
             alert.messageText = "Show private photos?"
-            alert.informativeText = "This Mac has no login password, so Atelier can't ask for Touch ID or your password. Set one in System Settings > Users & Groups to protect private photos."
-            alert.addButton(withTitle: "Show Private Photos")
+            alert.informativeText = "This Mac has no login password, so Touch ID or a password can't be asked for."
+            alert.addButton(withTitle: "Show")
             alert.addButton(withTitle: "Cancel")
-            if alert.runModal() == .alertFirstButtonReturn { reveal() }
+            if alert.runModal() == .alertFirstButtonReturn { apply(choice) }
             return
         }
         asking = true
         context.evaluatePolicy(.deviceOwnerAuthentication,
-                               localizedReason: "show your private imports and collections") { [weak self] success, error in
+                               localizedReason: "show your private photos") { [weak self] success, error in
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     guard let self else { return }
                     self.asking = false
                     if success {
-                        self.reveal()
+                        self.apply(choice)
                     } else if let code = (error as? LAError)?.code,
                               ![.userCancel, .appCancel, .systemCancel].contains(code) {
                         self.model?.status = "Private photos weren't shown: \(error?.localizedDescription ?? "")"
@@ -72,28 +84,35 @@ final class PrivatePhotos {
         }
     }
 
-    private func reveal() {
+    private func apply(_ choice: PrivateVisibility) {
         guard let model else { return }
         lastActivity = Date()
-        model.filter.showsPrivate = true
+        // Show Only: an ordinary sidebar item has nothing left to show.
+        if choice == .only { model.leavesHiddenScope = true }
+        model.filter.privacy = choice
         startWatching()
-        let minutes = Self.hideAfterMinutes
-        model.status = minutes > 0
-            ? "Private photos are shown. They hide again after \(minutes) minutes without using Atelier, or from Library > Hide Private Photos."
-            : "Private photos are shown until you choose Library > Hide Private Photos, the Mac sleeps or Atelier quits."
+        model.status = choice == .only ? "Showing only private photos." : "Private photos are shown."
     }
 
     // MARK: Hide
 
-    /// Library > Hide Private Photos, the sidebar's Hide Private button, idle time, sleep and the
+    /// View > Hide Private Photos, the sidebar's Hide Private button, idle time, sleep and the
     /// screen locking. Anything private on screen is put away first.
     func hide(because reason: String? = nil) {
         guard let model, isShowing else { return }
         stopWatching()
         model.putAwayPrivatePhotos()
         model.leavesHiddenScope = true
-        model.filter.showsPrivate = false
+        model.filter.privacy = .hidden
         model.status = reason.map { "Private photos are hidden again \($0)." } ?? "Private photos are hidden."
+    }
+
+    /// Nothing is private any more: back to the normal view without a message.
+    func reset() {
+        guard let model, isShowing else { return }
+        stopWatching()
+        model.leavesHiddenScope = true
+        model.filter.privacy = .hidden
     }
 
     // MARK: Watching for idle time and sleep
@@ -182,8 +201,8 @@ extension LibraryModel {
 
     private func announcePrivate(_ name: String) {
         status = privatePhotos.isShowing
-            ? "\u{201C}\(name)\u{201D} is private. Its photos hide with Library > Hide Private Photos."
-            : "\u{201C}\(name)\u{201D} is private and hidden. Library > Show Private Photos… shows it."
+            ? "\u{201C}\(name)\u{201D} is private."
+            : "\u{201C}\(name)\u{201D} is private and hidden. View > Show Private Photos… shows it."
     }
 
     /// Before private photos hide: leaves a private import or collection for All Photographs, and
