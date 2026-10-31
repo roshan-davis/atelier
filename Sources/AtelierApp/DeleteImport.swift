@@ -18,7 +18,7 @@ extension LibraryModel {
     func beginDeleteImport(_ id: Int64) {
         guard let entry = sidebar.imports.first(where: { $0.id == id }) else { return }
         do {
-            let ids = try catalog.assetRows(filter: LibraryFilter(scope: .importGroup(id), groupsRawPairs: false)).map(\.id)
+            let ids = try catalog.assetRows(filter: LibraryFilter(scope: .importGroup(id), groupsRawPairs: false, showsPrivate: filter.showsPrivate)).map(\.id)
             deletingImport = ImportDeletion(id: id, name: entry.name, photoCount: entry.photoCount,
                                             plan: try catalog.removalPlan(for: ids))
         } catch {

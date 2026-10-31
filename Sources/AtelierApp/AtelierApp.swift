@@ -116,6 +116,13 @@ private struct ReadyLibraryCommands: Commands {
                 Divider()
                 Button("Refresh Volumes") { model.refreshVolumes() }
                     .keyboardShortcut("r", modifiers: [.command])
+                Divider()
+                if model.filter.showsPrivate {
+                    Button("Hide Private Photos") { model.privatePhotos.hide() }
+                } else {
+                    Button("Show Private Photos…") { model.privatePhotos.show() }
+                        .disabled(model.sidebar.privateListCount == 0)
+                }
             }
             CommandMenu("Photo") {
                 Button("Create Virtual Copy") { model.createVirtualCopies() }

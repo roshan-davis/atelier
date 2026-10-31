@@ -39,10 +39,13 @@ public struct LibraryFilter: Hashable, Sendable {
     public var groupsRawPairs: Bool = true
     public var sort: LibrarySort = .captureTime
     public var ascending = true
+    /// Includes photos in private imports and collections: set only while Library > Show
+    /// Private Photos is on, and never saved with the session.
+    public var showsPrivate = false
 
     public init(scope: LibraryScope = .all, minRating: Int = 0, flag: Flag? = nil,
                 colorLabel: ColorLabel? = nil, edited: Bool? = nil, text: String = "", groupsRawPairs: Bool = true,
-                sort: LibrarySort = .captureTime, ascending: Bool = true) {
+                sort: LibrarySort = .captureTime, ascending: Bool = true, showsPrivate: Bool = false) {
         self.scope = scope
         self.minRating = minRating
         self.flag = flag
@@ -52,6 +55,7 @@ public struct LibraryFilter: Hashable, Sendable {
         self.groupsRawPairs = groupsRawPairs
         self.sort = sort
         self.ascending = ascending
+        self.showsPrivate = showsPrivate
     }
 
     /// Whether any rule hides photos (the scope and the order aside).
@@ -78,9 +82,10 @@ public struct LibraryFilter: Hashable, Sendable {
         return parts
     }
 
-    /// Every rule off; keeps the scope, the order and pair grouping.
+    /// Every rule off; keeps the scope, the order, pair grouping and private photos shown or hidden.
     public var cleared: LibraryFilter {
-        LibraryFilter(scope: scope, groupsRawPairs: groupsRawPairs, sort: sort, ascending: ascending)
+        LibraryFilter(scope: scope, groupsRawPairs: groupsRawPairs, sort: sort, ascending: ascending,
+                      showsPrivate: showsPrivate)
     }
 }
 
@@ -111,6 +116,7 @@ extension Catalog {
                 (SELECT id FROM version WHERE assetId = asset.id AND kind = 'master' LIMIT 1)
             """
         var conditions: [String] = filter.groupsRawPairs ? ["NOT " + FilePairs.hiddenCondition()] : []
+        if !filter.showsPrivate { conditions.append("NOT " + privateCondition()) }
         var arguments: [(any DatabaseValueConvertible)?] = []
 
         switch filter.scope {
