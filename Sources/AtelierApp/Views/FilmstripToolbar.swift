@@ -313,7 +313,7 @@ extension LibraryModel {
 
 // MARK: - Pop-up button
 
-/// A plain button that opens an AppKit menu just under itself, like a pop-up button, with any
+/// A plain button that opens an AppKit menu just above itself, like a pop-up button, with any
 /// SwiftUI label.
 struct PopUpMenuButton<Label: View>: View {
     let menu: () -> NSMenu
@@ -336,10 +336,13 @@ struct PopUpMenuButton<Label: View>: View {
 final class MenuAnchor {
     weak var view: NSView?
 
+    /// Opens upward, as the Filmstrip sits at the bottom of the window (Lightroom's source menu
+    /// does the same); macOS moves it back on screen if there is no room above.
     func show(_ menu: NSMenu) {
         guard let view else { return }
-        // Not flipped: y 0 is the bottom edge, so the menu's top sits just below the button.
-        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: view.isFlipped ? view.bounds.height + 4 : -4), in: view)
+        // `at` is the menu's top-left corner. Not flipped: y grows upward from the bottom edge.
+        let top = view.bounds.height + menu.size.height + 4
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: view.isFlipped ? -menu.size.height - 4 : top), in: view)
     }
 }
 
