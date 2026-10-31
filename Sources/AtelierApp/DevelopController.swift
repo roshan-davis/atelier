@@ -490,14 +490,19 @@ final class DevelopController: ObservableObject {
         // memory when it was shown or prefetched lately, else the grid thumbnail until it is
         // decoded off the main thread.
         let cachedPreview = previews.url(for: assetID, size: .preview)
-        if previews.has(.preview, for: assetID) {
-            if let decoded = PreviewImages.shared.cached(assetID, at: cachedPreview) {
-                image = decoded
-            } else {
-                let placeholder = ThumbnailLoader.shared.cached(assetID)
-                image = placeholder
+        if previews.has(.preview, for: assetID), let decoded = PreviewImages.shared.cached(assetID, at: cachedPreview) {
+            image = decoded
+            SelectionTrace.mark("develop.open: decoded preview from memory")
+        } else {
+            // The thumbnail too when there is no preview yet, so the photo never waits for the proxy.
+            let placeholder = ThumbnailLoader.shared.cached(assetID)
+            image = placeholder
+            let hasPreview = previews.has(.preview, for: assetID)
+            SelectionTrace.mark("develop.open: thumbnail placeholder \(placeholder == nil ? "MISSING" : "shown"), preview on disk: \(hasPreview)")
+            if hasPreview {
                 Task {
                     let decoded = await PreviewImages.shared.load(assetID, at: cachedPreview)
+                    SelectionTrace.mark("develop: preview decoded")
                     // Not once the proxy has rendered, or for another photo.
                     guard self.assetID == assetID, self.image === placeholder, let decoded else { return }
                     self.image = decoded
@@ -522,6 +527,7 @@ final class DevelopController: ObservableObject {
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     guard self.assetID == assetID else { return }
+                    SelectionTrace.mark("develop: proxy session ready")
                     self.isLoading = false
                     guard let session else {
                         self.errorMessage = "This file can't be opened for editing."
@@ -1614,6 +1620,7 @@ final class DevelopController: ObservableObject {
                     // next render replaces it.
                     if self.assetID == assetID, cropping != self.isCropping, let cgImage {
                         self.image = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+                        SelectionTrace.mark("develop: render shown \(cgImage.width)x\(cgImage.height)")
                         self.imageIsWhole = !cropping
                         if let histogram { self.histogram = histogram }
                         if let scope { self.colorScope = scope }

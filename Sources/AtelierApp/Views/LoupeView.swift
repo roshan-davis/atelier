@@ -111,9 +111,13 @@ struct LoupeView: View {
             // Never clear to the background: keep the last photo until this one is ready, and
             // show its decoded preview or its grid thumbnail at once when they're in memory.
             if let previewURL, let cached = PreviewImages.shared.cached(id, at: previewURL) {
+                SelectionTrace.mark("loupe: decoded preview from memory")
                 show(cached, for: id)
             } else if let thumbnail = ThumbnailLoader.shared.cached(id) {
+                SelectionTrace.mark("loupe: thumbnail placeholder shown")
                 show(thumbnail, for: id)
+            } else {
+                SelectionTrace.mark("loupe: nothing in memory, preview on disk: \(previewURL != nil)")
             }
         }
         // Fall back to the thumbnail while the full preview is missing or being built.
@@ -130,6 +134,7 @@ struct LoupeView: View {
             }
             return
         }
+        SelectionTrace.mark("loupe: loaded \(loaded.map { "\(Int($0.size.width))x\(Int($0.size.height))" } ?? "nil")")
         guard model.focusedID == id, let loaded, loaded !== image else { return }
         show(loaded, for: id)
     }

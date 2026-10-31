@@ -85,10 +85,12 @@ final class LibraryModel: ObservableObject {
     @Published var focusedID: Int64? {
         didSet {
             guard focusedID != oldValue else { return }
+            SelectionTrace.chose(focusedID, mode: "\(mode)")
             zoomForNextPhoto(leaving: oldValue)
             reloadDetail()
             if mode == .develop { develop.open(focusedID) }
             prefetchNeighbourPreviews()
+            SelectionTrace.mark("focusedID didSet done")
         }
     }
     @Published var detail: AssetDetail?
