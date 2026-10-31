@@ -1,6 +1,6 @@
 # AT-021: standalone HDR app and a focused Atelier round trip
 
-**Revised discussion draft, October 30, 2026.** Rosh requested this pivot after discussing Machinery HDR. Source baseline: `8700f853bb9d5d06c906e9d8800b5137b5581a33`. The design direction is revised; implementation, algorithms, dependencies and detailed UX still require bounded approval. No runtime, rendering or catalog schema changes are made here. The existing filename is retained so PR links continue to work.
+**Agreed direction and phased design record, October 30, 2026.** Rosh requested this pivot after discussing Machinery HDR. Source baseline: `8700f853bb9d5d06c906e9d8800b5137b5581a33`. The PRD HDR editor section is authoritative; this record explains the agreed direction and remaining feasibility questions. Algorithms, dependencies and detailed implementation still require bounded scope. No runtime, rendering or catalog schema changes are made here. The existing filename is retained so PR links continue to work.
 
 ## The pivot
 
@@ -19,7 +19,7 @@ Machinery's manual describes both bracket fusion/alignment/deghosting and single
 - **Native editing:** responsive previews, before/after, undo, cancellable background work, saved versioned settings/projects and full-resolution output. Exact controls and first-release scope need design agreement.
 - **Independent use:** open photos without Atelier. The app owns HDR-specific editing UI and projects; Atelier owns its catalog, input selection, source relationships and returned-photo organization.
 
-A rendered return TIFF is a derivative; it does not make all HDR adjustments reversible in Atelier Develop. Preserve the HDR project's settings and input identities separately so reopening in the HDR app can restore editing. Whether Atelier references the project, how re-edit works, and whether it updates a derivative or creates a new version remain explicit decisions.
+A rendered return TIFF is a derivative; it does not make all HDR adjustments reversible in Atelier Develop. Preserve the HDR project's settings and input identities separately so reopening in the HDR app can restore editing. The agreed first return is tone-mapped 16-bit TIFF with a project beside it: re-edit opens the project, Save refreshes the same result, and Save As New returns a new version. Durable source ownership and transport details are feasibility questions.
 
 ## Responsibilities and one execution path
 
@@ -53,7 +53,7 @@ flowchart TB
     Future[Future headless or plugin adapter] -.-> Engine
 ```
 
-The HDR engine contains decoding/preparation, alignment, merge/deghost and tone/detail processing without catalog or UI dependencies. The HDR app owns its native interaction and project persistence. Atelier's adapter owns job preparation, launch/reconnect and result validation/publication through shared Core services. The engine can live in an independent package; its repository, app name and distribution are not chosen by this PR. No HDR math belongs in AtelierApp controllers.
+The HDR engine contains decoding/preparation, alignment, merge/deghost and tone/detail processing without catalog or UI dependencies. The HDR app owns its native interaction and project persistence. Atelier's adapter owns job preparation, launch/reconnect and result validation/publication through shared Core services. Keep a reusable HDR engine and second app product in this repository, extracting shared UI pieces only as needed. App name and distribution are still open. No HDR math belongs in AtelierApp controllers.
 
 ### Round trip: one selection becomes one HDR session
 
@@ -83,13 +83,13 @@ This is different from today's Edit In, which prepares and opens each selected p
 ```mermaid
 flowchart LR
     Design[Agree HDR experience and first slice] --> Spike[Prove engine and output feasibility]
-    Spike --> App[Standalone HDR engine and native editor]
-    App --> RoundTrip[Focused Atelier desktop Processor connection]
+    Spike --> App[Small HDR editor plus Atelier round trip]
+    App --> RoundTrip[Complete re-edit and recovery acceptance]
     RoundTrip --> Acceptance[Single-image and bracket acceptance]
     Acceptance --> Later[Reassess general plugin platform]
 ```
 
-The small contract can be designed alongside the HDR app; the diagram orders acceptance gates, not a requirement to defer all integration design until the app is finished. General plugin discovery/security, generated forms and a ComfyUI migration do not block this path.
+The first editor slice includes the Atelier round trip; the small contract is designed alongside the HDR app; the diagram orders acceptance gates, not a requirement to defer all integration design until the app is finished. General plugin discovery/security, generated forms and a ComfyUI migration do not block this path.
 
 ## Minimum Atelier Processor contract
 
@@ -105,7 +105,7 @@ Use a fixed desktop-app adapter initially, not a public extensibility framework.
 
 No silent conversion of RAW brackets to developed 16-bit TIFF. Single-image “edit as developed” and bracket “use originals” are distinct input policies requiring clear labels. Use staged copies, never hard links or writable originals. Grant no catalog access to the HDR app. A desktop app is its own trust boundary; this connection does not claim that a child process or path convention provides an OS sandbox.
 
-A versioned request/result document in a private job directory is a candidate transport; launching, completion signaling, saved projects and relaunch must be proven on Mac before freezing it. Do not depend on desktop automation, arbitrary scripts, or filenames alone to correlate results. Reopening a project cannot depend solely on temporary staging files: the project must retain durable copies or explicitly resolvable references, with ownership/cleanup and missing-source behavior agreed before implementation.
+A registered job-document type opened with NSWorkspace, followed by an atomically written result receipt in the job directory, is the candidate transport to prove; launching, completion signaling, saved projects and relaunch must be proven on Mac before freezing it. Do not depend on desktop automation, arbitrary scripts, or filenames alone to correlate results. Reopening a project cannot depend solely on temporary staging files: the project must retain durable copies or explicitly resolvable references, with ownership/cleanup and missing-source behavior agreed before implementation.
 
 ## Publication, cancel and recovery
 
@@ -115,7 +115,7 @@ Record **all** bracket sources regardless of whether the user creates a visual s
 
 Cancellation before handoff stops preparation. After handoff, Atelier can abandon its pending import or request cancellation through an agreed app protocol; it must not kill the user's HDR app or discard a saved project. Cancelling a merge inside the HDR app stops that computation while preserving the session. Closing without returning produces no new catalog photo. Late results for abandoned jobs require an explicit recovery action, not automatic import.
 
-After a crash/relaunch, correlate receipts by job ID, reconcile already registered outputs and avoid duplicates. Do not automatically rerun an expensive merge. Retain recoverable results with a visible location/action. Re-editing and repeated Save/Return need agreed versioning semantics before acceptance; no assumption that today's single-parent external-edit watcher solves this.
+After a crash/relaunch, correlate receipts by job ID, reconcile already registered outputs and avoid duplicates. Do not automatically rerun an expensive merge. Retain recoverable results with a visible location/action. Re-edit opens the associated project; Save updates the same TIFF, and Save As New returns a new result. Reuse EditWatcher for image refresh, but it does not already implement receipt discovery, project association or many-source recovery.
 
 ## HDR engine and format feasibility
 
@@ -139,15 +139,16 @@ Each implementation slice gets its own scope/approval and PR/chat. This PR revis
 
 | Phase | Scope | Gate |
 | --- | --- | --- |
-| 0 — this revision | Agree standalone HDR direction; defer full plugin platform | Rosh reviews revised boundaries; implementation remains unapproved |
-| 1 — HDR feasibility and product design | Single-image and bracket reference sets, UI concept, decoder/merge/deghost and output probes, project persistence design | Visual goals and first editor scope agreed; numerical/color/license evidence and Mac measurements recorded |
-| 2 — standalone HDR editor | Reusable engine plus native previews, controls, presets, undo, project save/reopen and export | Independent use without Atelier; no original mutation; single-image/bracket visual acceptance and full-resolution output tests |
-| 3 — focused Atelier connection / AT-008 slice | One grouped request through desktop Processor adapter, validated return, all source links and agreed stack/project behavior | One image and a bracket group round trip; cancel/close/restart, missing files, repeated return and duplicate prevention; existing Edit In/AI regression checks |
-| Later — reassess plugins | General manifests/discovery, generated forms, CLI/HTTP adapters and incremental AI migration | Separate proposal based on actual needs; security/conformance tests before third-party execution |
+| 0 — this design | Agreed standalone direction, first TIFF return and project re-edit; defer full plugins | Design completion only; no HDR runtime or visual acceptance |
+| 1 — prove image path | Disposable single-image/bracket fixtures, decode/alignment/basic merge, 16-bit TIFF profile/highlight tests, project sources and job-document/receipt feasibility | Record method, license/dependency and time/memory evidence; settle initial controls and bounded implementation scope |
+| 2 — small end-to-end slice | Second Mac app in this repo, reusable engine/shared controls, one window, one-image/bracket inputs, approximately four–six agreed tone/detail controls, undo, project/TIFF save/reopen and grouped Atelier return | Original preservation, all-source registration, valid profile/precision, basic cancel/close/crash/relaunch/duplicate safeguards and Rosh's image/UI acceptance |
+| 3 — re-edit/recovery completion | Project re-edit, same-result Save versus Save As New, relink and complete interruption/restart matrix | No silent source loss, duplicate imports or abandoned-job auto-return; basics already covered in phase 2 |
+| 4 — expand after acceptance | Presets, richer single-image effects and deghost quality/controls; bracket detection and batch later | Image fixtures and measured preview/full-size performance; each feature separately scoped |
+| Deferred — plugin platform and float return | General manifests/discovery/forms/CLI/HTTP, AI migration; float HDR master and extended Develop range | Separate proposals; not prerequisites for this editor |
 
 Dependencies: AT-008 supplies the one-contract boundary without a prerequisite broad migration; AT-005b/c cover portable source/project relationships and provenance recovery; AT-007 governs identity/license policy; AT-009 covers durable/offline queues later. Existing model restrictions and backend order remain unchanged. Do not silently implement those proposals as part of HDR work.
 
-Decisions still open: app/repository/package name; exact first-release effects; original/rendered input choices; engine/dependencies; output formats; project source ownership; Save/Return/re-edit versioning; visual stack policy and menu label. The direction is approved for design revision, not a commitment to every Machinery feature or an authorized app build.
+Decisions still open: app/package name; exact first controls and merge/deghost method; original/rendered input labels; dependency selection; durable source ownership; receipt signaling and stack placement. Agreed: same repository, second app, TIFF first, project-based HDR re-edit, one small end-to-end slice. The PRD retains the deferred Lightroom-style shortcuts, float/±10 EV, deghost controls/overlay, headless and batch requirements.
 
 Future Atelier testing covers main and context Edit In menus in grid/Loupe/Develop/Filmstrip, grouped RAW+JPEG handling, selection, return registration and existing external-save/AI flows. HDR app tests cover preview interactions, before/after, zoom/pan, sliders, undo, presets and project reopen. PRD/Help/snapshots accompany actual UI work. Desktop/UI testing always requires fresh explicit permission from Rosh; none was performed here.
 
@@ -159,16 +160,12 @@ Paths below are relative to the repository at the baseline revision.
 | --- | --- | --- |
 | Edit In | `Sources/AtelierApp/EditIn.swift`, `LibraryModel.editIn`: detached sequential preparation, `Exporter.export`, `Importer.addStacked`, then `NSWorkspace.open`; per-photo problems; existing external edits reopen directly | Preserve TIFF/JPEG, per-app color/develop options, selection and partial success; opening an editor is a handoff, not a completed pixel computation |
 | Live edits | Same file, `EditWatcher`: watches directories, debounces saves, checks modification time; `editedFileChanged` refreshes catalog and previews | A registered editable artifact has an ongoing observation lifecycle after the preparation job ends; cancel must not close another app or delete a registered edit |
-| AI | `Sources/AtelierCore/AI/AIRunner.swift`, `run`: render full developed sRGB TIFF, crop/mask/resize, upload, queue ComfyUI, monitor, download, composite, write TIFF, record provenance, `addStacked` | Keep recipe pixel operations together initially; extract preparation/publication at seams, not duplicate the runner in a new host |
-| AI control | `Sources/AtelierApp/AIController.swift`, `generate/cancel`: one detached Task, phase/fraction/error UI, select result; `ComfyProgress.swift` learns node timing | Common events must preserve optional/estimated fractions and “Cancelling…”; do not invent a percentage when disconnected |
-| Cancellation | `ComfyClient.outputs` checks cancellation while polling, defaults to 900 s timeout; `interrupt` POST stops whatever the server runs | Declare server-wide cancellation honestly; do not claim prompt-scoped cancellation or safely run competing Atelier jobs on that server without further API work |
 | Output | `Sources/AtelierCore/Catalog/Catalog+Stacks.swift`, `addStacked`: imports then separately stacks; `Catalog.stack` copies catalog metadata/collections/import entries; `DerivedFiles.folder` chooses source folder or managed Edits | Reuse these semantics, but publication needs idempotency/reconciliation because import + stack + filesystem writes are not one atomic transaction |
 | Relationships | `PhotoVersion` records one parent and optional provenance JSON | Many HDR sources and optional visual stack membership cannot be represented merely by repeating today's single-parent call; coordinate AT-005b/c and AT-007 before migrations |
 | Precision | `Exporter.swift` renders TIFF as `.RGBA16`, other formats `.RGBA8`; `AIRunner.write` can widen generated samples to 16 bits | Neither path proves scene-linear float retention or creates lost precision; precision metadata must distinguish container from effective source precision |
 | Develop | `DevelopRenderer.swift`: extended-linear Rec.2020 working space, half-float context, display conversions to 8-bit, RAW/non-RAW branches; non-RAW positive exposure uses `ExposureRolloff`; `DevelopSettings.Parameter.range` gives Exposure −5…5 | A float encoder alone does not establish an HDR editing path; test decode, pipeline clamps/rolloff, previews and export before offering extended exposure |
-| Commands/settings | `AtelierApp.swift` Photo menu and `PhotoMenu.swift` context menu are separate builders; `SettingsView.swift` has Edit In/AI tabs; editors and AI settings use defaults | A shared contribution model must feed both menu builders and `KeyBindings`; retain existing defaults keys during migration |
 
-There is no concrete shared Processor protocol/host in these inspected paths. README's contract wording describes the intended architecture, not completed orchestration. No durable common job queue was found in these flows.
+Later plugin/AI work: there is no concrete shared Processor protocol/host in the inspected baseline; ComfyUI migration and generic menu contribution work are deferred. README's contract wording describes the intended architecture, not completed orchestration. No durable common job queue was found in these flows.
 
 ## Primary research (accessed October 30, 2026)
 

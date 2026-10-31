@@ -438,7 +438,7 @@ Sidecars without history restore one current state, labeled “Recovered from XM
 
 ## External editor integration
 
-Every outside tool, whether a desktop app or an AI model, plugs in through one **Processor** contract: take a rendered image plus parameters, return an image file. The catalog then stores the result as a new version stacked on the source.
+Every outside tool, whether a desktop app or an AI model, plugs in through one **Processor** contract: accept one or more ordered, typed inputs (rendered images or read-only original copies) plus parameters, and return validated image files or hand off an interactive session to a desktop app. The catalog records every source relationship independently of visual stacking. Existing single-photo Edit In and AI behavior is preserved; grouped HDR inputs are a planned extension, not an implemented capability.
 
 ### Edit In (interactive apps)
 
@@ -457,9 +457,21 @@ As built (Oct 26, 2026):
 - Saves in the editor are picked up by watching the folder (and on switching back to Atelier, and when the photo is shown after a relaunch): the file's size and dimensions are re-read and the previews rebuilt. Edit In on a photo that already is an edit opens it as it is (Lightroom's Edit Original).
 - PSD and RAW pass-through wait for v1.
 
+### HDR editor and grouped Edit In (AT-021; planned)
+
+Build a standalone native Mac HDR editor inspired by Machinery HDR in this repository as a second app product, with a reusable HDR engine and shared native UI pieces extracted only as needed. The app supports one-image tone/detail editing and bracket merging; it is useful without Atelier. This is the agreed design direction, not a shipped feature. The [design record and diagrams](Design/AT-021-Processor-Architecture.md) explain the architecture; this PRD is the product specification.
+
+- **First return format:** tone-mapped, color-profiled 16-bit TIFF. HDR adjustments are revisited in the HDR app through its saved project, not reconstructed from the TIFF in Develop. Float-master return and extended-range Develop editing are deferred. Internal processing precision must still be validated; a 16-bit container does not prove recovered detail.
+- **Small first vertical slice:** one native window, shared viewport/controls, one-image input or one bracket group, a basic merge and approximately four–six agreed tone/detail controls, undo, project save/reopen, TIFF output and the grouped Atelier round trip. Feasibility selects the actual merge method and initial controls before implementation. Presets, broad effects, advanced deghosting and batch follow acceptance.
+- **Connection:** a focused desktop adapter uses the one Processor contract; no special HDR-only catalog path, full plugin platform or ComfyUI migration prerequisite. A versioned job document opened by the HDR app plus an atomic completion receipt is the candidate to prove, not an already functioning transport.
+- **Project and re-edit:** save a durable project beside the result TIFF with versioned settings and source identities. Re-edit opens the project; normal Save refreshes the same TIFF/catalog version, while Save As New creates a new result/version. Reuse external-file refresh where appropriate, but implement project association, all-source relationships, receipt validation and duplicate prevention explicitly. Projects must not depend on disposable job copies; missing originals need visible relink behavior. Whether durable source copies or verified references are the default is settled by feasibility.
+- **Integrity:** source files remain unchanged; validate results, record all bracket sources and use an explicit visual stack policy. Include cancel/close, crash/relaunch, missing-source and duplicate-return checks in the first round trip. Further recovery drills follow; basics are not deferred until after release.
+- **Deferred Lightroom-style workflow, retained:** Photo > Photo Merge > HDR… (⌃H), Auto Align/Auto Settings, Deghost None/Low/Medium/High with overlay, Create Stack, linear RAW-derived merge returned as float DNG/TIFF/EXR for Develop editing with ±10 EV, headless last-settings merge (⇧⌃H), bracket detection and batch. These are future requirements to scope separately, not claims about the first TIFF-return release. Alignment/basic merging are still necessary for the first bracket slice; advanced controls/quality gates are agreed against fixtures.
+
+Delivery: (1) prove image path and project/handoff feasibility using disposable fixtures; (2) one small end-to-end editor plus Atelier return; (3) complete re-edit/recovery acceptance; (4) expand effects/deghost/presets/batch after visual acceptance. Reassess general plugins later. Existing model restrictions and ComfyUI → Core ML → MLX order remain unchanged; nothing is bundled. App name, exact controls/algorithms and dependency selection remain open. No app runtime is authorized or delivered by merging the design document; the next bounded task is the feasibility work.
+
 ### Processor plugins (headless tools)
 
-**HDR direction (AT-021, revised October 30, 2026):** prioritize a standalone native Mac HDR editor inspired by Machinery HDR, supporting single-image tone/detail work and multi-image bracket processing. Atelier will connect through the one Processor contract as an interactive desktop-app round trip: one selected photo or one bracket group in, validated result with all source relationships out. The HDR app owns its controls, presets and saved project/settings; Atelier owns catalog registration and stacking. A small shared contract is designed alongside this work. The general plugin platform described below remains a later capability, not a prerequisite for the HDR app. [Revised design and diagrams](Design/AT-021-Processor-Architecture.md) specify the proposed boundaries. Detailed effects, engine, original/rendered input policy, project persistence, return/re-edit behavior, stack policy and formats still need scoped agreement and validation; no HDR capability is shipped by this design revision. Existing Edit In/AI behavior and backend order are preserved.
 
 For tools without a UI (command-line denoisers, scripts, other AI servers):
 
@@ -479,7 +491,7 @@ AI runs locally through swappable backends behind the Processor contract. The ap
 | --- | --- | --- | --- |
 | ComfyUI (headless) | Generative edits: object removal, background replace, relight, multi-reference edits | HTTP + WebSocket API, workflow JSON templates with named inputs | MVP |
 | Core ML | Fast on-device tasks: subject and sky masks, denoise, upscale | In-process via Vision and Core ML | v1 |
-| MLX | Apple Silicon native diffusion and vision-language models | Bundled Python or Swift MLX worker process | v1 |
+| MLX | Apple Silicon native diffusion and vision-language models | Separately installed Python or Swift MLX worker process | v1 |
 | Remote HTTP | A model on another machine or a paid API | Same plugin manifest, endpoint URL | Later |
 
 ### Starting model set (permissive licenses only)
@@ -547,7 +559,7 @@ The catalog is one SQLite database (WAL mode) in a `.atelier` package on the loc
 | Metadata | asset id, rating, flag, label, title, caption, GPS | Synced to XMP |
 | Keyword / Collection | id, name, parent id; join tables to assets | Hierarchical |
 | ImportGroup | id, name, created at; join table to assets | One per import entry; deleting it keeps the photos |
-| Processor | id, kind (app, plugin, backend), manifest JSON | External apps and AI backends |
+| Processor | id, kind (app, plugin, backend), versioned capabilities/configuration; ordered typed inputs and source-linked results or interactive handoff | One contract for external apps, plugins and AI; grouped HDR extension planned |
 | Model | id, processor id, name, version, license, allowed use, paths | The model registry |
 | Job | id, version id, recipe JSON, model id, seed, status, timings, error | Also the provenance record |
 
