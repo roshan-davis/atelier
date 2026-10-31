@@ -95,6 +95,8 @@ public struct ExportSettings: Codable, Hashable, Sendable {
     public var colorSpace: ExportColorSpace = .sRGB
     public var metadata: ExportMetadata = .allExceptLocation
     public var sharpening: ExportSharpening = .none
+    /// Drawn after resizing and sharpening; nil for none.
+    public var watermark: ExportWatermark?
     public var destination: URL
 
     public init(destination: URL) {
@@ -197,6 +199,7 @@ public final class Exporter: Sendable {
             image = sharpen.outputImage ?? image
         }
         image = image.cropped(to: image.extent.integral)
+        image = Watermark.apply(settings.watermark, to: image)
 
         let format: CIFormat = settings.format.isSixteenBit ? .RGBA16 : .RGBA8
         guard let cgImage = renderer.context.createCGImage(image, from: image.extent, format: format,

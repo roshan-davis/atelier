@@ -13,38 +13,73 @@
 
 <div class="eyebrow">Share</div>
 <h1>Export</h1>
-<p class="lede">Save finished photos as JPEG, HEIC, TIFF or PNG, with your edits, at the size and color space you need. Originals are never changed.</p>
+<p class="lede">Save finished photos as JPEG, HEIC, TIFF or PNG, with your edits, at the size and color space you need, with your watermark if you want one. Save the choices you use often as presets. Originals are never changed.</p>
 
 <h2 id="open">Open the Export dialog</h2>
 <p>Select photos and choose <span class="path">File › Export…</span> (<kbd>⇧⌘E</kbd>), click <b>Export</b> in the toolbar, or right-click › <span class="path">Export…</span>. In Loupe and Develop it exports the photo you're on (or the filmstrip selection).</p>
 
 <figure>
-  <div class="pins pinned wide" style="max-width:520px">
+  <div class="pins pinned wide" style="max-width:640px">
   <div class="panel" style="background:#323232">
     <div class="pb" style="gap:9px">
       <div style="font-weight:700;font-size:15px">Export 12 Photos</div>
-      <div class="row" data-pin="1"><span class="name">Quick settings</span><span class="btn">Website</span><span class="btn">Full-Size JPEG</span><span class="btn">Full-Size TIFF</span></div>
-      <div class="row" data-pin="2"><span class="name">Format</span><span class="popup">JPEG</span></div>
-      <div class="row"><span class="name">Quality</span><span class="sl" style="flex:1" data-name="" data-value="85" data-at="0.7" data-def="0"></span></div>
-      <div class="row" data-pin="3"><span class="check" style="width:110px"><i class="on"></i>Resize to fit</span><span class="popup" style="flex:none;width:80px">2048</span><span class="muted">pixels</span></div>
-      <div class="row" data-pin="4"><span class="name">Color space</span><span class="popup">sRGB (web and social)</span></div>
-      <div class="row"><span class="name">Sharpening</span><span class="popup">For screen</span></div>
-      <div class="row" data-pin="5"><span class="name">Metadata</span><span class="popup">All except location</span></div>
-      <div class="row" data-pin="6"><span class="name">Save to</span><span class="muted" style="flex:1">~/Pictures/Exports</span><span class="btn">Change…</span></div>
-      <div class="check"><i class="on"></i>Show in Finder when done</div>
+      <div style="display:flex;gap:12px">
+        <div style="width:150px;flex:none;background:#2a2a2a;border-radius:6px;padding:6px 8px;display:flex;flex-direction:column;gap:3px;font-size:12px">
+          <span class="muted" style="font-weight:650" data-pin="1">Atelier</span>
+          <span style="background:#5b5b5b;border-radius:4px;padding:1px 6px">Website</span>
+          <span style="padding:1px 6px">Full-Size JPEG</span>
+          <span style="padding:1px 6px">Full-Size TIFF</span>
+          <span class="muted" style="font-weight:650;margin-top:6px">User Presets</span>
+          <span style="padding:1px 6px">Shop + Watermark</span>
+          <span class="muted" style="margin-top:auto">+ &nbsp; −</span>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;gap:9px">
+          <div class="row" data-pin="2" data-pin-side="right"><span class="name">Format</span><span class="popup">JPEG</span></div>
+          <div class="row"><span class="name">Quality</span><span class="sl" style="flex:1" data-name="" data-value="85" data-at="0.7" data-def="0"></span></div>
+          <div class="row" data-pin="3" data-pin-side="right"><span class="check" style="width:110px"><i class="on"></i>Resize to fit</span><span class="popup" style="flex:none;width:80px">2048</span><span class="muted">pixels</span></div>
+          <div class="row" data-pin="4" data-pin-side="right"><span class="name">Color space</span><span class="popup">sRGB (web and social)</span></div>
+          <div class="row"><span class="name">Sharpening</span><span class="popup">For screen</span></div>
+          <div class="row" data-pin="5" data-pin-side="right"><span class="name">Metadata</span><span class="popup">All except location</span></div>
+          <div class="row" data-pin="6" data-pin-side="right"><span class="check"><i class="on"></i>Add watermark</span></div>
+          <div class="row" data-pin="7" data-pin-side="right"><span class="name">Save to</span><span class="muted" style="flex:1">~/Pictures/Atelier Exports</span><span class="btn">Change…</span></div>
+          <div class="check"><i class="on"></i>Show in Finder when done</div>
+        </div>
+      </div>
       <div class="row" style="justify-content:flex-end;gap:8px"><span class="btn">Cancel</span><span class="btn on">Export 12 Photos</span></div>
     </div>
   </div>
   </div>
 </figure>
 <ol class="legend">
-  <li><b>Quick settings</b> fill in everything below in one click: <b>Website</b> (JPEG, 2048 px long edge, sRGB, sharpened for screen, no location), <b>Full-Size JPEG</b>, and <b>Full-Size TIFF</b> (16-bit, Adobe RGB, for print or further editing).</li>
+  <li><b>Presets</b> fill in everything on the right in one click (see <a href="#presets">Export presets</a>). The preset that matches the current settings is highlighted; change any setting and the highlight goes, as in Lightroom.</li>
   <li><b>Format</b>: JPEG and HEIC (with Quality, 50 to 100), TIFF (16-bit) or PNG.</li>
   <li><b>Resize to fit</b>: the long edge in pixels. Off keeps the full size.</li>
-  <li><b>Color space</b>: sRGB for web and social, Display P3, Adobe RGB (1998) or ProPhoto RGB. <b>Sharpening</b>: None or For screen.</li>
+  <li><b>Color space</b>: sRGB for web and social, Display P3 or Adobe RGB (1998). <b>Sharpening</b>: None or For screen.</li>
   <li><b>Metadata</b>: All metadata, All except location (removes GPS), or None.</li>
+  <li><b>Add watermark</b> puts your name or logo on every photo (see <a href="#watermark">Watermark</a>).</li>
   <li><b>Save to</b> a folder. Atelier remembers your last choices.</li>
 </ol>
+
+<h2 id="presets">Export presets</h2>
+<ul>
+  <li><b>Atelier</b> has three built-in presets: <b>Website</b> (JPEG 85, 2048 px long edge, sRGB, sharpened for screen, no location), <b>Full-Size JPEG</b> (JPEG 95, all metadata) and <b>Full-Size TIFF</b> (16-bit, Adobe RGB, for print or further editing). Hover over a preset to see what it sets.</li>
+  <li>To save your own, set everything up and click <b>+</b> under the list, then name it. A preset keeps the format, quality, size, color space, sharpening, metadata and watermark. It doesn't keep the folder.</li>
+  <li>Right-click a user preset for <b>Update with Current Settings</b> or <b>Delete…</b>. To delete the highlighted preset you can also click <b>−</b>. Built-in presets can't be changed.</li>
+  <li>Using the name of a preset you already have replaces that preset.</li>
+  <li>User presets are shared by every catalog.</li>
+</ul>
+
+<h2 id="watermark">Watermark</h2>
+<p>Turn on <b>Add watermark</b> to see its settings, with a preview of the first photo above them showing exactly where the watermark will go.</p>
+<dl class="defs">
+  <dt>Style</dt><dd><b>Text</b> (it starts as © and the year with your name; type anything) in <b>White</b> or <b>Black</b>, or <b>Image</b>: click <b>Choose…</b> and pick a logo. A PNG with a transparent background works best.</dd>
+  <dt>Size</dt><dd>The watermark's width as a share of the photo's width. Because it's a share, the watermark looks the same on a 2048 px website JPEG and a full-size TIFF.</dd>
+  <dt>Opacity</dt><dd>100% is solid; lower lets the photo show through.</dd>
+  <dt>Position</dt><dd>Click one of the nine dots: a corner, an edge or the center.</dd>
+  <dt>Inset</dt><dd>The gap between the watermark and the photo's edges, as a share of the photo's short side.</dd>
+  <dt>Shadow</dt><dd>A soft drop shadow that keeps white text readable on bright skies.</dd>
+</dl>
+<p>Double-click a slider's name to reset it. The watermark is drawn after resizing and sharpening, so it stays crisp and is never sharpened. If the text is empty or no image is chosen, <b>Export</b> stays dimmed until you fix it or turn the watermark off.</p>
 
 <h2 id="while">While it runs</h2>
 <ul>
