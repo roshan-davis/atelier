@@ -1,0 +1,10 @@
+test_no_receipt_for_partial_output_and_no_stale_overwrite (__main__.Probe) ... ok
+test_owned_sources_survive_job_removal_and_verified_relink (__main__.Probe) ... ok
+test_reject_invalid_receipts_and_abandoned_job (__main__.Probe) ... ok
+test_replay_relaunch_and_interrupted_save (__main__.Probe) ... ok
+test_save_refresh_and_save_as_new (__main__.Probe) ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.026s
+
+OK
