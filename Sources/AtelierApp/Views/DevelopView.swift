@@ -7,6 +7,8 @@ struct DevelopImageView: View {
     @EnvironmentObject private var model: LibraryModel
     @Environment(\.theme) private var theme
     @ObservedObject var develop: DevelopController
+    /// The original has taken over 0.6 s to open, so the spinner shows over the photo.
+    @State private var slowLoad = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -57,8 +59,9 @@ struct DevelopImageView: View {
                                           position: $develop.sliderPosition)
                     }
                 }
-                // Only with nothing to show: over the photo it read as a delay (Rosh, Oct 31, 2026).
-                if develop.isLoading, develop.image == nil {
+                // Over a shown photo only when loading is slow (a NAS original): a spinner on
+                // every photo read as a delay (Rosh, Oct 31, 2026).
+                if develop.isLoading, develop.image == nil || slowLoad {
                     ProgressView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
@@ -87,6 +90,12 @@ struct DevelopImageView: View {
             .padding(.vertical, 6)
         }
         .onAppear { develop.open(model.focusedID) }
+        .task(id: develop.isLoading ? develop.assetID : nil) {
+            slowLoad = false
+            guard develop.isLoading else { return }
+            try? await Task.sleep(for: .milliseconds(600))
+            if !Task.isCancelled, develop.isLoading { slowLoad = true }
+        }
         .onChange(of: develop.compareMode) { old, new in compareModeChanged(from: old, to: new) }
         .onChange(of: CropOfPhoto(assetID: develop.assetID, crop: develop.crop)) { old, new in
             // The zoomed spot follows the photo through a crop (the crop tool, undo, a preset).
