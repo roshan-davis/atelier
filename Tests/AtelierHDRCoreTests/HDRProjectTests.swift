@@ -96,4 +96,34 @@ final class HDRProjectTests: XCTestCase {
         XCTAssertEqual(after, committed)
     }
 
+    func testGenerationRetentionAndAbandonedFirstSave() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let original = root.appendingPathComponent("original.tif")
+        try HDRImageIO().writeTIFF(HDRImage(width: 8, height: 6, rgb: Array(repeating: 0.2, count: 144)), to: original)
+        let originalHash = try HDRProjectStore.hash(original)
+        let url = root.appendingPathComponent("kept.atelierhdr")
+        let store = try HDRProjectStore.create(at: url, source: original)
+        var generations: [UUID] = []
+        for i in 0..<5 {
+            var settings = HDRSettings(); settings.exposure = Float(i) / 10
+            let saved = try await store.save(settings: settings)
+            generations.append(try XCTUnwrap(saved.generationID))
+        }
+        let folders = try FileManager.default.contentsOfDirectory(atPath: url.appendingPathComponent("Generations").path)
+        XCTAssertEqual(Set(folders), Set(generations.suffix(2).map(\.uuidString)))
+        let reopened = try HDRProjectStore.open(url)
+        try FileManager.default.removeItem(at: url.deletingPathExtension().appendingPathExtension("tif"))
+        try await reopened.publish()
+        let discardedSaved = try await store.discardIfUnsaved()
+        XCTAssertFalse(discardedSaved, "committed work must never be abandoned")
+        let abandonedURL = root.appendingPathComponent("abandoned.atelierhdr")
+        let abandoned = try HDRProjectStore.create(at: abandonedURL, source: original)
+        let discarded = try await abandoned.discardIfUnsaved()
+        XCTAssertTrue(discarded)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: abandonedURL.path))
+        XCTAssertEqual(try HDRProjectStore.hash(original), originalHash)
+    }
+
 }

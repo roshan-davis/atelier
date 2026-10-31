@@ -20,6 +20,7 @@ public final class PreviewScheduler: @unchecked Sendable {
     private let lock = NSLock()
     private var pending: [Key: Operation] = [:]
     private var failed: Set<Key> = []
+    private var tokens: [Key: UUID] = [:]
     private var completion: Completion?
 
     public init(cache: PreviewCache) {
@@ -42,29 +43,61 @@ public final class PreviewScheduler: @unchecked Sendable {
     /// With non-neutral `settings` both sizes are rendered developed.
     public func request(_ size: PreviewCache.Size, for assetID: Int64, source: URL, urgent: Bool = false,
                         settings: DevelopSettings? = nil) {
-        if cache.has(size, for: assetID) { return }
+        schedule(size, for: assetID, source: source, urgent: urgent, settings: settings, force: false)
+    }
+
+    /// A file changed under a stable asset ID. Rebuild both sizes even when cached, after
+    /// any older render finishes, so an old in-flight job cannot overwrite the new pixels.
+    public func refresh(for assetID: Int64, source: URL, settings: DevelopSettings? = nil) {
+        let earlier: [Operation] = lock.withLock {
+            var result: [Operation] = []
+            var waiting = pending.filter { $0.key.assetID == assetID }.map(\.value)
+            var visited: Set<ObjectIdentifier> = []
+            while let operation = waiting.popLast() {
+                guard visited.insert(ObjectIdentifier(operation)).inserted else { continue }
+                result.append(operation); waiting.append(contentsOf: operation.dependencies)
+            }
+            return result
+        }
+        for size in PreviewCache.Size.allCases {
+            schedule(size, for: assetID, source: source, urgent: true, settings: settings,
+                     force: true, dependencies: earlier)
+        }
+    }
+
+    private func schedule(_ size: PreviewCache.Size, for assetID: Int64, source: URL,
+                          urgent: Bool, settings: DevelopSettings?, force: Bool, dependencies: [Operation] = []) {
+        if !force, cache.has(size, for: assetID) { return }
         let key = Key(assetID: assetID, size: size)
         let operation: BlockOperation? = lock.withLock {
+            if force { failed.remove(key) }
             if failed.contains(key) { return nil }
-            if let existing = pending[key] {
+            let previous = pending[key]
+            if !force, let existing = previous {
                 if urgent { existing.queuePriority = .veryHigh }
                 return nil
             }
             let cache = self.cache
+            let token = UUID()
             let operation = BlockOperation { [weak self] in
-                if let settings, !settings.isNeutral {
-                    if !cache.has(size, for: assetID) {
-                        try? cache.generateDeveloped(for: assetID, from: source, settings: settings)
+                do {
+                    if let settings, !settings.isNeutral {
+                        if force || !cache.has(size, for: assetID) {
+                            try cache.generateDeveloped(for: assetID, from: source, settings: settings)
+                        }
+                    } else {
+                        switch size {
+                        case .thumbnail: try cache.generateThumbnail(for: assetID, from: source)
+                        case .preview: try cache.generatePreview(for: assetID, from: source)
+                        }
                     }
-                } else {
-                    switch size {
-                    case .thumbnail: try? cache.generateThumbnail(for: assetID, from: source)
-                    case .preview: try? cache.generatePreview(for: assetID, from: source)
-                    }
-                }
-                self?.finish(key, written: cache.has(size, for: assetID))
+                    self?.finish(key, token: token, written: cache.has(size, for: assetID))
+                } catch { self?.finish(key, token: token, written: false) }
             }
+            if let previous { operation.addDependency(previous) }
+            for dependency in dependencies where dependency !== previous { operation.addDependency(dependency) }
             operation.queuePriority = urgent ? .veryHigh : .normal
+            tokens[key] = token
             pending[key] = operation
             return operation
         }
@@ -78,6 +111,7 @@ public final class PreviewScheduler: @unchecked Sendable {
         lock.withLock {
             guard let operation = pending[key], !operation.isExecuting else { return }
             operation.cancel()
+            tokens[key] = nil
             pending[key] = nil
         }
     }
@@ -102,8 +136,10 @@ public final class PreviewScheduler: @unchecked Sendable {
 
     /// Reporting a failure as a finished preview would make the grid ask for it again at once,
     /// and the library would refresh in a loop for as long as the file can't be read.
-    private func finish(_ key: Key, written: Bool) {
+    private func finish(_ key: Key, token: UUID, written: Bool) {
         let completion: Completion? = lock.withLock {
+            guard tokens[key] == token else { return nil }
+            tokens[key] = nil
             pending[key] = nil
             guard written else {
                 failed.insert(key)

@@ -51,8 +51,35 @@ final class HDRController: ObservableObject {
             }
             Theme.current.apply()
             self.request = request; requestURL = url
-            openProject(request.projectURL, originalName: request.sourceURL.lastPathComponent)
+            if request.expectedProjectID == nil && !FileManager.default.fileExists(atPath: request.projectURL.path) {
+                openOriginal(request)
+            } else {
+                openProject(request.projectURL, originalName: request.sourceURL.lastPathComponent)
+            }
         } catch { self.error = error.localizedDescription }
+    }
+
+    /// A new session reads the original until first Save. Closing it creates no project,
+    /// source copy or generations beside the original.
+    private func openOriginal(_ request: ProcessorDocument) {
+        guard !busy else { return }
+        projectURL = request.projectURL; sourceURL = request.sourceURL; store = nil
+        sourceName = request.sourceURL.lastPathComponent; busy = true; status = "Opening original…"
+        task = Task {
+            do {
+                let decoded = try await Task.detached { () -> (HDRImage, CGImage, CGSize) in
+                    guard try HDRProjectStore.hash(request.sourceURL) == request.sourceHash else {
+                        throw HDRError.invalidProject("The original changed since this session was prepared.")
+                    }
+                    let io = HDRImageIO(), image = try HDRImageIO().decode(request.sourceURL, longEdge: 1600)
+                    return (image, try io.preview(image), try HDRImageIO.dimensions(request.sourceURL))
+                }.value
+                try Task.checkCancellation()
+                input = decoded.0; before = NSImage(cgImage: decoded.1, size: .zero); pixelSize = decoded.2
+                settings = HDRSettings(); savedSettings = settings; dirty = false
+                busy = false; status = "Ready; the project is created on first Save"; render()
+            } catch { busy = false; self.error = error.localizedDescription }
+        }
     }
 
     func chooseOpen() {
@@ -214,7 +241,8 @@ final class HDRController: ObservableObject {
     }
 
     func save(returnToAtelier: Bool = false, asNew: Bool = false) {
-        guard let store, !busy else { return }
+        guard !busy, let projectURL, let sourceURL else { return }
+        let store = self.store
         var destination: URL?
         if asNew {
             let panel = NSSavePanel(); panel.title = "Save HDR As New"
@@ -225,11 +253,27 @@ final class HDRController: ObservableObject {
         let snapshot = settings
         busy = true; status = "Rendering full-resolution TIFF…"
         task = Task {
+            var newlyCreated: HDRProjectStore?
             do {
                 let active: HDRProjectStore
-                if let destination { active = try await store.fork(to: destination) } else { active = store }
+                if store == nil, let request, try HDRProjectStore.hash(sourceURL) != request.sourceHash {
+                    throw HDRError.invalidProject("The original changed. Reopen it before saving.")
+                }
+                if let destination {
+                    if let store { active = try await store.fork(to: destination) }
+                    else { active = try HDRProjectStore.create(at: destination, source: sourceURL) }
+                    newlyCreated = active
+                } else if let store { active = store }
+                else {
+                    if let request, try HDRProjectStore.hash(sourceURL) != request.sourceHash {
+                        throw HDRError.invalidProject("The original changed. Reopen it before saving.")
+                    }
+                    active = try HDRProjectStore.create(at: projectURL, source: sourceURL)
+                    newlyCreated = active
+                }
                 let manifest = try await active.save(settings: snapshot, cancellation: { try Task.checkCancellation() })
-                self.store = active; projectURL = await active.url
+                self.store = active; self.projectURL = await active.url
+                self.sourceURL = await active.sourceURL()
                 savedSettings = snapshot; dirty = settings != snapshot
                 if let request, let requestURL {
                     // Save As New authorizes a new session, leaving the original output identity intact.
@@ -259,8 +303,17 @@ final class HDRController: ObservableObject {
                         }
                     }
                 }
-            } catch is CancellationError { busy = false; status = "Cancelled; the previous saved project is preserved" }
-            catch { busy = false; self.error = error.localizedDescription; status = "Save needs attention" }
+            } catch {
+                if let newlyCreated {
+                    if (try? await newlyCreated.discardIfUnsaved()) != true,
+                       await newlyCreated.manifest.revision > 0, destination == nil {
+                        self.store = newlyCreated
+                    }
+                }
+                busy = false
+                if error is CancellationError { status = "Cancelled; the previous saved project is preserved" }
+                else { self.error = error.localizedDescription; status = "Save needs attention" }
+            }
         }
     }
     func cancel() { task?.cancel() }

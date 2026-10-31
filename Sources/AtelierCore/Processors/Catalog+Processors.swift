@@ -46,9 +46,19 @@ extension Catalog {
 
     public func hasConsumedProcessorResult(_ receipt: ProcessorReceipt, request: ProcessorDocument) throws -> Bool {
         try receipt.validateIdentity(against: request)
-        return try writer.read { db in
-            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM processorCompletion WHERE jobID = ? AND outputID = ? AND revision = ? AND resultHash = ?",
-                             arguments: [receipt.jobID.uuidString, receipt.outputID.uuidString, receipt.revision, receipt.resultHash]) == 1
+        return try consumedProcessorAsset(receipt, request: request) != nil
+    }
+
+    private func consumedProcessorAsset(_ receipt: ProcessorReceipt, request: ProcessorDocument) throws -> Int64? {
+        try writer.read { db in
+            if let id = try Int64.fetchOne(db, sql: "SELECT derivedAssetID FROM processorCompletion WHERE jobID = ? AND outputID = ? AND revision = ? AND resultHash = ?",
+                arguments: [receipt.jobID.uuidString, receipt.outputID.uuidString, receipt.revision, receipt.resultHash]) { return id }
+            return try Int64.fetchOne(db, sql: """
+                SELECT derivedAssetID FROM processorOutput
+                WHERE outputID = ? AND projectID = ? AND projectPath = ? AND sourceAssetID = ?
+                    AND sourceHash = ? AND revision = ? AND resultHash = ?
+                """, arguments: [receipt.outputID.uuidString, receipt.projectID.uuidString, request.projectURL.path,
+                                  request.sourceAssetID, request.sourceHash, receipt.revision, receipt.resultHash])
         }
     }
 
@@ -56,10 +66,7 @@ extension Catalog {
     /// Replays update the same output; a stale completion cannot replace a newer catalog revision.
     public func acceptProcessorResult(_ receipt: ProcessorReceipt, request: ProcessorDocument) throws -> Int64 {
         try receipt.validateIdentity(against: request)
-        if let consumed = try writer.read({ db in
-            try Int64.fetchOne(db, sql: "SELECT derivedAssetID FROM processorCompletion WHERE jobID = ? AND outputID = ? AND revision = ? AND resultHash = ?",
-                               arguments: [receipt.jobID.uuidString, receipt.outputID.uuidString, receipt.revision, receipt.resultHash])
-        }) { return consumed }
+        if let consumed = try consumedProcessorAsset(receipt, request: request) { return consumed }
         try receipt.validate(against: request)
         let provenance = String(data: try JSONEncoder().encode(request), encoding: .utf8)
         let values = try request.resultURL.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])

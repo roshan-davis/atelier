@@ -32,7 +32,9 @@ public actor HDRProjectStore {
         guard !fm.fileExists(atPath: url.path),
               !fm.fileExists(atPath: url.deletingPathExtension().appendingPathExtension("tif").path) else { throw HDRError.invalidProject("The destination already exists.") }
         let sourceHash = try hash(source)
-        try fm.createDirectory(at: url, withIntermediateDirectories: false)
+        guard mkdir(url.path, 0o700) == 0 else {
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+        }
         do {
             try fm.createDirectory(at: url.appendingPathComponent("Sources"), withIntermediateDirectories: false)
             try fm.createDirectory(at: url.appendingPathComponent("Generations"), withIntermediateDirectories: false)
@@ -47,7 +49,9 @@ public actor HDRProjectStore {
             try write(manifest, to: url.appendingPathComponent("project.json"))
             return HDRProjectStore(url: url, manifest: manifest)
         } catch {
-            // Preserve partial preparation for diagnosis; never remove caller source files.
+            // The root was exclusively created above; an incomplete private copy is not
+            // a saved document. Never leave that copy behind after preparation fails.
+            try? fm.removeItem(at: url)
             throw error
         }
     }
@@ -129,6 +133,7 @@ public actor HDRProjectStore {
         let input = try io.decode(source)
         try cancellation()
         let rendered = try HDRToneMapper.render(input, settings: settings, cancellation: cancellation)
+        let previousGeneration = manifest.generationID
         let generationID = UUID()
         let folder = url.appendingPathComponent("Generations").appendingPathComponent(generationID.uuidString)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
@@ -142,6 +147,7 @@ public actor HDRProjectStore {
         try Self.write(next, to: url.appendingPathComponent("project.json"))
         manifest = next
         try publish()
+        try pruneGenerations(keeping: Set([generationID, previousGeneration].compactMap { $0 }))
         return next
     }
 
@@ -157,6 +163,41 @@ public actor HDRProjectStore {
         if FileManager.default.fileExists(atPath: destination.path) {
             _ = try FileManager.default.replaceItemAt(destination, withItemAt: staging)
         } else { try FileManager.default.moveItem(at: staging, to: destination) }
+    }
+
+    /// Keep the current and previous committed generations after successful publication.
+    /// Unknown folders are preserved; only our UUID generation folders with known payloads
+    /// are housekeeping candidates. This is not user history or deletion of originals.
+    private func pruneGenerations(keeping retained: Set<UUID>) throws {
+        let generations = url.appendingPathComponent("Generations")
+        for folder in try FileManager.default.contentsOfDirectory(at: generations, includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey]) {
+            guard let id = UUID(uuidString: folder.lastPathComponent), !retained.contains(id) else { continue }
+            let values = try folder.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+            guard values.isDirectory == true, values.isSymbolicLink != true else { continue }
+            let names = try FileManager.default.contentsOfDirectory(atPath: folder.path)
+            guard Set(names).isSubset(of: ["result.tif", "manifest.json"]) else { continue }
+            if names.contains("manifest.json") {
+                guard let saved = try? JSONDecoder().decode(HDRProjectManifest.self, from: Data(contentsOf: folder.appendingPathComponent("manifest.json"))) else { continue }
+                guard saved.projectID == manifest.projectID, saved.generationID == id else { continue }
+            }
+            try FileManager.default.removeItem(at: folder)
+        }
+    }
+
+    /// Only a project created by this store with no committed save can be abandoned.
+    /// A failed/cancelled first Save must not leave a private RAW copy beside the original.
+    @discardableResult public func discardIfUnsaved() throws -> Bool {
+        let fd = Darwin.open(url.appendingPathComponent("writer.lock").path, O_CREAT | O_RDWR | O_NOFOLLOW, 0o600)
+        guard fd >= 0 else { return false }
+        defer { flock(fd, LOCK_UN); close(fd) }
+        guard flock(fd, LOCK_EX | LOCK_NB) == 0 else { return false }
+        let current = try Self.metadata(at: url)
+        guard manifest.projectID == current.projectID, current.revision == 0,
+              current.generationID == nil, !FileManager.default.fileExists(atPath: resultURL().path) else { return false }
+        let known: Set<String> = ["Sources", "Generations", "project.json", "writer.lock"]
+        guard Set(try FileManager.default.contentsOfDirectory(atPath: url.path)).isSubset(of: known) else { return false }
+        try FileManager.default.removeItem(at: url)
+        return true
     }
 
     /// Save As New forks a durable project and output identity, preserving the old project.

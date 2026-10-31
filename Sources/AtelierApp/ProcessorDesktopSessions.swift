@@ -31,7 +31,7 @@ final class ProcessorDesktopSessions {
             return
         }
         let catalog = model.catalog
-        model.status = "Preparing a verified HDR project…"
+        model.status = "Preparing HDR session…"
         Task {
             do {
                 var request = try await Task.detached { () -> ProcessorDocument in
@@ -51,10 +51,8 @@ final class ProcessorDesktopSessions {
                     }
                     let stem = source.deletingPathExtension().lastPathComponent + "-HDR-" + UUID().uuidString.prefix(8)
                     let projectURL = DerivedFiles.folder(for: source).appendingPathComponent(stem).appendingPathExtension("atelierhdr")
-                    let project = try HDRProjectStore.create(at: projectURL, source: source)
-                    let manifest = await project.manifest
-                    return ProcessorDocument(sourceAssetID: sourceID, sourceURL: source, sourceHash: manifest.sourceHash,
-                        projectURL: projectURL, expectedProjectID: manifest.projectID, outputID: manifest.outputID)
+                    return ProcessorDocument(sourceAssetID: sourceID, sourceURL: source,
+                        sourceHash: try FileHasher.sha256(of: source), projectURL: projectURL)
                 }.value
                 request.uiPreferences = Dictionary(uniqueKeysWithValues: ["appearance.theme", "zoom.clickPercent", "keys.zoom", "keys.beforeAfter", "keys.compareMode"].compactMap { key in
                     UserDefaults.standard.object(forKey: key).map { (key, String(describing: $0)) }
@@ -98,7 +96,7 @@ final class ProcessorDesktopSessions {
         checking = true
         let prior = seen, catalog = model.catalog
         Task {
-            let results = await Task.detached { () -> [(String, Date, Result<Int64, Error>)] in
+            let results = await Task.detached { () -> [(String, Date, Result<Int64?, Error>)] in
                 guard let files = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.contentModificationDateKey]) else { return [] }
                 return files.filter { $0.pathExtension == "receipt" }.compactMap { receiptURL in
                     guard let date = try? receiptURL.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate,
@@ -106,7 +104,7 @@ final class ProcessorDesktopSessions {
                     do {
                         let request = try ProcessorDocument.read(receiptURL.deletingPathExtension().appendingPathExtension("json"))
                         let receipt = try ProcessorReceipt.read(receiptURL)
-                        if try catalog.hasConsumedProcessorResult(receipt, request: request) { return nil }
+                        if try catalog.hasConsumedProcessorResult(receipt, request: request) { return (receiptURL.path, date, .success(nil)) }
                         return (receiptURL.path, date, .success(try catalog.acceptProcessorResult(receipt, request: request)))
                     } catch { return (receiptURL.path, date, .failure(error)) }
                 }
@@ -114,11 +112,11 @@ final class ProcessorDesktopSessions {
             for (path, date, result) in results {
                 seen[path] = date
                 switch result {
-                case .success(let id):
+                case .success(nil): break
+                case .success(.some(let id)):
                     if let url = try? catalog.fileURL(for: id) {
-                        model.previewScheduler.retryFailed(for: id)
-                        model.previewScheduler.request(.thumbnail, for: id, source: url, urgent: true)
-                        model.previewScheduler.request(.preview, for: id, source: url)
+                        let settings = (try? catalog.developSettings(for: id)) ?? .neutral
+                        model.previewScheduler.refresh(for: id, source: url, settings: settings)
                     }
                     model.selection = [id]; model.focusedID = id; model.openDevelop()
                     if model.develop.assetID == id { model.develop.reopen() }

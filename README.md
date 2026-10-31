@@ -84,7 +84,7 @@ Select one photo and choose **Photo > Edit In > HDR App (Original)…**.
 The companion reads original pixels rather than baking Atelier Develop adjustments.
 Use **Reset All** in an older test project to try the revised HDR starting look.
 **Save & Return to Atelier** writes a full-resolution profiled 16-bit sRGB TIFF and
-keeps an owned-source HDR project beside it. Selecting the returned TIFF and choosing
+creates an owned-source HDR project beside it on first Save. Opening and closing without saving leaves no source copy; saves keep only the current and previous generations. Selecting the returned TIFF and choosing
 the HDR menu again reopens that project; ordinary Save updates the same result.
 **File > Save As New…** forks a project and creates a new result.
 

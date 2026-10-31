@@ -92,6 +92,9 @@ public final class Importer: Sendable {
     public static func collectFiles(from sources: [URL]) -> [URL] {
         var files: [URL] = []
         for source in sources {
+            // Independent of LaunchServices/UTI registration, including explicitly selected
+            // project descendants. Private sources and saved generations are never imports.
+            if source.pathComponents.contains(where: { ($0 as NSString).pathExtension.lowercased() == "atelierhdr" }) { continue }
             var isDirectory: ObjCBool = false
             guard FileManager.default.fileExists(atPath: source.path, isDirectory: &isDirectory) else { continue }
             if !isDirectory.boolValue {
@@ -102,6 +105,10 @@ public final class Importer: Sendable {
                 at: source, includingPropertiesForKeys: [.isRegularFileKey],
                 options: [.skipsHiddenFiles, .skipsPackageDescendants])
             while let url = enumerator?.nextObject() as? URL {
+                if url.pathExtension.lowercased() == "atelierhdr" {
+                    enumerator?.skipDescendants()
+                    continue
+                }
                 let isFile = (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) ?? false
                 if isFile && MetadataReader.isSupported(url) { files.append(url) }
             }

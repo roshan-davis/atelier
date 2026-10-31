@@ -27,6 +27,12 @@ final class ProcessorDocumentTests: XCTestCase {
         XCTAssertEqual(try catalog.acceptProcessorResult(receipt(manifest), request: request), first)
         XCTAssertEqual(try catalog.derivation(of: first)?.assetId, sourceID)
         XCTAssertEqual(try catalog.processorAssociation(for: first)?.projectID, manifest.projectID)
+        // Opening the same committed output under a new job is already cataloged. It
+        // must not re-import, invalidate previews or trigger host navigation/status.
+        var reopenedRequest = request; reopenedRequest.jobID = UUID()
+        var reopenedReceipt = receipt(manifest); reopenedReceipt.jobID = reopenedRequest.jobID
+        XCTAssertTrue(try catalog.hasConsumedProcessorResult(reopenedReceipt, request: reopenedRequest))
+        XCTAssertEqual(try catalog.acceptProcessorResult(reopenedReceipt, request: reopenedRequest), first)
         var settings = HDRSettings(); settings.exposure = 0.5
         let next = try await store.save(settings: settings)
         XCTAssertEqual(try catalog.acceptProcessorResult(receipt(next), request: request), first)
