@@ -213,7 +213,7 @@ Evidence baseline, October 30, 2026:
 
 ## AT-019 — Photo lags when selected: background shows before the image
 
-**Status:** In review — fix on branch `claude/project-thread-e9rjh8` (PR opened October 31, 2026), not compiled in the cloud and CI billing-blocked; needs Rosh's Xcode build and test. Timings not measured yet. **Owner/chat/branch/PR:** Claude (project thread "Fix photo lag and zoom cursor bugs"), branch `claude/project-thread-e9rjh8`, same PR as AT-020. **Dependencies:** AT-011 measurement protocol for before/after timings.
+**Status:** Done — PR #71 merged at Rosh's instruction on October 31, 2026, after Rosh tested `7348bb6` in Xcode (no background flash; cursor fixed). Codex's Mac check passed at `800aa2a`; the final review-fix commit `b0f7e69` was not built before merge. Follow-up: the 130–300 ms whole-window SwiftUI update per photo change (Debug) is not addressed. **Owner/chat/branch/PR:** Claude (project thread "Fix photo lag and zoom cursor bugs"), branch `claude/project-thread-e9rjh8`, same PR as AT-020. **Dependencies:** AT-011 measurement protocol for before/after timings.
 
 **Symptom:** selecting a photo (Filmstrip, arrow keys) first draws the empty main panel background, then the photo.
 
@@ -233,7 +233,7 @@ Evidence baseline, October 30, 2026:
 
 ## AT-020 — Zoom cursor shows when the photo can't zoom or pan
 
-**Status:** In review — fix on branch `claude/project-thread-e9rjh8`, same PR as AT-019; not compiled in the cloud, needs Rosh's Xcode test. Decision: no magnifier at any zoom (zoom is double-click; the hint line says so). **Owner/chat/branch/PR:** Claude (project thread "Fix photo lag and zoom cursor bugs"). **Dependencies:** none.
+**Status:** Done — PR #71 merged October 31, 2026; Rosh confirmed the cursor in Xcode. Decision: no magnifier at any zoom (zoom is double-click; the hint line says so). **Owner/chat/branch/PR:** Claude (project thread "Fix photo lag and zoom cursor bugs"). **Dependencies:** none.
 
 **Implemented:** `ZoomScrollView.canPan` now measures whether part of the photo is out of view (more than 1 screen point) instead of trusting the zoom level, so just past Fit or Fill with a matching shape counts as nothing to pan; `cursorShape` returns the arrow then, the hand otherwise. The cursor refreshes after a window resize and after a pinch. PRD principle 11 updated.
 
