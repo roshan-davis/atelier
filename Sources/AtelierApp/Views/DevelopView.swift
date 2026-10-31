@@ -57,7 +57,8 @@ struct DevelopImageView: View {
                                           position: $develop.sliderPosition)
                     }
                 }
-                if develop.isLoading {
+                // Only with nothing to show: over the photo it read as a delay (Rosh, Oct 31, 2026).
+                if develop.isLoading, develop.image == nil {
                     ProgressView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
