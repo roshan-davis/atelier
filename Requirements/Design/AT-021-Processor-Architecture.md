@@ -1,18 +1,155 @@
-# AT-021: one Processor host, with HDR Merge as the first plugin
+# AT-021: standalone HDR app and a focused Atelier round trip
 
-**Discussion draft, October 30, 2026.** Requested by Rosh as a priority override. Source baseline: `8700f853bb9d5d06c906e9d8800b5137b5581a33`. This proposes architecture, not permission to implement it. The PRD remains authoritative. No runtime, HDR algorithm, license policy, schema migration or UI is changed by this document.
+**Revised discussion draft, October 30, 2026.** Rosh requested this pivot after discussing Machinery HDR. Source baseline: `8700f853bb9d5d06c906e9d8800b5137b5581a33`. The design direction is revised; implementation, algorithms, dependencies and detailed UX still require bounded approval. No runtime, rendering or catalog schema changes are made here. The existing filename is retained so PR links continue to work.
 
-## Recommendation and decisions needed
+## The pivot
 
-Use one Core Processor host to prepare inputs, run an adapter, validate results and register derived files. Desktop editors, CLI/HTTP plugins and AI backends implement that same contract; their lifecycle capabilities differ. Preserve existing Edit In and ComfyUI behavior while moving one responsibility at a time. Do not introduce a separate HDR pipeline into the catalog or a general controller rewrite.
+Prioritize a standalone native Mac HDR editor inspired by Machinery HDR, with a reusable image-processing engine. Atelier sends a single photo or a group of bracketed photos to that app and registers the returned result. Defer the general third-party plugin platform: discovery, installable manifests, arbitrary CLI/HTTP tools, generated forms and plugin-contributed menus are not prerequisites for this HDR app.
 
-Before implementation, agree these product decisions:
+Keep a small shared **Processor contract** for the Atelier connection, consistent with the existing one-contract product rule. Extend the current Edit In pattern to grouped inputs and many-source results through this contract; do not create a special HDR-only catalog/import path. There is no prerequisite to migrate or rewrite ComfyUI before HDR development. Existing Edit In and AI workflows remain supported; AI order stays ComfyUI → Core ML → MLX, nothing bundled.
 
-1. **Inputs:** extend the PRD's single rendered-image contract to ordered, typed inputs, including read-only original copies and scene-linear float images. HDR cannot satisfy linear RAW merging by receiving today's developed TIFFs. This is a proposed PRD change, not an interpretation of existing approval.
-2. **UI ownership:** keep all in-app controls native and host-owned, including an HDR-specific preview dialog. Plugins supply parameter schemas and preview artifacts, not executable SwiftUI, HTML or injected views. The backlog's “own dialog” would mean a host dialog described by the plugin. An independently opened desktop app remains Edit In. Arbitrary plugin-owned embedded UI would need a separate proposal and conflicts with today's headless-plugin/host-owned-AI UX.
-3. **Security:** require a demonstrated constrained execution boundary before enabling third-party executable plugins. A child process alone is crash isolation, not a sandbox. A trusted developer-only harness can precede this, but must not ship advertised as safe plugin execution.
-4. **HDR scope:** approve an evaluation spike before choosing decoder, merger or output format. Prefer scene-linear float TIFF as the first interoperability candidate, with DNG evaluated alongside it; neither is a verified Atelier HDR output today. Do not promise mosaic-RAW editing, Lightroom-equivalent deghosting or ±10 EV until the complete path passes fixtures.
-5. **First implementation slice:** AT-008 host contract and a fake adapter plus compatibility tests, then migrate Edit In and ComfyUI separately. Discovery and HDR follow those gates. Batch grouping, automatic Nikon bracket detection and durable offline queues remain later slices.
+This supersedes the previous “full plugin architecture first, HDR as its first plugin” delivery plan. HDR is now a separate interactive app connected as a desktop Processor. A headless HDR adapter or broader plugin system can be considered later using the same engine and contract.
+
+## What the HDR product means
+
+Machinery's manual describes both bracket fusion/alignment/deghosting and single-image creative processing, including microcontrast, detail enhancement, smoothing, dynamic contrast and presets [8]. The desired product therefore goes beyond a Lightroom-style merge dialog. It is an independently useful HDR editor, not merely a launcher around a merge executable. Inspiration means comparable workflows and visual goals, not copying proprietary algorithms, assets or UI.
+
+- **One image:** interactive tone/local-contrast/detail work and presets. It cannot recover scene information absent from the input; synthetic exposures do not add captured dynamic range.
+- **Multiple bracketed images:** alignment, merging, deghosting, then interactive tone/detail work.
+- **Native editing:** responsive previews, before/after, undo, cancellable background work, saved versioned settings/projects and full-resolution output. Exact controls and first-release scope need design agreement.
+- **Independent use:** open photos without Atelier. The app owns HDR-specific editing UI and projects; Atelier owns its catalog, input selection, source relationships and returned-photo organization.
+
+A rendered return TIFF is a derivative; it does not make all HDR adjustments reversible in Atelier Develop. Preserve the HDR project's settings and input identities separately so reopening in the HDR app can restore editing. Whether Atelier references the project, how re-edit works, and whether it updates a derivative or creates a new version remain explicit decisions.
+
+## Responsibilities and one execution path
+
+These diagrams describe the revised proposal, not shipped capabilities.
+
+### Architecture: separate app, reusable engine, one Atelier connection
+
+```mermaid
+flowchart TB
+    subgraph Atelier[Atelier]
+        Select[Select one photo or bracket group]
+        Contract[Small shared Processor contract]
+        Adapter[Desktop HDR app adapter]
+        Register[Validate and register returned file]
+        Catalog[Catalog: all sources and optional stack]
+    end
+    subgraph HDRApp[Standalone native Mac HDR app]
+        Open[Open files directly or receive one grouped job]
+        UI[HDR controls, previews, presets and undo]
+        Engine[Reusable HDR processing engine]
+        Project[Versioned project and settings]
+        Result[Saved result and completion receipt]
+    end
+    Select --> Contract --> Adapter --> Open
+    Direct[Finder or HDR app Open] --> Open
+    Open --> UI
+    UI --> Engine
+    UI <--> Project
+    Engine --> Result
+    Result --> Register --> Catalog
+    Future[Future headless or plugin adapter] -.-> Engine
+```
+
+The HDR engine contains decoding/preparation, alignment, merge/deghost and tone/detail processing without catalog or UI dependencies. The HDR app owns its native interaction and project persistence. Atelier's adapter owns job preparation, launch/reconnect and result validation/publication through shared Core services. The engine can live in an independent package; its repository, app name and distribution are not chosen by this PR. No HDR math belongs in AtelierApp controllers.
+
+### Round trip: one selection becomes one HDR session
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Atelier
+    participant HDR as HDR app
+    participant Engine
+    User->>Atelier: Select one image or several brackets
+    User->>Atelier: Edit In > HDR app (proposed)
+    Atelier->>Atelier: Snapshot inputs and prepare grouped request
+    Atelier->>HDR: Open job with staged inputs and return contract
+    HDR->>Engine: Merge if bracketed; preview tone/detail settings
+    Engine-->>HDR: Updated preview
+    User->>HDR: Save result / return to Atelier
+    HDR->>HDR: Save project, output and completion receipt
+    HDR-->>Atelier: Result ready for this job
+    Atelier->>Atelier: Validate, publish and record every source
+    Atelier-->>User: New catalog photo; stack according to agreed policy
+```
+
+This is different from today's Edit In, which prepares and opens each selected photo individually. The new operation explicitly groups the selected inputs into one session; it does not change ordinary multi-photo Edit In semantics. Saving a standalone HDR project need not automatically import every intermediate preview or export into Atelier. The exact Save/Return commands require UX agreement.
+
+### Delivery order: HDR-focused work, broader plugins later
+
+```mermaid
+flowchart LR
+    Design[Agree HDR experience and first slice] --> Spike[Prove engine and output feasibility]
+    Spike --> App[Standalone HDR engine and native editor]
+    App --> RoundTrip[Focused Atelier desktop Processor connection]
+    RoundTrip --> Acceptance[Single-image and bracket acceptance]
+    Acceptance --> Later[Reassess general plugin platform]
+```
+
+The small contract can be designed alongside the HDR app; the diagram orders acceptance gates, not a requirement to defer all integration design until the app is finished. General plugin discovery/security, generated forms and a ComfyUI migration do not block this path.
+
+## Minimum Atelier Processor contract
+
+Use a fixed desktop-app adapter initially, not a public extensibility framework. Core owns types, preparation, output validation and registration. AppKit launch/activation stays in Atelier's app layer. Current export/stack helpers supply existing behavior but need bounded extensions for one grouped job and multiple sources.
+
+| Record | Minimum meaning |
+| --- | --- |
+| Request | Version, UUID job ID, operation, ordered input IDs, reference input, immutable settings snapshot and requested input/output representation |
+| Input | Staged file identity/hash, role, dimensions/orientation, original versus rendered representation, sample precision, color profile/transfer function and exposure metadata with explicit unknowns |
+| Handoff | Job-local request location, app identity and agreed return location/receipt; transport mechanism chosen in a small spike, not assumed from an ordinary Open Files event |
+| Result | Job ID, stable output identity/path/hash, all source mappings, reference frame, actual output format/color/precision, project reference if agreed and engine/settings version |
+| Status | Preparing, handed off, result ready, validating, registered, cancelled or failed; reason/recovery action and optional progress where actually available |
+
+No silent conversion of RAW brackets to developed 16-bit TIFF. Single-image “edit as developed” and bracket “use originals” are distinct input policies requiring clear labels. Use staged copies, never hard links or writable originals. Grant no catalog access to the HDR app. A desktop app is its own trust boundary; this connection does not claim that a child process or path convention provides an OS sandbox.
+
+A versioned request/result document in a private job directory is a candidate transport; launching, completion signaling, saved projects and relaunch must be proven on Mac before freezing it. Do not depend on desktop automation, arbitrary scripts, or filenames alone to correlate results. Reopening a project cannot depend solely on temporary staging files: the project must retain durable copies or explicitly resolvable references, with ownership/cleanup and missing-source behavior agreed before implementation.
+
+## Publication, cancel and recovery
+
+Atelier validates regular output files, expected representation, profile/precision, size and decode success before import. Restrict return paths, reject traversal/symlinks and never overwrite originals. Use unique destination names and retain existing source-folder/managed-Edits behavior unless a different destination is agreed. Treat import/relationship updates and filesystem publication as a recoverable operation with a receipt: today's `addStacked` imports and stacks separately.
+
+Record **all** bracket sources regardless of whether the user creates a visual stack. Reference-frame metadata inheritance and stack placement must be explicit; copying a single frame's exposure onto the merged file would be misleading. Coordinate relationships/provenance with AT-005b/c and AT-007, without implementing a new license policy in this work.
+
+Cancellation before handoff stops preparation. After handoff, Atelier can abandon its pending import or request cancellation through an agreed app protocol; it must not kill the user's HDR app or discard a saved project. Cancelling a merge inside the HDR app stops that computation while preserving the session. Closing without returning produces no new catalog photo. Late results for abandoned jobs require an explicit recovery action, not automatic import.
+
+After a crash/relaunch, correlate receipts by job ID, reconcile already registered outputs and avoid duplicates. Do not automatically rerun an expensive merge. Retain recoverable results with a visible location/action. Re-editing and repeated Save/Return need agreed versioning semantics before acceptance; no assumption that today's single-parent external-edit watcher solves this.
+
+## HDR engine and format feasibility
+
+Qualify decoder and input representation first. Scene-linear demosaiced RGB is not untouched sensor mosaic RAW. Today's neutral `Exporter` TIFF is not a validated RAW-merge input. Compare a qualified RAW-capable merger with a linear-RGB approach using Nikon Zf/Z6 brackets. Record dependency versions/licenses; no algorithm or dependency is adopted by this design.
+
+The first editor should distinguish a high-dynamic-range master/project from the tone-mapped output used for ordinary viewing. Preserve reversible processing settings in the HDR project. Do not promise Lightroom-equivalent deghosting, ±10 EV Develop support or true HDR display/export simply because a float file can be written.
+
+| Candidate | Verified research | Still to prove |
+| --- | --- | --- |
+| Machinery-style workflow | Manual documents single-image effects, bracket fusion, alignment/deghost, presets, project saving and Lightroom round trip [8] | Desired visual style, controls and algorithm quality on Rosh's images; source does not expose proprietary math |
+| OpenCV | Tutorial separates float HDR merging from low-dynamic-range exposure fusion [2]; AlignMTB exposes shift alignment [3] | RAW preparation, handheld rotation/parallax and suitable deghost; not a complete Machinery substitute |
+| Float TIFF | Apple exposes TIFF writing with a pixel-format argument [4] | Numeric round trip above 1/below 0, tags/profile/metadata, actual precision, Atelier decode/Develop/export |
+| DNG | Adobe supplies specification and SDK resources [5] | Exact SDK terms/dependencies, float linear-DNG writing and independent reader tests |
+| OpenEXR | Format supports float channels/color metadata [6] | Encoder/dependency, metadata carriage and Atelier import/preview/Develop support |
+
+Benchmark responsive preview updates and full-resolution render time/peak memory before optimization. Coalesce preview work and discard stale settings revisions. Test single-image natural/detail-heavy looks and bracket sets with moving subjects, tripod/handheld shifts, clipped highlights, mismatched dimensions/orientation, missing exposure metadata, mixed RAW/JPEG, offline originals and read-only folders. No synthetic bracket can restore uncaptured information.
+
+## Bounded delivery plan and acceptance
+
+Each implementation slice gets its own scope/approval and PR/chat. This PR revises the design only.
+
+| Phase | Scope | Gate |
+| --- | --- | --- |
+| 0 — this revision | Agree standalone HDR direction; defer full plugin platform | Rosh reviews revised boundaries; implementation remains unapproved |
+| 1 — HDR feasibility and product design | Single-image and bracket reference sets, UI concept, decoder/merge/deghost and output probes, project persistence design | Visual goals and first editor scope agreed; numerical/color/license evidence and Mac measurements recorded |
+| 2 — standalone HDR editor | Reusable engine plus native previews, controls, presets, undo, project save/reopen and export | Independent use without Atelier; no original mutation; single-image/bracket visual acceptance and full-resolution output tests |
+| 3 — focused Atelier connection / AT-008 slice | One grouped request through desktop Processor adapter, validated return, all source links and agreed stack/project behavior | One image and a bracket group round trip; cancel/close/restart, missing files, repeated return and duplicate prevention; existing Edit In/AI regression checks |
+| Later — reassess plugins | General manifests/discovery, generated forms, CLI/HTTP adapters and incremental AI migration | Separate proposal based on actual needs; security/conformance tests before third-party execution |
+
+Dependencies: AT-008 supplies the one-contract boundary without a prerequisite broad migration; AT-005b/c cover portable source/project relationships and provenance recovery; AT-007 governs identity/license policy; AT-009 covers durable/offline queues later. Existing model restrictions and backend order remain unchanged. Do not silently implement those proposals as part of HDR work.
+
+Decisions still open: app/repository/package name; exact first-release effects; original/rendered input choices; engine/dependencies; output formats; project source ownership; Save/Return/re-edit versioning; visual stack policy and menu label. The direction is approved for design revision, not a commitment to every Machinery feature or an authorized app build.
+
+Future Atelier testing covers main and context Edit In menus in grid/Loupe/Develop/Filmstrip, grouped RAW+JPEG handling, selection, return registration and existing external-save/AI flows. HDR app tests cover preview interactions, before/after, zoom/pan, sliders, undo, presets and project reopen. PRD/Help/snapshots accompany actual UI work. Desktop/UI testing always requires fresh explicit permission from Rosh; none was performed here.
 
 ## What exists, and what must remain
 
@@ -33,178 +170,6 @@ Paths below are relative to the repository at the baseline revision.
 
 There is no concrete shared Processor protocol/host in these inspected paths. README's contract wording describes the intended architecture, not completed orchestration. No durable common job queue was found in these flows.
 
-## Responsibilities and one execution path
-
-All diagrams describe the proposed design, not shipped capabilities. HDR Merge is a plugin added **after** the shared plugin architecture; it gets no separate catalog or execution path.
-
-### Architecture: who owns what
-
-```mermaid
-flowchart TB
-    subgraph App[Atelier native interface]
-        UI[Photo menus · Edit In · AI panel · plugin dialogs]
-        Settings[Settings: discovery, enable/disable and trust]
-    end
-    subgraph Core[Atelier Core — one Processor host]
-        Registry[Validated processor registry]
-        Host[Prepare request and staged inputs]
-        Contract[One Processor contract]
-        Publish[Validate output · publish · reconcile]
-        Catalog[Catalog · source relationships · stacks]
-    end
-    Settings --> Registry
-    Registry --> Host
-    UI --> Host
-    Host --> Contract
-    Contract --> Desktop[Desktop app adapter]
-    Contract --> CLI[CLI plugin adapter]
-    Contract --> HTTP[HTTP plugin adapter]
-    Contract --> AI[AI adapter: ComfyUI first]
-    CLI --> HDR[HDR Merge plugin — later]
-    CLI --> Other[Other installed CLI plugins]
-    Desktop --> Results[Candidate files or interactive handoff]
-    HDR --> Results
-    Other --> Results
-    HTTP --> Results
-    AI --> Results
-    Results --> Publish
-    Publish --> Catalog
-    Catalog --> Refresh[Preview refresh and completion event]
-    Refresh --> UI
-```
-
-The host owns access to photos, catalog writes, stacks and native presentation. Plugins process staged inputs and return candidates. The CLI/HTTP placement is a transport choice: HDR's final transport is selected after feasibility evaluation. Core ML and MLX are later adapters behind the same contract, in that order after ComfyUI; nothing is bundled.
-
-### Job lifecycle: one route to a registered result
-
-```mermaid
-flowchart TD
-    Submit[Submit immutable request] --> Preflight[Check inputs, capabilities and permission]
-    Preflight --> Prepare[Prepare private staged copies]
-    Prepare --> Run[Run adapter; show progress and previews]
-    Run --> Validate[Validate candidate files and pixel metadata]
-    Validate --> Boundary{Publication boundary}
-    Boundary -->|proceed| Publish[Publish files and reconcile catalog receipt]
-    Publish --> Done[Completed: registered result]
-    Preflight -. failure .-> Failed[Failed: reason and recovery action]
-    Prepare -. failure .-> Failed
-    Run -. crash or timeout .-> Failed
-    Validate -. invalid output .-> Failed
-    Publish -. interrupted .-> Recover[Retain output; reconcile on restart]
-    Recover --> Publish
-    Cancel[Cancel request] --> Stop[Stop owned work; await acknowledgement]
-    Stop --> Boundary
-    Boundary -->|cancel wins before commit| Cancelled[Cancelled: no new registered result]
-    Boundary -->|already committed| Done
-    Publish -->|desktop editor| Handoff[Interactive handoff: open registered copy]
-    Handoff --> Watch[Observe later saves; refresh previews]
-```
-
-Cancellation is checked throughout preparation and execution. The boundary resolves the race between cancellation and publication; a committed result is never reported as removed by cancellation. Edit In hands off an already registered copy and continues observing saves. A failed or interrupted run cannot silently rerun or register a duplicate after relaunch. Originals stay outside plugin write access; execution isolation still needs proof.
-
-### Delivery order: architecture first, HDR plugin afterward
-
-```mermaid
-flowchart LR
-    Design[0. Agree architecture] --> Contract[1. Shared host and fake adapter]
-    Contract --> EditIn[2a. Migrate Edit In]
-    EditIn --> AI[2b. Migrate ComfyUI]
-    AI --> Plugins[3. Safe plugin host, discovery and native forms]
-    Plugins --> Spike[4. HDR feasibility: RAW, alignment, deghost and output]
-    Spike --> HDR[5. HDR Merge plugin]
-    HDR --> Later[Later: bracket detection and batch]
-```
-
-Each phase has its own scope, approval and acceptance gate. This design PR is phase 0 only. HDR uses the host established in phases 1–3; its feasibility work selects an engine and output format before phase 5 implements the plugin.
-
-
-Proposed Core files are small units under `AtelierCore/Processors`: contract types, host/state machine, registry/manifest validation, input preparation, output publication, adapters and journal. App code owns native presentation, `NSWorkspace` launching/watching bridge, settings and command routing. Core never depends on AppKit UI. Adapters cannot import into the catalog or select photos. AI recipe preparation/compositing stays a Core service called by its adapter. Export remains available independently and is reused where its rendered output is appropriate.
-
-Conceptual types (not final Swift API):
-
-| Type | Essential fields/meaning |
-| --- | --- |
-| `ProcessorDescriptor` | stable reverse-domain ID, plugin version, protocol major/minor range, operations, transport, dependencies, permissions, UI schema, licenses and capabilities |
-| `ProcessorRequest` | protocol version, UUID job/attempt IDs, operation, immutable ordered source references, reference input ID, settings snapshot + schema version, typed parameters, masks/references, requested output contract and publication policy |
-| `InputArtifact` | job-local opaque ID/location, role, original/rendered/linear representation, content hash, dimensions/orientation, integer/float sample type and bits, effective precision if known, color profile/transfer function, exposure time/ISO/aperture/bias with explicit unknowns, decode/profile version and applied-settings identity |
-| `ProcessorEvent` | job/attempt ID, monotonically increasing sequence, stage, bounded optional fraction + estimated flag, warning, preview artifact or terminal outcome; no UI objects |
-| `ProcessorResult` | candidate artifacts with roles, detected/claimed pixel metadata, reference/source mapping, operation details, dependency versions and provenance declarations; interactive handoff is a distinct outcome |
-| `ProcessorFailure` | stable code, affected input IDs, readable reason/recovery action, retriable flag and bounded diagnostics; preserve underlying error in logs without tokens/prompts by default |
-
-One adapter operation starts a request, emits events, and returns an outcome; cancellation uses the same job handle/token. Manifest capabilities describe cardinality, representations, previews, cancellation scope, interactive handoff and reconnect support. The host rejects unsupported combinations before rendering or launching. No “fallback” silently changes precision, color, originals availability or model. AI order stays ComfyUI → Core ML → MLX, no bundled models or worker environments; adding an adapter does not implement backend selection automatically.
-
-## Discovery, manifest and transports
-
-Propose user-installed folders in `~/Library/Application Support/Atelier/Processors`, plus internally registered adapters for current editors and AI recipes. Scan only manifests, without executing code; no recursive search of arbitrary folders. Invalid/incompatible/duplicate IDs remain visible with a reason and cannot run. Disable removes commands and prevents new runs; offer cancellation for active jobs, retain results and settings. Changed package identity/permissions requires reapproval; pin an active job to its exact installed version. Do not replace an executable underneath a run.
-
-A manifest uses `manifestVersion: 1`, plugin ID/name/version/publisher, supported host protocol range, macOS/arm64 minimums, operations, relative executable + argument array **or** endpoint, parameter schema, input/output capabilities, menu contribution IDs, permissions, dependency probes and license/notice references. Reject absolute executable paths, package escapes, duplicate operation IDs, unsupported mandatory features and unknown major versions. Minor additions are optional/negotiated; versioned schema migrations never reinterpret saved parameters silently. Bound manifest/schema size, nesting and control counts. No remote schema references, executable validators or shell fragments.
-
-CLI: launch directly with argument arrays and a minimal environment, never through a shell. Newline-delimited JSON over stdin/stdout; stderr is bounded diagnostics. Handshake negotiates protocol/capabilities before `start`; events carry job/attempt/sequence; a single `complete`, `failed` or `cancelled` ends the attempt. Malformed/oversized events, EOF, duplicate terminal messages or nonzero exit fail the job. Drain both pipes concurrently to avoid deadlock. Exit zero without a valid result is failure. A `cancel` message gets a bounded grace period, then termination of the owned worker/process group, never another user's process.
-
-HTTP: same logical request/event/result schema via an adapter, using create/status/cancel/result resources with an idempotency key; negotiated polling or event stream, bounded timeouts and downloads. The server owns remote job IDs. Local paths are valid only for an explicitly negotiated shared workspace; other endpoints receive uploaded bytes and opaque artifact IDs. Disallow arbitrary result URLs/redirects outside the configured endpoint policy. Store credentials in Keychain, not manifests/journals. Generic remote HTTP is a later PRD capability; do not broaden today's ComfyUI server access as part of discovery.
-
-## Native UX and menu boundaries
-
-Settings > Processors is proposed: name/version, enabled state, compatibility, execution location, dependency/trust status, permissions, Reveal Package, diagnostics; existing Edit In and AI configuration remain where they are. No automatic downloads, package-manager execution or model installation. Installation checks can report what is missing without executing arbitrary dependency probes before trust.
-
-Support a deliberately small form schema: booleans, bounded numbers, enum choices, text, host photo/file pickers, groups, defaults and visibility rules. Reuse `SliderRow`/`DevelopSlider`, `GroupHeading`, pickers, cursors, themes, help and history conventions. Arbitrary JSON Schema does not map automatically to a polished form; unsupported controls fail validation. HDR preview uses a host-provided specialized presentation ID after approval, with a shared photo viewport, not a second zoom state. Preview jobs carry settings revisions; stale previews are discarded and never registered.
-
-Menu contributions are declarative operation IDs under host-approved Photo submenus (HDR: proposed Photo > Photo Merge > HDR…). No arbitrary top-level menus, selectors or code. The host computes availability from current target IDs/RAW+JPEG grouping, cardinality, permissions and original availability. Both main and right-click menus use the same descriptors; keyboard shortcuts go through `KeyBindings`, conflict checked. Job completion never steals focus if the user has moved elsewhere. Exact layout and key choices need mockup/snapshot and Rosh acceptance later.
-
-## Trust, originals and publication
-
-Plugins receive staged copies, never writable original paths, catalog databases, library roots or credentials. No hard links to originals. Canonicalize paths, reject traversal/symlinks and package escapes; use private per-job directories and exclusive output creation. The host publishes only regular validated files inside the job output directory, with size/dimension/count limits, supported decode, finite pixel values where required, expected format/profile and hashes. Claimed metadata is not trusted. Require output files to be closed/stable before publication. Plugins cannot choose an arbitrary final destination.
-
-This prevents accidental mutation through the protocol, but an unrestricted executable can still access the user's files. README explicitly lists App Sandbox as unbuilt. Apple's sandbox inheritance is tied to actual signed entitlements, not the `Process` API. A separate security spike must prove a signed constrained worker/XPC arrangement can run installed arm64 plugins with only staged input access and declared network/dependency rights on macOS 15+. Test denials against originals/catalog/home/network, not just manifest declarations. If that cannot be demonstrated, stop third-party CLI release and discuss trusted-only limitations with Rosh; do not quietly weaken the PRD sandbox requirement. HTTP server trust and desktop app file access are separate, explicit boundaries.
-
-Publication reserves unique names using existing destination rules, validates before promotion, and records a host-generated job→result receipt. A small durable journal tracks validated/promoted/registered states. On failure, retain recoverable outputs with a visible location/action, reconcile rather than duplicate catalog entries, and never remove a registered artifact on cancellation. Import and relationship updates need an idempotent catalog operation/new migration when approved; `addStacked` today is not an atomic multi-output commit. “Create Stack” is presentation policy independent of the required provenance edges. Reference metadata is inherited explicitly; other bracket metadata is preserved in provenance, not falsely copied as one exposure.
-
-## Jobs, cancellation and restart
-
-State machine: preflight → preparing → running (or handedOff for apps) → validating → publishing → completed. Fail/cancel may occur before completion; cancelRequested remains visible until acknowledged or the worker stops. Terminal state occurs once. Check cancellation between preparation steps and immediately before publication; the publication boundary decides whether the result is committed, and reports that fact instead of claiming cancellation removed a completed result.
-
-Start with one expensive plugin job at a time, background work and bounded event delivery; concurrency limits need measurement before expansion. Host previews are cancellable/coalesced, with no render per slider event. Heartbeats distinguish a stalled worker from slow determinate work; lack of progress alone is not proof of failure. Logs are capped and private. A worker crash/timeout produces a per-job error and leaves originals unchanged; a process boundary does not guarantee protection from system-wide memory exhaustion, so memory/disk/large-image stress tests remain necessary.
-
-On relaunch, unfinished jobs are interrupted, not auto-rerun. Reconcile publication receipts first; offer retry with the same immutable request and a new attempt. Remote reattach requires a supported status API and persisted server job ID; do not assume a request failed because the network disconnected. No automatic repeated upload/merge after an ambiguous timeout. Edit In observation resumes through existing catalog/watch behavior. Durable offline waiting, scheduling/reconnect UX and smart previews belong to AT-009; first slice retains current explicit offline errors.
-
-## HDR Merge worked example and feasibility gates
-
-Select two or more explicit bracket photos. Resolve grouped RAW+JPEG to RAW once, preserve input order and choose a documented reference (proposed middle exposure, user-overridable). Preflight dimensions/orientation, camera/lens metadata, exposure data and available originals. Reject mixed RAW/JPEG and unsupported dimensions for the first slice with actionable reasons; do not silently discard frames or infer exposure from bias alone. Bracket auto-detection by capture time/bias is a later convenience needing Nikon Zf/Z6 fixtures, not a prerequisite for explicit selection.
-
-The host supplies staged originals for a qualified decoder, or a specified scene-linear demosaiced float representation after a separately validated RAW preparation stage. Scene-linear RGB is not untouched sensor mosaic data. Agree whether that satisfies the desired “RAW merge” promise before building; otherwise require a qualified RAW merger. Today's `Exporter(develop: false)` still runs a renderer with neutral settings and writes integer TIFF: it is not this contract.
-
-Proposed HDR parameters: Auto Align, Auto Settings, Deghost None/Low/Medium/High, Show Deghost Overlay and Create Stack. Align and deghost affect merge pixels; overlay is a preview artifact; stack is host publication policy. Auto Settings should create reversible initial Develop settings, not bake tone mapping into the float master. Preview and final must share algorithm/parameter semantics; low-resolution preview differences must be identified. Cancel discards unpublished candidates. Headless “last settings” uses the same operation/request without presentation; multi-group batch comes later.
-
-| Choice | Verified from primary documentation | Proposed evaluation / limitation |
-| --- | --- | --- |
-| Lightroom reference | Adobe documents bracket selection, alignment for camera movement, four deghost levels/overlay, stack and DNG output [1] | UX reference only; no claim to Adobe's algorithm or SDK merger |
-| OpenCV | Official tutorial separates Debevec/Robertson float HDR from Mertens low-dynamic-range exposure fusion [2]; AlignMTB exposes shift-based alignment [3] | Useful baseline for experiments; tutorial uses 8-bit input + exposure times, not a ready RAW merger or documented Lightroom-style deghost engine. Translation alignment alone is insufficient for all handheld parallax/rotation |
-| Float TIFF | Apple's API accepts a CIFormat and compatible RGB/monochrome color space [4]; installed Xcode SDK `CIContext.h` confirms writer API | First format probe: write `.RGBAf` test values above 1, below 0 and fractional values; inspect TIFF tags, round-trip values/profile/metadata and test Develop/export. API existence does not verify encoder precision or end-to-end support |
-| DNG | Adobe provides specification and a reading/writing SDK [5] | Obtain exact SDK terms/notices, evaluate build/distribution/dependencies and float linear-DNG tags, validate with independent readers. Download availability is not a license audit or proof of working HDR output |
-| OpenEXR | Format defines half/float channels and color/chromaticity attributes [6] | Strong interchange candidate, but encoder/dependency, EXIF/XMP carriage, import/Develop/preview support need proof. A UTType or read capability does not prove native writing |
-
-Recommend the next HDR spike compare an established RAW-capable merger with a linear-RGB approach; require named versions/licenses and reproducible fixtures before selecting either. No HDR math or dependency adoption is authorized here. Separate software/dependency licensing from model/output-use licensing: AT-007 owns the latter. A plugin manifest's license string cannot approve website/shop use.
-
-HDR acceptance fixtures: tripod and handheld Nikon Zf/Z6 brackets, foliage/person movement, clipping in every frame, repeated/unknown exposure, mixed orientation/dimensions, RAW+JPEG grouping, offline sources and read-only source folder. Measure time/peak memory and alignment/ghosting crops on this Mac, recording exact revisions. Verify unaltered originals, values outside SDR retained through save/reopen/Develop/export, no false precision claims, metadata/reference correctness, reversible Auto Settings and no duplicate registration after crash. Any ±10 EV range must be an approved shared parameter change with backward-compatible settings, rendering tests and `PreviewCache.version` bump if rendered behavior changes. HDR radiance preservation and HDR display/gain-map export are separate features.
-
-## Bounded delivery plan and acceptance
-
-Each implementation phase requires its own scoped approval/PR/chat. Passing tests does not supply Rosh's product acceptance.
-
-| Phase | Scope | Gate |
-| --- | --- | --- |
-| 0 — this design | Architecture, current-source evidence, decisions and dependencies | Rosh agrees input/UI/security boundaries and first slice; no runtime changes |
-| 1 — AT-008 foundation | Types, state machine, fake adapter, one-output publication receipt; no new plugin UI | Tests: cancel at every boundary, malformed result, duplicate completion, import/stack failure and crash/restart reconciliation; unchanged existing workflows |
-| 2a — Edit In adapter | Route existing editor preparation/handoff through host; retain defaults/watchers/reopen behavior | Actual TIFF/JPEG round trips, existing edit reopen, multi-photo partial failure, saves/relaunch; before/after compatibility fixtures |
-| 2b — ComfyUI adapter | Reuse AIRunner services behind host, move catalog publication out once | Existing three recipes, brush compositing, timing progress, cancel scope, server errors/unknown license declarations preserved; live server tests with authorized UI checks |
-| 3 — safe plugin host | Manifest registry, constrained CLI execution, forms/commands and transport conformance | Security denial tests, install/version/disable tests, native UX review, invalid/crashing worker tests; HTTP adapter conformance before generic endpoint release |
-| 4 — HDR feasibility | Disposable non-UI fixture spike, decoder/align/deghost and float-format comparison | Exact license/dependency review and numerical/interoperability evidence; Rosh chooses actual HDR scope |
-| 5 — HDR first plugin | Explicit bracket selection, host preview, approved merge engine, one result | Real camera/image acceptance, restart/provenance/stack fixtures, Help + PRD + latest-head snapshots; automatic grouping/batch deferred |
-
-Dependencies: **AT-005b** portable many-source relationships/stack recovery; **AT-005c** provenance recovery envelope; **AT-007** identity, hashes, workflow/dependency/model records and agreed license enforcement; **AT-008** incremental host migration; **AT-009** durable queues/offline/reconnect. Design reserves these seams without implementing their policy. Provenance should eventually identify all source hashes, reference frame, decode/merge versions, settings and dependency identities; current IDs/JSON alone do not guarantee reproducibility. Existing experimental/permissive restrictions remain binding and ComfyUI → Core ML → MLX order remains unchanged.
-
-Future runtime validation also covers every contributing main/context menu (grid, Loupe, Develop, Filmstrip), Settings > Edit In/AI/Processors, all three AI recipes, output selection/previews, external saves and restart. If the HDR preview adds photo interactions, test click/drag/handles/hover, Space-drag, scroll/pinch/⌘-scroll, zoom buttons, Navigator and keys through the shared viewport. Desktop/UI testing requires fresh explicit permission from Rosh. This documentation performs none.
-
 ## Primary research (accessed October 30, 2026)
 
 1. [Adobe: HDR photo merge](https://helpx.adobe.com/lightroom-classic/desktop/process-and-develop-photos/hdr-photo-merge.html).
@@ -214,3 +179,5 @@ Future runtime validation also covers every contributing main/context menu (grid
 5. [Adobe: DNG specification and SDK resources](https://helpx.adobe.com/camera-raw/desktop/dng-and-file-formats/digital-negative.html). Exact SDK archive/license not audited in this phase.
 6. [OpenEXR: Technical Introduction](https://openexr.com/en/latest/TechnicalIntroduction.html).
 7. [Apple: Enabling App Sandbox / inheritance](https://developer.apple.com/library/archive/documentation/Miscellaneous/Reference/EntitlementKeyReference/Chapters/EnablingAppSandbox.html) and [accessing files from the macOS App Sandbox](https://developer.apple.com/documentation/security/accessing-files-from-the-macos-app-sandbox). Architecture constraints; isolation feasibility still requires a signed implementation spike.
+
+8. [Machinery HDR Effects manual](https://www.machineryhdr.com/manual/), accessed October 30, 2026. Product reference for single-image effects, bracket fusion and standalone/editor round trips.

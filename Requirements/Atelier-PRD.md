@@ -459,7 +459,7 @@ As built (Oct 26, 2026):
 
 ### Processor plugins (headless tools)
 
-**Architecture discussion (AT-021, October 30, 2026):** [Processor architecture draft](Design/AT-021-Processor-Architecture.md) documents current implementation gaps and a proposed incremental host. Its ordered/linear-RAW inputs, native plugin dialog ownership and execution isolation are proposals awaiting agreement, not changes to the requirements below or implemented capabilities. HDR Merge is a feasibility example, not a shipped feature.
+**HDR direction (AT-021, revised October 30, 2026):** prioritize a standalone native Mac HDR editor inspired by Machinery HDR, supporting single-image tone/detail work and multi-image bracket processing. Atelier will connect through the one Processor contract as an interactive desktop-app round trip: one selected photo or one bracket group in, validated result with all source relationships out. The HDR app owns its controls, presets and saved project/settings; Atelier owns catalog registration and stacking. A small shared contract is designed alongside this work. The general plugin platform described below remains a later capability, not a prerequisite for the HDR app. [Revised design and diagrams](Design/AT-021-Processor-Architecture.md) specify the proposed boundaries. Detailed effects, engine, original/rendered input policy, project persistence, return/re-edit behavior, stack policy and formats still need scoped agreement and validation; no HDR capability is shipped by this design revision. Existing Edit In/AI behavior and backend order are preserved.
 
 For tools without a UI (command-line denoisers, scripts, other AI servers):
 
