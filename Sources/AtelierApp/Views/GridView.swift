@@ -394,7 +394,7 @@ final class ThumbnailLoader: @unchecked Sendable {
     }
 
     /// Decodes fully off the main thread; NSImage(contentsOf:) would defer decoding to the first draw.
-    private static func decode(_ url: URL) -> NSImage? {
+    static func decode(_ url: URL) -> NSImage? {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
               let image = CGImageSourceCreateImageAtIndex(
                 source, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary) else { return nil }

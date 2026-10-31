@@ -486,9 +486,24 @@ final class DevelopController: ObservableObject {
         history = (try? catalog.developHistory(for: assetID)) ?? DevelopHistory()
         committed = settings
         pendingStep = nil
-        // Show the cached preview immediately while the editable proxy decodes.
+        // Show the cached preview immediately while the editable proxy decodes: decoded in
+        // memory when it was shown or prefetched lately, else the grid thumbnail until it is
+        // decoded off the main thread.
         let cachedPreview = previews.url(for: assetID, size: .preview)
-        if previews.has(.preview, for: assetID) { image = NSImage(contentsOf: cachedPreview) }
+        if previews.has(.preview, for: assetID) {
+            if let decoded = PreviewImages.shared.cached(assetID, at: cachedPreview) {
+                image = decoded
+            } else {
+                let placeholder = ThumbnailLoader.shared.cached(assetID)
+                image = placeholder
+                Task {
+                    let decoded = await PreviewImages.shared.load(assetID, at: cachedPreview)
+                    // Not once the proxy has rendered, or for another photo.
+                    guard self.assetID == assetID, self.image === placeholder, let decoded else { return }
+                    self.image = decoded
+                }
+            }
+        }
 
         guard let url = try? catalog.fileURL(for: assetID) else {
             errorMessage = "The original is offline. Connect its drive to edit this photo."

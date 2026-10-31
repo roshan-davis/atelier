@@ -213,7 +213,7 @@ Evidence baseline, October 30, 2026:
 
 ## AT-019 — Photo lags when selected: background shows before the image
 
-**Status:** Approved / ready — bug reported by Rosh, October 30, 2026; fix to be bounded to the selection-to-first-frame path. **Owner/chat/branch/PR:** unassigned. **Dependencies:** AT-011 measurement protocol for before/after timings.
+**Status:** In review — fix on branch `claude/project-thread-e9rjh8` (PR opened October 31, 2026), not compiled in the cloud and CI billing-blocked; needs Rosh's Xcode build and test. Timings not measured yet. **Owner/chat/branch/PR:** Claude (project thread "Fix photo lag and zoom cursor bugs"), branch `claude/project-thread-e9rjh8`, same PR as AT-020. **Dependencies:** AT-011 measurement protocol for before/after timings.
 
 **Symptom:** selecting a photo (Filmstrip, arrow keys) first draws the empty main panel background, then the photo.
 
@@ -225,11 +225,15 @@ Evidence baseline, October 30, 2026:
 
 **Scope:** keep the previous photo on screen until the next one is decoded (never clear to background); show the cached grid thumbnail immediately, then swap to the preview; decode off the main thread (`CGImageSource` with `kCGImageSourceShouldCacheImmediately`); a small LRU of decoded previews and prefetch of the next/previous photo in the current order. Apply to Loupe and Develop, and check Compare/Before-After and Cull for the same pattern.
 
+**Implemented (branch above):** `PreviewImages` (new, `Sources/AtelierApp/PreviewImages.swift`): decodes 2560 px previews off the main thread with `ThumbnailLoader.decode` (`kCGImageSourceShouldCacheImmediately`), keeps the last eight (re-decoded when the preview file's date changes), and `LibraryModel` prefetches the previous and next photo in the current order in Loupe and Develop. Loupe keeps the last photo until the next is ready and shows the in-memory grid thumbnail at once; it clears only when the photo has no preview or thumbnail yet. Develop shows the decoded preview at once, else the thumbnail until the preview is decoded (never replacing a proxy render). Not changed: Cull and the Before/After panes (they come from the Develop render).
+
 **Acceptance:** stepping through 50 photos with arrow keys never shows the empty background; time from selection to first photo frame measured before/after on Rosh's Mac (target to agree, e.g. under 100 ms from a cached preview); no change to rendered look, so no `PreviewCache.version` bump.
 
 ## AT-020 — Zoom cursor shows when the photo can't zoom or pan
 
-**Status:** Approved / ready — bug reported by Rosh, October 30, 2026. **Owner/chat/branch/PR:** unassigned. **Dependencies:** none.
+**Status:** In review — fix on branch `claude/project-thread-e9rjh8`, same PR as AT-019; not compiled in the cloud, needs Rosh's Xcode test. Decision: no magnifier at any zoom (zoom is double-click; the hint line says so). **Owner/chat/branch/PR:** Claude (project thread "Fix photo lag and zoom cursor bugs"). **Dependencies:** none.
+
+**Implemented:** `ZoomScrollView.canPan` now measures whether part of the photo is out of view (more than 1 screen point) instead of trusting the zoom level, so just past Fit or Fill with a matching shape counts as nothing to pan; `cursorShape` returns the arrow then, the hand otherwise. The cursor refreshes after a window resize and after a pinch. PRD principle 11 updated.
 
 **Evidence at `5086f3d`:** `ZoomCanvasView.cursorShape` in `ZoomableImageView.swift` returns `.grab` when `canPan`, otherwise always `.zoomIn`. Zoom is double-click only since PR #44, so a magnifier over a fitted photo suggests a single click zooms. It also shows when double-click would not change anything (for example a small photo whose click-zoom size, `LibraryModel.clickZoomPercent`, is not larger than fit).
 

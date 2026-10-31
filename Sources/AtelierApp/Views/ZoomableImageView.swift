@@ -497,7 +497,15 @@ final class ZoomScrollView: NSScrollView {
         onZoomChange?(next)
     }
 
-    var canPan: Bool { lastReport.isZoomedPastFit || level == .fill }
+    /// Part of the photo is out of view, so a drag moves it. Measured, not taken from the zoom
+    /// level: just past Fit, or at Fill with the view's shape, the whole photo can still fit.
+    var canPan: Bool {
+        guard documentSize.width > 0, documentSize.height > 0 else { return false }
+        let visible = contentView.bounds.size
+        // In screen points, so a sliver under a point doesn't count.
+        return (documentSize.width - visible.width) * magnification > 1
+            || (documentSize.height - visible.height) * magnification > 1
+    }
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
@@ -510,6 +518,8 @@ final class ZoomScrollView: NSScrollView {
         report()
         reportVisible()
         updatePhotoFrame()
+        // A bigger window can leave nothing to pan, a smaller one something.
+        Cursors.shared.refresh()
     }
 
     @objc private func didEndMagnify() {
@@ -517,6 +527,7 @@ final class ZoomScrollView: NSScrollView {
         onZoomChange?(level)
         report()
         updatePhotoFrame()
+        Cursors.shared.refresh()
     }
 
     override func scrollWheel(with event: NSEvent) {
@@ -600,13 +611,14 @@ final class ZoomCanvasView: NSView {
 
     private var tracking: NSTrackingArea?
 
-    /// A picker's eyedropper, a hand once zoomed in, else a magnifier for double-click to zoom.
-    /// Under a tool (Masking) the tool decides.
+    /// A picker's eyedropper, a hand when a drag moves the photo, else the arrow. No magnifier:
+    /// zoom is a double-click, and a magnifier says a single click zooms (Rosh, Oct 30, 2026; the
+    /// hint under the photo says how to zoom). Under a tool (Masking) the tool decides.
     private var cursorShape: CursorShape? {
         guard let scrollView, !scrollView.hasOverlay else { return nil }
         if scrollView.onPickDrag != nil { return .rowResize }
         if scrollView.onPick != nil { return .eyedropper }
-        return scrollView.canPan ? .grab : .zoomIn
+        return scrollView.canPan ? .grab : .arrow
     }
 
     override func updateTrackingAreas() {

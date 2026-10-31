@@ -88,12 +88,14 @@ final class LibraryModel: ObservableObject {
             zoomForNextPhoto(leaving: oldValue)
             reloadDetail()
             if mode == .develop { develop.open(focusedID) }
+            prefetchNeighbourPreviews()
         }
     }
     @Published var detail: AssetDetail?
     @Published var mode: ViewMode = .grid {
         didSet {
             if mode == .develop { develop.open(focusedID) } else if oldValue == .develop { develop.flushSave() }
+            prefetchNeighbourPreviews()
         }
     }
     @Published var status: String?
@@ -801,6 +803,17 @@ final class LibraryModel: ObservableObject {
                                      settings: settings)
         }
         return nil
+    }
+
+    /// Decodes the previews of the photos before and after the focused one, in Loupe and
+    /// Develop, so the arrow keys show them at once. Only previews already on disk.
+    private func prefetchNeighbourPreviews() {
+        guard mode == .loupe || mode == .develop, let focusedID,
+              let index = rows.firstIndex(where: { $0.id == focusedID }) else { return }
+        let ids = [index + 1, index - 1].filter { rows.indices.contains($0) }.map { rows[$0].id }
+        PreviewImages.shared.prefetch(ids.compactMap { id -> (id: Int64, url: URL)? in
+            previews.has(.preview, for: id) ? (id: id, url: previews.url(for: id, size: .preview)) : nil
+        })
     }
 
     /// A grid cell scrolled away before its thumbnail started.
