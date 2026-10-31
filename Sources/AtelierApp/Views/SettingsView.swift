@@ -350,7 +350,7 @@ private struct ExportSettingsTab: View {
             } header: {
                 Text("Defaults")
             } footer: {
-                Text("Format, size, color and metadata are chosen in File > Export… and remembered from the last export.")
+                Text("Format, size, color, metadata and watermark are chosen in File > Export…, where you can also save them as presets. The last choices are remembered.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

@@ -117,6 +117,7 @@ enum LayoutSnapshots {
                       to: folder.appendingPathComponent("settings-ai.png"))
         await capture(AnyView(GeneralSettings().environmentObject(model).frame(width: 640)), size: CGSize(width: 640, height: 640),
                       to: folder.appendingPathComponent("settings-general.png"))
+        await snapshotExport(model: model, into: folder)
         // The splash with each built-in image, and with none.
         for url in SplashController.builtInImages {
             let image = SplashImage.load(url)
@@ -730,6 +731,28 @@ enum LayoutSnapshots {
         }
         try? await Task.sleep(for: .seconds(1))
         print("SNAPSHOT: after Delete from Disk, status \(model.status ?? "-"), file still there \(url.map { FileManager.default.fileExists(atPath: $0.path) } ?? false), rows \(model.rows.map(\.filename)), focused \(model.focusedID.map(String.init) ?? "-")")
+    }
+
+    /// The Export dialog with the Website preset selected, then with a text watermark added (no
+    /// preset matches, so none is selected). The watermark section is below the fold.
+    private static func snapshotExport(model: LibraryModel, into folder: URL) async {
+        model.mode = .grid
+        model.selection = Set(model.rows.map(\.id))
+        model.beginExport()
+        model.showingExportSheet = false
+        var settings = ExportSettings(destination: folder)
+        ExportPreset.website.apply(to: &settings)
+        var watermark = ExportWatermark(text: "© 2026 Rosh Davis")
+        watermark.size = 0.3
+        ExportSheet.saveLast(settings, watermark: watermark)
+        await capture(AnyView(ExportSheet().environmentObject(model)), size: ExportSheet.size,
+                      to: folder.appendingPathComponent("export-website.png"))
+        settings.watermark = watermark
+        ExportSheet.saveLast(settings, watermark: watermark)
+        await capture(AnyView(ExportSheet().environmentObject(model)), size: ExportSheet.size,
+                      to: folder.appendingPathComponent("export-watermark.png"))
+        UserDefaults.standard.removeObject(forKey: "export.lastSettings")
+        UserDefaults.standard.removeObject(forKey: "export.lastWatermark")
     }
 
     private static func writeScene(_ scene: Int, shift: Int, soft: Bool, second: Int, to url: URL) {
