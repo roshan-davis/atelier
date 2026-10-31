@@ -329,7 +329,7 @@ Evidence baseline, October 30, 2026:
 
 ## AT-023 — Private imports and collections
 
-**Status:** In progress — Rosh asked on October 31, 2026 to add it and build it right away. **Owner/chat/branch:** Claude (project thread "Add private imports and collections"), branch `claude/project-thread-mc0j05`. **Requested:** Rosh, October 31, 2026. **Dependencies:** none.
+**Status:** Merged at Rosh's instruction on October 31, 2026 (PR #77), to be refined later. Rosh's Xcode builds found two compile errors, both fixed; the final head was not Mac-built, `PrivateListTests` and the layout snapshots were not run (CI billing-blocked). Still open: a passing `python3 Scripts/check_pr.py` and Rosh's acceptance in Xcode. **Owner/chat/branch:** Claude (project thread "Add private imports and collections"), branch `claude/project-thread-mc0j05`. **Requested:** Rosh, October 31, 2026. **Dependencies:** none.
 
 **Why:** some shoots (model photoshoots) should be opened on purpose, not seen while browsing. Deliberate access, not security: no encryption of files or previews; the folder on disk is Rosh's concern.
 
