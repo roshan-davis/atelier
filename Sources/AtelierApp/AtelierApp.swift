@@ -15,6 +15,13 @@ struct AtelierApp: App {
                         .environmentObject(model)
                         .onAppear {
                             appDelegate.model = model
+                            model.processorSessions.start()
+                            PanelHelp.hasTopic = { HelpWindow.topic(forPanel: $0) != nil }
+                            PanelHelp.show = { title in
+                                if let topic = HelpWindow.topic(forPanel: title) {
+                                    HelpWindow.shared.show(page: topic.page, section: topic.section)
+                                }
+                            }
                             if let folder = LayoutSnapshots.outputFolder {
                                 Task { await LayoutSnapshots.run(model: model, into: folder) }
                             }
@@ -125,6 +132,9 @@ private struct ReadyLibraryCommands: Commands {
                     .disabled(model.focusedCullGroupSize < 2)
                 Divider()
                 Menu("Edit In") {
+                    Button("HDR App (Original)…") { model.editInHDR() }
+                        .disabled(model.targetIDs.count != 1)
+                    Divider()
                     ForEach(Array(model.externalEditors.enumerated()), id: \.element.id) { index, editor in
                         if index == 0 {
                             Button("Edit in \(editor.name)") { model.editIn(editor) }
@@ -201,7 +211,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Launched from `swift run` the process has no bundle; make it a regular foreground app.
         NSApp.setActivationPolicy(.regular)
-        if let iconURL = Bundle.module.url(forResource: "AppIcon", withExtension: "icns"),
+        if let iconURL = AtelierResources.bundle.url(forResource: "AppIcon", withExtension: "icns"),
            let icon = NSImage(contentsOf: iconURL) {
             NSApp.applicationIconImage = icon
         }

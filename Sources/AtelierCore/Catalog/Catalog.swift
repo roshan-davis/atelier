@@ -160,6 +160,7 @@ public final class Catalog: Sendable {
         registerCullMigration(&migrator)
         registerVirtualCopyMigration(&migrator)
         registerPairMigration(&migrator)
+        registerProcessorMigration(&migrator)
         return migrator
     }
 }

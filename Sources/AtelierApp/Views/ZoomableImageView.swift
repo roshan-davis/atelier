@@ -4,6 +4,11 @@ import SwiftUI
 
 /// Zoom for loupe and develop. 100% shows one pixel of the full-size photo per screen pixel.
 enum ZoomLevel: Hashable {
+    static var clickZoomPercent: Double {
+        let value = UserDefaults.standard.double(forKey: "zoom.clickPercent")
+        return value > 0 ? value : 100
+    }
+
     case fit, fill
     case percent(Double)
 
@@ -348,7 +353,7 @@ final class ZoomScrollView: NSScrollView {
     func focus(on center: CGPoint) {
         guard documentSize.width > 0, documentSize.height > 0 else { return }
         if !canPan {
-            let next = ZoomLevel.percent(LibraryModel.clickZoomPercent)
+            let next = ZoomLevel.percent(ZoomLevel.clickZoomPercent)
             applyLevel(next, anchor: nil)
             onZoomChange?(next)
         }
@@ -510,7 +515,7 @@ final class ZoomScrollView: NSScrollView {
     }
 
     func toggleZoom(at point: NSPoint) {
-        let next: ZoomLevel = lastReport.isZoomedPastFit ? .fit : .percent(LibraryModel.clickZoomPercent)
+        let next: ZoomLevel = lastReport.isZoomedPastFit ? .fit : .percent(ZoomLevel.clickZoomPercent)
         applyLevel(next, anchor: point)
         onZoomChange?(next)
     }

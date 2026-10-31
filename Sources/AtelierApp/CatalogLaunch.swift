@@ -12,6 +12,7 @@ final class CatalogLaunch: ObservableObject {
         #if DEBUG
         // Disposable-catalog override for recovery checks; never changes the normal location.
         let path = ProcessInfo.processInfo.environment["ATELIER_CATALOG_PATH"]
+            ?? Bundle.main.object(forInfoDictionaryKey: "AtelierTestCatalogPath") as? String
         opening = CatalogOpening(packageURL: packageURL ?? path.map { URL(fileURLWithPath: $0) } ?? Catalog.defaultPackageURL)
         #else
         opening = CatalogOpening(packageURL: packageURL ?? Catalog.defaultPackageURL)
