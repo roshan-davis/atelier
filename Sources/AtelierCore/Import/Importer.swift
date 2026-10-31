@@ -254,7 +254,8 @@ public final class Importer: Sendable {
         let metadata = MetadataReader.read(staged?.url ?? source, sidecarFor: source)
         // Fail this file visibly before copying if recovery data is unreadable. Never
         // substitute a preset or neutral edits for damaged/unsupported recovery settings.
-        let recovered = try XMPSidecar.readDevelop(for: source)
+        let recovery = try XMPSidecar.readDevelopRecovery(for: source)
+        let recovered = recovery?.settings
         let initialSettings = recovered ?? options.developPreset.map { $0.applied(to: .neutral) }
         let hash: String
         var fileURL = source
@@ -326,11 +327,11 @@ public final class Importer: Sendable {
             try Catalog.addKeywords(db, names: metadata.xmp.keywords + options.keywords, to: [assetID])
             if let settings = initialSettings,
                let versionID = try Catalog.masterVersionID(db, assetID: assetID, create: true) {
-                var history = DevelopHistory()
-                if recovered != nil {
+                var history = recovery?.history ?? DevelopHistory()
+                if recovered != nil, recovery?.history == nil {
                     history.steps = [DevelopHistory.Step(name: "Recovered from XMP", settings: settings)]
                     history.position = 0
-                } else {
+                } else if recovered == nil {
                     history.record("Import Preset: \(options.developPreset?.name ?? "Preset")",
                                    settings: settings, previous: .neutral)
                 }

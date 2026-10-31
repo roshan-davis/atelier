@@ -30,6 +30,10 @@ public enum XMPSidecar {
     static let writeLock = NSRecursiveLock()
 
     public static func readDevelop(for original: URL) throws -> DevelopSettings? {
+        try readDevelopRecovery(for: original)?.settings
+    }
+
+    static func readDevelopRecovery(for original: URL) throws -> (settings: DevelopSettings, history: DevelopHistory?)? {
         let url = sidecarURL(for: original)
         guard FileManager.default.fileExists(atPath: url.path) else { return nil }
         let data = try Data(contentsOf: url)
@@ -39,15 +43,21 @@ public enum XMPSidecar {
             // refusing to silently lose a recognizable Atelier recovery packet. Dropping
             // NULs also recognizes ASCII markers in UTF-16/32 packets with damaged XML.
             let text = String(decoding: data, as: UTF8.self).replacingOccurrences(of: "\0", with: "")
-            if text.contains("DevelopRecovery") { throw DevelopRecovery.RecoveryError.invalidSidecar }
+            if text.contains("DevelopRecovery") || text.contains("HistoryRecovery") { throw DevelopRecovery.RecoveryError.invalidSidecar }
             return nil
         }
         CGImageMetadataRegisterNamespaceForPrefix(mutable, atelierNamespace as CFString,
                                                   atelierPrefix as CFString, nil)
-        guard let json = try recoveryJSON(mutable) else { return nil }
-        let packet = try DevelopRecovery.packet(json)
-        guard let settings = packet.files[original.lastPathComponent] else { return nil }
-        return try DevelopRecovery.settings(settings)
+        let historyPacket = try recoveryJSON(mutable, path: HistoryRecovery.path).map(HistoryRecovery.packet)
+        let historyEntry = historyPacket?.files[original.lastPathComponent]
+        guard let json = try recoveryJSON(mutable),
+              let value = try DevelopRecovery.packet(json).files[original.lastPathComponent] else {
+            if historyEntry != nil { throw DevelopRecovery.RecoveryError.invalidRecovery }
+            return nil
+        }
+        let settings = try DevelopRecovery.settings(value)
+        let history = try historyEntry.map { try HistoryRecovery.history($0, settings: settings) }
+        return (settings, history)
     }
 
     public static let atelierNamespace = "http://ns.atelier.app/xmp/1.0/"
@@ -99,7 +109,7 @@ public enum XMPSidecar {
     // MARK: Writing
 
     public static func write(_ fields: XMPFields, toSidecar url: URL,
-                             develop: DevelopSettings? = nil, filename: String? = nil) throws {
+                             develop: DevelopSettings? = nil, filename: String? = nil, history: DevelopHistory? = nil) throws {
         writeLock.lock()
         defer { writeLock.unlock() }
         let metadata: CGMutableImageMetadata
@@ -121,10 +131,30 @@ public enum XMPSidecar {
                 ?? DevelopRecovery.Packet()
             // Do not downgrade an entry written by a newer app or replace damaged edits.
             if let existing = packet.files[filename] { _ = try DevelopRecovery.settings(existing) }
-            packet.files[filename] = try develop.encoded()
+            var histories = try recoveryJSON(metadata, path: HistoryRecovery.path).map(HistoryRecovery.packet)
+                ?? HistoryRecovery.Packet()
+            if let existing = histories.files[filename] {
+                guard let current = packet.files[filename] else { throw DevelopRecovery.RecoveryError.invalidRecovery }
+                _ = try HistoryRecovery.history(existing, settings: DevelopRecovery.settings(current))
+            }
+            let settingsJSON = try develop.encoded()
+            if let history {
+                let entry = HistoryRecovery.Entry(settings: settingsJSON, history: try history.encoded())
+                _ = try HistoryRecovery.history(entry, settings: develop)
+                histories.files[filename] = entry
+            } else {
+                // Settings-only callers must not leave stale history attached to new edits.
+                histories.files.removeValue(forKey: filename)
+            }
+            packet.files[filename] = settingsJSON
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys]
             set(metadata, DevelopRecovery.path, String(decoding: try encoder.encode(packet), as: UTF8.self))
+            if !histories.files.isEmpty {
+                set(metadata, HistoryRecovery.path, String(decoding: try encoder.encode(histories), as: UTF8.self))
+            } else {
+                CGImageMetadataRemoveTagWithPath(metadata, nil, HistoryRecovery.path as CFString)
+            }
         }
 
         set(metadata, "xmp:Rating", fields.rating.map(String.init))
@@ -150,9 +180,9 @@ public enum XMPSidecar {
 
     // MARK: Helpers
 
-    private static func recoveryJSON(_ metadata: CGImageMetadata) throws -> String? {
-        guard CGImageMetadataCopyTagWithPath(metadata, nil, DevelopRecovery.path as CFString) != nil else { return nil }
-        guard let json = string(metadata, DevelopRecovery.path) else {
+    private static func recoveryJSON(_ metadata: CGImageMetadata, path: String = DevelopRecovery.path) throws -> String? {
+        guard CGImageMetadataCopyTagWithPath(metadata, nil, path as CFString) != nil else { return nil }
+        guard let json = string(metadata, path) else {
             throw DevelopRecovery.RecoveryError.invalidRecovery
         }
         return json

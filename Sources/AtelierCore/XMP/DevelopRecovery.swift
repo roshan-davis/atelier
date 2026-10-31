@@ -41,9 +41,10 @@ enum DevelopRecovery {
     }
 
     enum RecoveryError: LocalizedError {
-        case unsupported, invalidSidecar, invalidRecovery
+        case unsupported, invalidSidecar, invalidRecovery, inconsistentHistory
         var errorDescription: String? {
             switch self {
+            case .inconsistentHistory: return "The saved Atelier history does not match the current edits. The sidecar was preserved."
             case .unsupported: return "Unsupported Atelier XMP recovery version. The sidecar was preserved."
             case .invalidRecovery: return "The Atelier XMP recovery data cannot be read. The sidecar was preserved."
             case .invalidSidecar: return "The existing XMP sidecar cannot be read. It was preserved."
