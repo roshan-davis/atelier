@@ -69,3 +69,33 @@ This local check requires no GitHub configuration and leaves the existing Action
 Use `--base <ref>` to check against a different fetched PR base. Agent workspace and environment
 rules are in [AGENTS.md](AGENTS.md#where-you-work). Cloud Claude cannot execute this Mac-only
 command; its PR must disclose that and receive a Mac check before validation is complete.
+
+
+## Single-image HDR MVP (work in progress)
+
+On the HDR task branch, build both products once before running Atelier in Xcode:
+
+~~~sh
+swift build
+~~~
+
+Then choose the **AtelierApp** scheme, **My Mac**, and **Product > Run (⌘R)**.
+Select one photo and choose **Photo > Edit In > HDR App (Original)…**.
+The companion reads original pixels rather than baking Atelier Develop adjustments.
+Use **Reset All** in an older test project to try the revised HDR starting look.
+**Save & Return to Atelier** writes a full-resolution profiled 16-bit sRGB TIFF and
+keeps an owned-source HDR project beside it. Selecting the returned TIFF and choosing
+the HDR menu again reopens that project; ordinary Save updates the same result.
+**File > Save As New…** forks a project and creates a new result.
+
+This is an implementation under active validation, not an accepted MachineryHDR match.
+Bracket processing, presets and batch are not included. Back up the project package
+and TIFF as well as the catalog. HDR engine tests run without opening either app:
+
+~~~sh
+swift test --filter AtelierHDRCoreTests
+~~~
+
+The engine is optimized in Debug builds: the first unoptimized full-resolution UI
+trial exceeded two minutes at one CPU core. Revised timing and final-head validation
+will be recorded in the PR before this work is considered ready.

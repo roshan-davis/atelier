@@ -55,6 +55,7 @@ GROUPS = [
     ("Share", [
         ("export.html", "Export"),
         ("edit-in.html", "Edit In other apps"),
+        ("hdr.html", "Single-image HDR"),
     ]),
     ("Set up", [
         ("settings.html", "Settings"),

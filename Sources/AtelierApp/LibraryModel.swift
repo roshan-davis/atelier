@@ -61,6 +61,7 @@ struct SidebarData: Equatable, Sendable {
 @MainActor
 final class LibraryModel: ObservableObject {
     let catalog: Catalog
+    lazy var processorSessions = ProcessorDesktopSessions(model: self)
     let previews: PreviewCache
     let previewScheduler: PreviewScheduler
     let develop: DevelopController
@@ -470,8 +471,7 @@ final class LibraryModel: ObservableObject {
 
     /// Settings > Develop: the zoom a double-click or Z goes to (Lightroom's 1:1 by default).
     nonisolated static var clickZoomPercent: Double {
-        let value = UserDefaults.standard.double(forKey: "zoom.clickPercent")
-        return value > 0 ? value : 100
+        ZoomLevel.clickZoomPercent
     }
 
     func zoomIn() {

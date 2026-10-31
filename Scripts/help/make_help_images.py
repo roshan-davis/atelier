@@ -477,8 +477,42 @@ def thumbnails(red, eagle, paint):
         save(small, f"thumbs/{name}.jpg", quality=74)
 
 
+def make_hdr_images(base):
+    # HDR: illustrative linear luminance shoulder plus bounded texture, matching the
+    # single-image engine's controls; not a claim of extra captured scene detail.
+    linear_hdr = np.where(base <= 0.04045, base / 12.92, ((base + 0.055) / 1.055) ** 2.4)
+    hdr_luma = np.sum(linear_hdr * np.array([0.2126, 0.7152, 0.0722]), axis=2)
+    log_y = np.log2(np.maximum(hdr_luma, 1e-6))
+    radius = max(1, round(max(base.shape[:2]) * 0.02))
+    mean = lambda x: cv2.boxFilter(x, -1, (2 * radius + 1, 2 * radius + 1), borderType=cv2.BORDER_REPLICATE)
+    m = mean(log_y)
+    variance = np.maximum(0, mean(log_y * log_y) - m * m)
+    a = variance / (variance + 0.12)
+    guided = mean(a) * log_y + mean((1 - a) * m)
+    anchor = np.log2(0.18)
+    amount = 0.65 * np.where(guided < anchor, np.clip(hdr_luma / 0.06, 0, 1), 1)
+    compressed = anchor + (guided - anchor) * (1 - amount * 0.85)
+    local = 2 ** (compressed + log_y - guided)
+    shaped = 0.18 * (local / 0.18) ** 1.25
+    mapped = shaped * (1 + 0.65 * 0.18) / (1 + 0.65 * shaped)
+    small = cv2.boxFilter(log_y, -1, (5, 5), borderType=cv2.BORDER_REPLICATE)
+    fine = np.clip(log_y - small, -0.5, 0.5)
+    coarse = np.clip(small - guided, -0.5, 0.5)
+    protection = (0.5 + 0.5 * np.clip(hdr_luma / 0.08, 0, 1)) * (0.5 + 0.5 / (1 + np.maximum(0, hdr_luma - 0.7) * 4))
+    boundary = 1 / (1 + np.abs(log_y - small) * 4)
+    texture_gain = 2 ** (protection * (0.35 * fine * 2 + 0.6 * coarse * 3 * boundary))
+    hdr_gain = np.where(hdr_luma > 1e-6, mapped / np.maximum(hdr_luma, 1e-6), 1) * texture_gain
+    hdr_linear = linear_hdr * hdr_gain[..., None]
+    hdr_encoded = np.where(hdr_linear <= 0.0031308, hdr_linear * 12.92, 1.055 * np.maximum(hdr_linear, 0) ** (1 / 2.4) - 0.055)
+    pair("hdr", base.copy(), hdr_encoded)
+
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
+    if "--hdr-only" in sys.argv:
+        make_hdr_images(flat(load("splash-redwoods.jpg")))
+        return 0
     red = load("splash-redwoods.jpg")
     eagle = load("splash-eagle.jpg")
     paint = load("splash-watercolor.jpg", width=760)
@@ -623,6 +657,8 @@ def main():
     small_eye = cv2.resize(eye, (eye.shape[1] // 4, eye.shape[0] // 4), interpolation=cv2.INTER_AREA)
     pair("ai-upscale", cv2.resize(small_eye, (540, 540 * eye.shape[0] // eye.shape[1]), interpolation=cv2.INTER_LINEAR),
          sharpen(cv2.resize(eye, (540, 540 * eye.shape[0] // eye.shape[1]), interpolation=cv2.INTER_CUBIC), 0.6, 1.2))
+
+    make_hdr_images(base)
 
     # Histogram data for the panel diagrams
     with open(os.path.join(OUT, "histogram.js"), "w") as f:

@@ -17,6 +17,7 @@ final class HelpWindow: NSObject, WKNavigationDelegate {
     /// The help page and section for a Develop panel or tool, by the title its header shows.
     static func topic(forPanel title: String) -> (page: String, section: String?)? {
         switch title {
+        case "Tone Mapping", "Artifacts": return ("hdr", "controls")
         case "Histogram": return ("develop", "histogram")
         case "Basic": return ("basic", nil)
         case "Tone Curve": return ("tone-curve", nil)

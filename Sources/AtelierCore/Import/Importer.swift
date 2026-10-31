@@ -235,9 +235,10 @@ public final class Importer: Sendable {
         }
     }
 
-    func importFile(_ source: URL, options: ImportOptions, stager: ImportStager? = nil) throws -> ImportOutcome {
+    func importFile(_ source: URL, options: ImportOptions, stager: ImportStager? = nil,
+                    registration: ((Database, Int64) throws -> Void)? = nil) throws -> ImportOutcome {
         // Re-importing a referenced folder should not re-hash files that are already cataloged.
-        if options.mode == .reference, let existing = try existingAssetID(for: source) {
+        if options.mode == .reference, registration == nil, let existing = try existingAssetID(for: source) {
             return .existing(existing)
         }
 
@@ -298,6 +299,7 @@ public final class Importer: Sendable {
                 SELECT id FROM asset WHERE folderId = ? AND filename = ? AND virtualCopyOf IS NULL
                 """,
                                                  arguments: [folder.id!, filename]) {
+                try registration?(db, existing)
                 return .existing(existing)
             }
 
@@ -339,6 +341,7 @@ public final class Importer: Sendable {
                     json: settings.encoded(), historyJson: history.encoded(), updatedAt: Date()).save(db)
                 try AssetMetadata.filter(key: assetID).updateAll(db, Column("xmpDirty").set(to: true))
             }
+            try registration?(db, assetID)
             return .imported(assetID, importedURL, hasSettings: initialSettings != nil)
         }
     }

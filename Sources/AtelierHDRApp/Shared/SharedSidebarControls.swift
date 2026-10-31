@@ -1,0 +1,1 @@
+../../AtelierApp/Views/SharedSidebarControls.swift

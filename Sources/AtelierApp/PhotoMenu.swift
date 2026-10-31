@@ -157,6 +157,10 @@ extension LibraryModel {
     func editInMenu() -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
+        let hdr = ClosureMenuItem("HDR App (Original)…") { self.editInHDR() }
+        hdr.isEnabled = targetIDs.count == 1
+        menu.addItem(hdr)
+        menu.addItem(.separator())
         for editor in externalEditors {
             let item = ClosureMenuItem("Edit in \(editor.name)") { self.editIn(editor) }
             let icon = editor.icon
