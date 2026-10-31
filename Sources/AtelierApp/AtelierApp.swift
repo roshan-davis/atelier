@@ -95,6 +95,19 @@ private struct ReadyLibraryCommands: Commands {
                 Divider()
                 FilmstripMenuItem()
                 Divider()
+                // Only when an import or collection is private. Leaving Hide asks for Touch ID or
+                // the login password (see PrivatePhotos).
+                if model.sidebar.privateListCount > 0 {
+                    Picker("Private Photos", selection: Binding(get: { model.filter.privacy },
+                                                                set: { model.privatePhotos.choose($0) })) {
+                        Text("Hide Private Photos").tag(PrivateVisibility.hidden)
+                        Text(model.filter.showsPrivate ? "Show Private Photos" : "Show Private Photos…")
+                            .tag(PrivateVisibility.shown)
+                        Text(model.filter.showsPrivate ? "Show Only Private Photos" : "Show Only Private Photos…")
+                            .tag(PrivateVisibility.only)
+                    }
+                    .pickerStyle(.inline)
+                }
             }
             CommandMenu("Library") {
                 Button("Grid") { model.mode = .grid }

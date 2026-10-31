@@ -129,6 +129,7 @@ struct GeneralSettings: View {
     @AppStorage("backups.keep") private var backupsToKeep = 10
     @AppStorage(Splash.showKey) private var showSplash = true
     @AppStorage(DeleteFeedback.enabledKey) private var deleteEffects = true
+    @AppStorage(PrivatePhotos.hideAfterKey) private var hidePrivateAfter = PrivatePhotos.defaultHideAfter
     @State private var previewsSize: String?
     @State private var backupMessage: String?
 
@@ -164,6 +165,20 @@ struct GeneralSettings: View {
                 Text("Backups")
             } footer: {
                 Text("The catalog is backed up when Atelier quits. Backups are kept inside the catalog package.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Picker("Hide again after", selection: $hidePrivateAfter) {
+                    ForEach(PrivatePhotos.hideAfterChoices, id: \.self) { minutes in
+                        Text(minutes == 0 ? "Never" : "\(minutes) minutes without using Atelier").tag(minutes)
+                    }
+                }
+            } header: {
+                Text("Private Photos")
+            } footer: {
+                Text("Private photos also hide when the Mac sleeps or locks, and every time Atelier opens.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

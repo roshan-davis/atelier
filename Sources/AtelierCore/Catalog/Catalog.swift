@@ -161,6 +161,7 @@ public final class Catalog: Sendable {
         registerVirtualCopyMigration(&migrator)
         registerPairMigration(&migrator)
         registerProcessorMigration(&migrator)
+        registerPrivateMigration(&migrator)
         return migrator
     }
 }

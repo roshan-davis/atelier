@@ -56,12 +56,19 @@ struct SidebarData: Equatable, Sendable {
     var collections: [PhotoCollection] = []
     var imports: [ImportGroupSummary] = []
     var totalCount = 0
+    /// Private import entries and collections, shown or not, for View > Show Private Photos.
+    var privateListCount = 0
 }
 
 @MainActor
 final class LibraryModel: ObservableObject {
     let catalog: Catalog
     lazy var processorSessions = ProcessorDesktopSessions(model: self)
+    /// Library > Show/Hide Private Photos and hiding them again when Atelier isn't used.
+    lazy var privatePhotos = PrivatePhotos(model: self)
+    /// Set when lists were just made private or hidden: the next sidebar data leaves a sidebar
+    /// item that is no longer listed.
+    var leavesHiddenScope = false
     let previews: PreviewCache
     let previewScheduler: PreviewScheduler
     let develop: DevelopController
@@ -77,7 +84,9 @@ final class LibraryModel: ObservableObject {
         didSet {
             guard filter != oldValue else { return }
             observeRows()
-            if filter.groupsRawPairs != oldValue.groupsRawPairs { observeSidebar() }
+            if filter.groupsRawPairs != oldValue.groupsRawPairs || filter.privacy != oldValue.privacy {
+                observeSidebar()
+            }
         }
     }
     @Published var selection: Set<Int64> = []
@@ -243,22 +252,32 @@ final class LibraryModel: ObservableObject {
     private func observeSidebar() {
         sidebarTask?.cancel()
         let pairs = filter.groupsRawPairs
+        let privacy = filter.privacy
         let observation = ValueObservation.tracking { db in
             SidebarData(
                 volumes: try Volume.order(Column("name")).fetchAll(db),
-                folders: try Folder.order(Column("relativePath")).fetchAll(db),
-                collections: try PhotoCollection.order(Column("name")).fetchAll(db),
-                imports: try Catalog.fetchImportGroupSummaries(db, groupingRawPairs: pairs),
-                totalCount: try Catalog.fetchPhotoCount(db, groupingRawPairs: pairs))
+                folders: try Catalog.fetchFolders(db, privacy: privacy),
+                collections: try Catalog.fetchCollections(db, privacy: privacy),
+                imports: try Catalog.fetchImportGroupSummaries(db, groupingRawPairs: pairs, privacy: privacy),
+                totalCount: try Catalog.fetchPhotoCount(db, groupingRawPairs: pairs, privacy: privacy),
+                privateListCount: try Catalog.fetchPrivateListCount(db))
         }
         let writer = catalog.writer
         sidebarTask = Task { [weak self] in
             do {
                 for try await data in observation.values(in: writer) {
-                    self?.sidebar = data
-                    self?.checkRestoredScope(data)
-                    if let loaded = self?.onLibraryLoaded {
-                        self?.onLibraryLoaded = nil
+                    // A replaced observation can still deliver; it may list hidden private lists.
+                    guard let self, !Task.isCancelled, self.filter.privacy == privacy else { return }
+                    self.sidebar = data
+                    self.checkRestoredScope(data)
+                    // The last private list was made not private: nothing is left to show or hide.
+                    if data.privateListCount == 0, privacy != .hidden { self.privatePhotos.reset() }
+                    if self.leavesHiddenScope {
+                        self.leavesHiddenScope = false
+                        self.leaveMissingScope(data)
+                    }
+                    if let loaded = self.onLibraryLoaded {
+                        self.onLibraryLoaded = nil
                         loaded(data)
                     }
                 }
@@ -687,6 +706,11 @@ final class LibraryModel: ObservableObject {
                 if Task.isCancelled || self.importWasCancelled { parts.insert("Import cancelled", at: 0) }
                 self.status = parts.joined(separator: ", ")
                 if let groupID = result.importGroupId {
+                    // Showing only private photos: an ordinary import would open empty.
+                    if self.filter.privacy == .only,
+                       (try? self.catalog.writer.read({ try ImportGroup.fetchOne($0, key: groupID) }))?.isPrivate != true {
+                        self.privatePhotos.choose(.shown)
+                    }
                     self.sidebarSelection = .importGroup(groupID)
                 }
                 if UserDefaults.standard.bool(forKey: "xmp.autoWrite") {

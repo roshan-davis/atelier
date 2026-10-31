@@ -431,7 +431,7 @@ extension LibraryModel {
     func beginCull(importGroup id: Int64) {
         // Virtual copies are deliberate versions, not near-duplicate shots.
         guard let entry = sidebar.imports.first(where: { $0.id == id }),
-              let rows = (try? catalog.assetRows(filter: LibraryFilter(scope: .importGroup(id), groupsRawPairs: true)))?
+              let rows = (try? catalog.assetRows(filter: LibraryFilter(scope: .importGroup(id), groupsRawPairs: true, privacy: filter.privacy)))?
                 .filter({ $0.stackKind != .virtualCopy }), !rows.isEmpty else {
             status = "This import has no photos to cull"
             return

@@ -15,7 +15,7 @@
 <h1>Organize and find</h1>
 <p class="lede">Browse in the grid, look closely in the loupe, rate and flag with single keys, and find any photo with the filter bar.</p>
 
-<div class="chips"><a href="#sidebar">Sidebar</a><a href="#grid-loupe">Grid and Loupe</a><a href="#rate">Rate, flag, label</a><a href="#badges">Thumbnail badges</a><a href="#filter">Filter and search</a><a href="#inspector">Inspector</a><a href="#collections">Collections and imports</a><a href="#filmstrip">Filmstrip</a><a href="#xmp">XMP sidecars</a><a href="#volumes">Drives and the NAS</a></div>
+<div class="chips"><a href="#sidebar">Sidebar</a><a href="#grid-loupe">Grid and Loupe</a><a href="#rate">Rate, flag, label</a><a href="#badges">Thumbnail badges</a><a href="#filter">Filter and search</a><a href="#inspector">Inspector</a><a href="#collections">Collections and imports</a><a href="#private">Private imports</a><a href="#filmstrip">Filmstrip</a><a href="#xmp">XMP sidecars</a><a href="#volumes">Drives and the NAS</a></div>
 
 <h2 id="sidebar">Sidebar</h2>
 <dl class="defs">
@@ -24,6 +24,7 @@
   <dt>Volumes</dt><dd>Your drives and the NAS, each with its folders as they are on disk. An offline drive is marked; its photos stay browsable.</dd>
   <dt>Collections</dt><dd>Your own lists. A photo can be in any number of them. <b>+</b> makes a new one.</dd>
 </dl>
+<p>Imports and collections marked with a lock are <a href="#private">private</a>.</p>
 
 <h2 id="grid-loupe">Grid and Loupe</h2>
 <table class="keys">
@@ -90,6 +91,17 @@
 
 <h2 id="collections">Collections and imports</h2>
 <p>The <b>Organize</b> toolbar menu works on the selected photos: <span class="path">New Collection with Selection…</span>, <span class="path">Add to</span> a collection, <span class="path">Add to Import</span>, and, when you're in a collection or import, <span class="path">Remove from This Collection</span> or <span class="path">Remove from This Import</span>. Removing from a list never removes the photo from the catalog.</p>
+
+<h2 id="private">Private imports and collections</h2>
+<p>Some shoots you want to open on purpose, not see every time you browse. Make their import (or a collection) private, and its photos stay out of sight until you ask for them.</p>
+<ol>
+  <li><b>Make it private:</b> right-click the import or collection in the sidebar › <span class="path">Make Private…</span>, then <b>Make Private</b> to confirm. Its photos now appear nowhere in Atelier: not in the sidebar, All Photographs, other imports or collections, folders that hold only private photos, the Filmstrip's source menu, search, or any count.</li>
+  <li><b>See them:</b> <span class="path">View › Show Private Photos…</span> (with all your other photos) or <span class="path">View › Show Only Private Photos…</span> (nothing else in the sidebar or grid), and confirm with Touch ID or your Mac's login password. Private imports show a lock after their name, and <b>Hide Private</b> appears at the top of the sidebar. Switching between the two doesn't ask again. These View menu items are there only when something is private.</li>
+  <li><b>Hide them again:</b> <span class="path">View › Hide Private Photos</span> or <b>Hide Private</b> in the sidebar. They also hide on their own after 10 minutes without using Atelier (change it in <span class="path">Settings › General › Private Photos</span>), when your Mac sleeps or locks, and every time Atelier opens. If a private photo is open, Atelier goes back to the grid.</li>
+  <li><b>Stop it being private:</b> while private photos are shown, right-click the import › <span class="path">Make Not Private</span>.</li>
+</ol>
+<p>A photo in a private list stays hidden even when it's also in an ordinary import or collection, and so do its virtual copies, edits and the JPEG of its RAW+JPEG pair.</p>
+<div class="tip"><p><span class="label">Not encryption.</span> This keeps photos out of view inside Atelier. The files, their previews and Finder are untouched, so keep the folder itself somewhere private.</p></div>
 
 <h2 id="filmstrip">Filmstrip</h2>
 <p>The strip of thumbnails along the bottom, in every view, showing the current list in the same order as the grid. Its header, from the left:</p>
