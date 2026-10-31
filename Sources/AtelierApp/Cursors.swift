@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// Every pointer shape Atelier shows, named by what a click or drag there does. Views never set
+/// Every pointer shape Lightfast shows, named by what a click or drag there does. Views never set
 /// an `NSCursor` themselves: they say which shape a spot has (`.cursor(_:)` in SwiftUI,
 /// `Cursors.shared` in AppKit) and `Cursors` shows it, keeps it through a drag and puts the
 /// arrow back when the view goes away.

@@ -256,7 +256,7 @@ public final class Exporter: Sendable {
         // Pixels are already upright and resized.
         var tiff = properties[kCGImagePropertyTIFFDictionary] as? [CFString: Any] ?? [:]
         tiff[kCGImagePropertyTIFFOrientation] = 1
-        tiff[kCGImagePropertyTIFFSoftware] = "Atelier"
+        tiff[kCGImagePropertyTIFFSoftware] = "Lightfast"
         properties[kCGImagePropertyTIFFDictionary] = tiff
         var exif = properties[kCGImagePropertyExifDictionary] as? [CFString: Any] ?? [:]
         exif[kCGImagePropertyExifPixelXDimension] = width

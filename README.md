@@ -1,6 +1,8 @@
-# Atelier
+# Lightfast
 
 A personal Lightroom-style photo catalog and editor for macOS (Swift, SwiftUI + AppKit, Apple Silicon, macOS 15+).
+
+The app was called Atelier until Oct 31, 2026. The Swift targets (`AtelierApp`, `AtelierCore`, …), the Xcode scheme, the repo and the folders on disk (`~/Pictures/Atelier`, `~/Library/Application Support/Atelier`) keep the old name until a follow-up PR moves them safely.
 Scope and architecture follow [Requirements/Atelier-PRD.md](Requirements/Atelier-PRD.md), the source of truth; update it in the same PR as any change it covers.
 Agents working in this repo follow [AGENTS.md](AGENTS.md).
 
@@ -26,7 +28,7 @@ Agents working in this repo follow [AGENTS.md](AGENTS.md).
 - Edit In external apps through the Processor contract; edited files come back stacked with the original.
 - Experimental AI tools through a headless ComfyUI server (Remove Object, Replace Background, Upscale), set up in Settings > AI. Nothing is bundled.
 - Themes: System, Light, Dark, Graphite, Darkroom, Neutral Gray (Settings > Appearance).
-- Atelier Help (Help > Atelier Help, ⌘?): every tool explained with drawn controls and interactive before/after pictures, in `Sources/AtelierApp/Help`. The pages also open in a browser.
+- Lightfast Help (Help > Lightfast Help, ⌘?): every tool explained with drawn controls and interactive before/after pictures, in `Sources/AtelierApp/Help`. The pages also open in a browser.
 
 ## Run in Xcode
 
@@ -73,7 +75,7 @@ command; its PR must disclose that and receive a Mac check before validation is 
 
 ## Single-image HDR MVP (work in progress)
 
-On the HDR task branch, build both products once before running Atelier in Xcode:
+On the HDR task branch, build both products once before running Lightfast in Xcode:
 
 ~~~sh
 swift build
@@ -81,9 +83,9 @@ swift build
 
 Then choose the **AtelierApp** scheme, **My Mac**, and **Product > Run (⌘R)**.
 Select one photo and choose **Photo > Edit In > HDR App (Original)…**.
-The companion reads original pixels rather than baking Atelier Develop adjustments.
+The companion reads original pixels rather than baking Lightfast Develop adjustments.
 Use **Reset All** in an older test project to try the revised HDR starting look.
-**Save & Return to Atelier** writes a full-resolution profiled 16-bit sRGB TIFF and
+**Save & Return to Lightfast** writes a full-resolution profiled 16-bit sRGB TIFF and
 creates an owned-source HDR project beside it on first Save. Opening and closing without saving leaves no source copy; saves keep only the current and previous generations. Selecting the returned TIFF and choosing
 the HDR menu again reopens that project; ordinary Save updates the same result.
 **File > Save As New…** forks a project and creates a new result.
@@ -107,6 +109,6 @@ To build a movable native app with the HDR companion included:
 python3 Scripts/build_macos_app.py
 ~~~
 
-The generated app is at .build/Applications/Atelier.app. Earlier generated apps
+The generated app is at .build/Applications/Lightfast.app. Earlier generated apps
 are renamed and preserved when rebuilding. This is a local ad-hoc-signed build,
 not a notarized distribution.

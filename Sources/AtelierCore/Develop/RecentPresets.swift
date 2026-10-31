@@ -1,7 +1,7 @@
 import Foundation
 
 /// The Presets panel's Recent group: the presets applied most recently, newest first.
-/// Atelier keeps their IDs (as an app preference), so a renamed preset stays in the list and a
+/// Lightfast keeps their IDs (as an app preference), so a renamed preset stays in the list and a
 /// deleted or hidden one simply drops out.
 public enum RecentPresets {
     /// How many presets the Recent group lists.

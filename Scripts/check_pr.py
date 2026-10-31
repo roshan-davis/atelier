@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Local pre-PR checks for Atelier. No GitHub setup or third-party Python packages required."""
+"""Local pre-PR checks for Lightfast. No GitHub setup or third-party Python packages required."""
 import argparse
 import datetime
 import hashlib

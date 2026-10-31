@@ -8,7 +8,7 @@ public enum CatalogError: Error, LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .notFound(let what): return "\(what) not found in the catalog."
-        case .missingDatabase(let url): return "The catalog database is missing at \(url.path). Use Show in Finder to check the Backups folder inside this catalog. Atelier does not restore backups automatically."
+        case .missingDatabase(let url): return "The catalog database is missing at \(url.path). Use Show in Finder to check the Backups folder inside this catalog. Lightfast does not restore backups automatically."
         }
     }
 }

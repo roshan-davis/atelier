@@ -1,8 +1,8 @@
 import AppKit
 import WebKit
 
-/// Atelier Help: the HTML pages in Sources/AtelierApp/Help, shown in their own window
-/// (Help > Atelier Help, ⌘?). The same files open in any browser; they're written by hand and
+/// Lightfast Help: the HTML pages in Sources/AtelierApp/Help, shown in their own window
+/// (Help > Lightfast Help, ⌘?). The same files open in any browser; they're written by hand and
 /// indexed by Scripts/help/build_help_index.py.
 @MainActor
 final class HelpWindow: NSObject, WKNavigationDelegate {
@@ -65,7 +65,7 @@ final class HelpWindow: NSObject, WKNavigationDelegate {
         let window = NSWindow(contentRect: webView.frame,
                               styleMask: [.titled, .closable, .miniaturizable, .resizable],
                               backing: .buffered, defer: false)
-        window.title = "Atelier Help"
+        window.title = "Lightfast Help"
         window.isReleasedWhenClosed = false
         window.minSize = CGSize(width: 560, height: 400)
         window.contentView = webView

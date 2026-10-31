@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Makes the pictures in Atelier Help (Sources/AtelierApp/Help/images).
+"""Makes the pictures in Lightfast Help (Sources/AtelierApp/Help/images).
 
 The example photos are the splash images in Sources/AtelierApp/Resources/Splash. Each tool's
 before/after pair is made here with a close approximation of what the tool does, so Help can

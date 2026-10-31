@@ -279,7 +279,7 @@ final class LibraryModel: ObservableObject {
 
     func reloadDetail() {
         detail = focusedID.flatMap { try? catalog.detail(for: $0) }
-        // An edit saved while Atelier was not watching (after a relaunch) is picked up when shown.
+        // An edit saved while Lightfast was not watching (after a relaunch) is picked up when shown.
         if let detail, let id = detail.asset.id, rows.first(where: { $0.id == id })?.stackKind == .externalEdit,
            let url = detail.fileURL {
             editWatcher.watch(id, at: url, known: detail.asset.modifiedAt)

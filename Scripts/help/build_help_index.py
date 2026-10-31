@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Writes Atelier Help's page list and search index (Sources/AtelierApp/Help/assets/toc.js),
+"""Writes Lightfast Help's page list and search index (Sources/AtelierApp/Help/assets/toc.js),
 and checks every page: each listed page exists, every picture it uses exists, and every link
 to another help page or section lands somewhere.
 
@@ -25,7 +25,7 @@ HELP = os.path.join(ROOT, "Sources/AtelierApp/Help")
 GROUPS = [
     ("Get started", [
         ("index.html", "Welcome"),
-        ("workspace.html", "The Atelier window"),
+        ("workspace.html", "The Lightfast window"),
         ("shortcuts.html", "Keyboard shortcuts"),
     ]),
     ("Library", [

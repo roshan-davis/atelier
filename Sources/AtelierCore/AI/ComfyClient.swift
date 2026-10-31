@@ -51,7 +51,7 @@ public struct ComfyClient: Sendable {
     public func upload(png: Data, name: String) async throws -> String {
         var request = URLRequest(url: baseURL.appendingPathComponent("upload/image"))
         request.httpMethod = "POST"
-        let boundary = "Atelier-\(UUID().uuidString)"
+        let boundary = "Lightfast-\(UUID().uuidString)"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         var body = Data()
         func field(_ name: String, _ value: String) {
@@ -136,7 +136,7 @@ public struct ComfyClient: Sendable {
         return monitor
     }
 
-    /// Stops whatever the server is running (Cancel in Atelier).
+    /// Stops whatever the server is running (Cancel in Lightfast).
     public func interrupt() async {
         var request = URLRequest(url: baseURL.appendingPathComponent("interrupt"))
         request.httpMethod = "POST"

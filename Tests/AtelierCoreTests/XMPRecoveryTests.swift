@@ -271,7 +271,7 @@ final class XMPRecoveryTests: XCTestCase {
         XCTAssertEqual(try catalog.developSettings(for: id), .neutral)
         XCTAssertThrowsError(try XMPSidecar.write(XMPFields(), toSidecar: sidecar))
         XCTAssertEqual(try Data(contentsOf: sidecar), foreign)
-        // Recognition also protects a damaged UTF-16 Atelier packet.
+        // Recognition also protects a damaged UTF-16 Lightfast packet.
         try "<atelier:DevelopRecovery>broken".data(using: .utf16)!.write(to: sidecar)
         XCTAssertThrowsError(try XMPSidecar.readDevelop(for: file))
     }

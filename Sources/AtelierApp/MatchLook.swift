@@ -208,7 +208,7 @@ final class MatchLookModel: ObservableObject, Identifiable {
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     guard let image else {
-                        self.message = "Atelier can't read “\(url.lastPathComponent)” as an image."
+                        self.message = "Lightfast can't read “\(url.lastPathComponent)” as an image."
                         return
                     }
                     self.setReference(image, name: url.lastPathComponent)

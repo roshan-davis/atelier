@@ -3,7 +3,7 @@ import AtelierCore
 import Combine
 import Foundation
 
-/// Reopens Atelier where Rosh left it: the same view, sidebar item, filter, photo, zoom and grid
+/// Reopens Lightfast where Rosh left it: the same view, sidebar item, filter, photo, zoom and grid
 /// scroll position, as Lightroom does. See "Restore last session" in the PRD.
 extension LibraryModel {
     static let sessionKey = "session.last"

@@ -1,10 +1,10 @@
-# Working on Atelier
+# Working on Lightfast
 
 Rules for any coding agent (Claude, Antigravity, Codex, …) working in this repo.
 
 ## Project
 
-Atelier is Rosh's personal Lightroom-style photo catalog and editor.
+Lightfast is Rosh's personal Lightroom-style photo catalog and editor.
 
 - Native macOS only: Swift, SwiftUI + AppKit, Apple Silicon, macOS 15+. Swift package with `AtelierCore` (library) and `AtelierApp` (executable).
 - [Requirements/Atelier-PRD.md](Requirements/Atelier-PRD.md) is the spec and the single source of truth. There is no other copy.
@@ -22,7 +22,7 @@ Atelier is Rosh's personal Lightroom-style photo catalog and editor.
 - **Cursors:** never set an `NSCursor` in a view. Name the shape with `.cursor(_:)` (SwiftUI) or `Cursors.shared` (AppKit), from `Sources/AtelierApp/Cursors.swift`; for a tool with handles, work the shape out from the same hit test its drag uses. Add a `CursorShape` case if one is missing. PRD UX principle 11.
 - **Deletes:** every delete calls `DeleteFeedback.play(.trash)` (files to the Trash) or `.remove` (anything else) once it succeeds. PRD UX principle 12.
 - **Preview cache:** when the way previews are rendered changes, bump `PreviewCache.version` in `Sources/AtelierCore/Previews/PreviewCache.swift` (and note why in its comment) so old previews are rebuilt.
-- **Help:** Atelier Help (`Sources/AtelierApp/Help`, opened with Help > Atelier Help, ⌘?) documents every tool with drawn controls and before/after pictures. A PR that adds or changes a feature or control updates its help page in the same PR:
+- **Help:** Lightfast Help (`Sources/AtelierApp/Help`, opened with Help > Lightfast Help, ⌘?) documents every tool with drawn controls and before/after pictures. A PR that adds or changes a feature or control updates its help page in the same PR:
   - Edit the page's HTML (or add a page and list it in `GROUPS` in `Scripts/help/build_help_index.py`). Give each h2/h3 an `id`.
   - New or changed before/after pictures come from `Scripts/help/make_help_images.py`; add a pair there and run it.
   - Run `python3 Scripts/help/build_help_index.py`. It rebuilds the search index and must report no problems (missing pictures, broken links).
@@ -35,8 +35,8 @@ How to think before writing code. The PRD says *what* the app does; this says ho
 ### Lightroom is the floor, not the ceiling
 
 - Start from how Lightroom Classic does it: names, layout, gestures, keys. Rosh knows Lightroom; matching it is the default.
-- Keep anything Atelier already does better than Lightroom. Never remove or downgrade an improvement "to match Lightroom" without asking Rosh first.
-- If you add something Lightroom doesn't have, it still follows Atelier's shared patterns (next section).
+- Keep anything Lightfast already does better than Lightroom. Never remove or downgrade an improvement "to match Lightroom" without asking Rosh first.
+- If you add something Lightroom doesn't have, it still follows Lightfast's shared patterns (next section).
 
 ### Solve a pattern once, centrally
 
@@ -166,6 +166,6 @@ Rosh tests manually: they get the branch with git in Terminal, then run the app 
   git pull                   # update it after new pushes
   ```
   Back to latest main: `git checkout main && git pull`. If `git status` shows changes, say what to do with them (usually `git stash`); never tell Rosh to discard them.
-- For everything in the app and Xcode, give exact click paths, e.g. Product > Run (⌘R), Atelier > Settings… > Appearance.
+- For everything in the app and Xcode, give exact click paths, e.g. Product > Run (⌘R), Lightfast > Settings… > Appearance.
 - Say what to check and where, step by step. Never "open the panel and try it".
 - Use Xcode 26's real names. If you're not sure what a dialog or menu is called, ask Rosh for a screenshot instead of guessing.

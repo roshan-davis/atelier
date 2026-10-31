@@ -39,7 +39,7 @@ public struct ComfyProgress: Sendable {
         self.expected = expected
     }
 
-    /// Seconds a node of this kind takes before Atelier has timed one, on an Apple Silicon Mac.
+    /// Seconds a node of this kind takes before Lightfast has timed one, on an Apple Silicon Mac.
     /// Only the proportions matter, and only until the first run has been measured.
     static func guess(for classType: String) -> TimeInterval {
         let name = classType.lowercased()

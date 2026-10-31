@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AI tools · Atelier Help</title>
+<title>AI tools · Lightfast Help</title>
 <link rel="stylesheet" href="assets/help.css">
 <script src="assets/toc.js" defer></script>
 <script src="assets/help.js" defer></script>
@@ -18,10 +18,10 @@
 <div class="chips"><a href="#setup">Set up ComfyUI</a><a href="#remove">Remove Object</a><a href="#background">Replace Background</a><a href="#upscale">Upscale</a><a href="#results">Results</a><a href="#licenses">Licenses</a></div>
 
 <h2 id="setup">Set up ComfyUI</h2>
-<p>Atelier sends photos to <b>ComfyUI</b>, a free app you run yourself; nothing is bundled with Atelier.</p>
+<p>Lightfast sends photos to <b>ComfyUI</b>, a free app you run yourself; nothing is bundled with Lightfast.</p>
 <ol class="steps">
   <li>Start ComfyUI (the desktop app, or from Terminal).</li>
-  <li>In <span class="path">Atelier › Settings… › AI</span>, set <b>Server</b>: the ComfyUI desktop app uses <code>http://127.0.0.1:8000</code>, ComfyUI from Terminal uses port 8188. Click <b>Connect</b>.</li>
+  <li>In <span class="path">Lightfast › Settings… › AI</span>, set <b>Server</b>: the ComfyUI desktop app uses <code>http://127.0.0.1:8000</code>, ComfyUI from Terminal uses port 8188. Click <b>Connect</b>.</li>
   <li>Pick the <b>Edit model</b> and the <b>Upscale model (4×)</b> from what your server has, and a <b>Generation size</b>: 768 px (faster), 1024 px, or 1536 px (slower).</li>
 </ol>
 <p>The AI panel shows whether ComfyUI is reachable. If it says “ComfyUI not reachable”, start ComfyUI and click <b>Check</b>.</p>
@@ -43,7 +43,7 @@
 <figcaption>Only the area around your strokes is sent, at the generation size, so detail stays high; the result is blended back softly. (Illustration: the real result comes from the model.)</figcaption>
 
 <h2 id="background">Replace Background</h2>
-<p>Atelier finds the subject (the background to replace is tinted on the photo), and you describe the new background in words. The subject's pixels are kept exactly.</p>
+<p>Lightfast finds the subject (the background to replace is tinted on the photo), and you describe the new background in words. The subject's pixels are kept exactly.</p>
 
 <h2 id="upscale">Upscale</h2>
 <p>Enlarge 2× or 4× with an upscale model, for big prints or heavy crops.</p>
@@ -52,7 +52,7 @@
 </figure>
 
 <h2 id="results">Results</h2>
-<p>Each result is a 16-bit TIFF named <code>name-AI Recipe.tif</code> next to the original, stacked on it with a <span class="badge">✦ AI</span> badge in the grid. Atelier records the recipe, models, licenses, prompt and seed with it, so any result can be traced and reproduced.</p>
+<p>Each result is a 16-bit TIFF named <code>name-AI Recipe.tif</code> next to the original, stacked on it with a <span class="badge">✦ AI</span> badge in the grid. Lightfast records the recipe, models, licenses, prompt and seed with it, so any result can be traced and reproduced.</p>
 
 <h2 id="licenses">Licenses: what you can publish</h2>
 <div class="note"><p><span class="label">For your website or shop,</span> use only results from permissively licensed models (Apache 2.0 or MIT), such as Qwen-Image-Edit-2511 (the default for Remove Object and Replace Background) or FLUX.2 [klein] 4B. Non-commercial models such as Qwen-Image-2.1, Fibo 2.0 or FLUX.2 [klein] 9B are for experiments only.</p></div>

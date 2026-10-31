@@ -3,7 +3,7 @@ import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 
-/// How Atelier talks to ComfyUI, from Settings > AI.
+/// How Lightfast talks to ComfyUI, from Settings > AI.
 public struct AISettings: Codable, Hashable, Sendable {
     public var server: URL
     /// Edit model (a diffusion model file, e.g. a Qwen-Image-Edit GGUF) for Remove Object and
@@ -86,7 +86,7 @@ public final class AIRunner: Sendable {
 
         // The photo as developed, at full size, in sRGB as the models expect.
         progress("Rendering the photo")
-        let temp = FileManager.default.temporaryDirectory.appendingPathComponent("Atelier-AI-\(UUID().uuidString)", isDirectory: true)
+        let temp = FileManager.default.temporaryDirectory.appendingPathComponent("Lightfast-AI-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: temp) }
         var render = ExportSettings(destination: temp)
@@ -109,7 +109,7 @@ public final class AIRunner: Sendable {
         case .replaceBackground:
             progress("Finding the subject")
             guard let subject = try AIImaging.subjectMask(for: base), let background = AIImaging.inverted(subject) else {
-                throw AIError("Atelier couldn't find a subject in this photo.")
+                throw AIError("Lightfast couldn't find a subject in this photo.")
             }
             mask = background
         case .upscale:
@@ -205,7 +205,7 @@ public final class AIRunner: Sendable {
         return AIResult(assetID: id, url: target)
     }
 
-    /// Which models made the result, with their licenses, for the license gate. Models Atelier
+    /// Which models made the result, with their licenses, for the license gate. Models Lightfast
     /// can't vouch for (a custom workflow, a different edit model) are recorded as unknown.
     private func models(for recipe: AIRecipe, isCustom: Bool, settings: AISettings) -> [[String: String]] {
         if isCustom { return [["name": recipe.workflowURL.lastPathComponent, "license": "unknown", "allowedUse": "unknown"]] }

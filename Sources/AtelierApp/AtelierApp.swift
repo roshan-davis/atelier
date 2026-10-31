@@ -8,7 +8,7 @@ struct AtelierApp: App {
     @StateObject private var launch = CatalogLaunch()
 
     var body: some Scene {
-        WindowGroup("Atelier") {
+        WindowGroup("Lightfast") {
             Group {
                 if let model = launch.model {
                     ContentView()
@@ -36,7 +36,7 @@ struct AtelierApp: App {
         .commands {
             LibraryCommands(model: launch.model)
             CommandGroup(replacing: .help) {
-                Button("Atelier Help") { HelpWindow.shared.show() }
+                Button("Lightfast Help") { HelpWindow.shared.show() }
                     .keyboardShortcut("?", modifiers: [.command])
                 Button("Keyboard Shortcuts") { launch.model?.showingShortcuts = true }
                     .keyboardShortcut("/", modifiers: [.command])

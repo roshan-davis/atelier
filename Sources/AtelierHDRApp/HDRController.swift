@@ -11,7 +11,7 @@ final class HDRController: ObservableObject {
     @Published var before: NSImage?
     @Published var after: NSImage?
     @Published var pixelSize: CGSize?
-    @Published var status = "Open a photo or launch from Atelier > Photo > Edit In > HDR App."
+    @Published var status = "Open a photo or launch from Lightfast > Photo > Edit In > HDR App."
     @Published var busy = false
     @Published var error: String?
     @Published var sourceName = "No photo"

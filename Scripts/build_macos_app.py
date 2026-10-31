@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build Atelier and its HDR companion into a local, ad-hoc-signed macOS app."""
+"""Build Lightfast and its HDR companion into a local, ad-hoc-signed macOS app."""
 import argparse
 import os
 from pathlib import Path
@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--configuration", choices=["debug", "release"], default="release")
-    parser.add_argument("--output", type=Path, default=ROOT / ".build/Applications/Atelier.app")
+    parser.add_argument("--output", type=Path, default=ROOT / ".build/Applications/Lightfast.app")
     parser.add_argument("--bundle-id", default="local.atelier.app")
     parser.add_argument("--test-catalog", type=Path, help="Debug only: disposable catalog override")
     parser.add_argument("--snapshots", type=Path, help="Debug only: HDR layout snapshot folder")
@@ -29,7 +29,7 @@ def main():
     revision = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, text=True).strip()
     output = args.output.expanduser().absolute()
     output.parent.mkdir(parents=True, exist_ok=True)
-    staging = output.parent / ("Atelier-building-" + str(uuid.uuid4()) + ".app")
+    staging = output.parent / ("Lightfast-building-" + str(uuid.uuid4()) + ".app")
 
     def bundle(path, executable, name, identifier, resource_names):
         mac = path / "Contents/MacOS"
@@ -46,20 +46,20 @@ def main():
         if args.test_catalog and executable == "AtelierApp":
             info["AtelierTestCatalogPath"] = str(args.test_catalog.absolute())
         if executable == "AtelierHDRApp":
-            info["CFBundleDocumentTypes"] = [{"CFBundleTypeName": "Atelier HDR Project",
+            info["CFBundleDocumentTypes"] = [{"CFBundleTypeName": "Lightfast HDR Project",
                 "CFBundleTypeRole": "Editor", "LSItemContentTypes": ["local.atelier.hdr-project"],
                 "LSTypeIsPackage": True}]
             info["UTExportedTypeDeclarations"] = [{"UTTypeIdentifier": "local.atelier.hdr-project",
-                "UTTypeDescription": "Atelier HDR Project", "UTTypeConformsTo": ["com.apple.package"],
+                "UTTypeDescription": "Lightfast HDR Project", "UTTypeConformsTo": ["com.apple.package"],
                 "UTTypeTagSpecification": {"public.filename-extension": ["atelierhdr"]}}]
             if args.snapshots:
                 info["AtelierHDRSnapshotPath"] = str(args.snapshots.absolute())
         (path / "Contents/Info.plist").write_bytes(plistlib.dumps(info))
 
-    bundle(staging, "AtelierApp", "Atelier", args.bundle_id,
+    bundle(staging, "AtelierApp", "Lightfast", args.bundle_id,
            ["Atelier_AtelierApp.bundle", "GRDB_GRDB.bundle"])
-    helper = staging / "Contents/Helpers/Atelier HDR.app"
-    bundle(helper, "AtelierHDRApp", "Atelier HDR", args.bundle_id + ".hdr",
+    helper = staging / "Contents/Helpers/Lightfast HDR.app"
+    bundle(helper, "AtelierHDRApp", "Lightfast HDR", args.bundle_id + ".hdr",
            ["Atelier_AtelierHDRApp.bundle", "GRDB_GRDB.bundle"])
     subprocess.run(["codesign", "--force", "--sign", "-", str(helper)], check=True)
     subprocess.run(["codesign", "--force", "--sign", "-", str(staging)], check=True)

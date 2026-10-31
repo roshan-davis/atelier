@@ -62,8 +62,8 @@ struct SplashImage {
 /// CATransaction.flush() to reach the screen, without an AppKit redraw, which isn't allowed
 /// while SwiftUI is still setting up the app and the catalog is opening.
 final class SplashContentView: NSView {
-    // Placeholders until Rosh picks the name and tagline.
-    static let title = "Atelier"
+    // Rosh picked the name Lightfast (Oct 31, 2026). The tagline is still a placeholder.
+    static let title = "Lightfast"
     static let tagline = "Develop with intent."
 
     static let stripHeight: CGFloat = 72

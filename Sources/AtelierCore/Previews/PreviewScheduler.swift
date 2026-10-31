@@ -25,10 +25,10 @@ public final class PreviewScheduler: @unchecked Sendable {
 
     public init(cache: PreviewCache) {
         self.cache = cache
-        thumbnailQueue.name = "Atelier thumbnails"
+        thumbnailQueue.name = "Lightfast thumbnails"
         thumbnailQueue.qualityOfService = .userInitiated
         thumbnailQueue.maxConcurrentOperationCount = max(2, ProcessInfo.processInfo.activeProcessorCount / 2)
-        previewQueue.name = "Atelier previews"
+        previewQueue.name = "Lightfast previews"
         previewQueue.qualityOfService = .utility
         previewQueue.maxConcurrentOperationCount = 2
     }

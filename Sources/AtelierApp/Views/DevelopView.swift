@@ -789,7 +789,7 @@ struct ParameterSlider: View {
     }
 }
 
-/// The one slider row every slider in Atelier uses: the name (double-click resets, Shift-double-
+/// The one slider row every slider in Lightfast uses: the name (double-click resets, Shift-double-
 /// click sets Auto where there is one), a slim Lightroom-style track (⌥ while dragging shows the
 /// slider's view where it has one), and the value (click it to type one).
 /// Lightroom's tool strip under the histogram.

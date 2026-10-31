@@ -103,7 +103,7 @@ struct ExportSheet: View {
     private var presetList: some View {
         VStack(spacing: 0) {
             List(selection: presetSelection) {
-                Section("Atelier") {
+                Section("Lightfast") {
                     ForEach(ExportPreset.builtIn) { presetRow($0) }
                 }
                 Section("User Presets") {

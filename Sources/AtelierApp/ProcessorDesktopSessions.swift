@@ -73,13 +73,13 @@ final class ProcessorDesktopSessions {
                     }
                     try process.run(); processes.removeAll { !$0.isRunning }; processes.append(process)
                 }
-                model.status = "Opened Atelier HDR. Save returns a TIFF stacked with the source."
+                model.status = "Opened Lightfast HDR. Save returns a TIFF stacked with the source."
                 start()
             } catch { model.status = "HDR could not open: \(error.localizedDescription)" }
         }
     }
     private static var hdrExecutable: URL? {
-        let packaged = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/Atelier HDR.app")
+        let packaged = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/Lightfast HDR.app")
         if FileManager.default.fileExists(atPath: packaged.path) { return packaged }
         #if DEBUG
         let checkout = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()

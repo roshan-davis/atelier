@@ -17,7 +17,7 @@ import Foundation
 /// a film stock set the Grain Type that fits it (Oct 30, 2026); the rest keep Standard.
 extension DevelopPreset {
     /// The built-in packs, in panel order. The user's groups can't take these names.
-    public static let builtInGroups = ["Atelier", "Film", "Black & White", "Portrait", "Landscape", "Street",
+    public static let builtInGroups = ["Lightfast", "Film", "Black & White", "Portrait", "Landscape", "Street",
                                        "Cinematic", "Vintage & Matte"]
 
     public static func isBuiltInGroup(_ name: String) -> Bool {
@@ -28,10 +28,10 @@ extension DevelopPreset {
         + landscapePack + streetPack + cinematicPack + vintagePack
 
     /// Each pack's number in its presets' IDs. Panel order is `builtInGroups`; these never change.
-    private static let packNumbers = ["Atelier": 1, "Film": 2, "Black & White": 3, "Portrait": 4, "Landscape": 5,
+    private static let packNumbers = ["Lightfast": 1, "Film": 2, "Black & White": 3, "Portrait": 4, "Landscape": 5,
                                       "Vintage & Matte": 6, "Cinematic": 7, "Street": 8]
 
-    /// Preset `index` of `group`. Atelier's IDs predate the packs. An index is never reused for
+    /// Preset `index` of `group`. Lightfast's IDs predate the packs. An index is never reused for
     /// another look, so a dropped preset's number stays retired.
     private static func look(_ group: String, _ index: Int, _ name: String,
                              _ configure: (inout DevelopSettings) -> Void) -> DevelopPreset {
@@ -63,7 +63,7 @@ extension DevelopPreset {
     /// Everyday essentials: product, artwork reproduction, wildlife/detail punch, warm film and B&W.
     private static let atelierPack: [DevelopPreset] = [
         // Crisp whites, open shadows and clean micro-contrast for product & studio work.
-        look("Atelier", 1, "Clean Product") { s in
+        look("Lightfast", 1, "Clean Product") { s in
             s.contrast = 15
             s.highlights = -35
             s.shadows = 30
@@ -76,7 +76,7 @@ extension DevelopPreset {
             s[.curveDarks] = -5
         },
         // True paper whites and pigment fidelity without hue shifts, for watercolor and artwork.
-        look("Atelier", 6, "Fine Art & Pigments") { s in
+        look("Lightfast", 6, "Fine Art & Pigments") { s in
             s.contrast = 18
             s.highlights = -18
             s.shadows = 18
@@ -90,7 +90,7 @@ extension DevelopPreset {
             s[.curveDarks] = -6
         },
         // Bold tonal bite, anchored blacks and rich color separation.
-        look("Atelier", 2, "Punchy") { s in
+        look("Lightfast", 2, "Punchy") { s in
             s.contrast = 38
             s.highlights = -25
             s.shadows = 10
@@ -104,7 +104,7 @@ extension DevelopPreset {
             s.setPoints(curve((0, 0), (0.22, 0.17), (0.78, 0.84), (1, 1)), for: .rgb)
         },
         // Everyday analog warmth with gentle red/blue crossover and a cyan-tinted shadow toe.
-        look("Atelier", 4, "Warm Film") { s in
+        look("Lightfast", 4, "Warm Film") { s in
             s.contrast = 20
             s.highlights = -20
             s.shadows = 15
@@ -119,7 +119,7 @@ extension DevelopPreset {
             s.vignette = -14
         },
         // Luminous everyday monochrome with a yellow-orange filter mix and deep blacks.
-        look("Atelier", 5, "Black & White") { s in
+        look("Lightfast", 5, "Black & White") { s in
             s.monochrome = true
             s.contrast = 32
             s.highlights = -20

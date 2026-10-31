@@ -165,7 +165,7 @@ struct CullView: View {
                     .monospacedDigit()
             }
         }
-        .help("Atelier copies the photos while you cull, so Import has less to do. Back or Cancel discards these copies.")
+        .help("Lightfast copies the photos while you cull, so Import has less to do. Back or Cancel discards these copies.")
     }
 
     private var finishTitle: String {

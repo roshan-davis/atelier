@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// HDR states participate in the same opt-in snapshot convention as Atelier's LayoutSnapshots.
+/// HDR states participate in the same opt-in snapshot convention as Lightfast's LayoutSnapshots.
 /// Only disposable app launches should set ATELIER_HDR_SNAPSHOTS.
 @MainActor enum LayoutSnapshots {
     static func run(editor: HDRController, into folder: URL) async {

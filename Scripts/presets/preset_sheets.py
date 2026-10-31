@@ -10,7 +10,7 @@ photo on top.
     python3 Scripts/presets/preset_sheets.py OUT_DIR PHOTO [PHOTO ...]
 
 Use only photos you own or have a license for. A RAW file is decoded with rawpy (camera
-white balance), so its base look differs a little from Atelier's camera match.
+white balance), so its base look differs a little from Lightfast's camera match.
 """
 
 import os

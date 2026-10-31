@@ -3,7 +3,7 @@ import AtelierCore
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Atelier > Settings… (⌘,). Values live in user defaults under the same keys the dialogs use,
+/// Lightfast > Settings… (⌘,). Values live in user defaults under the same keys the dialogs use,
 /// so a default set here is what the Import and Export dialogs start with.
 struct SettingsView: View {
     var body: some View {
@@ -163,7 +163,7 @@ struct GeneralSettings: View {
             } header: {
                 Text("Backups")
             } footer: {
-                Text("The catalog is backed up when Atelier quits. Backups are kept inside the catalog package.")
+                Text("The catalog is backed up when Lightfast quits. Backups are kept inside the catalog package.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -389,7 +389,7 @@ struct EditInSettings: View {
             } header: {
                 Text("Edit In")
             } footer: {
-                Text("Photo > Edit In saves a copy next to the original (or in Pictures/Atelier/Edits when that folder is read-only), stacks it with the original, and opens it in the app. Saves in the app update Atelier.")
+                Text("Photo > Edit In saves a copy next to the original (or in Pictures/Atelier/Edits when that folder is read-only), stacks it with the original, and opens it in the app. Saves in the app update Lightfast.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -480,7 +480,7 @@ struct AISettingsTab: View {
             } header: {
                 Text("ComfyUI")
             } footer: {
-                Text("Atelier sends photos to a ComfyUI server you run, on this Mac or another one, and never bundles models. The ComfyUI desktop app listens on http://127.0.0.1:8000; ComfyUI started from Terminal uses port 8188.")
+                Text("Lightfast sends photos to a ComfyUI server you run, on this Mac or another one, and never bundles models. The ComfyUI desktop app listens on http://127.0.0.1:8000; ComfyUI started from Terminal uses port 8188.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -566,7 +566,7 @@ struct MetadataSettings: View {
             Section {
                 Toggle("Automatically write changes into XMP sidecars", isOn: $autoWrite)
             } footer: {
-                Text("When on, metadata and current Develop edits, including masks, are written to .xmp files next to the originals as you change them. Other apps can read the metadata; Develop edits are for Atelier recovery. When off, use Library > Write XMP for Selection (⌘S).")
+                Text("When on, metadata and current Develop edits, including masks, are written to .xmp files next to the originals as you change them. Other apps can read the metadata; Develop edits are for Lightfast recovery. When off, use Library > Write XMP for Selection (⌘S).")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

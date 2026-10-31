@@ -27,7 +27,7 @@ public enum AIRecipe: String, CaseIterable, Codable, Sendable {
     public var summary: String {
         switch self {
         case .removeObject: return "Paint over what should go. Only the painted area changes."
-        case .replaceBackground: return "Atelier finds the subject and keeps it; the rest is generated from your prompt."
+        case .replaceBackground: return "Lightfast finds the subject and keeps it; the rest is generated from your prompt."
         case .upscale: return "Enlarges the photo with an upscaling model."
         }
     }

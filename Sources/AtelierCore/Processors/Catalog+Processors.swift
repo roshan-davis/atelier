@@ -81,7 +81,7 @@ extension Catalog {
                 } else {
                     guard try Asset.fetchOne(db, key: request.sourceAssetID) != nil else { throw ProcessorDocumentError.invalidRequest }
                     var version = PhotoVersion(assetId: request.sourceAssetID, kind: .externalEdit,
-                                               name: "Atelier HDR", filePath: request.resultURL.path,
+                                               name: "Lightfast HDR", filePath: request.resultURL.path,
                                                derivedAssetId: derivedID, provenance: provenance)
                     try version.insert(db)
                     try Self.copyCatalogInfo(db, from: request.sourceAssetID, to: derivedID)

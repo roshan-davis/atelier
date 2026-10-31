@@ -1,4 +1,4 @@
-// Atelier Help: the sidebar, search, before/after sliders and the drawn slider rows.
+// Lightfast Help: the sidebar, search, before/after sliders and the drawn slider rows.
 // Pages list their content in plain HTML; this file only adds behavior. The page list and the
 // search index come from toc.js, which Scripts/help/build_help_index.py writes.
 (function () {
@@ -16,7 +16,7 @@
     sidebar.className = "sidebar";
     sidebar.setAttribute("aria-label", "Help topics");
     sidebar.innerHTML =
-      '<a class="brand" href="index.html"><span class="brand-mark"></span>Atelier Help</a>' +
+      '<a class="brand" href="index.html"><span class="brand-mark"></span>Lightfast Help</a>' +
       '<div class="search"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8">' +
       '<circle cx="7" cy="7" r="5"/><path d="M11 11l3.5 3.5" stroke-linecap="round"/></svg>' +
       '<input type="search" placeholder="Search Help" aria-label="Search Help" autocomplete="off" spellcheck="false"></div>' +

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Organize and find · Atelier Help</title>
+<title>Organize and find · Lightfast Help</title>
 <link rel="stylesheet" href="assets/help.css">
 <script src="assets/toc.js" defer></script>
 <script src="assets/help.js" defer></script>
@@ -97,7 +97,7 @@
   <li><b>Source</b>: the list's name and how many photos it shows. Click it to switch to <b>All Photographs</b>, one of the recent imports, a collection, or a folder (under its drive) without leaving the view you're in.</li>
   <li>How many photos are selected, which one you're on (“2 of 12”) and its file name.</li>
   <li><b>Filters</b>: the same Flag, Rating, Color Label and Edits rules as the bar above the photos. When any are on, the button turns blue and lists them (“Picked · ★3+”); the <b>ⓧ</b> next to it clears them.</li>
-  <li><b>Sort</b>: Capture Time, Import Order, File Name, Rating or Edit Time. The arrow button next to it switches between ascending and descending. Versions stacked on a photo always stay right after it. The grid uses the same order, and Atelier remembers it.</li>
+  <li><b>Sort</b>: Capture Time, Import Order, File Name, Rating or Edit Time. The arrow button next to it switches between ascending and descending. Versions stacked on a photo always stay right after it. The grid uses the same order, and Lightfast remembers it.</li>
 </ul>
 <ul>
   <li>Click, <kbd>⌘</kbd>-click and <kbd>⇧</kbd>-click select, as in the grid. Right-click for the photo menu.</li>
@@ -113,13 +113,13 @@
 </ul>
 
 <h3 id="recover-edits">Recover edits, history and snapshots</h3>
-<p>Writing XMP also saves the current Atelier Develop settings and masks. Develop edits mark the sidecar unsaved; automatic writing includes them. To back up edits made before this feature, select those photos and choose <span class="path">Library › Write XMP for Selection</span>.</p>
-<p>If you lose the catalog, import the originals with their sidecars into a new catalog. Atelier restores the matching current edits, saved history and snapshots before making previews, even when an import preset is selected. Photos already in the catalog keep their existing edits. RAW and JPEG files with the same name keep separate Develop entries in their shared sidecar; ratings and other standard metadata remain shared. Keep filenames unchanged for recovery.</p>
-<p>Old metadata-only sidecars still work. Unreadable foreign metadata alone does not block import. Unsupported or damaged Atelier recovery data appears in the import problems; Atelier leaves the sidecar untouched instead of silently replacing your edits. A write that cannot safely preserve existing recovery data also reports a problem. If another, older Atelier version changes current edits while leaving saved history behind, recovery reports the mismatch instead of combining incompatible states. Keep history backups current using this version of Atelier.</p>
-<p>New sidecar writes include retained History steps, the selected step and redo steps, plus snapshot names, dates and saved looks. Earlier sidecars containing only current edits recover one state, shown as <b>Recovered from XMP</b>. Write XMP explicitly to back up history from earlier edits. Atelier currently keeps up to 500 history steps per photo. Virtual copies, stacks, collections and AI provenance still require catalog backups. Subject and object masks are regenerated from their saved instructions, so edges may change with macOS. Keep separate backups of originals and external/AI result files. Other apps can read the standard metadata, but the Develop settings are specific to Atelier.</p>
+<p>Writing XMP also saves the current Lightfast Develop settings and masks. Develop edits mark the sidecar unsaved; automatic writing includes them. To back up edits made before this feature, select those photos and choose <span class="path">Library › Write XMP for Selection</span>.</p>
+<p>If you lose the catalog, import the originals with their sidecars into a new catalog. Lightfast restores the matching current edits, saved history and snapshots before making previews, even when an import preset is selected. Photos already in the catalog keep their existing edits. RAW and JPEG files with the same name keep separate Develop entries in their shared sidecar; ratings and other standard metadata remain shared. Keep filenames unchanged for recovery.</p>
+<p>Old metadata-only sidecars still work. Unreadable foreign metadata alone does not block import. Unsupported or damaged Lightfast recovery data appears in the import problems; Lightfast leaves the sidecar untouched instead of silently replacing your edits. A write that cannot safely preserve existing recovery data also reports a problem. If another, older Lightfast version changes current edits while leaving saved history behind, recovery reports the mismatch instead of combining incompatible states. Keep history backups current using this version of Lightfast.</p>
+<p>New sidecar writes include retained History steps, the selected step and redo steps, plus snapshot names, dates and saved looks. Earlier sidecars containing only current edits recover one state, shown as <b>Recovered from XMP</b>. Write XMP explicitly to back up history from earlier edits. Lightfast currently keeps up to 500 history steps per photo. Virtual copies, stacks, collections and AI provenance still require catalog backups. Subject and object masks are regenerated from their saved instructions, so edges may change with macOS. Keep separate backups of originals and external/AI result files. Other apps can read the standard metadata, but the Develop settings are specific to Lightfast.</p>
 
 <h2 id="volumes">Drives and the NAS</h2>
-<p>Atelier remembers photos by drive, not by where it's mounted, so plugging a drive in somewhere else doesn't break anything. When the NAS or a drive is off, its photos stay in the grid from their previews, marked Offline. <span class="path">Library › Refresh Volumes</span> (<kbd>⌘R</kbd>) checks again after you connect one.</p>
+<p>Lightfast remembers photos by drive, not by where it's mounted, so plugging a drive in somewhere else doesn't break anything. When the NAS or a drive is off, its photos stay in the grid from their previews, marked Offline. <span class="path">Library › Refresh Volumes</span> (<kbd>⌘R</kbd>) checks again after you connect one.</p>
 
 <div class="see-also">See also: <a href="photos.html">Virtual copies, stacks and removing</a> · <a href="shortcuts.html">Keyboard shortcuts</a></div>
 

@@ -7,7 +7,7 @@ struct AtelierHDRApp: App {
     @NSApplicationDelegateAdaptor(HDRAppDelegate.self) private var delegate
     @StateObject private var editor = HDRController()
     var body: some Scene {
-        WindowGroup("Atelier HDR") {
+        WindowGroup("Lightfast HDR") {
             HDRWorkspace(editor: editor)
                 .frame(minWidth: 1100, minHeight: 680)
                 .environment(\.theme, Theme.current)
@@ -30,7 +30,7 @@ struct AtelierHDRApp: App {
                 Button("Save As New…") { editor.save(asNew: true) }.keyboardShortcut("s", modifiers: [.command, .shift]).disabled(editor.before == nil || editor.busy)
             }
             CommandGroup(replacing: .help) {
-                Button("Atelier HDR Help") { HelpWindow.shared.show(page: "hdr") }.keyboardShortcut("?", modifiers: [.command])
+                Button("Lightfast HDR Help") { HelpWindow.shared.show(page: "hdr") }.keyboardShortcut("?", modifiers: [.command])
             }
             CommandGroup(replacing: .undoRedo) {
                 Button("Undo HDR Adjustment") { editor.undo() }.keyboardShortcut("z").disabled(!editor.canUndo || editor.busy)
@@ -65,7 +65,7 @@ struct AtelierHDRApp: App {
             }
         }
         NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main) { [weak self] note in
-            MainActor.assumeIsolated { if let window = note.object as? NSWindow, window.title == "Atelier HDR" { window.delegate = self } }
+            MainActor.assumeIsolated { if let window = note.object as? NSWindow, window.title == "Lightfast HDR" { window.delegate = self } }
         }
     }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -99,12 +99,12 @@ struct HDRWorkspace: View {
         VStack(spacing: 0) {
             HStack {
                 Image(systemName: "camera.filters").foregroundStyle(Color.accentColor)
-                Text("Atelier HDR").font(.headline)
-                Text("From Atelier · \(editor.sourceName)").foregroundStyle(.secondary).lineLimit(1)
+                Text("Lightfast HDR").font(.headline)
+                Text("From Lightfast · \(editor.sourceName)").foregroundStyle(.secondary).lineLimit(1)
                 if editor.dirty { Text("Edited").font(.caption).foregroundStyle(.secondary) }
                 Spacer()
                 if editor.busy { ProgressView().controlSize(.small); Button("Cancel", action: editor.cancel).keyboardShortcut(.cancelAction) }
-                Button("Save & Return to Atelier") { editor.save(returnToAtelier: true) }
+                Button("Save & Return to Lightfast") { editor.save(returnToAtelier: true) }
                     .buttonStyle(.borderedProminent).disabled(editor.before == nil || editor.busy)
             }.padding(12).background(Color(nsColor: theme.chrome))
             Divider()
@@ -116,7 +116,7 @@ struct HDRWorkspace: View {
                     Text("Tone-map the original’s available range and adjust texture. Virtual exposures add no captured detail.")
                         .font(.caption).foregroundStyle(.secondary)
                     Divider()
-                    Text("Finish color grading in Atelier Develop after return.").font(.caption).foregroundStyle(.secondary)
+                    Text("Finish color grading in Lightfast Develop after return.").font(.caption).foregroundStyle(.secondary)
                     Spacer()
                     Button("Open Project…", action: editor.chooseOpen).disabled(editor.busy)
                     Button("Relink Source…", action: editor.relinkSource).disabled(editor.busy)
@@ -192,7 +192,7 @@ struct HDRWorkspace: View {
     @ViewBuilder private var canvas: some View {
         if editor.before == nil {
             ContentUnavailableView("Open an HDR Project", systemImage: "camera.filters",
-                                   description: Text("Start in Atelier > Photo > Edit In > HDR App."))
+                                   description: Text("Start in Lightfast > Photo > Edit In > HDR App."))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if keys.option || editor.originalToggled {
             photo(editor.before)

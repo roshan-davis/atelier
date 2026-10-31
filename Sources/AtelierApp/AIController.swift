@@ -82,7 +82,7 @@ final class AIController: ObservableObject {
             await MainActor.run {
                 self.isFindingSubject = false
                 self.backgroundMask = mask
-                if mask == nil { self.errorMessage = "Atelier couldn't find a subject in this photo." }
+                if mask == nil { self.errorMessage = "Lightfast couldn't find a subject in this photo." }
             }
         }
     }

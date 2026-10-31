@@ -1,7 +1,7 @@
 import Foundation
 
 /// History is separate from the v1 current-settings packet so older sidecars stay readable.
-/// The settings binding detects a stale history packet left by an older Atelier writer.
+/// The settings binding detects a stale history packet left by an older Lightfast writer.
 enum HistoryRecovery {
     static let path = "atelier:HistoryRecovery"
 

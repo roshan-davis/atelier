@@ -44,9 +44,9 @@ enum DevelopRecovery {
         case unsupported, invalidSidecar, invalidRecovery, inconsistentHistory
         var errorDescription: String? {
             switch self {
-            case .inconsistentHistory: return "The saved Atelier history does not match the current edits. The sidecar was preserved."
-            case .unsupported: return "Unsupported Atelier XMP recovery version. The sidecar was preserved."
-            case .invalidRecovery: return "The Atelier XMP recovery data cannot be read. The sidecar was preserved."
+            case .inconsistentHistory: return "The saved Lightfast history does not match the current edits. The sidecar was preserved."
+            case .unsupported: return "Unsupported Lightfast XMP recovery version. The sidecar was preserved."
+            case .invalidRecovery: return "The Lightfast XMP recovery data cannot be read. The sidecar was preserved."
             case .invalidSidecar: return "The existing XMP sidecar cannot be read. It was preserved."
             }
         }

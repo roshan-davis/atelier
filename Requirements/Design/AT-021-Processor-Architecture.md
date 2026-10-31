@@ -1,12 +1,12 @@
-# AT-021: standalone HDR app and a focused Atelier round trip
+# AT-021: standalone HDR app and a focused Lightfast round trip
 
 **Agreed direction and phased design record, October 30, 2026.** Rosh requested this pivot after discussing Machinery HDR. Source baseline: `8700f853bb9d5d06c906e9d8800b5137b5581a33`. The PRD HDR editor section is authoritative; this record explains the agreed direction and remaining feasibility questions. Algorithms, dependencies and detailed implementation still require bounded scope. No runtime, rendering or catalog schema changes are made here. The existing filename is retained so PR links continue to work.
 
 ## The pivot
 
-Prioritize a standalone native Mac HDR editor inspired by Machinery HDR, with a reusable image-processing engine. Atelier sends a single photo or a group of bracketed photos to that app and registers the returned result. Defer the general third-party plugin platform: discovery, installable manifests, arbitrary CLI/HTTP tools, generated forms and plugin-contributed menus are not prerequisites for this HDR app.
+Prioritize a standalone native Mac HDR editor inspired by Machinery HDR, with a reusable image-processing engine. Lightfast sends a single photo or a group of bracketed photos to that app and registers the returned result. Defer the general third-party plugin platform: discovery, installable manifests, arbitrary CLI/HTTP tools, generated forms and plugin-contributed menus are not prerequisites for this HDR app.
 
-Keep a small shared **Processor contract** for the Atelier connection, consistent with the existing one-contract product rule. Extend the current Edit In pattern to grouped inputs and many-source results through this contract; do not create a special HDR-only catalog/import path. There is no prerequisite to migrate or rewrite ComfyUI before HDR development. Existing Edit In and AI workflows remain supported; AI order stays ComfyUI → Core ML → MLX, nothing bundled.
+Keep a small shared **Processor contract** for the Lightfast connection, consistent with the existing one-contract product rule. Extend the current Edit In pattern to grouped inputs and many-source results through this contract; do not create a special HDR-only catalog/import path. There is no prerequisite to migrate or rewrite ComfyUI before HDR development. Existing Edit In and AI workflows remain supported; AI order stays ComfyUI → Core ML → MLX, nothing bundled.
 
 This supersedes the previous “full plugin architecture first, HDR as its first plugin” delivery plan. HDR is now a separate interactive app connected as a desktop Processor. A headless HDR adapter or broader plugin system can be considered later using the same engine and contract.
 
@@ -17,19 +17,19 @@ Machinery's manual describes both bracket fusion/alignment/deghosting and single
 - **One image:** interactive tone/local-contrast/detail work and presets. It cannot recover scene information absent from the input; synthetic exposures do not add captured dynamic range.
 - **Multiple bracketed images:** alignment, merging, deghosting, then interactive tone/detail work.
 - **Native editing:** responsive previews, before/after, undo, cancellable background work, saved versioned settings/projects and full-resolution output. Exact controls and first-release scope need design agreement.
-- **Independent use:** open photos without Atelier. The app owns HDR-specific editing UI and projects; Atelier owns its catalog, input selection, source relationships and returned-photo organization.
+- **Independent use:** open photos without Lightfast. The app owns HDR-specific editing UI and projects; Lightfast owns its catalog, input selection, source relationships and returned-photo organization.
 
-A rendered return TIFF is a derivative; it does not make all HDR adjustments reversible in Atelier Develop. Preserve the HDR project's settings and input identities separately so reopening in the HDR app can restore editing. The agreed first return is tone-mapped 16-bit TIFF with a project beside it: re-edit opens the project, Save refreshes the same result, and Save As New returns a new version. Durable source ownership and transport details are feasibility questions.
+A rendered return TIFF is a derivative; it does not make all HDR adjustments reversible in Lightfast Develop. Preserve the HDR project's settings and input identities separately so reopening in the HDR app can restore editing. The agreed first return is tone-mapped 16-bit TIFF with a project beside it: re-edit opens the project, Save refreshes the same result, and Save As New returns a new version. Durable source ownership and transport details are feasibility questions.
 
 ## Responsibilities and one execution path
 
 These diagrams describe the revised proposal, not shipped capabilities.
 
-### Architecture: separate app, reusable engine, one Atelier connection
+### Architecture: separate app, reusable engine, one Lightfast connection
 
 ```mermaid
 flowchart TB
-    subgraph Atelier[Atelier]
+    subgraph Lightfast[Lightfast]
         Select[Select one photo or bracket group]
         Contract[Small shared Processor contract]
         Adapter[Desktop HDR app adapter]
@@ -53,47 +53,47 @@ flowchart TB
     Future[Future headless or plugin adapter] -.-> Engine
 ```
 
-The HDR engine contains decoding/preparation, alignment, merge/deghost and tone/detail processing without catalog or UI dependencies. The HDR app owns its native interaction and project persistence. Atelier's adapter owns job preparation, launch/reconnect and result validation/publication through shared Core services. Keep a reusable HDR engine and second app product in this repository, extracting shared UI pieces only as needed. App name and distribution are still open. No HDR math belongs in AtelierApp controllers.
+The HDR engine contains decoding/preparation, alignment, merge/deghost and tone/detail processing without catalog or UI dependencies. The HDR app owns its native interaction and project persistence. Lightfast's adapter owns job preparation, launch/reconnect and result validation/publication through shared Core services. Keep a reusable HDR engine and second app product in this repository, extracting shared UI pieces only as needed. App name and distribution are still open. No HDR math belongs in AtelierApp controllers.
 
 ### Round trip: one selection becomes one HDR session
 
 ```mermaid
 sequenceDiagram
     actor User
-    participant Atelier
+    participant Lightfast
     participant HDR as HDR app
     participant Engine
-    User->>Atelier: Select one image or several brackets
-    User->>Atelier: Edit In > HDR app (proposed)
-    Atelier->>Atelier: Snapshot inputs and prepare grouped request
-    Atelier->>HDR: Open job with staged inputs and return contract
+    User->>Lightfast: Select one image or several brackets
+    User->>Lightfast: Edit In > HDR app (proposed)
+    Lightfast->>Lightfast: Snapshot inputs and prepare grouped request
+    Lightfast->>HDR: Open job with staged inputs and return contract
     HDR->>Engine: Merge if bracketed; preview tone/detail settings
     Engine-->>HDR: Updated preview
-    User->>HDR: Save result / return to Atelier
+    User->>HDR: Save result / return to Lightfast
     HDR->>HDR: Save project, output and completion receipt
-    HDR-->>Atelier: Result ready for this job
-    Atelier->>Atelier: Validate, publish and record every source
-    Atelier-->>User: New catalog photo; stack according to agreed policy
+    HDR-->>Lightfast: Result ready for this job
+    Lightfast->>Lightfast: Validate, publish and record every source
+    Lightfast-->>User: New catalog photo; stack according to agreed policy
 ```
 
-This is different from today's Edit In, which prepares and opens each selected photo individually. The new operation explicitly groups the selected inputs into one session; it does not change ordinary multi-photo Edit In semantics. Saving a standalone HDR project need not automatically import every intermediate preview or export into Atelier. The exact Save/Return commands require UX agreement.
+This is different from today's Edit In, which prepares and opens each selected photo individually. The new operation explicitly groups the selected inputs into one session; it does not change ordinary multi-photo Edit In semantics. Saving a standalone HDR project need not automatically import every intermediate preview or export into Lightfast. The exact Save/Return commands require UX agreement.
 
 ### Delivery order: HDR-focused work, broader plugins later
 
 ```mermaid
 flowchart LR
     Design[Agree HDR experience and first slice] --> Spike[Prove engine and output feasibility]
-    Spike --> App[Small HDR editor plus Atelier round trip]
+    Spike --> App[Small HDR editor plus Lightfast round trip]
     App --> RoundTrip[Complete re-edit and recovery acceptance]
     RoundTrip --> Acceptance[Single-image and bracket acceptance]
     Acceptance --> Later[Reassess general plugin platform]
 ```
 
-The first editor slice includes the Atelier round trip; the small contract is designed alongside the HDR app; the diagram orders acceptance gates, not a requirement to defer all integration design until the app is finished. General plugin discovery/security, generated forms and a ComfyUI migration do not block this path.
+The first editor slice includes the Lightfast round trip; the small contract is designed alongside the HDR app; the diagram orders acceptance gates, not a requirement to defer all integration design until the app is finished. General plugin discovery/security, generated forms and a ComfyUI migration do not block this path.
 
-## Minimum Atelier Processor contract
+## Minimum Lightfast Processor contract
 
-Use a fixed desktop-app adapter initially, not a public extensibility framework. Core owns types, preparation, output validation and registration. AppKit launch/activation stays in Atelier's app layer. Current export/stack helpers supply existing behavior but need bounded extensions for one grouped job and multiple sources.
+Use a fixed desktop-app adapter initially, not a public extensibility framework. Core owns types, preparation, output validation and registration. AppKit launch/activation stays in Lightfast's app layer. Current export/stack helpers supply existing behavior but need bounded extensions for one grouped job and multiple sources.
 
 | Record | Minimum meaning |
 | --- | --- |
@@ -109,11 +109,11 @@ A registered job-document type opened with NSWorkspace, followed by an atomicall
 
 ## Publication, cancel and recovery
 
-Atelier validates regular output files, expected representation, profile/precision, size and decode success before import. Restrict return paths, reject traversal/symlinks and never overwrite originals. Use unique destination names and retain existing source-folder/managed-Edits behavior unless a different destination is agreed. Treat import/relationship updates and filesystem publication as a recoverable operation with a receipt: today's `addStacked` imports and stacks separately.
+Lightfast validates regular output files, expected representation, profile/precision, size and decode success before import. Restrict return paths, reject traversal/symlinks and never overwrite originals. Use unique destination names and retain existing source-folder/managed-Edits behavior unless a different destination is agreed. Treat import/relationship updates and filesystem publication as a recoverable operation with a receipt: today's `addStacked` imports and stacks separately.
 
 Record **all** bracket sources regardless of whether the user creates a visual stack. Reference-frame metadata inheritance and stack placement must be explicit; copying a single frame's exposure onto the merged file would be misleading. Coordinate relationships/provenance with AT-005b/c and AT-007, without implementing a new license policy in this work.
 
-Cancellation before handoff stops preparation. After handoff, Atelier can abandon its pending import or request cancellation through an agreed app protocol; it must not kill the user's HDR app or discard a saved project. Cancelling a merge inside the HDR app stops that computation while preserving the session. Closing without returning produces no new catalog photo. Late results for abandoned jobs require an explicit recovery action, not automatic import.
+Cancellation before handoff stops preparation. After handoff, Lightfast can abandon its pending import or request cancellation through an agreed app protocol; it must not kill the user's HDR app or discard a saved project. Cancelling a merge inside the HDR app stops that computation while preserving the session. Closing without returning produces no new catalog photo. Late results for abandoned jobs require an explicit recovery action, not automatic import.
 
 After a crash/relaunch, correlate receipts by job ID, reconcile already registered outputs and avoid duplicates. Do not automatically rerun an expensive merge. Retain recoverable results with a visible location/action. Re-edit opens the associated project; Save updates the same TIFF, and Save As New returns a new result. Reuse EditWatcher for image refresh, but it does not already implement receipt discovery, project association or many-source recovery.
 
@@ -127,9 +127,9 @@ The first editor should distinguish a high-dynamic-range master/project from the
 | --- | --- | --- |
 | Machinery-style workflow | Manual documents single-image effects, bracket fusion, alignment/deghost, presets, project saving and Lightroom round trip [8] | Desired visual style, controls and algorithm quality on Rosh's images; source does not expose proprietary math |
 | OpenCV | Tutorial separates float HDR merging from low-dynamic-range exposure fusion [2]; AlignMTB exposes shift alignment [3] | RAW preparation, handheld rotation/parallax and suitable deghost; not a complete Machinery substitute |
-| Float TIFF | Apple exposes TIFF writing with a pixel-format argument [4] | Numeric round trip above 1/below 0, tags/profile/metadata, actual precision, Atelier decode/Develop/export |
+| Float TIFF | Apple exposes TIFF writing with a pixel-format argument [4] | Numeric round trip above 1/below 0, tags/profile/metadata, actual precision, Lightfast decode/Develop/export |
 | DNG | Adobe supplies specification and SDK resources [5] | Exact SDK terms/dependencies, float linear-DNG writing and independent reader tests |
-| OpenEXR | Format supports float channels/color metadata [6] | Encoder/dependency, metadata carriage and Atelier import/preview/Develop support |
+| OpenEXR | Format supports float channels/color metadata [6] | Encoder/dependency, metadata carriage and Lightfast import/preview/Develop support |
 
 Benchmark responsive preview updates and full-resolution render time/peak memory before optimization. Coalesce preview work and discard stale settings revisions. Test single-image natural/detail-heavy looks and bracket sets with moving subjects, tripod/handheld shifts, clipped highlights, mismatched dimensions/orientation, missing exposure metadata, mixed RAW/JPEG, offline originals and read-only folders. No synthetic bracket can restore uncaptured information.
 
@@ -141,7 +141,7 @@ Each implementation slice gets its own scope/approval and PR/chat. This PR revis
 | --- | --- | --- |
 | 0 — this design | Agreed standalone direction, first TIFF return and project re-edit; defer full plugins | Design completion only; no HDR runtime or visual acceptance |
 | 1 — prove image path | Disposable single-image/bracket fixtures, decode/alignment/basic merge, 16-bit TIFF profile/highlight tests, project sources and job-document/receipt feasibility | Record method, license/dependency and time/memory evidence; settle initial controls and bounded implementation scope |
-| 2 — small end-to-end slice | Second Mac app in this repo, reusable engine/shared controls, one window, one-image/bracket inputs, approximately four–six agreed tone/detail controls, undo, project/TIFF save/reopen and grouped Atelier return | Original preservation, all-source registration, valid profile/precision, basic cancel/close/crash/relaunch/duplicate safeguards and Rosh's image/UI acceptance |
+| 2 — small end-to-end slice | Second Mac app in this repo, reusable engine/shared controls, one window, one-image/bracket inputs, approximately four–six agreed tone/detail controls, undo, project/TIFF save/reopen and grouped Lightfast return | Original preservation, all-source registration, valid profile/precision, basic cancel/close/crash/relaunch/duplicate safeguards and Rosh's image/UI acceptance |
 | 3 — re-edit/recovery completion | Project re-edit, same-result Save versus Save As New, relink and complete interruption/restart matrix | No silent source loss, duplicate imports or abandoned-job auto-return; basics already covered in phase 2 |
 | 4 — expand after acceptance | Presets, richer single-image effects and deghost quality/controls; bracket detection and batch later | Image fixtures and measured preview/full-size performance; each feature separately scoped |
 | Deferred — plugin platform and float return | General manifests/discovery/forms/CLI/HTTP, AI migration; float HDR master and extended Develop range | Separate proposals; not prerequisites for this editor |
@@ -150,7 +150,7 @@ Dependencies: AT-008 supplies the one-contract boundary without a prerequisite b
 
 Decisions still open: app/package name; exact first controls and merge/deghost method; original/rendered input labels; dependency selection; durable source ownership; receipt signaling and stack placement. Agreed: same repository, second app, TIFF first, project-based HDR re-edit, one small end-to-end slice. The PRD retains the deferred Lightroom-style shortcuts, float/±10 EV, deghost controls/overlay, headless and batch requirements.
 
-Future Atelier testing covers main and context Edit In menus in grid/Loupe/Develop/Filmstrip, grouped RAW+JPEG handling, selection, return registration and existing external-save/AI flows. HDR app tests cover preview interactions, before/after, zoom/pan, sliders, undo, presets and project reopen. PRD/Help/snapshots accompany actual UI work. Desktop/UI testing always requires fresh explicit permission from Rosh; none was performed here.
+Future Lightfast testing covers main and context Edit In menus in grid/Loupe/Develop/Filmstrip, grouped RAW+JPEG handling, selection, return registration and existing external-save/AI flows. HDR app tests cover preview interactions, before/after, zoom/pan, sliders, undo, presets and project reopen. PRD/Help/snapshots accompany actual UI work. Desktop/UI testing always requires fresh explicit permission from Rosh; none was performed here.
 
 ## What exists, and what must remain
 

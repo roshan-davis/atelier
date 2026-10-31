@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 /// The sound and puff of smoke when something is deleted: Finder's Trash sound when files go
-/// to the Trash, the Dock's poof when something is removed from Atelier (a mask, preset, guide,
+/// to the Trash, the Dock's poof when something is removed from Lightfast (a mask, preset, guide,
 /// snapshot, collection, or photos taken out of the catalog). Every delete calls `play`, so
 /// they all sound and look the same. Settings > General can turn it off; the sound also follows
 /// System Settings > Sound > "Play user interface sound effects", and the puff Reduce Motion.
@@ -11,7 +11,7 @@ enum DeleteFeedback {
     enum Kind {
         /// Files moved to the Trash.
         case trash
-        /// Something removed from Atelier; no file is touched.
+        /// Something removed from Lightfast; no file is touched.
         case remove
     }
 
