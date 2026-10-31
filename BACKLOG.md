@@ -44,11 +44,17 @@ Evidence baseline, October 30, 2026:
 
 ## AT-004 — Develop settings and masks in XMP recovery
 
-**Status:** Proposed / discuss. **Owner/chat/branch/PR:** unassigned. **Dependencies:** agree portable format and compatibility policy before coding; coordinate AT-005.
+**Status:** In progress — Rosh approved the proposed scope and defaults in this chat. **Owner:** Co (Codex). **Chat:** [Develop and mask XMP recovery](codex://threads/01a18ee6-6bd5-7ec3-a719-478c7424b395). **Branch:** `codex/xmp-develop-recovery`. **PR:** [#67](https://github.com/roshan-davis/atelier/pull/67) (draft; Help visual review pending). **Dependencies:** format and conflict policy agreed in this chat; wider recovery remains AT-005.
 
-**Evidence:** review §3.3, unchanged source baseline: XMPFields stores metadata, while Develop settings/masks are catalog JSON. **Scope to discuss:** versioned Develop/mask sidecar round trip, preserving foreign tags and old catalogs; RAW+JPEG same-stem behavior. Keep history, relationships and provenance separate (AT-005).
+**Evidence:** review §3.3, unchanged source baseline: XMPFields stores metadata, while Develop settings/masks are catalog JSON. **Scope:** versioned Develop/mask sidecar round trip, preserving foreign tags and old catalogs; RAW+JPEG same-stem behavior. Keep history, relationships and provenance separate (AT-005).
 
-**Acceptance to agree:** recover settings/masks after catalog loss, old/new sidecar compatibility, unknown tags preserved, paired-file conflict fixtures, unchanged originals and equivalent rendered results. No full-catalog recovery claim from this work alone.
+**Approved scope:** current settings/masks only; exact-filename entries for shared RAW/JPEG sidecars; restore only new imports, recovered settings win over import presets; regenerate Vision subject/object masks. History, relationships, provenance and exact segmentation bitmap recovery are deferred.
+
+**Acceptance:** recover settings/masks after catalog loss, old/new sidecar compatibility, unknown tags preserved, paired-file conflict fixtures, unchanged originals and equivalent rendered results. No full-catalog recovery claim from this work alone.
+
+**Review follow-up:** Cl reviewed `64ad79e` without a macOS toolchain. Addressed never-edited vs reset recovery, import auto-write targets, unreadable foreign metadata and preservation of earlier import problems. Existing reference assets already skip recovery reads; regression added. Coalescing auto-writes is deferred pending measured NAS evidence (AT-011), with no NAS throughput claim. Copy imports with filename collisions retain the source-keyed sidecar entry until XMP writes add the destination key; documented limit. AGENTS.md now defines same-revision cross-environment validation attribution. Follow-up full Mac check at `64ad79e` plus the review patch passed: 227 XCTest tests, 2 missing-RAW skips, zero failures; script regressions, Help, build and whitespace passed. Logs `/private/tmp/atelier-at-004/.build/local-checks/20261030-170525-267348`. Committed-head check and CI evidence are recorded in PR #67.
+
+**Validation/limits:** full Mac check at `5086f3d` plus this implementation passed (223 XCTest tests, 2 missing-RAW skips, zero failures; ten script regressions, Help, build and whitespace passed), logs `/private/tmp/atelier-at-004/.build/local-checks/20261030-152834-451080`. Nine recovery tests exercise fresh-catalog reconstruction, equivalent synthetic rendering, original preservation, old/future/corrupt data, foreign tags, paired/concurrent writes, resets, copied imports and failed/offline dirty state. Committed-head check `dca751d` passed with the same totals, logs `/private/tmp/atelier-at-004/.build/local-checks/20261030-165438-379453`; catalog-free Light/Graphite Metadata snapshots were generated and inspected at that head with no clipping. PR #67 records final-head validation and CI status. Help index has no problems; browser visual review is blocked by the computer-use tool's local-file URL policy. No rendering math, cache version or catalog schema changes. Earlier edits need an explicit XMP write; renamed-file recovery and exact Vision segmentation are not supported. Real RAW, live auto-write/reconnect and real-library recovery acceptance remain open.
 
 ## AT-005 — History, relationships and provenance recovery
 
@@ -146,7 +152,7 @@ Evidence baseline, October 30, 2026:
 
 ## AT-017 — Local-check false failure on clean untracked files
 
-**Status:** In progress — bounded fix explicitly authorized by Rosh. **Owner:** Co (Codex). **Chat:** [AT-017](codex://threads/01a18edb-1f08-7550-9c6a-0ee25e4503bc). **Branch:** `codex/at-017-new-file-whitespace`. **PR:** [#65](https://github.com/roshan-davis/atelier/pull/65). **Dependencies:** AT-001.
+**Status:** Done — merged PR #65 at `5086f3df871e49efde85ed4c6f922593f8690905` (verified on fetched main). **Owner:** Co (Codex). **Chat:** [AT-017](codex://threads/01a18edb-1f08-7550-9c6a-0ee25e4503bc). **Branch:** `codex/at-017-new-file-whitespace`. **PR:** [#65](https://github.com/roshan-davis/atelier/pull/65). **Dependencies:** AT-001.
 
 **Evidence:** reproduced against `17ea9c3`: a clean untracked new file yields exit 1 with empty stdout/stderr from `git diff --no-index --check`. The runner treated every nonzero exit as failure. Search found one no-index execution path; ordinary tracked checks must retain their existing exit semantics.
 

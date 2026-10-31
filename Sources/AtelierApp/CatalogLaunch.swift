@@ -25,6 +25,13 @@ final class CatalogLaunch: ObservableObject {
         task = Task {
             defer { task = nil }
             #if DEBUG
+            if let path = ProcessInfo.processInfo.environment["ATELIER_METADATA_SNAPSHOTS"] {
+                let folder = URL(fileURLWithPath: path, isDirectory: true)
+                try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                await LayoutSnapshots.snapshotMetadata(into: folder)
+                NSApp.terminate(nil)
+                return
+            }
             if let path = ProcessInfo.processInfo.environment["ATELIER_RECOVERY_SNAPSHOTS"] {
                 let folder = URL(fileURLWithPath: path, isDirectory: true)
                 try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)

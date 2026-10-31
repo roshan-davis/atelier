@@ -115,6 +115,7 @@ extension Catalog {
             guard let versionID = try Self.masterVersionID(db, assetID: assetID, create: true) else { return }
             try DevelopSettingsRecord(versionId: versionID, schemaVersion: settings.schemaVersion, json: json,
                                       historyJson: historyJSON, updatedAt: Date()).save(db)
+            try AssetMetadata.filter(key: assetID).updateAll(db, Column("xmpDirty").set(to: true))
         }
     }
 

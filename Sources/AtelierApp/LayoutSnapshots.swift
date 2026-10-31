@@ -95,6 +95,7 @@ enum LayoutSnapshots {
         await snapshotVirtualCopy(model: model, into: folder)
         await snapshotCulling(model: model, into: folder)
         await snapshotRawPair(model: model, into: folder)
+        await snapshotMetadata(into: folder)
         await capture(AnyView(ImportSettings().frame(width: 560)), size: CGSize(width: 560, height: 420),
                       to: folder.appendingPathComponent("settings-import.png"))
         // The Import dialog's progress step, partway through a copy.
@@ -130,6 +131,23 @@ enum LayoutSnapshots {
         Theme.system.apply()
         fflush(stdout)
         exit(0)
+    }
+
+    /// Can run without opening a catalog via ATELIER_METADATA_SNAPSHOTS.
+    static func snapshotMetadata(into folder: URL) async {
+        let savedTheme = UserDefaults.standard.object(forKey: Theme.defaultsKey)
+        defer {
+            if let savedTheme { UserDefaults.standard.set(savedTheme, forKey: Theme.defaultsKey) }
+            else { UserDefaults.standard.removeObject(forKey: Theme.defaultsKey) }
+            Theme.current.apply()
+        }
+        for theme in [Theme.light, .graphite] {
+            UserDefaults.standard.set(theme.rawValue, forKey: Theme.defaultsKey)
+            theme.apply()
+            await capture(AnyView(MetadataSettings().frame(width: 560, height: 260)),
+                          size: CGSize(width: 560, height: 260),
+                          to: folder.appendingPathComponent("settings-metadata-\(theme.rawValue).png"))
+        }
     }
 
     /// Uses a disposable damaged database, never the user's catalog.

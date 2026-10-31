@@ -51,6 +51,8 @@ public struct ImportProgress: Sendable {
     public var previewsBuilt = 0
     public var failures: [ImportFailure] = []
     public var importedAssetIDs: [Int64] = []
+    /// New photos that received recovered settings or an import preset; auto-write only these.
+    public var developedAssetIDs: [Int64] = []
     /// The import entry the photos were added to.
     public var importGroupId: Int64?
     /// Each source file's photo, new or already in the catalog.
@@ -66,7 +68,7 @@ public struct ImportProgress: Sendable {
 }
 
 enum ImportOutcome {
-    case imported(Int64, URL)
+    case imported(Int64, URL, hasSettings: Bool)
     /// Already in the catalog; it still joins the import entry.
     case existing(Int64)
 }
@@ -148,14 +150,11 @@ public final class Importer: Sendable {
                 do {
                     let assetID: Int64
                     switch try outcome.get() {
-                    case .imported(let id, let url):
+                    case .imported(let id, let url, let hasSettings):
                         state.imported += 1
+                        if hasSettings { state.developedAssetIDs.append(id) }
                         imported.append((index, id, url))
                         assetID = id
-                        if let preset = options.developPreset {
-                            try? catalog.saveDevelopSettings(preset.applied(to: .neutral), for: id,
-                                                             step: "Import Preset: \(preset.name)")
-                        }
                     case .existing(let id):
                         state.skipped += 1
                         assetID = id
@@ -185,11 +184,13 @@ public final class Importer: Sendable {
         state.importedAssetIDs = imported.map(\.id)
 
         if options.buildPreviews, let scheduler {
-            let settings = options.developPreset.map { $0.applied(to: .neutral) }
-            for photo in imported {
+            let jobs = imported.map { photo in
+                (photo, try? catalog.developSettings(for: photo.id))
+            }
+            for (photo, settings) in jobs {
                 scheduler.request(.thumbnail, for: photo.id, source: photo.url, settings: settings)
             }
-            for photo in imported {
+            for (photo, settings) in jobs {
                 scheduler.request(.preview, for: photo.id, source: photo.url, settings: settings)
             }
         } else if options.buildPreviews, let previews {
@@ -251,6 +252,10 @@ public final class Importer: Sendable {
         // From the local copy when there is one: reading a raw file's metadata takes many small
         // reads, each a round trip to the NAS.
         let metadata = MetadataReader.read(staged?.url ?? source, sidecarFor: source)
+        // Fail this file visibly before copying if recovery data is unreadable. Never
+        // substitute a preset or neutral edits for damaged/unsupported recovery settings.
+        let recovered = try XMPSidecar.readDevelop(for: source)
+        let initialSettings = recovered ?? options.developPreset.map { $0.applied(to: .neutral) }
         let hash: String
         var fileURL = source
 
@@ -319,7 +324,21 @@ public final class Importer: Sendable {
             ).insert(db)
 
             try Catalog.addKeywords(db, names: metadata.xmp.keywords + options.keywords, to: [assetID])
-            return .imported(assetID, importedURL)
+            if let settings = initialSettings,
+               let versionID = try Catalog.masterVersionID(db, assetID: assetID, create: true) {
+                var history = DevelopHistory()
+                if recovered != nil {
+                    history.steps = [DevelopHistory.Step(name: "Recovered from XMP", settings: settings)]
+                    history.position = 0
+                } else {
+                    history.record("Import Preset: \(options.developPreset?.name ?? "Preset")",
+                                   settings: settings, previous: .neutral)
+                }
+                try DevelopSettingsRecord(versionId: versionID, schemaVersion: settings.schemaVersion,
+                    json: settings.encoded(), historyJson: history.encoded(), updatedAt: Date()).save(db)
+                try AssetMetadata.filter(key: assetID).updateAll(db, Column("xmpDirty").set(to: true))
+            }
+            return .imported(assetID, importedURL, hasSettings: initialSettings != nil)
         }
     }
 

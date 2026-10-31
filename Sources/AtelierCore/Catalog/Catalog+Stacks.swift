@@ -61,7 +61,7 @@ extension Importer {
                            provenance: String? = nil) throws -> Int64 {
         let id: Int64
         switch try importFile(url, options: ImportOptions(buildPreviews: false)) {
-        case .imported(let newID, _): id = newID
+        case .imported(let newID, _, _): id = newID
         case .existing(let existingID): id = existingID
         }
         try catalog.stack(id, on: parentID, kind: kind, name: name, provenance: provenance)

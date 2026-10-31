@@ -428,6 +428,7 @@ final class DevelopController: ObservableObject {
     private var dirty = false
     private let queue = DispatchQueue(label: "atelier.develop", qos: .userInteractive)
     var onPreviewsUpdated: ((Int64) -> Void)?
+    var onSettingsSaved: ((Int64) -> Void)?
     /// Unedited RAW files whose preview was replaced by a render this launch.
     private var developedPreviews = Set<Int64>()
 
@@ -1228,7 +1229,13 @@ final class DevelopController: ObservableObject {
     func apply(_ newSettings: DevelopSettings, onto assetIDs: [Int64]?, step: String) {
         let targets = assetIDs ?? assetID.map { [$0] } ?? []
         for id in targets where id != assetID {
-            try? catalog.saveDevelopSettings(newSettings, for: id, step: step)
+            do {
+                try catalog.saveDevelopSettings(newSettings, for: id, step: step)
+                onSettingsSaved?(id)
+            } catch {
+                errorMessage = "Could not save: \(error.localizedDescription)"
+                continue
+            }
             refreshPreviews(for: id, settings: newSettings)
         }
         if let assetID, targets.contains(assetID) {
@@ -1274,7 +1281,13 @@ final class DevelopController: ObservableObject {
         for id in targets where id != assetID {
             let base = (try? catalog.developSettings(for: id)) ?? .neutral
             let newSettings = preset.applied(to: base)
-            try? catalog.saveDevelopSettings(newSettings, for: id, step: step)
+            do {
+                try catalog.saveDevelopSettings(newSettings, for: id, step: step)
+                onSettingsSaved?(id)
+            } catch {
+                errorMessage = "Could not save: \(error.localizedDescription)"
+                continue
+            }
             refreshPreviews(for: id, settings: newSettings)
         }
         if let assetID, targets.contains(assetID) {
@@ -1735,7 +1748,9 @@ final class DevelopController: ObservableObject {
         let settings = self.settings
         do {
             try catalog.saveDevelop(settings, history: history, for: assetID)
+            onSettingsSaved?(assetID)
         } catch {
+            dirty = true
             errorMessage = "Could not save: \(error.localizedDescription)"
             return
         }
