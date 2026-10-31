@@ -1,0 +1,102 @@
+{
+  "os" : "Version 26.0.1 (Build 25A362)",
+  "raw" : [
+    {
+      "defaults" : {
+        "baselineExposure" : 0.34999999403953552,
+        "boost" : 1,
+        "decoder" : "8",
+        "edr" : 0,
+        "localTone" : 0,
+        "shadowBias" : 3
+      },
+      "file" : "_RZF0632.NEF",
+      "fullFloatTIFFBytes" : 390203646,
+      "fullFloatTIFFSeconds" : 0.28177595138549805,
+      "minusOneEVAbsoluteErrorP99" : 2.9802322387695312e-08,
+      "minusOneEVRatioMedian" : 0.5,
+      "nativeSize" : [
+        6048,
+        4032
+      ],
+      "originalUnchanged" : true,
+      "proxyDecodeSeconds" : 0.090555071830749512,
+      "proxyMaximum" : 1.8168548345565796,
+      "sha256" : "6f991e815da6211e29a4f731201719c64c92f9d4e3b4a40a47ed1dfaad126c5c",
+      "toneMappedProxyBits" : 16,
+      "toneMappedProxyMaximumError" : 1.1175870895385742e-05,
+      "whiteBalanceTemperature" : 4958.83447265625,
+      "whiteBalanceTint" : 7.5613055229187012
+    },
+    {
+      "defaults" : {
+        "baselineExposure" : 0.34999999403953552,
+        "boost" : 1,
+        "decoder" : "8",
+        "edr" : 0,
+        "localTone" : 0,
+        "shadowBias" : 3
+      },
+      "file" : "Z62_0210.NEF",
+      "fullFloatTIFFBytes" : 389429412,
+      "fullFloatTIFFSeconds" : 0.3246999979019165,
+      "minusOneEVAbsoluteErrorP99" : 2.9802322387695312e-08,
+      "minusOneEVRatioMedian" : 0.5,
+      "nativeSize" : [
+        6048,
+        4024
+      ],
+      "originalUnchanged" : true,
+      "proxyDecodeSeconds" : 0.093484997749328613,
+      "proxyMaximum" : 2.1922578811645508,
+      "sha256" : "8a8d62a92e0c22715de11ef58999ca924208e962379947666fde176a641a67ba",
+      "toneMappedProxyBits" : 16,
+      "toneMappedProxyMaximumError" : 1.1861324310302734e-05,
+      "whiteBalanceTemperature" : 6059.17626953125,
+      "whiteBalanceTint" : 4.9362044334411621
+    }
+  ],
+  "synthetic" : {
+    "bitsPerComponent" : 16,
+    "dimensions" : [
+      512,
+      256
+    ],
+    "exposureScales" : [
+      0.0625,
+      0.25,
+      1
+    ],
+    "fallbackPixels" : 0,
+    "floatTIFFMaximumError" : 0,
+    "iccBytes" : 3144,
+    "mergeMaximumError" : 4.76837158203125e-07,
+    "profile" : "sRGB IEC61966-2.1",
+    "sceneMaximum" : 8,
+    "toneMappedTIFFMaximumLinearError" : 1.5199184417724609e-05
+  },
+  "visionTranslation" : [
+    {
+      "expected" : [
+        -7,
+        5
+      ],
+      "exposureEV" : 0,
+      "pixelError" : 0,
+      "seconds" : 0.0039689540863037109,
+      "tx" : -7,
+      "ty" : 5
+    },
+    {
+      "expected" : [
+        -7,
+        5
+      ],
+      "exposureEV" : 2,
+      "pixelError" : 183.70900903330789,
+      "seconds" : 0.0020529031753540039,
+      "tx" : 18,
+      "ty" : -177
+    }
+  ]
+}
