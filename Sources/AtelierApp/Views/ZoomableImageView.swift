@@ -67,7 +67,6 @@ final class ZoomState: ObservableObject {
         view.applyPendingCenter()
         // Draw it now rather than when the window's update ends.
         CATransaction.flush()
-        SelectionTrace.mark("showNow: flushed \(Int(image.size.width))x\(Int(image.size.height))")
     }
 }
 
@@ -148,7 +147,6 @@ struct ZoomableImageView: NSViewRepresentable {
     var overlay: ((PhotoFrame) -> AnyView)? = nil
 
     func makeNSView(context: Context) -> ZoomScrollView {
-        SelectionTrace.mark("NEW photo view created")
         let view = ZoomScrollView()
         // A new photo view (back from another mode) starts on the spot the last one showed.
         view.pendingCenter = zoom.viewport.center
@@ -625,7 +623,6 @@ final class ZoomCanvasView: NSView {
         guard image !== currentImage else { return }
         currentImage = image
         layer?.contents = image?.cgImage(forProposedRect: nil, context: nil, hints: nil)
-        SelectionTrace.mark("canvas.setImage \(image.map { "\(Int($0.size.width))x\(Int($0.size.height))" } ?? "nil") frame \(Int(frame.width))x\(Int(frame.height)) hidden \(isHiddenOrHasHiddenAncestor) window \(window != nil)")
     }
 
     // MARK: Cursor

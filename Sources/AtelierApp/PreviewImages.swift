@@ -18,7 +18,8 @@ final class PreviewImages {
     private var entries: [Int64: Entry] = [:]
     /// Least recently used first.
     private var order: [Int64] = []
-    private var inFlight: [Int64: Task<NSImage?, Never>] = [:]
+    /// Decodes running now, with the preview file's date when each started.
+    private var inFlight: [Int64: (modified: Date?, task: Task<NSImage?, Never>)] = [:]
 
     /// The decoded preview, if it is in memory and its file hasn't changed.
     func cached(_ id: Int64, at url: URL) -> NSImage? {
@@ -28,15 +29,25 @@ final class PreviewImages {
     }
 
     /// Decodes the preview off the main thread, or returns the one in memory.
-    func load(_ id: Int64, at url: URL, priority: TaskPriority = .userInitiated) async -> NSImage? {
+    /// The file's date is read before and after decoding: a preview rebuilt meanwhile (after an
+    /// edit) may have been read half old, so it is decoded again rather than kept as current.
+    func load(_ id: Int64, at url: URL, priority: TaskPriority = .userInitiated, attempts: Int = 2) async -> NSImage? {
         if let image = cached(id, at: url) { return image }
-        if let task = inFlight[id] { return await task.value }
-        let task = Task.detached(priority: priority) { () -> NSImage? in ThumbnailLoader.decode(url) }
-        inFlight[id] = task
+        let modified = Self.modified(url)
+        let task: Task<NSImage?, Never>
+        if let flight = inFlight[id], flight.modified == modified {
+            task = flight.task
+        } else {
+            task = Task.detached(priority: priority) { () -> NSImage? in ThumbnailLoader.decode(url) }
+            inFlight[id] = (modified, task)
+        }
         let image = await task.value
-        inFlight[id] = nil
+        if inFlight[id]?.task == task { inFlight[id] = nil }
+        guard Self.modified(url) == modified else {
+            return attempts > 1 ? await load(id, at: url, priority: priority, attempts: attempts - 1) : nil
+        }
         if let image {
-            entries[id] = Entry(image: image, modified: Self.modified(url))
+            entries[id] = Entry(image: image, modified: modified)
             touch(id)
         }
         return image

@@ -35,7 +35,11 @@ final class DevelopController: ObservableObject {
 
     @Published private(set) var assetID: Int64?
     @Published private(set) var settings = DevelopSettings()
-    @Published private(set) var image: NSImage?
+    @Published private(set) var image: NSImage? {
+        didSet { if image !== oldValue, showsPreviousPhoto, oldValue != nil { showsPreviousPhoto = false } }
+    }
+    /// `image` is still the previous photo, held so the view never clears between photos.
+    private(set) var showsPreviousPhoto = false
     /// `image` is the whole, uncropped photo (rendered for the crop tool) rather than the crop.
     @Published private(set) var imageIsWhole = false
     @Published private(set) var isLoading = false
@@ -452,7 +456,10 @@ final class DevelopController: ObservableObject {
         flushSave()
         self.assetID = assetID
         session = nil
+        // Kept on screen until the next photo has an image (AT-019), never used as this photo's.
+        let previousImage = image
         image = nil
+        showsPreviousPhoto = false
         imageIsWhole = false
         beforeImage = nil
         histogram = nil
@@ -487,22 +494,25 @@ final class DevelopController: ObservableObject {
         committed = settings
         pendingStep = nil
         // Show the cached preview immediately while the editable proxy decodes: decoded in
-        // memory when it was shown or prefetched lately, else the grid thumbnail until it is
-        // decoded off the main thread.
+        // memory when it was shown or prefetched lately, else the grid thumbnail (also when there
+        // is no preview yet), else the previous photo, until the preview is decoded off the main
+        // thread or the proxy renders.
         let cachedPreview = previews.url(for: assetID, size: .preview)
-        if previews.has(.preview, for: assetID), let decoded = PreviewImages.shared.cached(assetID, at: cachedPreview) {
+        let hasPreview = previews.has(.preview, for: assetID)
+        let url = try? catalog.fileURL(for: assetID)
+        if hasPreview, let decoded = PreviewImages.shared.cached(assetID, at: cachedPreview) {
             image = decoded
-            SelectionTrace.mark("develop.open: decoded preview from memory")
         } else {
-            // The thumbnail too when there is no preview yet, so the photo never waits for the proxy.
-            let placeholder = ThumbnailLoader.shared.cached(assetID)
+            var placeholder = ThumbnailLoader.shared.cached(assetID)
+            // Only while something is coming to replace it.
+            if placeholder == nil, hasPreview || url != nil, !isMasking, let previousImage {
+                placeholder = previousImage
+                showsPreviousPhoto = true
+            }
             image = placeholder
-            let hasPreview = previews.has(.preview, for: assetID)
-            SelectionTrace.mark("develop.open: thumbnail placeholder \(placeholder == nil ? "MISSING" : "shown"), preview on disk: \(hasPreview)")
             if hasPreview {
                 Task {
                     let decoded = await PreviewImages.shared.load(assetID, at: cachedPreview)
-                    SelectionTrace.mark("develop: preview decoded")
                     // Not once the proxy has rendered, or for another photo.
                     guard self.assetID == assetID, self.image === placeholder, let decoded else { return }
                     self.image = decoded
@@ -510,7 +520,7 @@ final class DevelopController: ObservableObject {
             }
         }
 
-        guard let url = try? catalog.fileURL(for: assetID) else {
+        guard let url else {
             errorMessage = "The original is offline. Connect its drive to edit this photo."
             return
         }
@@ -527,9 +537,9 @@ final class DevelopController: ObservableObject {
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     guard self.assetID == assetID else { return }
-                    SelectionTrace.mark("develop: proxy session ready")
                     self.isLoading = false
                     guard let session else {
+                        if self.showsPreviousPhoto { self.image = nil }
                         self.errorMessage = "This file can't be opened for editing."
                         return
                     }
@@ -1620,7 +1630,6 @@ final class DevelopController: ObservableObject {
                     // next render replaces it.
                     if self.assetID == assetID, cropping != self.isCropping, let cgImage {
                         self.image = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
-                        SelectionTrace.mark("develop: render shown \(cgImage.width)x\(cgImage.height)")
                         self.imageIsWhole = !cropping
                         if let histogram { self.histogram = histogram }
                         if let scope { self.colorScope = scope }

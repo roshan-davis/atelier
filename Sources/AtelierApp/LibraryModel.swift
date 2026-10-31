@@ -85,17 +85,15 @@ final class LibraryModel: ObservableObject {
     @Published var focusedID: Int64? {
         didSet {
             guard focusedID != oldValue else { return }
-            SelectionTrace.chose(focusedID, mode: "\(mode)")
             zoomForNextPhoto(leaving: oldValue)
             reloadDetail()
             if mode == .develop {
                 develop.open(focusedID)
-                if let image = develop.image, let width = detail?.asset.width, let height = detail?.asset.height {
+                if let image = develop.image, !develop.showsPreviousPhoto, let width = detail?.asset.width, let height = detail?.asset.height {
                     zoomState.showNow(image, pixelSize: develop.croppedPixelSize(assetSize: CGSize(width: width, height: height)))
                 }
             }
             prefetchNeighbourPreviews()
-            SelectionTrace.mark("focusedID didSet done")
         }
     }
     @Published var detail: AssetDetail?
