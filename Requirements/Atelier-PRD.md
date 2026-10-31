@@ -459,6 +459,8 @@ As built (Oct 26, 2026):
 
 ### Processor plugins (headless tools)
 
+**Architecture discussion (AT-021, October 30, 2026):** [Processor architecture draft](Design/AT-021-Processor-Architecture.md) documents current implementation gaps and a proposed incremental host. Its ordered/linear-RAW inputs, native plugin dialog ownership and execution isolation are proposals awaiting agreement, not changes to the requirements below or implemented capabilities. HDR Merge is a feasibility example, not a shipped feature.
+
 For tools without a UI (command-line denoisers, scripts, other AI servers):
 
 - A plugin is a folder with a `manifest.json` (name, version, inputs, parameters schema, output format) and an executable or an HTTP endpoint.
