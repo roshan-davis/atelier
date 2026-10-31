@@ -50,6 +50,25 @@ final class ZoomState: ObservableObject {
     /// The photo views using this zoom. Those on screen together (the before and after compare
     /// panes) stay on the same spot at the same zoom.
     let views = NSHashTable<ZoomScrollView>.weakObjects()
+
+    /// Puts the next photo on the photo view now, before SwiftUI's update for it, which redraws
+    /// the whole window and can take a few hundred ms (measured 190 to 320 ms in a Debug build,
+    /// AT-019). Only with one plain photo view on screen; compare panes and tools wait for the
+    /// update. The update then passes the same image, which changes nothing.
+    func showNow(_ image: NSImage, pixelSize: CGSize?) {
+        let onScreen = views.allObjects.filter { $0.window != nil }
+        guard onScreen.count == 1, let view = onScreen.first, view.visibleWidth == nil, !view.hasOverlay else { return }
+        if let center = pendingCenter {
+            view.pendingCenter = center
+            pendingCenter = nil
+        }
+        view.setImage(image, pixelSize: pixelSize)
+        view.apply(level)
+        view.applyPendingCenter()
+        // Draw it now rather than when the window's update ends.
+        CATransaction.flush()
+        SelectionTrace.mark("showNow: flushed \(Int(image.size.width))x\(Int(image.size.height))")
+    }
 }
 
 /// The part of the photo the photo view shows. Its own object so that scrolling redraws only
