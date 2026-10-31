@@ -72,7 +72,7 @@ extension Catalog {
         return try writer.read { db in
             let placeholders = Array(repeating: "?", count: ids.count).joined(separator: ",")
             return Set(try Int64.fetchAll(db, sql: """
-                SELECT asset.id FROM asset WHERE asset.id IN (\(placeholders)) AND \(privateCondition())
+                SELECT asset.id FROM asset WHERE asset.id IN (\(placeholders)) AND \(Self.privateCondition())
                 """, arguments: StatementArguments(Array(ids))))
         }
     }
