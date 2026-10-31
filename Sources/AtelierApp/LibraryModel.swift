@@ -633,8 +633,10 @@ final class LibraryModel: ObservableObject {
             }
             await MainActor.run {
                 self.status = message
-                self.problems = failures.map { Problem(name: $0.url.lastPathComponent, reason: $0.reason) }
-                self.problemsTitle = "These XMP sidecars could not be written"
+                if !failures.isEmpty {
+                    self.problems = failures.map { Problem(name: $0.url.lastPathComponent, reason: $0.reason) }
+                    self.problemsTitle = "These XMP sidecars could not be written"
+                }
             }
         }
     }
@@ -681,7 +683,7 @@ final class LibraryModel: ObservableObject {
                     self.sidebarSelection = .importGroup(groupID)
                 }
                 if UserDefaults.standard.bool(forKey: "xmp.autoWrite") {
-                    self.autoWriteXMP(result.importedAssetIDs)
+                    self.autoWriteXMP(result.developedAssetIDs)
                 }
                 then?(result)
                 self.problems = result.failures.map { Problem(name: $0.url.lastPathComponent, reason: $0.reason) }

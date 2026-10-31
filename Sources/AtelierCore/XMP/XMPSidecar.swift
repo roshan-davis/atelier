@@ -35,7 +35,12 @@ public enum XMPSidecar {
         let data = try Data(contentsOf: url)
         guard let metadata = CGImageMetadataCreateFromXMPData(data as CFData),
               let mutable = CGImageMetadataCreateMutableCopy(metadata) else {
-            throw DevelopRecovery.RecoveryError.invalidSidecar
+            // Preserve legacy import behavior for unreadable foreign metadata, while
+            // refusing to silently lose a recognizable Atelier recovery packet. Dropping
+            // NULs also recognizes ASCII markers in UTF-16/32 packets with damaged XML.
+            let text = String(decoding: data, as: UTF8.self).replacingOccurrences(of: "\0", with: "")
+            if text.contains("DevelopRecovery") { throw DevelopRecovery.RecoveryError.invalidSidecar }
+            return nil
         }
         CGImageMetadataRegisterNamespaceForPrefix(mutable, atelierNamespace as CFString,
                                                   atelierPrefix as CFString, nil)

@@ -14,9 +14,9 @@ extension Catalog {
         XMPSidecar.writeLock.lock()
         defer { XMPSidecar.writeLock.unlock() }
         // A virtual copy shares its master's file, so only the master writes the sidecar.
-        let (jobs, copies): ([(Int64, URL?, XMPFields, String)], [Int64]) = try writer.read { db in
+        let (jobs, copies): ([(Int64, URL?, XMPFields, String?)], [Int64]) = try writer.read { db in
             let ids = try assetIDs ?? Int64.fetchAll(db, sql: "SELECT assetId FROM metadata WHERE xmpDirty = 1")
-            var jobs: [(Int64, URL?, XMPFields, String)] = []
+            var jobs: [(Int64, URL?, XMPFields, String?)] = []
             var copies: [Int64] = []
             for id in ids {
                 guard let detail = try Self.fetchDetail(db, assetID: id) else { continue }
@@ -29,7 +29,7 @@ extension Catalog {
                                        keywords: detail.keywords, title: m.title, caption: m.caption)
                 let versionID = try Self.masterVersionID(db, assetID: id, create: false)
                 let record = try versionID.flatMap { try DevelopSettingsRecord.fetchOne(db, key: $0) }
-                jobs.append((id, detail.fileURL, fields, try record?.json ?? DevelopSettings.neutral.encoded()))
+                jobs.append((id, detail.fileURL, fields, record?.json))
             }
             return (jobs, copies)
         }
@@ -42,7 +42,7 @@ extension Catalog {
                 continue
             }
             do {
-                let settings = try DevelopRecovery.settings(json)
+                let settings = try json.map(DevelopRecovery.settings)
                 try XMPSidecar.write(fields, toSidecar: XMPSidecar.sidecarURL(for: url),
                                      develop: settings, filename: url.lastPathComponent)
                 // A save during the file write must stay dirty. Compare the entire snapshot.
@@ -53,7 +53,7 @@ extension Catalog {
                                             keywords: detail.keywords, title: m.title, caption: m.caption)
                     let version = try Self.masterVersionID(db, assetID: id, create: false)
                     let record = try version.flatMap { try DevelopSettingsRecord.fetchOne(db, key: $0) }
-                    let currentJSON = try record?.json ?? DevelopSettings.neutral.encoded()
+                    let currentJSON = record?.json
                     if current == fields && currentJSON == json {
                         try AssetMetadata.filter(key: id).updateAll(db, Column("xmpDirty").set(to: false))
                     }

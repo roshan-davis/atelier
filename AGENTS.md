@@ -112,6 +112,13 @@ Either way, GitHub is the only hand-off: Rosh sees a change after it's pushed an
 - Fetch the PR base first. Whitespace validation compares the working tree to the merge base with `origin/main`, including committed changes and new files; use `--base <ref>` for another base. Inspect test logs for skipped RAW fixtures.
 - The local check does not render or inspect GUI snapshots. UI changes still require the snapshot review below. No GitHub setup is needed for the local check.
 
+### Cloud review when macOS is unavailable
+
+- A cloud agent without macOS/full Xcode must still review the diff and run applicable portable checks. State exactly which checks were run, skipped or unavailable; a missing toolchain is a limitation, not a build failure or a pass. Do not try to replace the native macOS checks with Linux Swift or ask Rosh to paste build errors.
+- For a read-only review, the reviewer may cite a Mac agent's existing `Scripts/check_pr.py` result for the **same exact commit**. Verify the checked SHA against the reviewed PR head and read the recorded result, working changes, summary/log location and skipped tests. Attribute it explicitly: “Source reviewed at `<SHA>`; macOS validation performed by Codex at `<SHA>`: `<result>`, logs `<location>`, skips `<details>`. I did not independently run the Mac checks.” A generic reported pass without revision/evidence is insufficient. If logs are not accessible in the cloud, say so; do not imply independent verification of their contents.
+- If the cloud agent changes code, the prior Mac pass does not validate the new head. Push the changes, then request a Mac agent check the new commit in a separate task worktree from that exact head, without touching Rosh's active Xcode checkout. The Mac agent runs the required checks, reports failures directly and records fresh evidence in the PR. Fix failures and repeat at the resulting head. Keep native validation pending if no Mac agent is available; source approval alone must not be presented as complete validation.
+- A later documentation-only commit may cite an earlier build/test result only with both SHAs and a verified empty diff for the relevant source/tests/build inputs; label this inherited evidence, not a fresh final-head run. Prefer a fresh final-head check before handoff. GUI snapshots, real RAW skips, live integration tests and Rosh's manual acceptance remain separate; neither source review nor a passing build substitutes for them. Check GitHub Actions for the actual head and report unavailable/blocked CI separately from local results. Never merge without Rosh's instruction.
+
 
 ## Pull requests
 

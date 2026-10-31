@@ -51,6 +51,8 @@ public struct ImportProgress: Sendable {
     public var previewsBuilt = 0
     public var failures: [ImportFailure] = []
     public var importedAssetIDs: [Int64] = []
+    /// New photos that received recovered settings or an import preset; auto-write only these.
+    public var developedAssetIDs: [Int64] = []
     /// The import entry the photos were added to.
     public var importGroupId: Int64?
     /// Each source file's photo, new or already in the catalog.
@@ -66,7 +68,7 @@ public struct ImportProgress: Sendable {
 }
 
 enum ImportOutcome {
-    case imported(Int64, URL)
+    case imported(Int64, URL, hasSettings: Bool)
     /// Already in the catalog; it still joins the import entry.
     case existing(Int64)
 }
@@ -148,8 +150,9 @@ public final class Importer: Sendable {
                 do {
                     let assetID: Int64
                     switch try outcome.get() {
-                    case .imported(let id, let url):
+                    case .imported(let id, let url, let hasSettings):
                         state.imported += 1
+                        if hasSettings { state.developedAssetIDs.append(id) }
                         imported.append((index, id, url))
                         assetID = id
                     case .existing(let id):
@@ -335,7 +338,7 @@ public final class Importer: Sendable {
                     json: settings.encoded(), historyJson: history.encoded(), updatedAt: Date()).save(db)
                 try AssetMetadata.filter(key: assetID).updateAll(db, Column("xmpDirty").set(to: true))
             }
-            return .imported(assetID, importedURL)
+            return .imported(assetID, importedURL, hasSettings: initialSettings != nil)
         }
     }
 

@@ -114,7 +114,7 @@ final class XMPRecoveryTests: XCTestCase {
     func testInvalidOrFutureDataIsPreservedAndImportReportsProblem() async throws {
         let file = try image()
         let sidecar = XMPSidecar.sidecarURL(for: file)
-        for value in ["not XML", recoveryXML(format: 99, settings: #"{"schemaVersion":3}"#),
+        for value in ["<atelier:DevelopRecovery>truncated", recoveryXML(format: 99, settings: #"{"schemaVersion":3}"#),
                       recoveryXML(settings: #"{"schemaVersion":999,"exposure":1}"#),
                       recoveryXML(settings: #"{"schemaVersion":3,"masks":"broken"}"#),
                       recoveryXML(settings: #"{"schemaVersion":3,"profile":"unknown"}"#),
@@ -235,6 +235,72 @@ final class XMPRecoveryTests: XCTestCase {
         let offline = try catalog.writeXMPSidecars()
         XCTAssertEqual(offline.offline, 1)
         XCTAssertTrue(try XCTUnwrap(catalog.detail(for: id)).metadata.xmpDirty)
+    }
+
+    func testMetadataOnlyWriteDoesNotSuppressFreshImportPreset() async throws {
+        let file = try image()
+        let catalog = try Catalog()
+        let id = try await importPhoto(file, into: catalog)
+        try catalog.setRating(4, for: [id])
+        XCTAssertEqual(try catalog.writeXMPSidecars().written, 1)
+        XCTAssertNil(try XMPSidecar.readDevelop(for: file))
+        var settings = DevelopSettings()
+        settings.exposure = 1.2
+        let preset = DevelopPreset(name: "Fresh import", parts: [.exposure], settings: settings)
+        let restored = try Catalog()
+        let restoredID = try await importPhoto(file, into: restored,
+            options: ImportOptions(buildPreviews: false, developPreset: preset))
+        XCTAssertEqual(try restored.developSettings(for: restoredID).exposure, 1.2)
+        XCTAssertEqual(try restored.detail(for: restoredID)?.metadata.rating, 4)
+    }
+
+    func testUnreadableForeignSidecarDoesNotBlockImportOrOverwriteIt() async throws {
+        let file = try image()
+        let sidecar = XMPSidecar.sidecarURL(for: file)
+        let foreign = Data("<foreign:metadata>truncated foreign data".utf8)
+        try foreign.write(to: sidecar)
+        XCTAssertNil(try XMPSidecar.readDevelop(for: file))
+        let catalog = try Catalog()
+        let id = try await importPhoto(file, into: catalog)
+        XCTAssertEqual(try catalog.developSettings(for: id), .neutral)
+        XCTAssertThrowsError(try XMPSidecar.write(XMPFields(), toSidecar: sidecar))
+        XCTAssertEqual(try Data(contentsOf: sidecar), foreign)
+        // Recognition also protects a damaged UTF-16 Atelier packet.
+        try "<atelier:DevelopRecovery>broken".data(using: .utf16)!.write(to: sidecar)
+        XCTAssertThrowsError(try XMPSidecar.readDevelop(for: file))
+    }
+
+    func testExistingReferenceIsSkippedBeforeDamagedRecoveryIsRead() async throws {
+        let file = try image()
+        let catalog = try Catalog()
+        let id = try await importPhoto(file, into: catalog)
+        try catalog.saveDevelopSettings(edited(), for: id)
+        let before = try catalog.developSettings(for: id)
+        try Data("<atelier:DevelopRecovery>truncated".utf8).write(to: XMPSidecar.sidecarURL(for: file))
+        let result = await Importer(catalog: catalog, previews: nil)
+            .run(sources: [file], options: ImportOptions(buildPreviews: false))
+        XCTAssertEqual(result.skipped, 1)
+        XCTAssertTrue(result.failures.isEmpty)
+        XCTAssertEqual(try catalog.developSettings(for: id), before)
+    }
+
+    func testImportAutoWriteCandidatesExcludeUntouchedPhotos() async throws {
+        let file = try image()
+        let untouched = await Importer(catalog: try Catalog(), previews: nil)
+            .run(sources: [file], options: ImportOptions(buildPreviews: false))
+        XCTAssertEqual(untouched.imported, 1)
+        XCTAssertTrue(untouched.developedAssetIDs.isEmpty)
+        var settings = DevelopSettings()
+        settings.exposure = 0.5
+        let preset = DevelopPreset(name: "Preset", parts: [.exposure], settings: settings)
+        let presetImport = await Importer(catalog: try Catalog(), previews: nil)
+            .run(sources: [file], options: ImportOptions(buildPreviews: false, developPreset: preset))
+        XCTAssertEqual(presetImport.developedAssetIDs, presetImport.importedAssetIDs)
+        try XMPSidecar.write(XMPFields(), toSidecar: XMPSidecar.sidecarURL(for: file),
+                             develop: .neutral, filename: file.lastPathComponent)
+        let recovered = await Importer(catalog: try Catalog(), previews: nil)
+            .run(sources: [file], options: ImportOptions(buildPreviews: false))
+        XCTAssertEqual(recovered.developedAssetIDs, recovered.importedAssetIDs)
     }
 
     private func recoveryXML(format: Int = 1, settings: String) -> String {
