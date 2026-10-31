@@ -54,7 +54,7 @@ struct FilterBar: View {
         Picker("Rating", selection: $model.filter.minRating) {
             Text("Any").tag(0)
             ForEach(1...5, id: \.self) { stars in
-                Text(String(repeating: "★", count: stars) + " +").tag(stars)
+                Text(String(repeating: "★", count: stars) + (stars < 5 ? " +" : "")).tag(stars)
             }
         }
     }

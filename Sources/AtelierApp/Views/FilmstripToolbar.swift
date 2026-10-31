@@ -285,7 +285,8 @@ extension LibraryModel {
         let flags: [(String, Flag?)] = [("Any Flag", nil), ("Picked", .picked), ("Unflagged", Flag.none), ("Rejected", .rejected)]
         section("Flag", \.flag, flags)
         var ratings: [(String, Int)] = [("Any Rating", 0)]
-        for stars in 1...5 { ratings.append((String(repeating: "★", count: stars) + " and Higher", stars)) }
+        // Five stars is the top rating, so it has no "and Higher".
+        for stars in 1...5 { ratings.append((String(repeating: "★", count: stars) + (stars < 5 ? " and Higher" : ""), stars)) }
         section("Rating", \.minRating, ratings)
         var labels: [(String, ColorLabel?)] = [("Any Label", nil)]
         for label in ColorLabel.allCases { labels.append((label.rawValue, label)) }

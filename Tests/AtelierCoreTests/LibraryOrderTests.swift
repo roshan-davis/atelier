@@ -106,6 +106,7 @@ final class LibraryOrderTests: XCTestCase {
         XCTAssertFalse(filter.cleared.isFiltering)
         XCTAssertEqual(filter.summary, ["Picked", "★2+", "Red", "Edited", "“sea”"])
         XCTAssertEqual(LibraryFilter(flag: Flag.none).summary, ["Unflagged"])
+        XCTAssertEqual(LibraryFilter(minRating: 5).summary, ["★5"])
         XCTAssertEqual(filter.cleared.summary, [])
     }
 

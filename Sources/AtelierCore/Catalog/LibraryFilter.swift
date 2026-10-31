@@ -70,7 +70,7 @@ public struct LibraryFilter: Hashable, Sendable {
         case .none?: parts.append("Unflagged")
         case nil: break
         }
-        if minRating > 0 { parts.append("★\(minRating)+") }
+        if minRating > 0 { parts.append(minRating >= 5 ? "★5" : "★\(minRating)+") }
         if let colorLabel { parts.append(colorLabel.rawValue) }
         if let edited { parts.append(edited ? "Edited" : "Unedited") }
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
