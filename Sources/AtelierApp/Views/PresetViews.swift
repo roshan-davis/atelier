@@ -24,7 +24,7 @@ struct PresetsSection: View {
     @Binding var isExpanded: Bool
     @State private var search = ""
     /// Groups opened or closed away from their default (the user's open, built-in packs closed).
-    @AppStorage("presets.toggledGroups") private var toggledList = ""
+    @AppStorage(PresetPreferences.toggledGroupsKey) private var toggledList = ""
     @State private var hoverTask: Task<Void, Never>?
     @State private var newPresetGroup: String?
     @State private var updating: DevelopPreset?

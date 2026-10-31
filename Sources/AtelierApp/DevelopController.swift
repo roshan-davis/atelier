@@ -365,8 +365,14 @@ final class DevelopController: ObservableObject {
     @Published private(set) var presets: [DevelopPreset] = []
     private let presetStore = PresetStore(fileURL: PresetStore.defaultURL)
     /// Built-in packs hidden with Hide Group or Develop > Manage Presets….
-    @Published var hiddenPresetGroups = Set(UserDefaults.standard.stringArray(forKey: "presets.hiddenGroups") ?? []) {
-        didSet { UserDefaults.standard.set(hiddenPresetGroups.sorted(), forKey: "presets.hiddenGroups") }
+    /// Reading it first carries over choices saved under a renamed pack's old name, before
+    /// this or the Presets panel's toggled groups are read.
+    @Published var hiddenPresetGroups = DevelopController.savedHiddenPresetGroups() {
+        didSet { UserDefaults.standard.set(hiddenPresetGroups.sorted(), forKey: PresetPreferences.hiddenGroupsKey) }
+    }
+    private static func savedHiddenPresetGroups() -> Set<String> {
+        PresetPreferences.migrate()
+        return Set(UserDefaults.standard.stringArray(forKey: PresetPreferences.hiddenGroupsKey) ?? [])
     }
     /// The presets to list: all but the hidden packs.
     var visiblePresets: [DevelopPreset] {

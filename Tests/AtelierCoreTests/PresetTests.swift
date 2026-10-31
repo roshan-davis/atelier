@@ -223,4 +223,41 @@ final class PresetTests: XCTestCase {
         color.monochrome = true
         XCTAssertNotNil(ColorLUT.cube(for: color))
     }
+
+    // MARK: Renamed packs keep their hidden and open state
+
+    func testRenamedPackStaysHiddenAndExpanded() throws {
+        let suite = "AtelierPresetPrefs-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        // Saved by the version that called the pack "Atelier".
+        defaults.set(["Atelier", "Film"], forKey: PresetPreferences.hiddenGroupsKey)
+        defaults.set("pack:Atelier\npack:Street\nuser:Atelier\nuser:Weddings", forKey: PresetPreferences.toggledGroupsKey)
+
+        PresetPreferences.migrate(defaults)
+
+        XCTAssertEqual(defaults.stringArray(forKey: PresetPreferences.hiddenGroupsKey), ["Film", "Lightfast"])
+        // The built-in pack's entry moves; a user group that happens to be called Atelier keeps its own.
+        XCTAssertEqual(defaults.string(forKey: PresetPreferences.toggledGroupsKey),
+                       "pack:Lightfast\npack:Street\nuser:Atelier\nuser:Weddings")
+        XCTAssertTrue(DevelopPreset.builtInGroups.contains("Lightfast"))
+
+        // It runs once: choices made after the upgrade aren't touched again.
+        defaults.set(["Film"], forKey: PresetPreferences.hiddenGroupsKey)
+        defaults.set("pack:Atelier", forKey: PresetPreferences.toggledGroupsKey)
+        PresetPreferences.migrate(defaults)
+        XCTAssertEqual(defaults.stringArray(forKey: PresetPreferences.hiddenGroupsKey), ["Film"])
+        XCTAssertEqual(defaults.string(forKey: PresetPreferences.toggledGroupsKey), "pack:Atelier")
+    }
+
+    func testPackRenameWithNothingSaved() throws {
+        let suite = "AtelierPresetPrefs-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        PresetPreferences.migrate(defaults)
+        XCTAssertNil(defaults.stringArray(forKey: PresetPreferences.hiddenGroupsKey))
+        XCTAssertNil(defaults.string(forKey: PresetPreferences.toggledGroupsKey))
+        XCTAssertEqual(PresetPreferences.migratedHiddenGroups(["Atelier", "Lightfast"]), ["Lightfast"])
+        XCTAssertEqual(PresetPreferences.migratedToggledGroups("pack:Atelier\npack:Lightfast"), "pack:Lightfast")
+    }
 }
