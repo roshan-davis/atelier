@@ -44,7 +44,7 @@ Evidence baseline, October 30, 2026:
 
 ## AT-004 — Develop settings and masks in XMP recovery
 
-**Status:** In progress — Rosh approved the proposed scope and defaults in this chat. **Owner:** Co (Codex). **Chat:** [Develop and mask XMP recovery](codex://threads/01a18ee6-6bd5-7ec3-a719-478c7424b395). **Branch:** `codex/xmp-develop-recovery`. **PR:** [#67](https://github.com/roshan-davis/atelier/pull/67) (draft; Help visual review pending). **Dependencies:** format and conflict policy agreed in this chat; wider recovery remains AT-005.
+**Status:** Done — merged PR #67 at `5fec14fd2aa0b0ceff41e6a717a3f9772730725b`; acceptance limits below remain open. **Owner:** Co (Codex). **Chat:** [Develop and mask XMP recovery](codex://threads/01a18ee6-6bd5-7ec3-a719-478c7424b395). **Branch:** `codex/xmp-develop-recovery`. **PR:** [#67](https://github.com/roshan-davis/atelier/pull/67). **Dependencies:** format and conflict policy agreed in this chat; wider recovery remains AT-005.
 
 **Evidence:** review §3.3, unchanged source baseline: XMPFields stores metadata, while Develop settings/masks are catalog JSON. **Scope:** versioned Develop/mask sidecar round trip, preserving foreign tags and old catalogs; RAW+JPEG same-stem behavior. Keep history, relationships and provenance separate (AT-005).
 
@@ -54,15 +54,45 @@ Evidence baseline, October 30, 2026:
 
 **Review follow-up:** Cl reviewed `64ad79e` without a macOS toolchain. Addressed never-edited vs reset recovery, import auto-write targets, unreadable foreign metadata and preservation of earlier import problems. Existing reference assets already skip recovery reads; regression added. Coalescing auto-writes is deferred pending measured NAS evidence (AT-011), with no NAS throughput claim. Copy imports with filename collisions retain the source-keyed sidecar entry until XMP writes add the destination key; documented limit. AGENTS.md now defines same-revision cross-environment validation attribution. Follow-up full Mac check at `64ad79e` plus the review patch passed: 227 XCTest tests, 2 missing-RAW skips, zero failures; script regressions, Help, build and whitespace passed. Logs `/private/tmp/atelier-at-004/.build/local-checks/20261030-170525-267348`. Committed-head check and CI evidence are recorded in PR #67.
 
+**Final merged evidence:** Mac check PASS at pre-merge head `f35496cfb0e3334c52932ce44ec692dc7fd04fa7`: ten script regressions, Help/index/build/whitespace, 227 XCTest tests, 2 missing-RAW skips, zero failures; logs `/private/tmp/atelier-at-004/.build/local-checks/20261030-170601-807036`. Exact-head Actions run `41148345930` failed before starting due to account payments/spending limits (also capacity annotation); CI did not pass. Existing manual/UI/RAW limits below remain.
+
 **Validation/limits:** full Mac check at `5086f3d` plus this implementation passed (223 XCTest tests, 2 missing-RAW skips, zero failures; ten script regressions, Help, build and whitespace passed), logs `/private/tmp/atelier-at-004/.build/local-checks/20261030-152834-451080`. Nine recovery tests exercise fresh-catalog reconstruction, equivalent synthetic rendering, original preservation, old/future/corrupt data, foreign tags, paired/concurrent writes, resets, copied imports and failed/offline dirty state. Committed-head check `dca751d` passed with the same totals, logs `/private/tmp/atelier-at-004/.build/local-checks/20261030-165438-379453`; catalog-free Light/Graphite Metadata snapshots were generated and inspected at that head with no clipping. PR #67 records final-head validation and CI status. Help index has no problems; browser visual review is blocked by the computer-use tool's local-file URL policy. No rendering math, cache version or catalog schema changes. Earlier edits need an explicit XMP write; renamed-file recovery and exact Vision segmentation are not supported. Real RAW, live auto-write/reconnect and real-library recovery acceptance remain open.
 
 ## AT-005 — History, relationships and provenance recovery
 
-**Status:** Proposed / discuss. **Owner/chat/branch/PR:** unassigned. **Dependencies:** AT-004 format boundary; AT-007 provenance requirements.
+**Status:** Partially in progress; parent remains open until AT-005a/b/c are complete. **Dependencies:** AT-004 format boundary; AT-007 provenance requirements. Rosh approved splitting the original item and the bounded AT-005a policy in the linked chat. Original AT-005 through AT-015 retain priority over AT-018+ unless Rosh directs otherwise.
 
-**Evidence:** review §3.3: SQLite holds history, version/stack/virtual-copy relationships and AI provenance; portable reconstruction is incomplete. **Scope to discuss:** a documented backup/restore representation distinct from settings/masks; identity and conflict policy.
+**Evidence:** review §3.3; source investigation at `5fec14f`: SQLite holds history, version/stack/virtual-copy relationships and AI provenance; portable reconstruction is incomplete. Sub-items preserve the original scope and missing-file/duplicate acceptance requirements.
 
-**Acceptance to agree:** restore history, parent/derived relationships, virtual copies and provenance with missing-file/duplicate fixtures. Document what cannot be recovered and which original/derived files require separate backups.
+### AT-005a — Develop history and snapshots recovery
+
+**Status:** In progress — approved by Rosh. **Owner:** Co (Codex). **Chat:** [history recovery planning](codex://threads/01a18f4b-6d4b-7e32-9d0f-380b67601f4d). **Branch:** `codex/at-005a-history-recovery`. **PR:** pending. **Dependencies:** AT-004.
+
+**Approved scope/policy:** recover retained named steps, selected position, redo steps and named snapshots alongside current settings. Separate versioned history representation bound to current settings; exact-filename identity, no hash merging or automatic rename recovery. Existing catalog assets keep their state. New imports recover ahead of presets. Settings-only sidecars retain the single “Recovered from XMP” step. Invalid/future/inconsistent history fails visibly and preserves the sidecar. Save/write comparisons include history-only changes. Virtual copies remain excluded.
+
+**Acceptance:** fresh-catalog round trip preserves history/snapshot names, dates, snapshot IDs, selected position and redo; old/settings-only packets, paired filenames, copied imports, corrupt historical settings and conflicting packets have fixtures; originals remain unchanged. Source/tests do not substitute for real-library/RAW and live automatic-write acceptance. Recover only retained history: existing code caps steps at 500 despite PRD unlimited wording; changing retention is deferred for discussion.
+
+**Validation/limits:** required Mac checks are being rerun on the committed head; exact revision/results/logs are recorded in the PR. Initial build and 233 tests passed (2 missing-RAW skips), but that run was correctly invalidated because a collision fixture was added during checks; it is not a full-check PASS. Help index has no problems; browser visual review awaits explicit desktop permission. No new controls/screens/pictures, rendering or catalog schema change. Relationships/provenance remain AT-005b/c; wider restore tooling and file backups remain AT-006/012.
+
+### AT-005b — Virtual copies, stacks and parent/derived relationships recovery
+
+**Status:** Proposed / discuss — not approved for implementation by AT-005a. **Owner/chat/branch/PR:** unassigned. **Dependencies:** AT-004/005a format boundaries; coordinate AT-007/008 and AT-006 restore design.
+
+**Evidence at `5fec14f`:** virtual copies are separate asset rows sharing originals; version rows link parent and derived assets using catalog-local integers, with rendered file paths. Those IDs/paths are not portable identity.
+
+**Scope to agree:** durable portable identities and remapping, virtual-copy metadata/settings/history, stack ordering/names, parent/derived graph, duplicate/ambiguous file matches, missing/offline rendered files, partial restore and conflict policy. No automatic graph reconstruction is implied by this entry.
+
+**Acceptance to agree:** restore masters, several virtual copies and external/AI derived relationships into a fresh catalog; missing-file, duplicate-content, renamed-file and conflicting-existing-catalog fixtures; repeat restore does not duplicate versions or overwrite existing work. Document unrecoverable state and separate original/derived-pixel backup requirements.
+
+### AT-005c — AI provenance recovery
+
+**Status:** Proposed / discuss — not approved for implementation by AT-005a. **Owner/chat/branch/PR:** unassigned. **Dependencies:** AT-007 provenance/license requirements; AT-005b portable relationship identities; coordinate AT-008.
+
+**Evidence at `5fec14f`:** AIRunner records recipe, workflow label, model/license declarations, prompt, seed, generation size, region, server and creation time in version provenance JSON; XMP does not carry it. Current records are not a complete reproducibility bundle.
+
+**Scope to agree:** portable, versioned provenance and attachment to the correct recovered result/source; preserve known/unknown declarations without inventing license approval, model hashes or missing workflow data. Agree AT-007 requirements before expanding the record.
+
+**Acceptance to agree:** provenance survives catalog-loss recovery and repeated restore, including missing derived/source files, duplicates, corrupt/future records and unknown/restricted models. Preserve provenance verbatim where supported; document what cannot reproduce pixels and which files/workflows/models require separate backups. No license-gate or reproducibility acceptance from a JSON round trip alone.
 
 ## AT-006 — Catalog and wider backup recovery design
 

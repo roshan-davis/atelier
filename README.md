@@ -13,7 +13,7 @@ Agents working in this repo follow [AGENTS.md](AGENTS.md).
 - RAW+JPEG pairs shown as one photo, virtual copies, stacks for Edit In versions.
 - Grid, loupe and a full-width filmstrip (F6); folders, collections and a filter bar (rating, flag, label, text).
 - Culling view with keyboard rating, flags and labels, and match modes for pairs. Keys are rebindable in Settings > Keyboard; ⌘/ shows them all.
-- EXIF, GPS and XMP read on import; XMP sidecars written on demand (Library > Write XMP for Selection, ⌘S, or automatically via Settings > Metadata), including current Develop settings and masks for recovery on new import. History, virtual copies, stacks and provenance still require catalog backups.
+- EXIF, GPS and XMP read on import; XMP sidecars written on demand (Library > Write XMP for Selection, ⌘S, or automatically via Settings > Metadata), including current Develop settings, masks, retained history and snapshots for recovery on new import. Virtual copies, stacks and provenance still require catalog backups.
 
 **Develop** (non-destructive)
 - RAW default look matched to the camera's embedded preview, plus a Profile menu.

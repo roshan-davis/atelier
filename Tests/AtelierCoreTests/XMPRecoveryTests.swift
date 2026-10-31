@@ -72,7 +72,7 @@ final class XMPRecoveryTests: XCTestCase {
         let recovered = try recoveredCatalog.developSettings(for: recoveredID)
         XCTAssertEqual(recovered, settings)
         let history = try recoveredCatalog.developHistory(for: recoveredID)
-        XCTAssertEqual(history.steps.map(\.name), ["Recovered from XMP"])
+        XCTAssertEqual(history, try catalog.developHistory(for: id))
         XCTAssertTrue(history.snapshots.isEmpty)
         let session = try XCTUnwrap(DevelopRenderer.shared.session(for: file, maxPixelSize: 32))
         let before = try XCTUnwrap(session.render(settings))
@@ -151,7 +151,10 @@ final class XMPRecoveryTests: XCTestCase {
         let file = try image()
         let sidecar = XMPSidecar.sidecarURL(for: file)
         let settings = edited()
-        try XMPSidecar.write(XMPFields(), toSidecar: sidecar, develop: settings, filename: file.lastPathComponent)
+        var history = DevelopHistory()
+        history.record("Before copy", settings: settings, previous: .neutral)
+        history.snapshots = [.init(name: "Copied snapshot", date: Date(timeIntervalSince1970: 100), settings: settings)]
+        try XMPSidecar.write(XMPFields(), toSidecar: sidecar, develop: settings, filename: file.lastPathComponent, history: history)
         let catalog = try Catalog()
         let destination = directory.appendingPathComponent("Copies")
         let id = try await importPhoto(file, into: catalog,
@@ -161,6 +164,7 @@ final class XMPRecoveryTests: XCTestCase {
         let copied = try XCTUnwrap(catalog.fileURL(for: id))
         XCTAssertNotEqual(copied, file)
         XCTAssertEqual(try XMPSidecar.readDevelop(for: copied), settings)
+        XCTAssertEqual(try XMPSidecar.readDevelopRecovery(for: copied)?.history, try catalog.developHistory(for: id))
     }
 
     func testResetWritesNeutralInsteadOfResurrectingOldEdits() async throws {
@@ -209,13 +213,15 @@ final class XMPRecoveryTests: XCTestCase {
             for (file, settings) in jobs {
                 group.addTask {
                     try XMPSidecar.write(XMPFields(), toSidecar: XMPSidecar.sidecarURL(for: file),
-                                         develop: settings, filename: file.lastPathComponent)
+                                         develop: settings, filename: file.lastPathComponent, history: DevelopHistory())
                 }
             }
             try await group.waitForAll()
         }
         XCTAssertEqual(try XMPSidecar.readDevelop(for: raw), rawSettings)
         XCTAssertEqual(try XMPSidecar.readDevelop(for: jpeg), jpegSettings)
+        XCTAssertEqual(try XMPSidecar.readDevelopRecovery(for: raw)?.history, DevelopHistory())
+        XCTAssertEqual(try XMPSidecar.readDevelopRecovery(for: jpeg)?.history, DevelopHistory())
     }
 
     func testFailedAndOfflineWritesStayDirty() async throws {
@@ -301,6 +307,176 @@ final class XMPRecoveryTests: XCTestCase {
         let recovered = await Importer(catalog: try Catalog(), previews: nil)
             .run(sources: [file], options: ImportOptions(buildPreviews: false))
         XCTAssertEqual(recovered.developedAssetIDs, recovered.importedAssetIDs)
+    }
+
+    func testHistoryRedoAndSnapshotsRecoverTogether() async throws {
+        let file = try image()
+        let original = try Data(contentsOf: file)
+        let catalog = try Catalog()
+        let id = try await importPhoto(file, into: catalog)
+        var history = DevelopHistory()
+        let settings = edited()
+        var later = settings
+        later.exposure = 1.8
+        history.record("First edit", settings: settings, previous: .neutral)
+        history.record("Later edit", settings: later, previous: settings)
+        history.position = 1
+        history.snapshots = [.init(name: "Sky & <light>", date: Date(timeIntervalSince1970: 100), settings: later)]
+        try catalog.saveDevelop(settings, history: history, for: id)
+        let expected = try catalog.developHistory(for: id)
+        XCTAssertEqual(try catalog.writeXMPSidecars().written, 1)
+        let restored = try Catalog()
+        let restoredID = try await importPhoto(file, into: restored)
+        let recovered = try restored.developHistory(for: restoredID)
+        XCTAssertEqual(recovered, expected)
+        XCTAssertTrue(recovered.canUndo)
+        XCTAssertTrue(recovered.canRedo)
+        XCTAssertEqual(recovered.steps[recovered.position + 1].settings, later)
+        XCTAssertEqual(try Data(contentsOf: file), original)
+        // Snapshot rename/update/delete and history clearing do not require a settings change.
+        var changed = recovered
+        changed.snapshots[0].name = "Renamed"
+        changed.snapshots[0].settings = settings
+        try restored.saveDevelop(settings, history: changed, for: restoredID)
+        XCTAssertTrue(try XCTUnwrap(restored.detail(for: restoredID)).metadata.xmpDirty)
+        XCTAssertEqual(try restored.writeXMPSidecars().written, 1)
+        XCTAssertEqual(try XMPSidecar.readDevelopRecovery(for: file)?.history, changed)
+        changed.snapshots.removeAll()
+        changed.clear()
+        try restored.saveDevelop(settings, history: changed, for: restoredID)
+        XCTAssertEqual(try restored.writeXMPSidecars().written, 1)
+        XCTAssertEqual(try XMPSidecar.readDevelopRecovery(for: file)?.history, changed)
+    }
+
+    func testSettingsOnlyCompatibilityAndLegacyCatalogHistory() async throws {
+        let file = try image()
+        let settings = edited()
+        try XMPSidecar.write(XMPFields(), toSidecar: XMPSidecar.sidecarURL(for: file),
+                             develop: settings, filename: file.lastPathComponent)
+        let catalog = try Catalog()
+        let id = try await importPhoto(file, into: catalog)
+        XCTAssertEqual(try catalog.developHistory(for: id).steps.map(\.name), ["Recovered from XMP"])
+        try await catalog.writer.write { db in
+            try db.execute(sql: "UPDATE developSettings SET historyJson = '[]'")
+        }
+        XCTAssertEqual(try catalog.writeXMPSidecars(for: [id]).written, 1)
+        XCTAssertEqual(try XMPSidecar.readDevelopRecovery(for: file)?.history, DevelopHistory())
+    }
+
+    func testHistoryValidationRejectsCorruptionRatherThanClampingOrDropping() throws {
+        let settings = edited()
+        var history = DevelopHistory()
+        history.record("Edit", settings: settings, previous: .neutral)
+        let entry = HistoryRecovery.Entry(settings: try settings.encoded(), history: try history.encoded())
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(entry.history.utf8)) as? [String: Any])
+        object["position"] = 999
+        var invalid = entry
+        invalid.history = String(decoding: try JSONSerialization.data(withJSONObject: object), as: UTF8.self)
+        XCTAssertThrowsError(try HistoryRecovery.history(invalid, settings: settings))
+        object["position"] = 1
+        var steps = try XCTUnwrap(object["steps"] as? [[String: Any]])
+        steps[0]["settings"] = ["schemaVersion": 3, "masks": "broken"]
+        object["steps"] = steps
+        invalid.history = String(decoding: try JSONSerialization.data(withJSONObject: object), as: UTF8.self)
+        XCTAssertThrowsError(try HistoryRecovery.history(invalid, settings: settings))
+        XCTAssertThrowsError(try HistoryRecovery.history(entry, settings: .neutral))
+        history.snapshots = [.init(name: "A", settings: settings)]
+        history.snapshots.append(history.snapshots[0])
+        invalid.history = try history.encoded()
+        XCTAssertThrowsError(try HistoryRecovery.history(invalid, settings: settings))
+        XCTAssertThrowsError(try HistoryRecovery.packet(#"{"formatVersion":99,"files":{}}"#))
+    }
+
+    func testStaleHistoryFromOlderWriterBlocksImportAndOverwrite() async throws {
+        let file = try image()
+        let sidecar = XMPSidecar.sidecarURL(for: file)
+        let settings = edited()
+        var history = DevelopHistory()
+        history.record("Edit", settings: settings, previous: .neutral)
+        try XMPSidecar.write(XMPFields(), toSidecar: sidecar, develop: settings,
+                             filename: file.lastPathComponent, history: history)
+        let metadata = try XCTUnwrap(CGImageMetadataCreateFromXMPData(Data(contentsOf: sidecar) as CFData))
+        let mutable = try XCTUnwrap(CGImageMetadataCreateMutableCopy(metadata))
+        CGImageMetadataRegisterNamespaceForPrefix(mutable, XMPSidecar.atelierNamespace as CFString, "atelier" as CFString, nil)
+        let packet = DevelopRecovery.Packet(files: [file.lastPathComponent: try DevelopSettings.neutral.encoded()])
+        let json = String(decoding: try JSONEncoder().encode(packet), as: UTF8.self)
+        CGImageMetadataSetValueWithPath(mutable, nil, DevelopRecovery.path as CFString, json as CFString)
+        try XCTUnwrap(CGImageMetadataCreateXMPData(mutable, nil) as Data?).write(to: sidecar)
+        let original = try Data(contentsOf: sidecar)
+        let result = await Importer(catalog: try Catalog(), previews: nil).run(sources: [file], options: .init(buildPreviews: false))
+        XCTAssertEqual(result.failures.count, 1)
+        XCTAssertEqual(result.imported, 0)
+        XCTAssertThrowsError(try XMPSidecar.write(XMPFields(), toSidecar: sidecar,
+            develop: settings, filename: file.lastPathComponent, history: history))
+        XCTAssertEqual(try Data(contentsOf: sidecar), original)
+    }
+
+    func testPairedHistoryWritesPreserveSiblingAndSettingsOnlyCallerRemovesOwnHistory() throws {
+        let raw = directory.appendingPathComponent("Pair.NEF")
+        let jpeg = directory.appendingPathComponent("Pair.JPG")
+        var history = DevelopHistory()
+        history.snapshots = [.init(name: "Neutral", date: Date(timeIntervalSince1970: 100), settings: .neutral)]
+        for file in [raw, jpeg] {
+            try XMPSidecar.write(XMPFields(), toSidecar: XMPSidecar.sidecarURL(for: file),
+                develop: .neutral, filename: file.lastPathComponent, history: history)
+        }
+        try XMPSidecar.write(XMPFields(rating: 4), toSidecar: XMPSidecar.sidecarURL(for: raw))
+        XCTAssertEqual(try XMPSidecar.readDevelopRecovery(for: raw)?.history, history)
+        try XMPSidecar.write(XMPFields(), toSidecar: XMPSidecar.sidecarURL(for: raw),
+            develop: edited(), filename: raw.lastPathComponent)
+        XCTAssertNil(try XMPSidecar.readDevelopRecovery(for: raw)?.history)
+        XCTAssertEqual(try XMPSidecar.readDevelopRecovery(for: jpeg)?.history, history)
+    }
+
+    func testDamagedAndFutureHistoryImportPreservesSidecarAndRejectsPreset() async throws {
+        let file = try image()
+        let sidecar = XMPSidecar.sidecarURL(for: file)
+        let settings = edited()
+        let entry = HistoryRecovery.Entry(settings: try settings.encoded(), history: "broken history")
+        let corrupt = String(decoding: try JSONEncoder().encode(HistoryRecovery.Packet(files: [file.lastPathComponent: entry])), as: UTF8.self)
+        for value in [corrupt, #"{"formatVersion":99,"files":{}}"#] {
+            try? FileManager.default.removeItem(at: sidecar)
+            try XMPSidecar.write(XMPFields(), toSidecar: sidecar, develop: settings, filename: file.lastPathComponent)
+            let metadata = try XCTUnwrap(CGImageMetadataCreateFromXMPData(Data(contentsOf: sidecar) as CFData))
+            let mutable = try XCTUnwrap(CGImageMetadataCreateMutableCopy(metadata))
+            CGImageMetadataRegisterNamespaceForPrefix(mutable, XMPSidecar.atelierNamespace as CFString, "atelier" as CFString, nil)
+            CGImageMetadataSetValueWithPath(mutable, nil, HistoryRecovery.path as CFString, value as CFString)
+            try XCTUnwrap(CGImageMetadataCreateXMPData(mutable, nil) as Data?).write(to: sidecar)
+            let bytes = try Data(contentsOf: sidecar)
+            let preset = DevelopPreset(name: "Do not substitute", parts: [.exposure], settings: .neutral)
+            let result = await Importer(catalog: try Catalog(), previews: nil).run(sources: [file],
+                options: .init(buildPreviews: false, developPreset: preset))
+            XCTAssertEqual(result.imported, 0)
+            XCTAssertEqual(result.failures.count, 1)
+            XCTAssertThrowsError(try XMPSidecar.write(XMPFields(), toSidecar: sidecar,
+                develop: settings, filename: file.lastPathComponent, history: DevelopHistory()))
+            XCTAssertEqual(try Data(contentsOf: sidecar), bytes)
+        }
+    }
+
+    func testCollisionRenamedCopyRecoversHistoryAndWritesDestinationKey() async throws {
+        let file = try image()
+        let options = ImportOptions(mode: .copy(destinationRoot: directory.appendingPathComponent("Library"), eventName: "Collision"), buildPreviews: false)
+        _ = try await importPhoto(file, into: Catalog(), options: options)
+        // A valid JPEG permits trailing bytes: different content forces a unique destination.
+        let handle = try FileHandle(forWritingTo: file)
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data([0]))
+        try handle.close()
+        let settings = edited()
+        var history = DevelopHistory()
+        history.record("Recovered collision", settings: settings, previous: .neutral)
+        try XMPSidecar.write(XMPFields(), toSidecar: XMPSidecar.sidecarURL(for: file),
+            develop: settings, filename: file.lastPathComponent, history: history)
+        let catalog = try Catalog()
+        let id = try await importPhoto(file, into: catalog, options: options)
+        let copied = try XCTUnwrap(catalog.fileURL(for: id))
+        XCTAssertNotEqual(copied.lastPathComponent, file.lastPathComponent)
+        XCTAssertEqual(try catalog.developHistory(for: id).steps.map(\.name), ["Import", "Recovered collision"])
+        XCTAssertEqual(try catalog.writeXMPSidecars().written, 1)
+        let recovered = try Catalog()
+        let restoredID = try await importPhoto(copied, into: recovered)
+        XCTAssertEqual(try recovered.developHistory(for: restoredID), try catalog.developHistory(for: id))
     }
 
     private func recoveryXML(format: Int = 1, settings: String) -> String {
