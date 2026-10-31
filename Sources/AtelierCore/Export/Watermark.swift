@@ -157,11 +157,18 @@ public enum Watermark {
             let probe = line(text, fontSize: 100, color: .white)
             guard probe.width > 0, probe.height > 0 else { return nil }
             let size = markSize(watermark, aspect: probe.width / probe.height, photo: photo)
-            let fontSize = 100 * size.width / probe.width
+            var fontSize = 100 * size.width / probe.width
             let color: CGColor = watermark.textColor == .white
                 ? CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1)
                 : CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 1)
-            let sized = line(text, fontSize: fontSize, color: color)
+            var sized = line(text, fontSize: fontSize, color: color)
+            // The system font's tracking and optical size change with point size, so width isn't
+            // proportional to size (a 2048 px export and the dialog's preview would differ).
+            // Correct until the line is the wanted width.
+            for _ in 0..<4 where sized.width > 0 && abs(sized.width - size.width) > 0.25 {
+                fontSize *= size.width / sized.width
+                sized = line(text, fontSize: fontSize, color: color)
+            }
             let contentSize = CGSize(width: ceil(sized.width), height: ceil(sized.height))
             return draw(contentSize: contentSize, shadow: watermark.shadow) { context, origin in
                 context.textPosition = CGPoint(x: origin.x, y: origin.y + sized.descent)
