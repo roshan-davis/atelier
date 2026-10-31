@@ -35,17 +35,88 @@ There is no concrete shared Processor protocol/host in these inspected paths. RE
 
 ## Responsibilities and one execution path
 
-```text
-Photo commands / Edit In / AI panel / HDR dialog
-                ↓ same submission API
-ProcessorHost (Core)
-  preflight → immutable request + staged inputs → adapter
-  events/cancel ← adapter → candidate outputs
-  validate → publish/reconcile → catalog relationships → previews/UI event
-                ↓ one adapter interface
-DesktopAppAdapter | CLIAdapter | HTTPAdapter | ComfyAdapter
-                                      later: CoreMLAdapter | MLXAdapter
+All diagrams describe the proposed design, not shipped capabilities. HDR Merge is a plugin added **after** the shared plugin architecture; it gets no separate catalog or execution path.
+
+### Architecture: who owns what
+
+```mermaid
+flowchart TB
+    subgraph App[Atelier native interface]
+        UI[Photo menus · Edit In · AI panel · plugin dialogs]
+        Settings[Settings: discovery, enable/disable and trust]
+    end
+    subgraph Core[Atelier Core — one Processor host]
+        Registry[Validated processor registry]
+        Host[Prepare request and staged inputs]
+        Contract[One Processor contract]
+        Publish[Validate output · publish · reconcile]
+        Catalog[Catalog · source relationships · stacks]
+    end
+    Settings --> Registry
+    Registry --> Host
+    UI --> Host
+    Host --> Contract
+    Contract --> Desktop[Desktop app adapter]
+    Contract --> CLI[CLI plugin adapter]
+    Contract --> HTTP[HTTP plugin adapter]
+    Contract --> AI[AI adapter: ComfyUI first]
+    CLI --> HDR[HDR Merge plugin — later]
+    CLI --> Other[Other installed CLI plugins]
+    Desktop --> Results[Candidate files or interactive handoff]
+    HDR --> Results
+    Other --> Results
+    HTTP --> Results
+    AI --> Results
+    Results --> Publish
+    Publish --> Catalog
+    Catalog --> Refresh[Preview refresh and completion event]
+    Refresh --> UI
 ```
+
+The host owns access to photos, catalog writes, stacks and native presentation. Plugins process staged inputs and return candidates. The CLI/HTTP placement is a transport choice: HDR's final transport is selected after feasibility evaluation. Core ML and MLX are later adapters behind the same contract, in that order after ComfyUI; nothing is bundled.
+
+### Job lifecycle: one route to a registered result
+
+```mermaid
+flowchart TD
+    Submit[Submit immutable request] --> Preflight[Check inputs, capabilities and permission]
+    Preflight --> Prepare[Prepare private staged copies]
+    Prepare --> Run[Run adapter; show progress and previews]
+    Run --> Validate[Validate candidate files and pixel metadata]
+    Validate --> Boundary{Publication boundary}
+    Boundary -->|proceed| Publish[Publish files and reconcile catalog receipt]
+    Publish --> Done[Completed: registered result]
+    Preflight -. failure .-> Failed[Failed: reason and recovery action]
+    Prepare -. failure .-> Failed
+    Run -. crash or timeout .-> Failed
+    Validate -. invalid output .-> Failed
+    Publish -. interrupted .-> Recover[Retain output; reconcile on restart]
+    Recover --> Publish
+    Cancel[Cancel request] --> Stop[Stop owned work; await acknowledgement]
+    Stop --> Boundary
+    Boundary -->|cancel wins before commit| Cancelled[Cancelled: no new registered result]
+    Boundary -->|already committed| Done
+    Publish -->|desktop editor| Handoff[Interactive handoff: open registered copy]
+    Handoff --> Watch[Observe later saves; refresh previews]
+```
+
+Cancellation is checked throughout preparation and execution. The boundary resolves the race between cancellation and publication; a committed result is never reported as removed by cancellation. Edit In hands off an already registered copy and continues observing saves. A failed or interrupted run cannot silently rerun or register a duplicate after relaunch. Originals stay outside plugin write access; execution isolation still needs proof.
+
+### Delivery order: architecture first, HDR plugin afterward
+
+```mermaid
+flowchart LR
+    Design[0. Agree architecture] --> Contract[1. Shared host and fake adapter]
+    Contract --> EditIn[2a. Migrate Edit In]
+    EditIn --> AI[2b. Migrate ComfyUI]
+    AI --> Plugins[3. Safe plugin host, discovery and native forms]
+    Plugins --> Spike[4. HDR feasibility: RAW, alignment, deghost and output]
+    Spike --> HDR[5. HDR Merge plugin]
+    HDR --> Later[Later: bracket detection and batch]
+```
+
+Each phase has its own scope, approval and acceptance gate. This design PR is phase 0 only. HDR uses the host established in phases 1–3; its feasibility work selects an engine and output format before phase 5 implements the plugin.
+
 
 Proposed Core files are small units under `AtelierCore/Processors`: contract types, host/state machine, registry/manifest validation, input preparation, output publication, adapters and journal. App code owns native presentation, `NSWorkspace` launching/watching bridge, settings and command routing. Core never depends on AppKit UI. Adapters cannot import into the catalog or select photos. AI recipe preparation/compositing stays a Core service called by its adapter. Export remains available independently and is reused where its rendered output is appropriate.
 
