@@ -179,8 +179,9 @@ extension LibraryModel {
     }
 
     private func changePrivate(_ isPrivate: Bool, name: String, _ change: (Catalog) throws -> Void) {
-        // Before the change, so the sidebar data that first lacks the list leaves it.
-        if isPrivate, !privatePhotos.isShowing { leavesHiddenScope = true }
+        // Before the change, so the sidebar data that first lacks the list leaves it: a list
+        // made private while they're hidden, or made not private while showing only them.
+        if isPrivate ? !privatePhotos.isShowing : (privatePhotos.visibility == .only) { leavesHiddenScope = true }
         do {
             try change(catalog)
         } catch {

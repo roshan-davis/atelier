@@ -706,6 +706,11 @@ final class LibraryModel: ObservableObject {
                 if Task.isCancelled || self.importWasCancelled { parts.insert("Import cancelled", at: 0) }
                 self.status = parts.joined(separator: ", ")
                 if let groupID = result.importGroupId {
+                    // Showing only private photos: an ordinary import would open empty.
+                    if self.filter.privacy == .only,
+                       (try? self.catalog.writer.read({ try ImportGroup.fetchOne($0, key: groupID) }))?.isPrivate != true {
+                        self.privatePhotos.choose(.shown)
+                    }
                     self.sidebarSelection = .importGroup(groupID)
                 }
                 if UserDefaults.standard.bool(forKey: "xmp.autoWrite") {

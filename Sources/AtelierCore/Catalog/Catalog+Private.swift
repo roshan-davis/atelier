@@ -29,16 +29,19 @@ extension Catalog {
     /// SQL that is true when the photo `alias` is private: it is in a private list, or it is a
     /// virtual copy, stacked edit or AI result of one, or the other file of its RAW+JPEG pair is.
     /// Never NULL (every NULL column is checked first), so `NOT` it is safe.
+    ///
+    /// Every subquery is uncorrelated, so SQLite works each out once per query, not per photo.
+    /// The leading check makes the whole condition false at once when nothing is private, so
+    /// catalogs without private lists pay nothing in the grid, counts and sidebar.
     public static func privateCondition(_ alias: String = "asset") -> String {
         """
-        (\(alias).id IN (\(privateMembers))
-         OR (\(alias).virtualCopyOf IS NOT NULL AND \(alias).virtualCopyOf IN (\(privateMembers)))
-         OR \(alias).id IN (SELECT derivedAssetId FROM version
-                            WHERE derivedAssetId IS NOT NULL AND assetId IN (\(privateMembers)))
-         OR (\(alias).stem IS NOT NULL AND EXISTS (
-                SELECT 1 FROM asset privateSibling
-                WHERE privateSibling.folderId = \(alias).folderId AND privateSibling.stem = \(alias).stem
-                  AND privateSibling.id != \(alias).id AND privateSibling.id IN (\(privateMembers)))))
+        ((EXISTS (SELECT 1 FROM importGroup WHERE isPrivate) OR EXISTS (SELECT 1 FROM collection WHERE isPrivate))
+         AND (\(alias).id IN (\(privateMembers))
+              OR (\(alias).virtualCopyOf IS NOT NULL AND \(alias).virtualCopyOf IN (\(privateMembers)))
+              OR \(alias).id IN (SELECT derivedAssetId FROM version
+                                 WHERE derivedAssetId IS NOT NULL AND assetId IN (\(privateMembers)))
+              OR (\(alias).stem IS NOT NULL AND (\(alias).folderId, \(alias).stem) IN (
+                     SELECT folderId, stem FROM asset WHERE stem IS NOT NULL AND id IN (\(privateMembers))))))
         """
     }
 
