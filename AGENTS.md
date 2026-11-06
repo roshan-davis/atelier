@@ -6,7 +6,7 @@ Rules for any coding agent (Claude, Antigravity, Codex, …) working in this rep
 
 Atelier is Rosh's personal Lightroom-style photo catalog and editor.
 
-- Native macOS only: Swift, SwiftUI + AppKit, Apple Silicon, macOS 15+. Swift package with `AtelierCore` (library) and `AtelierApp` (executable).
+- Native macOS only: Swift, SwiftUI + AppKit, macOS 15+. Apple Silicon is the main target; Intel (x86_64) and universal Release builds are supported (`Scripts/build_macos_app.py --arch`), so guard any Apple Silicon-only code (MLX, `Float16`, Neural Engine assumptions) with `#if arch(arm64)` or a runtime check and hide that feature on Intel. Swift package with `AtelierCore` (library) and `AtelierApp` (executable).
 - [Requirements/Atelier-PRD.md](Requirements/Atelier-PRD.md) is the spec and the single source of truth. There is no other copy.
   - Update it in the same PR whenever a feature or UX decision changes.
   - If a request conflicts with the PRD, say so before building it.
