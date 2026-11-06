@@ -340,3 +340,15 @@ Evidence baseline, October 30, 2026:
 **Names to confirm with Rosh:** property "Make Private…" / "Make Not Private"; viewing, in the View menu, "Hide Private Photos" / "Show Private Photos…" / "Show Only Private Photos…" (moved from Library and Show Only added at Rosh's request, Oct 31).
 
 **Acceptance:** a passing Mac build and `python3 Scripts/check_pr.py`; Rosh checks in Xcode that a private import disappears from everywhere, Touch ID shows it, and it hides after the idle time and on sleep. **Deferred:** photos open in other apps, Finder, Match Look recent files from disk; a separate Atelier password (not wanted).
+
+## AT-024 — Release builds for Apple Silicon and Intel
+
+**Status:** Merged at Rosh's instruction on November 6, 2026 (PR #78); the build script itself not yet run on a Mac. **Owner/chat/branch:** Claude (project thread "Add Intel and Apple Silicon release builds"), branch `claude/project-thread-0rsh8h`. **Requested:** Rosh, November 6, 2026. **Dependencies:** none.
+
+**Scope (PRD, Non-functional requirements > Compatibility: Apple Silicon and Intel):** Release builds for arm64, x86_64 and universal from `Scripts/build_macos_app.py --arch` and from Xcode (Release build configuration, Any Mac destination, My Mac (Rosetta) to run the Intel build). PRD, README and AGENTS.md no longer say Apple Silicon only.
+
+**Implemented:** `--arch native|arm64|x86_64|universal|all` in `Scripts/build_macos_app.py` (one `swift build --triple <arch>-apple-macosx15.0` per arch, `lipo -create` for universal, resource bundles from the arm64 build). Source audit: no `Float16`, MLX, `#if arch` or direct Metal device code; runtime Metal Core Image kernels and Vision requests are available on Intel Macs that run macOS 15.
+
+**Validation so far:** script logic exercised in the cloud with stand-in `swift`/`lipo`/`codesign` commands only (all four arch choices, default and custom output). GitHub Actions ran again on head `a3ad0cf` (run 42237725954, twice): `swift build` and 263 tests passed with 0 failures; the layout snapshot step timed out after 180 s both times, hanging at `develop-fringe-picker-1280x800.png` in `snapshotTransform` (existing main code, not touched by this PR). That run does not exercise `--arch` or an x86_64 build.
+
+**Acceptance:** on Rosh's Mac, `python3 Scripts/build_macos_app.py --arch all` succeeds; `lipo -archs` shows `arm64`, `x86_64` and `x86_64 arm64`; the universal and arm64 apps open natively and the x86_64 app opens under Rosetta, each showing the catalog and rendering a photo in Develop. Xcode Any Mac build succeeds. **Deferred:** a test on a real Intel Mac, notarization/distribution, guarding MLX when it is built.

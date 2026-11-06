@@ -1,6 +1,6 @@
 # Atelier
 
-A personal Lightroom-style photo catalog and editor for macOS (Swift, SwiftUI + AppKit, Apple Silicon, macOS 15+).
+A personal Lightroom-style photo catalog and editor for macOS (Swift, SwiftUI + AppKit, macOS 15+; Apple Silicon first, Intel builds supported).
 Scope and architecture follow [Requirements/Atelier-PRD.md](Requirements/Atelier-PRD.md), the source of truth; update it in the same PR as any change it covers.
 Agents working in this repo follow [AGENTS.md](AGENTS.md).
 
@@ -35,6 +35,40 @@ Agents working in this repo follow [AGENTS.md](AGENTS.md).
 3. Product > Run (⌘R).
 
 From a terminal: `swift build`, `swift test`, `swift run AtelierApp`.
+
+## Release builds for Apple Silicon and Intel
+
+`Scripts/build_macos_app.py` builds a movable, ad-hoc-signed `Atelier.app` (with the HDR
+companion inside) in the Release configuration. `--arch` picks the processor:
+
+```sh
+python3 Scripts/build_macos_app.py --arch all        # arm64, x86_64 and universal, side by side
+python3 Scripts/build_macos_app.py --arch universal  # one app that runs natively on both
+python3 Scripts/build_macos_app.py --arch arm64      # Apple Silicon only
+python3 Scripts/build_macos_app.py --arch x86_64     # Intel only
+python3 Scripts/build_macos_app.py                   # this Mac's processor (as before)
+```
+
+Apps land in `.build/Applications/<arch>/Atelier.app` (`.build/Applications/Atelier.app` for
+the default). Each arch is built with `swift build -c release --triple <arch>-apple-macosx15.0`;
+universal joins the two executables with `lipo`. Check a result with
+`lipo -archs .build/Applications/universal/Atelier.app/Contents/MacOS/AtelierApp`. An Intel build
+runs on an Apple Silicon Mac under Rosetta (`softwareupdate --install-rosetta` once). These are
+local builds, not notarized: another Mac needs right-click > Open the first time.
+
+In Xcode (`Package.swift` open, scheme **AtelierApp**):
+
+- Release instead of Debug: Product > Scheme > Edit Scheme… (⌘<), select **Run** on the left,
+  **Info** tab, set **Build Configuration** to **Release**, Close. Set it back to Debug for everyday work.
+- Universal: Product > Destination > **Any Mac (Apple Silicon, Intel)**, then Product > Build (⌘B).
+  Any Mac builds but does not run.
+- Run the Intel build on an Apple Silicon Mac: Product > Destination > Destination Architectures >
+  **Show Rosetta Destinations**, then pick **My Mac (Rosetta)** and Product > Run (⌘R).
+
+What differs on Intel: develop rendering, Vision masks and culling all work, but slower
+(no Neural Engine, weaker GPUs). The ComfyUI AI tools need an Apple Silicon Mac in practice,
+since current PyTorch no longer ships Intel Mac builds. MLX, when added, is Apple Silicon only
+and must be hidden on Intel. See the PRD's Non-functional requirements > Compatibility.
 
 ## CI
 

@@ -513,7 +513,7 @@ AI runs locally through swappable backends behind the Processor contract. The ap
 | --- | --- | --- | --- |
 | ComfyUI (headless) | Generative edits: object removal, background replace, relight, multi-reference edits | HTTP + WebSocket API, workflow JSON templates with named inputs | MVP |
 | Core ML | Fast on-device tasks: subject and sky masks, denoise, upscale | In-process via Vision and Core ML | v1 |
-| MLX | Apple Silicon native diffusion and vision-language models | Separately installed Python or Swift MLX worker process | v1 |
+| MLX | Apple Silicon native diffusion and vision-language models (hidden on Intel builds) | Separately installed Python or Swift MLX worker process | v1 |
 | Remote HTTP | A model on another machine or a paid API | Same plugin manifest, endpoint URL | Later |
 
 ### Starting model set (permissive licenses only)
@@ -601,7 +601,18 @@ Targets assume an M4 Mac and a catalog of 100k photos. They are starting targets
 | Privacy | No network calls except NAS, user-configured backends and update checks; no telemetry |
 | Sandboxing | App Sandbox with security-scoped bookmarks for each volume and folder the user grants |
 | Accessibility | Full keyboard workflow for culling; VoiceOver labels on all controls |
-| Compatibility | macOS 15 and later, Apple Silicon only |
+| Compatibility | macOS 15 and later. Apple Silicon is the main target: performance targets above are measured there. Intel Macs that run macOS 15 are supported through x86_64 and universal Release builds (decided Nov 6, 2026; see Compatibility: Apple Silicon and Intel below) |
+
+### Compatibility: Apple Silicon and Intel
+
+Decided Nov 6, 2026 (Rosh): Atelier builds for both Apple Silicon (arm64) and Intel (x86_64), as separate apps or one universal app. Before this it was Apple Silicon only.
+
+- **Builds.** Release builds come from `python3 Scripts/build_macos_app.py --arch arm64|x86_64|universal|all`, or from Xcode with the Release build configuration and the Any Mac (Apple Silicon, Intel) destination. Local, ad-hoc-signed builds; nothing is notarized or distributed yet.
+- **Same features, same catalog.** The catalog, previews, presets and XMP are identical on both; a catalog moves between Macs unchanged.
+- **Works on Intel, slower:** Core Image rendering with the runtime Metal kernels (every Mac that runs macOS 15 has a Metal GPU), Vision masks (Select Subject), culling feature prints and the splash saliency crop. No Neural Engine, so Vision tasks run on the GPU or CPU.
+- **Apple Silicon in practice:** the ComfyUI backend. ComfyUI is installed separately and current PyTorch has no Intel Mac builds, so the AI tools may simply find no server on an Intel Mac; Atelier already handles an unreachable server.
+- **Apple Silicon only:** the MLX backend (not built yet). When it is added it must be compiled out or hidden on Intel (`#if arch(arm64)` or a runtime check), not shown and then fail. The same goes for any later Core ML model that needs the Neural Engine or `Float16`.
+- As of Nov 6, 2026 no app code is architecture-specific (no `Float16`, MLX, `#if arch` or direct Metal device code), so nothing needed guarding for the first Intel build.
 
 ## Milestones and roadmap
 
