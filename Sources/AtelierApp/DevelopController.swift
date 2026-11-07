@@ -431,6 +431,12 @@ final class DevelopController: ObservableObject {
     private var saveTask: Task<Void, Never>?
     private var dirty = false
     private let queue = DispatchQueue(label: "atelier.develop", qos: .userInteractive)
+    /// Histogram and color scope, counted beside the render queue so the photo shows first.
+    private let measureQueue = DispatchQueue(label: "atelier.develop.measure", qos: .userInitiated)
+    /// Counts proxy renders, so an older histogram never replaces a newer one.
+    private var renderCount = 0
+    /// The render the shown histogram was counted from.
+    private var measuredCount = 0
     var onPreviewsUpdated: ((Int64) -> Void)?
     var onSettingsSaved: ((Int64) -> Void)?
     /// Unedited RAW files whose preview was replaced by a render this launch.
@@ -533,7 +539,7 @@ final class DevelopController: ObservableObject {
             }
         }
         queue.async {
-            let session = DevelopRenderer.shared.session(for: url, maxPixelSize: Self.proxySize)
+            let session = DevelopRenderer.shared.session(for: url, maxPixelSize: Self.proxySize, interactive: true)
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     guard self.assetID == assetID else { return }
@@ -1374,7 +1380,7 @@ final class DevelopController: ObservableObject {
         let assetID = self.assetID
         let existing = navigatorSession
         navigatorQueue.async {
-            let session = existing ?? DevelopRenderer.shared.session(for: url, maxPixelSize: Self.navigatorSize)
+            let session = existing ?? DevelopRenderer.shared.session(for: url, maxPixelSize: Self.navigatorSize, interactive: true)
             let cgImage = session?.render(settings)
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
@@ -1617,12 +1623,33 @@ final class DevelopController: ObservableObject {
         let overlay = isMasking && showMaskOverlay ? selectedMaskID : nil
         let preview = showingBefore ? nil : sliderPreview
         let clipping = overlay == nil && preview == nil ? clippingOverlay : (shadows: false, highlights: false)
+        renderCount += 1
+        let count = renderCount
+        let measures = overlay == nil && preview == nil
+        let measureQueue = self.measureQueue
         queue.async {
-            let rendered = session.render(settings, cropping: cropping, overlay: overlay, preview: preview)
-            // The red overlay or an Option-drag view would skew the histogram; keep the last one while it shows.
-            let histogram = overlay == nil && preview == nil ? rendered.flatMap { Histogram(image: $0) } : nil
-            let scope = overlay == nil && preview == nil ? rendered.flatMap { ColorScope(image: $0) } : nil
-            let cgImage = rendered.map { Self.withClipping($0, clipping) }
+            let rendered = RenderSignposts.measure("Proxy render") {
+                session.renderForDisplay(settings, cropping: cropping, overlay: overlay, preview: preview,
+                                         shadowClipping: clipping.shadows, highlightClipping: clipping.highlights)
+            }
+            let cgImage = rendered?.image
+            // The red overlay or an Option-drag view would skew the histogram; keep the last one
+            // while it shows. It is counted after the photo is on its way, beside the next render.
+            if measures, let plain = rendered?.plain {
+                measureQueue.async {
+                    let (histogram, scope) = RenderSignposts.measure("Histogram") {
+                        (Histogram(image: plain), ColorScope(image: plain))
+                    }
+                    DispatchQueue.main.async {
+                        MainActor.assumeIsolated {
+                            guard self.assetID == assetID, count >= self.measuredCount else { return }
+                            self.measuredCount = count
+                            if let histogram { self.histogram = histogram }
+                            if let scope { self.colorScope = scope }
+                        }
+                    }
+                }
+            }
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     self.rendering = false
@@ -1631,8 +1658,6 @@ final class DevelopController: ObservableObject {
                     if self.assetID == assetID, cropping != self.isCropping, let cgImage {
                         self.image = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
                         self.imageIsWhole = !cropping
-                        if let histogram { self.histogram = histogram }
-                        if let scope { self.colorScope = scope }
                     }
                     if self.needsRender {
                         self.needsRender = false
@@ -1650,11 +1675,6 @@ final class DevelopController: ObservableObject {
     private var clippingOverlay: (shadows: Bool, highlights: Bool) {
         guard !showingBefore, !isCropping, !isAIOpen else { return (false, false) }
         return (showShadowClipping, showHighlightClipping)
-    }
-
-    nonisolated private static func withClipping(_ image: CGImage, _ clipping: (shadows: Bool, highlights: Bool)) -> CGImage {
-        guard clipping.shadows || clipping.highlights else { return image }
-        return ClippingOverlay.apply(to: image, shadows: clipping.shadows, highlights: clipping.highlights) ?? image
     }
 
     /// J: both overlays on, or both off when either is on.
@@ -1683,8 +1703,11 @@ final class DevelopController: ObservableObject {
         let existing = fullSession
         let clipping = clippingOverlay
         fullQueue.async {
-            let session = existing ?? DevelopRenderer.shared.session(for: url, maxPixelSize: nil)
-            let cgImage = session?.render(settings).map { Self.withClipping($0, clipping) }
+            let session = existing ?? DevelopRenderer.shared.session(for: url, maxPixelSize: nil, interactive: true)
+            let cgImage = RenderSignposts.measure("Full-size render") {
+                session?.renderForDisplay(settings, shadowClipping: clipping.shadows,
+                                          highlightClipping: clipping.highlights)?.image
+            }
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     self.fullRendering = false
@@ -1723,7 +1746,7 @@ final class DevelopController: ObservableObject {
         let assetID = self.assetID
         let existing = fullSession
         fullQueue.async {
-            let session = existing ?? DevelopRenderer.shared.session(for: url, maxPixelSize: nil)
+            let session = existing ?? DevelopRenderer.shared.session(for: url, maxPixelSize: nil, interactive: true)
             let cgImage = session?.render(before)
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {

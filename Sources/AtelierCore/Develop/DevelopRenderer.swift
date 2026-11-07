@@ -30,9 +30,11 @@ public final class DevelopRenderer: @unchecked Sendable {
     }
 
     /// Opens a photo for editing. Keep the session while the photo is on screen; it reuses
-    /// the decoded source between slider changes.
-    public func session(for url: URL, maxPixelSize: Int?) -> DevelopSession? {
-        DevelopSession(url: url, maxPixelSize: maxPixelSize, renderer: self)
+    /// the decoded source between slider changes. `interactive` keeps the decoded,
+    /// lens-corrected photo between renders, for sessions that render again and again (Develop);
+    /// one-off renders (previews, export) leave it off so they don't fill Core Image's cache.
+    public func session(for url: URL, maxPixelSize: Int?, interactive: Bool = false) -> DevelopSession? {
+        DevelopSession(url: url, maxPixelSize: maxPixelSize, renderer: self, interactive: interactive)
     }
 
     public func cgImage(_ image: CIImage, colorSpace: CGColorSpace = DevelopRenderer.displaySpace) -> CGImage? {
@@ -481,10 +483,17 @@ public final class DevelopSession: @unchecked Sendable {
     /// lens geometry; a nil mask when Vision found nothing.
     private var subjectMasks: [DevelopSettings.MaskRect?: CIImage?] = [:]
     private var subjectKey: DevelopSettings?
+    /// Pipeline step 1's results for the settings they were made from (see `CorrectedKey`), so a
+    /// slider on any later panel doesn't decode the RAW and redo the lens corrections again.
+    /// Two are kept, most recent last, so the Before view and the edit don't push each other out.
+    private var correctedCache: [(key: CorrectedKey, image: CIImage)] = []
+    /// Whether `correctedCache` is used; see `DevelopRenderer.session(for:maxPixelSize:interactive:)`.
+    private let interactive: Bool
 
-    init?(url: URL, maxPixelSize: Int?, renderer: DevelopRenderer) {
+    init?(url: URL, maxPixelSize: Int?, renderer: DevelopRenderer, interactive: Bool = false) {
         self.url = url
         self.renderer = renderer
+        self.interactive = interactive
         var lensName: String?
         var focal = 0.0
         if let source = CGImageSourceCreateWithURL(url as CFURL, nil),
@@ -574,6 +583,49 @@ public final class DevelopSession: @unchecked Sendable {
     /// The result starts at the origin. Call with the lock held.
     private func corrected(_ settings: DevelopSettings, defringeView: Defringe.View = .photo) -> CIImage? {
         let settings = settings.applyingPanelSwitches()
+        guard interactive else { return decodeAndCorrect(settings, defringeView: defringeView) }
+        let key = CorrectedKey(settings, view: defringeView)
+        if let index = correctedCache.firstIndex(where: { $0.key == key }) {
+            let cached = correctedCache.remove(at: index)
+            correctedCache.append(cached)
+            return cached.image
+        }
+        guard let image = decodeAndCorrect(settings, defringeView: defringeView) else { return nil }
+        // Core Image keeps the rendered step 1 in its cache even though the context's
+        // intermediates are off, so the next render starts from it instead of the RAW.
+        let kept = image.insertingIntermediate(cache: true)
+        correctedCache.append((key, kept))
+        if correctedCache.count > 2 { correctedCache.removeFirst() }
+        return kept
+    }
+
+    /// Everything step 1 (`decodeAndCorrect`) reads, after the panel switches. Add a setting
+    /// here whenever step 1 starts to use it, or edits to it won't show until another step-1
+    /// setting changes.
+    struct CorrectedKey: Equatable {
+        let geometry: DevelopSettings
+        let temperature: Double?
+        let tint: Double
+        let exposure: Double
+        let profile: DevelopSettings.Profile
+        let removeChromaticAberration: Bool
+        let defringe: [Double]
+        let view: Defringe.View
+
+        init(_ settings: DevelopSettings, view: Defringe.View) {
+            // Lens profile corrections, lens vignetting and distortion, Upright and Transform.
+            geometry = settings.lensGeometryKey
+            temperature = settings.temperature
+            tint = settings.tint
+            exposure = settings.exposure
+            profile = settings.profile
+            removeChromaticAberration = settings.removeChromaticAberration
+            defringe = DevelopSettings.Parameter.allCases.filter(\.isDefringe).map { settings[$0] }
+            self.view = view
+        }
+    }
+
+    private func decodeAndCorrect(_ settings: DevelopSettings, defringeView: Defringe.View) -> CIImage? {
         var image: CIImage
         if let raw = rawFilter {
             raw.neutralTemperature = Float(settings.temperature ?? asShotTemperature)
@@ -780,5 +832,32 @@ public final class DevelopSession: @unchecked Sendable {
                        preview: SliderPreview? = nil) -> CGImage? {
         guard let image = image(with: settings, cropping: cropping, overlay: overlay, preview: preview) else { return nil }
         return renderer.cgImage(image)
+    }
+
+    /// Rendered for display in Display P3 with Lightroom's clipping overlay painted in during the
+    /// same render, and `plain`, the photo without the overlay for the histogram. Without the
+    /// overlay `plain` is the image itself; with it, a copy at most `sampleSize` pixels long, made
+    /// from the render Core Image just cached instead of rendering the photo again.
+    public func renderForDisplay(_ settings: DevelopSettings, cropping: Bool = true, overlay: UUID? = nil,
+                                 preview: SliderPreview? = nil, shadowClipping: Bool = false,
+                                 highlightClipping: Bool = false,
+                                 sampleSize: Int = Histogram.sampleSize) -> (image: CGImage, plain: CGImage)? {
+        guard var image = image(with: settings, cropping: cropping, overlay: overlay, preview: preview) else { return nil }
+        guard shadowClipping || highlightClipping else {
+            guard let cgImage = renderer.cgImage(image) else { return nil }
+            return (cgImage, cgImage)
+        }
+        image = image.insertingIntermediate(cache: true)
+        let painted = ClippingOverlay.apply(to: image, shadows: shadowClipping, highlights: highlightClipping,
+                                            shownIn: DevelopRenderer.displaySpace)
+        guard let shown = renderer.cgImage(painted) else { return nil }
+        let extent = image.extent
+        let factor = min(1, CGFloat(sampleSize) / max(1, max(extent.width, extent.height)))
+        var small = image
+        if factor < 1 {
+            small = image.applyingFilter("CILanczosScaleTransform", parameters: [kCIInputScaleKey: factor,
+                                                                                 kCIInputAspectRatioKey: 1])
+        }
+        return (shown, renderer.cgImage(small) ?? shown)
     }
 }
