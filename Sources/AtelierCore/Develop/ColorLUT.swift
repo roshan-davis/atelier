@@ -13,6 +13,8 @@ enum ColorLUT {
     static let space = CGColorSpace(name: CGColorSpace.displayP3)!
 
     private static let lock = NSLock()
+    /// Off only for the before/after benchmark (`SliderPerformanceTests`).
+    nonisolated(unsafe) static var buildsInParallel = true
     nonisolated(unsafe) private static var cachedKey: [Double]?
     nonisolated(unsafe) private static var cachedCube: Data?
 
@@ -30,9 +32,11 @@ enum ColorLUT {
         if key == cachedKey, let cachedCube { return cachedCube }
         let color = ColorMix(settings), grade = ColorGrade(settings)
         // In Black & White, the B&W Mix replaces HSL and Point Color; color grading then tones the grays.
-        let cube = build { rgb in
-            let mixed = color.apply(rgb)
-            return grade.isActive ? grade.apply(mixed) : mixed
+        let cube = RenderSignposts.measure("Color cube") {
+            build { rgb in
+                let mixed = color.apply(rgb)
+                return grade.isActive ? grade.apply(mixed) : mixed
+            }
         }
         cachedKey = key
         cachedCube = cube
@@ -63,19 +67,29 @@ enum ColorLUT {
     private static func build(_ map: (RGB) -> RGB) -> Data {
         let n = dimension
         var values = [Float](repeating: 0, count: n * n * n * 4)
-        var index = 0
-        // Core Image cubes vary red fastest, then green, then blue.
-        for b in 0..<n {
-            for g in 0..<n {
-                for r in 0..<n {
-                    let node: RGB = (Double(r) / Double(n - 1), Double(g) / Double(n - 1), Double(b) / Double(n - 1))
-                    let rgb = Oklab.encodedP3(fromSRGB: map(Oklab.encodedSRGB(fromP3: node)))
-                    values[index] = Float(min(1, max(0, rgb.0)))
-                    values[index + 1] = Float(min(1, max(0, rgb.1)))
-                    values[index + 2] = Float(min(1, max(0, rgb.2)))
-                    values[index + 3] = 1
-                    index += 4
+        // Rebuilt on every tick of an HSL or wheel drag, so spread it over the cores: each blue
+        // slice is independent, and `map` only reads its settings.
+        values.withUnsafeMutableBufferPointer { buffer in
+            let output = buffer
+            func slice(_ b: Int) {
+                // Core Image cubes vary red fastest, then green, then blue.
+                var index = b * n * n * 4
+                for g in 0..<n {
+                    for r in 0..<n {
+                        let node: RGB = (Double(r) / Double(n - 1), Double(g) / Double(n - 1), Double(b) / Double(n - 1))
+                        let rgb = Oklab.encodedP3(fromSRGB: map(Oklab.encodedSRGB(fromP3: node)))
+                        output[index] = Float(min(1, max(0, rgb.0)))
+                        output[index + 1] = Float(min(1, max(0, rgb.1)))
+                        output[index + 2] = Float(min(1, max(0, rgb.2)))
+                        output[index + 3] = 1
+                        index += 4
+                    }
                 }
+            }
+            if buildsInParallel {
+                DispatchQueue.concurrentPerform(iterations: n) { slice($0) }
+            } else {
+                for b in 0..<n { slice(b) }
             }
         }
         return values.withUnsafeBufferPointer { Data(buffer: $0) }

@@ -4,6 +4,8 @@ import Foundation
 /// RGB and luminance histogram of a rendered image, for the Develop panel.
 public struct Histogram: Sendable, Hashable {
     public static let binCount = 64
+    /// Long edge of the copy the histogram counts.
+    public static let sampleSize = 256
 
     /// Each array has `binCount` values scaled so the tallest bin across channels is 1.
     public var red: [Double]
@@ -21,7 +23,7 @@ public struct Histogram: Sendable, Hashable {
 
     /// Samples a downscaled copy, so this is cheap enough to run after every render. Transparent
     /// pixels (the crop tool's empty corners around a straightened photo) are left out.
-    public init?(image: CGImage, sampleSize: Int = 256) {
+    public init?(image: CGImage, sampleSize: Int = Histogram.sampleSize) {
         let scale = min(1, Double(sampleSize) / Double(max(image.width, image.height)))
         let width = max(1, Int(Double(image.width) * scale))
         let height = max(1, Int(Double(image.height) * scale))

@@ -19,13 +19,29 @@ public enum ClippingOverlay {
     public static func apply(to image: CGImage, shadows: Bool, highlights: Bool) -> CGImage? {
         guard shadows || highlights else { return image }
         let source = CIImage(cgImage: image, options: [.colorSpace: NSNull()])
+        let output = paint(source, shadows: shadows, highlights: highlights)
+        return context.createCGImage(output, from: source.extent, format: .RGBA8,
+                                     colorSpace: image.colorSpace ?? CGColorSpace(name: CGColorSpace.sRGB), deferred: false)
+    }
+
+    /// The overlay as part of a render, so the photo isn't read back and drawn a second time:
+    /// `image` is in the context's working space and is shown in `space`. The thresholds work on
+    /// `space`'s encoded values and sit halfway to the next 8-bit step, so the same pixels turn
+    /// red or blue as when the overlay was painted on the 8-bit render.
+    public static func apply(to image: CIImage, shadows: Bool, highlights: Bool, shownIn space: CGColorSpace) -> CIImage {
+        guard shadows || highlights, let encoded = image.matchedFromWorkingSpace(to: space) else { return image }
+        return paint(encoded, shadows: shadows, highlights: highlights).matchedToWorkingSpace(from: space) ?? image
+    }
+
+    /// Paints `source`'s clipped pixels, treating its values as the stored display values.
+    private static func paint(_ source: CIImage, shadows: Bool, highlights: Bool) -> CIImage {
         let extent = source.extent
         var result = source
         if highlights {
             // White where even the darkest channel is at 255.
             let darkest = CIFilter.minimumComponent()
             darkest.inputImage = source
-            result = paint(highlightColor, over: result, where: darkest.outputImage, above: 254.5 / 255, extent: extent)
+            result = paint(rawHighlight, over: result, where: darkest.outputImage, above: 254.5 / 255, extent: extent)
         }
         if shadows {
             // White where the brightest channel is above 0; the blue goes everywhere else.
@@ -34,7 +50,7 @@ public enum ClippingOverlay {
             let lifted = threshold(brightest.outputImage, at: 0.5 / 255)
             let blend = CIFilter.blendWithMask()
             blend.inputImage = result
-            blend.backgroundImage = CIImage(color: shadowColor).cropped(to: extent)
+            blend.backgroundImage = CIImage(color: rawShadow).cropped(to: extent)
             blend.maskImage = lifted
             result = blend.outputImage ?? result
         }
@@ -43,10 +59,15 @@ public enum ClippingOverlay {
         keepAlpha.inputImage = result
         keepAlpha.backgroundImage = CIImage(color: .clear).cropped(to: extent)
         keepAlpha.maskImage = source
-        guard let output = keepAlpha.outputImage?.cropped(to: extent) else { return nil }
-        return context.createCGImage(output, from: extent, format: .RGBA8,
-                                     colorSpace: image.colorSpace ?? CGColorSpace(name: CGColorSpace.sRGB))
+        return keepAlpha.outputImage?.cropped(to: extent) ?? source
     }
+
+    /// The overlay colors as stored values: tagged with the develop working space, so a color
+    /// managed context doesn't convert them either.
+    private static let rawHighlight = CIColor(red: 1, green: 0, blue: 0, colorSpace: DevelopRenderer.workingSpace)
+        ?? highlightColor
+    private static let rawShadow = CIColor(red: 0, green: 0.3, blue: 1, colorSpace: DevelopRenderer.workingSpace)
+        ?? shadowColor
 
     private static func paint(_ color: CIColor, over image: CIImage, where values: CIImage?, above level: Float,
                               extent: CGRect) -> CIImage {

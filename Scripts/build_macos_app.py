@@ -15,6 +15,7 @@ import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 ARCHS = ["arm64", "x86_64"]
+APP_ICON = ROOT / "Sources/AtelierApp/Resources/AppIcon.icns"
 MIN_MACOS = "15.0"
 
 
@@ -93,7 +94,14 @@ def package(args, arch, products, revision, output):
             source = resources_from / resource
             if source.is_dir():
                 shutil.copytree(source, path / "Contents/Resources" / resource)
+        # Finder and the Dock read the icon from the bundle itself (CFBundleIconFile); the app
+        # setting it at run time only changes the Dock while it runs. The HDR helper uses the same
+        # icon until it has its own.
+        resources = path / "Contents/Resources"
+        resources.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(APP_ICON, resources / APP_ICON.name)
         info = {"CFBundleIdentifier": identifier, "CFBundleExecutable": executable,
+                "CFBundleIconFile": APP_ICON.stem,
                 "CFBundleName": name, "CFBundleDisplayName": name, "CFBundlePackageType": "APPL",
                 "CFBundleVersion": "1", "CFBundleShortVersionString": "0.1",
                 "LSMinimumSystemVersion": "15.0", "AtelierSourceRevision": revision}
