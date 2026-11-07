@@ -13,6 +13,8 @@ enum ColorLUT {
     static let space = CGColorSpace(name: CGColorSpace.displayP3)!
 
     private static let lock = NSLock()
+    /// Off only for the before/after benchmark (`SliderPerformanceTests`).
+    nonisolated(unsafe) static var buildsInParallel = true
     nonisolated(unsafe) private static var cachedKey: [Double]?
     nonisolated(unsafe) private static var cachedCube: Data?
 
@@ -69,7 +71,7 @@ enum ColorLUT {
         // slice is independent, and `map` only reads its settings.
         values.withUnsafeMutableBufferPointer { buffer in
             let output = buffer
-            DispatchQueue.concurrentPerform(iterations: n) { b in
+            func slice(_ b: Int) {
                 // Core Image cubes vary red fastest, then green, then blue.
                 var index = b * n * n * 4
                 for g in 0..<n {
@@ -83,6 +85,11 @@ enum ColorLUT {
                         index += 4
                     }
                 }
+            }
+            if buildsInParallel {
+                DispatchQueue.concurrentPerform(iterations: n) { slice($0) }
+            } else {
+                for b in 0..<n { slice(b) }
             }
         }
         return values.withUnsafeBufferPointer { Data(buffer: $0) }
