@@ -355,8 +355,24 @@ Evidence baseline, October 30, 2026:
 
 ## AT-025 — Faster Develop sliders (GPU audit items GPU-0 to GPU-3) and the app icon in built apps
 
-**Status:** In progress; PR open, not built or timed on a Mac yet. **Owner/chat/branch:** Claude (project thread "Audit GPU use for performance"), branch `claude/project-thread-c8f3pt`. **Requested:** Rosh, November 7, 2026, after the GPU/performance audit (`reports/gpu-performance-audit-2026-11-07.md` in project files and in `~/RoshProjects/Atelier/reports/`). Part of AT-011's performance work. **Dependencies:** none.
+**Status:** In progress; PR [#79](https://github.com/roshan-davis/atelier/pull/79) open. CI built it and ran the tests at c3834f3; not yet built, timed or tested by hand on a Mac. **Owner/chat/branch:** Claude (project thread "Audit GPU use for performance"), branch `claude/project-thread-c8f3pt`. **Requested:** Rosh, November 7, 2026, after the GPU/performance audit (`reports/gpu-performance-audit-2026-11-07.md` in project files and in `~/RoshProjects/Atelier/reports/`). Part of AT-011's performance work. **Dependencies:** none.
 
 **Scope:** (1) GPU-1: an interactive `DevelopSession` (Develop's proxy, full-size and Navigator sessions) keeps pipeline step 1 (RAW decode, white balance, exposure, profile, Remove CA, Defringe, lens vignetting and distortion, Upright/Transform) as a Core Image cached intermediate, keyed by `DevelopSession.CorrectedKey`; sliders on later panels reuse it. One-off sessions (previews, export) are unchanged. (2) GPU-2: the clipping overlay (J) is painted in the same render (`ClippingOverlay.apply(to:shadows:highlights:shownIn:)`) instead of a second upload and readback; the histogram and color scope are counted on their own queue after the photo is published. (3) GPU-3: `ColorLUT.build` runs its 32 blue slices in parallel. (4) GPU-0: `RenderSignposts` intervals (Proxy render, Full-size render, Histogram, Color cube) in Instruments' Points of Interest. (5) `Scripts/build_macos_app.py` copies `AppIcon.icns` into Atelier.app and the HDR helper and sets `CFBundleIconFile`, so Finder shows the icon.
+
+**Performance improvement (PR [#79](https://github.com/roshan-davis/atelier/pull/79)):** measured with `SliderPerformanceTests` on CI's Nikon Z6 and Zf NEFs at commit c3834f3 (GitHub Actions macos-15 VM, Debug build, virtual GPU; a real M4 Pro will be much faster in absolute terms). Median ms per slider tick, 6 ticks after a warm-up; "before" is the old render-queue work per tick (no step-1 cache, one-core color cube, J as a second round trip, histogram and scope before the photo is shown), "after" is the new render plus the histogram work it no longer blocks on.
+
+| Slider (2560 px proxy) | Z6 before → after | Zf before → after |
+|---|---:|---:|
+| Basic > Contrast | 177 → 149 | 155 → 119 |
+| Other non-step-1 sliders (Highlights … Glow) | ~150–185 → ~140–170 | ~150–170 → ~112–132 |
+| HSL > Saturation Red | 291 → 219 | 263 → 194 |
+| HSL > Hue Blue | 279 → 230 | 256 → 199 |
+| Color Grading > Midtones wheel | 265 → 173 | 236 → 145 |
+| Contrast, J on | 205 → 125 | 185 → 97 |
+| HSL Saturation Red, J on | 307 → 204 | 291 → 177 |
+| Exposure, Temp, Distortion, Transform (step 1) | ~150–182, unchanged | unchanged |
+| HSL Saturation Red, full size (Z6) | 115 → 79 | – |
+
+Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Grading, 40–50% with J on; step-1 sliders unchanged as expected. The histogram and color scope take about 95–150 ms per tick in this Debug build, so moving them off the render queue is most of the win (candidate next fix: count them on the GPU). The run also showed `createCGImage` deferring the render until first draw (full-size Contrast "took" 7 ms), i.e. on the main thread; commit ae8b282 forces `deferred: false`. Timings at ae8b282 are pending: CI for that head failed to get a runner (re-run once), so they need a run on a Mac (`ATELIER_SAMPLE_RAWS=<folder of NEFs> ATELIER_SAMPLE_OUT=<folder> swift test --filter SliderPerformanceTests`).
 
 **Acceptance:** Mac build and tests pass; Develop sliders on every panel update correctly (no stale photo after Exposure, Temp/Tint, Profile, Lens Corrections, Defringe or Transform changes); J overlay marks the same pixels as before and the histogram is unchanged by it; Instruments numbers before/after for an HSL drag, a Contrast drag and a Clarity drag on a Z6 NEF; Atelier.app shows its icon in Finder. **Deferred:** GPU-4 to GPU-13 from the audit.
