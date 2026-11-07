@@ -37,8 +37,12 @@ public final class DevelopRenderer: @unchecked Sendable {
         DevelopSession(url: url, maxPixelSize: maxPixelSize, renderer: self, interactive: interactive)
     }
 
+    /// Rendered now, on the calling thread. Without `deferred: false` Core Image may hand back
+    /// a CGImage that renders only when first drawn, which for the photo view means on the main
+    /// thread. (In CI a full-size 24 MP render returned in 7 ms, which only a deferred render
+    /// explains.)
     public func cgImage(_ image: CIImage, colorSpace: CGColorSpace = DevelopRenderer.displaySpace) -> CGImage? {
-        context.createCGImage(image, from: image.extent.integral, format: .RGBA8, colorSpace: colorSpace)
+        context.createCGImage(image, from: image.extent.integral, format: .RGBA8, colorSpace: colorSpace, deferred: false)
     }
 
     // MARK: Geometry

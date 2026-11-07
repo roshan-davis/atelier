@@ -21,7 +21,7 @@ public enum ClippingOverlay {
         let source = CIImage(cgImage: image, options: [.colorSpace: NSNull()])
         let output = paint(source, shadows: shadows, highlights: highlights)
         return context.createCGImage(output, from: source.extent, format: .RGBA8,
-                                     colorSpace: image.colorSpace ?? CGColorSpace(name: CGColorSpace.sRGB))
+                                     colorSpace: image.colorSpace ?? CGColorSpace(name: CGColorSpace.sRGB), deferred: false)
     }
 
     /// The overlay as part of a render, so the photo isn't read back and drawn a second time:
