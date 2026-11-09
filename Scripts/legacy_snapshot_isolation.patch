@@ -1,0 +1,41 @@
+diff --git a/Sources/AtelierApp/EditIn.swift b/Sources/AtelierApp/EditIn.swift
+index 0718ae8..8111138 100644
+--- a/Sources/AtelierApp/EditIn.swift
++++ b/Sources/AtelierApp/EditIn.swift
+@@ -196,11 +196,14 @@ extension LibraryModel {
+                     self.selection = Set(opened.map(\.0))
+                     self.focusedID = first
+                 }
+-                let configuration = NSWorkspace.OpenConfiguration()
+-                NSWorkspace.shared.open(opened.map(\.1), withApplicationAt: editor.appURL,
+-                                        configuration: configuration) { _, error in
+-                    guard let error else { return }
+-                    Task { @MainActor in self.status = "\(editor.name) could not open the file: \(error.localizedDescription)" }
++                // Snapshot runs need the derivative and stack, while Preview owns its own windows.
++                if LayoutSnapshots.outputFolder == nil {
++                    let configuration = NSWorkspace.OpenConfiguration()
++                    NSWorkspace.shared.open(opened.map(\.1), withApplicationAt: editor.appURL,
++                                            configuration: configuration) { _, error in
++                        guard let error else { return }
++                        Task { @MainActor in self.status = "\(editor.name) could not open the file: \(error.localizedDescription)" }
++                    }
+                 }
+                 self.status = opened.isEmpty ? "Nothing was sent to \(editor.name)"
+                     : "Opened \(opened.count) photo\(opened.count == 1 ? "" : "s") in \(editor.name). Saves show up here."
+diff --git a/Sources/AtelierApp/LayoutSnapshots.swift b/Sources/AtelierApp/LayoutSnapshots.swift
+--- a/Sources/AtelierApp/LayoutSnapshots.swift
++++ b/Sources/AtelierApp/LayoutSnapshots.swift
+@@ -20,3 +20,3 @@
+         await snapshotCatalogRecovery(into: folder)
+-        await importSamplePhoto(into: model)
++        await importSamplePhoto(into: model, in: folder)
+         let panels = ["histogram"] + DevelopSettings.Panel.allCases.map(\.rawValue)
+@@ -858,4 +858,6 @@
+     /// A synthetic 3000x2000 photo, imported into the snapshot catalog.
+-    private static func importSamplePhoto(into model: LibraryModel) async {
+-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("atelier-snapshot.jpg")
++    private static func importSamplePhoto(into model: LibraryModel, in folder: URL) async {
++        let fixtures = folder.appendingPathComponent("fixtures", isDirectory: true)
++        try? FileManager.default.createDirectory(at: fixtures, withIntermediateDirectories: true)
++        let url = fixtures.appendingPathComponent("atelier-snapshot.jpg")
+         let width = 3000, height = 2000

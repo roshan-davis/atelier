@@ -456,3 +456,5 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 **Grouping and documentation:** Rosh requested a testing guide with report interpretation and recommended groups. Added selectable checks, build, Swift, smoke and visual groups to the same PR.
 
 **Local packaging fix:** The visual run at `a6aa648` from the App checkout stopped before launch because its existing SwiftPM output contained a stale HDR Help symlink. The UI runner now packages the current revision from a fresh SwiftPM build directory.
+
+**Edit In fixture cleanup:** The App visual run at `555faf8` compared 98 screens but left two documents open in Preview. The snapshot scenario now checks the generated stack without launching Preview, and the runner adapts older baselines so their Edit In TIFF is also cleaned with the run.

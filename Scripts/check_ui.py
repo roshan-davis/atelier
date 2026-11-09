@@ -53,6 +53,21 @@ def smoke(app, scratch, output, env):
         log=output / "smoke.log", timeout=180)
 
 
+def isolate_baseline_edit_in(source, output):
+    # Older revisions launched Preview and wrote the sample to the Mac's shared
+    # temporary directory. Patch only that test setup in the disposable baseline.
+    editor = "Sources/AtelierApp/EditIn.swift"
+    snapshots = "Sources/AtelierApp/LayoutSnapshots.swift"
+    includes = []
+    if 'LayoutSnapshots.outputFolder == nil' not in (source / editor).read_text():
+        includes.append(f"--include={editor}")
+    if 'temporaryDirectory.appendingPathComponent("atelier-snapshot.jpg")' in (source / snapshots).read_text():
+        includes.append(f"--include={snapshots}")
+    if includes:
+        run(["git", "apply", *includes, str(ROOT / "Scripts/legacy_snapshot_isolation.patch")],
+            cwd=source, log=output / "baseline-isolation.log")
+
+
 def capture(app, name, scratch, output, env):
     # The recovery and import screens show paths. Give both revisions the same
     # path, with a fresh catalog and fixture directory for each capture.
@@ -128,6 +143,7 @@ def main():
                 run(["git", "worktree", "add", "--detach", str(baseline), base],
                     log=output / "baseline-worktree.log")
                 try:
+                    isolate_baseline_edit_in(baseline, output)
                     base_app = scratch / "Baseline.app"
                     package(baseline, base_app, "base", output, env)
                     before = capture(base_app, "base", scratch, output, env)

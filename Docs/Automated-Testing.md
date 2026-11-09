@@ -17,7 +17,10 @@ That branch must include the automation runner.
 | All checks, including both UI groups | `python3 Scripts/check_pr.py --group all --quiet` |
 
 Use Python 3 and full Xcode. The UI groups need a logged-in Mac desktop session and open
-temporary Atelier windows with a disposable catalog. The visual group uses a locally
+temporary Atelier windows with a disposable catalog. The visual group exercises Edit In
+stacking inside Atelier and keeps its generated TIFF in the disposable test folder.
+For older baselines, the runner applies those same isolation changes to the test setup.
+The visual group uses a locally
 available `origin/main` as its default baseline. Run `git fetch origin main` to refresh it,
 or pass `--base <ref>` to compare against a different fetched revision.
 

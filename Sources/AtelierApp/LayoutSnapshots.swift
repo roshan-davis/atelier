@@ -99,7 +99,7 @@ enum LayoutSnapshots {
         await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
                       to: folder.appendingPathComponent("loupe-1280x800.png"))
         model.mode = .grid
-        // Edit In end to end, with Preview standing in for Photoshop: the copy is stacked next to the original.
+        // Render and catalog an Edit In copy to show the stack without opening Preview.
         model.selection = Set(model.rows.map(\.id))
         model.editIn(ExternalEditor(name: "Preview", appURL: URL(fileURLWithPath: "/System/Applications/Preview.app")))
         for _ in 0..<40 where model.rows.count < 2 { try? await Task.sleep(for: .milliseconds(250)) }
