@@ -51,8 +51,13 @@ final class KeyboardFocus {
         didBlur(target)
     }
 
+    /// The area ⌃Tab counts from. Kept apart from `current` so ⌃Tab always moves on, even
+    /// when a control was slow to take focus (or the photo, which has no control, has it).
+    private(set) var activeArea: KeyboardFocusArea = .photo
+
     func didFocus(_ target: Target) {
         current = target
+        activeArea = target.area
         lastInArea[target.area] = target.id
     }
 
@@ -63,6 +68,7 @@ final class KeyboardFocus {
     /// Gives the arrow keys back to the photo: Esc, a click on the photo, or ⌃Tab to the photo.
     func release() {
         current = nil
+        activeArea = .photo
         requests.send(Request(target: nil))
     }
 
@@ -73,16 +79,21 @@ final class KeyboardFocus {
             return
         }
         let id = lastInArea[area].flatMap { ids.contains($0) ? $0 : nil } ?? first
+        // Let go of the old area first, so its control never keeps focus (and the arrows).
+        requests.send(Request(target: nil))
+        current = nil
+        activeArea = area
         requests.send(Request(target: Target(area: area, id: id)))
     }
 
     /// The area ⌃Tab just moved to, for its brief outline (`AreaFocusFlash`).
     let arrivals = PassthroughSubject<KeyboardFocusArea, Never>()
 
-    /// ⌃Tab and ⌃⇧Tab: the next area with something to focus, wrapping around.
+    /// ⌃Tab and ⌃⇧Tab: the next area with something to focus, wrapping around. Each press
+    /// moves on, so holding ⌃ and tapping Tab walks the areas in turn.
     func cycle(forward: Bool) {
         let areas = KeyboardFocusArea.allCases
-        var index = areas.firstIndex(of: current?.area ?? .photo) ?? areas.count - 1
+        var index = areas.firstIndex(of: activeArea) ?? areas.count - 1
         for _ in areas.indices {
             index = (index + (forward ? 1 : areas.count - 1)) % areas.count
             let area = areas[index]
@@ -218,9 +229,9 @@ struct KeyboardSlider: ViewModifier {
     }
 }
 
-/// A thin accent outline around an area that ⌃Tab just moved to, fading out after about half
-/// a second, so you can see where focus went (Rosh, Nov 9, 2026). With Reduce Motion it shows
-/// and hides without fading.
+/// An accent ring with a soft glow around the area ⌃Tab just moved to: it eases in (settling
+/// from slightly larger), holds about 0.65 s and fades out, so you can see where focus went
+/// (Rosh, Nov 9, 2026). With Reduce Motion it shows and hides without moving or fading.
 struct AreaFocusFlash: ViewModifier {
     let area: KeyboardFocusArea
     var enabled = true
@@ -231,8 +242,21 @@ struct AreaFocusFlash: ViewModifier {
     func body(content: Content) -> some View {
         content
             .overlay {
-                Rectangle()
-                    .strokeBorder(Color.accentColor.opacity(0.8), lineWidth: 2)
+                // An accent ring with a soft inner glow and a faint wash: clear at a glance,
+                // gone in under a second.
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color.accentColor.opacity(0.06))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .strokeBorder(Color.accentColor.opacity(0.35), lineWidth: 7)
+                            .blur(radius: 5)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .strokeBorder(Color.accentColor, lineWidth: 2.5)
+                    )
+                    .padding(2)
+                    .scaleEffect(visible || reduceMotion ? 1 : 1.015)
                     .opacity(visible ? 1 : 0)
                     .allowsHitTesting(false)
             }
@@ -242,14 +266,18 @@ struct AreaFocusFlash: ViewModifier {
                     visible = false
                     return
                 }
-                visible = true
+                if reduceMotion {
+                    visible = true
+                } else {
+                    withAnimation(.easeOut(duration: 0.15)) { visible = true }
+                }
                 hideTask = Task { @MainActor in
-                    try? await Task.sleep(for: .milliseconds(reduceMotion ? 600 : 250))
+                    try? await Task.sleep(for: .milliseconds(reduceMotion ? 800 : 650))
                     guard !Task.isCancelled else { return }
                     if reduceMotion {
                         visible = false
                     } else {
-                        withAnimation(.easeOut(duration: 0.4)) { visible = false }
+                        withAnimation(.easeInOut(duration: 0.5)) { visible = false }
                     }
                 }
             }

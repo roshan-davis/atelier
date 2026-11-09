@@ -895,6 +895,12 @@ final class LibraryModel: ObservableObject {
         if event.modifierFlags.contains(.command) { return false }
         // Only the library window; never Settings or other windows.
         guard let window = NSApp.keyWindow, window === mainWindow, window.attachedSheet == nil else { return false }
+        // ⌃Tab moves between areas from anywhere in Develop, even from a text field (the Mac's
+        // own ⌃Tab leaves a text field), so it never gets stuck.
+        if mode == .develop, let action = KeyBindings.action(for: event),
+           action == .nextArea || action == .previousArea {
+            return perform(action)
+        }
         if window.firstResponder is NSText { return false }
         // ⌃ and ⌥ presses run only a command bound to them in Settings > Keyboard (⌃Tab).
         if !event.modifierFlags.intersection([.control, .option]).isEmpty {
