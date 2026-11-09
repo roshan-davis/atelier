@@ -251,21 +251,9 @@ public struct LensGeometry: Sendable {
         if let kernel = Self.compiled.kernel {
             let m = toPixels * inverse * toCentered
             let lens = CIVector(x: width / 2, y: height / 2, z: 4 / (width * width + height * height), w: distortion)
-            let sourceTransform: CGAffineTransform?
-            if distortion == 0, m.rows[2] == SIMD3(0, 0, 1) {
-                sourceTransform = CGAffineTransform(a: m.rows[0].x, b: m.rows[1].x,
-                                                    c: m.rows[0].y, d: m.rows[1].y,
-                                                    tx: m.rows[0].z, ty: m.rows[1].z)
-            } else {
-                sourceTransform = nil
-            }
+            let radialScale = distortion * lens.z
             warped = kernel.apply(extent: extent, roiCallback: { _, tile in
-                // Affine tiles only need their mapped source rectangle, plus room for the
-                // sampler's neighboring pixels. Requesting the whole RAW for every tile
-                // makes full-resolution Aspect and other affine transforms stall Core Image.
-                guard let sourceTransform else { return extent }
-                let region = tile.applying(sourceTransform).insetBy(dx: -2, dy: -2).integral.intersection(extent)
-                return region.isNull ? .zero : region
+                Self.sourceRegion(for: tile, within: extent, inverse: m, radialScale: radialScale)
             }, arguments: [image, m.ciRow(0), m.ciRow(1), m.ciRow(2), lens,
                            CIVector(x: width, y: height)])
         }
@@ -286,6 +274,39 @@ public struct LensGeometry: Sendable {
         }
         return (warped ?? image).composited(over: Self.fill.cropped(to: extent))
     }
+    private static func sourceRegion(for tile: CGRect, within extent: CGRect, inverse: Matrix3,
+                                     radialScale: Double) -> CGRect {
+        var minX = Double.infinity, minY = Double.infinity
+        var maxX = -Double.infinity, maxY = -Double.infinity
+        for x in [tile.minX, tile.maxX] {
+            for y in [tile.minY, tile.maxY] {
+                let point = SIMD3(Double(x), Double(y), 1)
+                let w = (inverse.rows[2] * point).sum()
+                // When the denominator stays positive, each projected coordinate reaches
+                // its extrema at the corners. Near a horizon, keep the conservative region.
+                guard w > 0.001 else { return extent }
+                let sx = (inverse.rows[0] * point).sum() / w
+                let sy = (inverse.rows[1] * point).sum() / w
+                guard sx.isFinite, sy.isFinite else { return extent }
+                minX = min(minX, sx)
+                minY = min(minY, sy)
+                maxX = max(maxX, sx)
+                maxY = max(maxY, sy)
+            }
+        }
+
+        // The radial shift has magnitude |k| × r³ / R². The farthest corner of
+        // the projected bounds gives a conservative upper bound for the whole tile.
+        let dx = max(abs(minX - extent.midX), abs(maxX - extent.midX))
+        let dy = max(abs(minY - extent.midY), abs(maxY - extent.midY))
+        let radius = hypot(dx, dy)
+        let padding = 2 + abs(radialScale) * radius * radius * radius
+        guard padding.isFinite else { return extent }
+        let bounds = CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+        let region = bounds.insetBy(dx: -padding, dy: -padding).integral.intersection(extent)
+        return region.isNull ? .zero : region
+    }
+
 }
 
 /// Lightroom's Transform as a camera turned in front of the photo: pitch and yaw tilt it,

@@ -287,6 +287,30 @@ final class TransformTests: XCTestCase {
     }
 
     func testAffineWarpTileMatchesTheSameRegionOfTheFullRender() throws {
+        var settings = DevelopSettings.neutral
+        settings[.transformAspect] = 13
+        settings[.transformRotate] = 8
+        settings[.transformOffsetX] = 35
+        try assertWarpTilesMatchFullRender(settings)
+    }
+
+    func testPerspectiveWarpTilesMatchFullRender() throws {
+        var settings = DevelopSettings.neutral
+        settings[.transformVertical] = 20
+        try assertWarpTilesMatchFullRender(settings)
+    }
+
+    func testDistortionWarpTilesMatchFullRender() throws {
+        for distortion in [-50.0, 50.0] {
+            var settings = DevelopSettings.neutral
+            settings[.lensDistortion] = distortion
+            try assertWarpTilesMatchFullRender(settings)
+            settings[.transformVertical] = 20
+            try assertWarpTilesMatchFullRender(settings)
+        }
+    }
+
+    private func assertWarpTilesMatchFullRender(_ settings: DevelopSettings) throws {
         let renderer = DevelopRenderer()
         let extent = CGRect(x: 0, y: 0, width: 640, height: 480)
         let gradient = CIFilter(name: "CILinearGradient", parameters: [
@@ -296,10 +320,6 @@ final class TransformTests: XCTestCase {
             "inputColor1": CIColor(red: 0.1, green: 0.2, blue: 0.8),
         ])
         let source = try XCTUnwrap(gradient?.outputImage).cropped(to: extent)
-        var settings = DevelopSettings.neutral
-        settings[.transformAspect] = 13
-        settings[.transformRotate] = 8
-        settings[.transformOffsetX] = 35
         let warped = LensGeometry(settings: settings, size: extent.size, focalLength35: 35).apply(to: source)
         let full = try XCTUnwrap(renderer.cgImage(warped, colorSpace: DevelopRenderer.sRGB))
 
