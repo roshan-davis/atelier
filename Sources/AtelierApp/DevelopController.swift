@@ -455,6 +455,17 @@ final class DevelopController: ObservableObject {
     /// How long ← → must rest before the photo is decoded, when they come faster than this.
     private static let openRest: TimeInterval = 0.15
     private var lastOpen = Date.distantPast
+    /// The photos either side of the open one in the Filmstrip (set by `LibraryModel`), and
+    /// their proxies, decoded and rendered once in the background after the open photo's first
+    /// render, so ← or → to one of them opens at once instead of decoding the RAW again.
+    /// Lightroom does the same for neighbouring photos.
+    var neighbours: [Int64] = [] {
+        didSet { if neighbours != oldValue, firstRenderDone { prefetchNeighbours() } }
+    }
+    private var prefetched: [Int64: DevelopSession] = [:]
+    private var prefetching: Set<Int64> = []
+    private var firstRenderDone = false
+    private static let prefetchQueue = DispatchQueue(label: "atelier.develop.prefetch", qos: .utility)
     /// The open photo, readable off the main thread so queued work for a photo already left is
     /// skipped.
     private let openAsset = LockedValue<Int64?>(nil)
@@ -481,14 +492,18 @@ final class DevelopController: ObservableObject {
     func reopen() {
         let id = assetID
         open(nil)
+        prefetched.removeAll()
         open(id)
     }
 
     func open(_ assetID: Int64?) {
         guard assetID != self.assetID else { return }
         flushSave()
+        // Kept for going straight back (← then →); dropped once it's no longer a neighbour.
+        if let previous = self.assetID, let session { prefetched[previous] = session }
         self.assetID = assetID
         openAsset.value = assetID
+        firstRenderDone = false
         session = nil
         // Kept on screen until the next photo has an image (AT-019), never used as this photo's.
         let previousImage = image
@@ -550,9 +565,11 @@ final class DevelopController: ObservableObject {
                     // Not once the proxy has rendered, or for another photo.
                     guard self.assetID == assetID, self.image === placeholder, let decoded else { return }
                     self.image = decoded
+                    if self.histogram == nil { self.measurePreview(decoded, of: assetID) }
                 }
             }
         }
+        measurePreview(image, of: assetID)
 
         guard let url else {
             errorMessage = "The original is offline. Connect its drive to edit this photo."
@@ -571,6 +588,11 @@ final class DevelopController: ObservableObject {
         let now = Date()
         let rushing = now.timeIntervalSince(lastOpen) < Self.openRest
         lastOpen = now
+        // A neighbour decoded while you looked at the last photo: no wait at all.
+        if let session = prefetched.removeValue(forKey: assetID) {
+            finishOpen(assetID, session: session)
+            return
+        }
         let openAsset = self.openAsset
         let start = {
             // Left before it started: don't decode it.
@@ -1685,22 +1707,10 @@ final class DevelopController: ObservableObject {
             let cgImage = rendered?.image
             // The red overlay or an Option-drag view would skew the histogram; keep the last one
             // while it shows. It is counted after the photo is on its way, beside the next render.
-            if measures, let plain = rendered?.plain,
-               measureJob.submit(DevelopMeasureRequest(image: plain, assetID: assetID, count: count)) {
-                measureQueue.async {
-                    while let request = measureJob.take() {
-                        let (histogram, scope) = RenderSignposts.measure("Histogram") {
-                            (Histogram(image: request.image), ColorScope(image: request.image))
-                        }
-                        DispatchQueue.main.async {
-                            MainActor.assumeIsolated {
-                                guard self.assetID == request.assetID, request.count >= self.measuredCount else { return }
-                                self.measuredCount = request.count
-                                if let histogram { self.histogram = histogram }
-                                if let scope { self.colorScope = scope }
-                            }
-                        }
-                    }
+            if measures, let plain = rendered?.plain {
+                Self.measure(DevelopMeasureRequest(image: plain, assetID: assetID, count: count),
+                             job: measureJob, on: measureQueue) { request, histogram, scope in
+                    MainActor.assumeIsolated { self.applyMeasure(request, histogram: histogram, scope: scope) }
                 }
             }
             DispatchQueue.main.async {
@@ -1712,6 +1722,10 @@ final class DevelopController: ObservableObject {
                         self.image = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
                         self.imageIsWhole = !cropping
                     }
+                    if self.assetID == assetID, !self.firstRenderDone {
+                        self.firstRenderDone = true
+                        self.prefetchNeighbours()
+                    }
                     if self.needsRender {
                         self.needsRender = false
                         self.scheduleRender()
@@ -1720,6 +1734,69 @@ final class DevelopController: ObservableObject {
                     }
                 }
             }
+        }
+    }
+
+    /// Decodes the neighbours' proxies and renders each once (which keeps the decoded photo in
+    /// the session), one at a time at utility priority, never for a photo you've already left.
+    private func prefetchNeighbours() {
+        guard let current = assetID else { return }
+        let wanted = Set(neighbours)
+        prefetched = prefetched.filter { wanted.contains($0.key) }
+        let openAsset = self.openAsset
+        for id in neighbours where prefetched[id] == nil && !prefetching.contains(id) {
+            guard let url = try? catalog.fileURL(for: id) else { continue }
+            let settings = (try? catalog.developSettings(for: id)) ?? .neutral
+            prefetching.insert(id)
+            Self.prefetchQueue.async {
+                var session: DevelopSession?
+                // Moved on before its turn: the next photo's neighbours are wanted instead.
+                if openAsset.value == current {
+                    session = DevelopRenderer.shared.session(for: url, maxPixelSize: Self.proxySize, interactive: true)
+                    _ = session?.renderForDisplay(settings)
+                }
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        self.prefetching.remove(id)
+                        guard let session, self.neighbours.contains(id), self.assetID != id else { return }
+                        self.prefetched[id] = session
+                    }
+                }
+            }
+        }
+    }
+
+    /// Counts a histogram and color scope off the main thread, latest-wins.
+    private nonisolated static func measure(_ request: DevelopMeasureRequest, job: LatestJob<DevelopMeasureRequest>,
+                                            on queue: DispatchQueue,
+                                            apply: @escaping (DevelopMeasureRequest, Histogram?, ColorScope?) -> Void) {
+        guard job.submit(request) else { return }
+        queue.async {
+            while let request = job.take() {
+                let (histogram, scope) = RenderSignposts.measure("Histogram") {
+                    (Histogram(image: request.image), ColorScope(image: request.image))
+                }
+                DispatchQueue.main.async { apply(request, histogram, scope) }
+            }
+        }
+    }
+
+    private func applyMeasure(_ request: DevelopMeasureRequest, histogram: Histogram?, scope: ColorScope?) {
+        guard assetID == request.assetID, request.count >= measuredCount else { return }
+        measuredCount = request.count
+        if let histogram { self.histogram = histogram }
+        if let scope { colorScope = scope }
+    }
+
+    /// Until the photo's first render is counted, the histogram comes from the cached preview
+    /// it opens on, as Lightroom does, so it doesn't spin while you move through photos or the
+    /// photo decodes (Rosh, Nov 9, 2026). Any render's count replaces it.
+    private func measurePreview(_ preview: NSImage?, of assetID: Int64) {
+        guard let preview, !showsPreviousPhoto,
+              let cgImage = preview.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
+        Self.measure(DevelopMeasureRequest(image: cgImage, assetID: assetID, count: renderCount),
+                     job: measureJob, on: measureQueue) { request, histogram, scope in
+            MainActor.assumeIsolated { self.applyMeasure(request, histogram: histogram, scope: scope) }
         }
     }
 

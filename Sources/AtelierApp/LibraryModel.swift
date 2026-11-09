@@ -850,6 +850,7 @@ final class LibraryModel: ObservableObject {
         guard mode == .loupe || mode == .develop, let focusedID,
               let index = rows.firstIndex(where: { $0.id == focusedID }) else { return }
         let ids = [index + 1, index - 1].filter { rows.indices.contains($0) }.map { rows[$0].id }
+        if mode == .develop { develop.neighbours = ids }
         var ready: [(id: Int64, url: URL)] = []
         for id in [focusedID] + ids {
             if previews.has(.preview, for: id) {

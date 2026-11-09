@@ -44,13 +44,16 @@ final class KeyboardFocus {
 
     private struct Entry {
         var handler: (Press) -> Bool
-        /// Where the control is on screen, for Tab order and the first control of an area.
-        var minY: CGFloat
         /// A text field (Search Presets): a Tab stop that types, never where ⌃Tab lands.
         var isText = false
     }
 
     private var entries: [Target: Entry] = [:]
+    /// Where each control sits in its column, for Tab order and the top control of an area.
+    /// Kept apart from `entries`: SwiftUI reports a control's position before its onAppear
+    /// registers it, and a position dropped then left the control sorted last, so Tab skipped
+    /// Basic and came back to it out of order (Rosh's test, Nov 9, 2026).
+    private var positions: [Target: CGFloat] = [:]
     /// The control with focus; nil while the photos have it.
     private(set) var current: Target?
     /// The area ⌃Tab counts from: where it last moved to, or the focused control's area.
@@ -64,14 +67,14 @@ final class KeyboardFocus {
     let arrivals = PassthroughSubject<KeyboardFocusArea, Never>()
 
     func register(_ target: Target, isText: Bool = false, handler: @escaping (Press) -> Bool) {
-        entries[target] = Entry(handler: handler, minY: entries[target]?.minY ?? .greatestFiniteMagnitude,
-                                isText: isText)
+        entries[target] = Entry(handler: handler, isText: isText)
     }
 
     /// Whether the focused control is a text field, which keeps the keys it types.
     var currentIsText: Bool { current.flatMap { entries[$0]?.isText } ?? false }
 
     func unregister(_ target: Target) {
+        // The position stays: a control that comes back without moving isn't measured again.
         entries.removeValue(forKey: target)
         if current == target {
             current = nil
@@ -80,7 +83,7 @@ final class KeyboardFocus {
     }
 
     func setPosition(_ target: Target, minY: CGFloat) {
-        entries[target]?.minY = minY
+        positions[target] = minY
     }
 
     /// Gives a control focus: a click or drag on it, Tab, or ⌃Tab.
@@ -134,9 +137,11 @@ final class KeyboardFocus {
 
     /// An area's controls, top to bottom.
     private func targets(in area: KeyboardFocusArea) -> [Target] {
-        entries.filter { $0.key.area == area }
-            .sorted { $0.value.minY < $1.value.minY }
-            .map(\.key)
+        entries.keys.filter { $0.area == area }
+            .sorted {
+                let a = positions[$0] ?? .greatestFiniteMagnitude, b = positions[$1] ?? .greatestFiniteMagnitude
+                return a != b ? a < b : $0.id < $1.id
+            }
     }
 
     /// Focuses the control last used in an area, or its top one that isn't a text field (⌃Tab to
