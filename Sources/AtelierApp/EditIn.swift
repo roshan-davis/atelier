@@ -218,7 +218,7 @@ extension LibraryModel {
         previewScheduler.retryFailed(for: id)
         let settings = (try? catalog.developSettings(for: id)) ?? .neutral
         develop.refreshPreviews(for: id, settings: settings)
-        if develop.assetID == id { develop.reopen() }
+        develop.sourceChanged(id)
         if focusedID == id { reloadDetail() }
     }
 

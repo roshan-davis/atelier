@@ -21,6 +21,25 @@ enum ZoomLevel: Hashable {
     }
 
     static let presets: [ZoomLevel] = [.fit, .fill, .percent(100), .percent(200)]
+
+    /// The zoom bar's icon: Fit and Fill have one; percentages show as text.
+    var symbol: String? {
+        switch self {
+        case .fit: return "arrow.down.right.and.arrow.up.left"
+        case .fill: return "arrow.up.left.and.arrow.down.right"
+        case .percent: return nil
+        }
+    }
+
+    /// The zoom bar's tooltip, with the key that toggles zoom (changeable in Settings > Keyboard).
+    var help: String {
+        let key = KeyBindings.display(KeyBindings.key(for: .zoom))
+        switch self {
+        case .fit: return "Fit: the whole photo in view (\(key) toggles Fit and 100%)"
+        case .fill: return "Fill: the photo fills the view, edges may be cut off"
+        case .percent(let value): return "Zoom to \(Int(value.rounded()))% (pinch, or hold ⌥ and scroll, to zoom freely)"
+        }
+    }
 }
 
 /// What the zoomed view currently shows, reported back for the zoom bar and full-res loading.
@@ -670,6 +689,8 @@ final class ZoomCanvasView: NSView {
     // MARK: Mouse
 
     override func mouseDown(with event: NSEvent) {
+        // A click on the photo gives the arrow keys back to it (previous or next photo).
+        KeyboardFocus.shared.release()
         dragStart = event.locationInWindow
         dragged = false
         if let onPickDrag = scrollView?.onPickDrag {
@@ -760,13 +781,11 @@ struct ZoomControls: View {
             .help("Zoom (Z toggles Fit and 100%; pinch, or hold ⌥ and scroll)")
         } else {
             HStack(spacing: 8) {
-                Picker("Zoom", selection: $zoom.level) {
-                    ForEach(ZoomLevel.presets, id: \.self) { Text($0.label).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
+                // Fit and Fill as icons, each with its own tooltip; the percentages stay as text.
+                IconSegmentedControl(segments: ZoomLevel.presets.map { level in
+                    IconSegmentedControl<ZoomLevel>.Segment(value: level, symbol: level.symbol, text: level.label, help: level.help)
+                }, selection: $zoom.level)
                 .fixedSize()
-                .help("Zoom (Z toggles Fit and 100%; pinch, or hold ⌥ and scroll)")
                 Text(report.percent > 0 ? percentText : "")
                     .monospacedDigit()
                     .foregroundStyle(.secondary)

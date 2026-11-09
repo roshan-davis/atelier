@@ -222,7 +222,8 @@ public struct CameraMatch: Sendable, Equatable {
 
 extension DevelopRenderer {
     /// The camera match for a RAW file, measured once per file version and kept for the session.
-    func cameraMatch(for url: URL) -> CameraMatch {
+    @discardableResult
+    public func cameraMatch(for url: URL) -> CameraMatch {
         let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
         let key = "\(url.path)|\(modified?.timeIntervalSince1970 ?? 0)" as NSString
         if let cached = cameraMatches.object(forKey: key) { return cached.match }

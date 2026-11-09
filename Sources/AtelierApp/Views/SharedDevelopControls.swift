@@ -70,6 +70,19 @@ struct PanelSection<Content: View>: View {
                     }
                 }
             }
+            // A Tab stop, so a closed panel can be opened from the keyboard (Rosh, Nov 9, 2026):
+            // Return or Space opens or closes it, → opens, ← closes.
+            .modifier(KeyboardControl { press in
+                let open: Bool
+                switch press.key {
+                case .enter, .space: open = !isExpanded
+                case .right: open = true
+                case .left: open = false
+                default: return false
+                }
+                if open != isExpanded { withAnimation(.easeInOut(duration: 0.18)) { isExpanded = open } }
+                return true
+            })
             .contextMenu {
                 Toggle("Solo Mode", isOn: $soloMode)
                 Divider()
@@ -160,6 +173,8 @@ struct SliderRow: View {
         }
         .font(.callout)
         .frame(height: 20)
+        // Click, drag or Tab to focus; the arrow keys then move it (⇧ for bigger steps).
+        .modifier(KeyboardSlider(value: $value, range: range, step: step, logarithmic: logarithmic))
     }
 
     private func commit() {
@@ -185,6 +200,7 @@ struct DevelopSlider: View {
     var onOption: ((Bool) -> Void)?
     var onEditingChanged: ((Bool) -> Void)?
     @State private var isDragging = false
+    @Environment(\.takeKeyboardFocus) private var takeKeyboardFocus
 
     private func fraction(_ v: Double) -> Double {
         let clamped = min(max(v, range.lowerBound), range.upperBound)
@@ -240,7 +256,11 @@ struct DevelopSlider: View {
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 0)
                 .onChanged { drag in
-                    if !isDragging { isDragging = true; onEditingChanged?(true) }
+                    if !isDragging {
+                        isDragging = true
+                        takeKeyboardFocus?()
+                        onEditingChanged?(true)
+                    }
                     onOption?(NSEvent.modifierFlags.contains(.option))
                     guard width > 0 else { return }
                     let newValue = value(at: Double(drag.location.x / width))

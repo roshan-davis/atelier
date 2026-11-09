@@ -626,7 +626,7 @@ private struct KeyboardSettings: View {
                                             .monospaced()
                                             .frame(minWidth: 90)
                                     }
-                                    .help("Click, then press the new key. Esc cancels, Delete removes it.")
+                                    .help("Click, then press the new key, with ⌃, ⌥ or ⇧ if you like. Esc cancels, Delete removes it.")
                                     if KeyBindings.key(for: action) != action.defaultKey {
                                         Button {
                                             KeyBindings.set(action.defaultKey, for: action)
@@ -646,7 +646,7 @@ private struct KeyboardSettings: View {
             .formStyle(.grouped)
             .id(revision)
             HStack {
-                Text("Single-key commands, as in Lightroom. Menu shortcuts like ⌘E are listed in Help > Keyboard Shortcuts (⌘/).")
+                Text("Keys can use ⌃, ⌥ and ⇧. Arrows, Tab, Return, Esc and Delete stay fixed; menu shortcuts like ⌘E are listed in Help > Keyboard Shortcuts (⌘/).")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -673,11 +673,11 @@ private struct KeyboardSettings: View {
                 case 51, 117:  // Delete removes the key
                     KeyBindings.set("", for: action)
                 default:
-                    guard KeyBindings.isAssignable(event), let key = event.charactersIgnoringModifiers?.lowercased() else {
+                    guard let combo = KeyBindings.combo(from: event) else {
                         NSSound.beep()
                         return nil
                     }
-                    KeyBindings.set(key, for: action)
+                    KeyBindings.set(combo.stored, for: action)
                 }
                 stopRecording()
                 revision += 1
@@ -710,10 +710,15 @@ struct ShortcutsSheet: View {
         ("Develop", [("⇧⌘C", "Copy settings"), ("⇧⌘V", "Paste settings"), ("⇧⌘R", "Reset all settings"),
                      ("⌘Z", "Undo"), ("⇧⌘Z", "Redo"), ("⌘[", "Rotate left"), ("⌘]", "Rotate right"),
                      ("Double-click name", "Reset a slider")]),
-        ("Masking", [("⇧W", "Open or close Masking"), ("⇧M", "Radial Gradient"), ("[ ]", "Brush size"),
+        ("Keyboard focus", [("Tab  ⇧Tab", "Next or previous control"),
+                            ("← → ↑ ↓", "Move the focused slider (⇧ for bigger steps)"),
+                            ("↑ ↓", "Presets: move and preview; ← → close or open a group"),
+                            ("Return", "Presets: apply the highlighted one"),
+                            ("Esc", "Give the arrows back to the photo")]),
+        ("Masking", [("[ ]", "Brush size"),
                      ("⇧[ ⇧]", "Brush feather"), ("⌥ drag", "Erase while brushing"), ("Delete", "Delete the selected part"),
                      ("Esc", "Cancel the tool, or close Masking")]),
-        ("Transform", [("⇧T", "Guided Upright: draw guides"), ("Delete", "Delete the selected guide"),
+        ("Transform", [("Delete", "Delete the selected guide"),
                        ("Esc", "Close Guided Upright")]),
         ("App", [("⌘,", "Settings"), ("⌘/", "This list")]),
     ]

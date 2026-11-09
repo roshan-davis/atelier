@@ -9,6 +9,8 @@ struct DevelopImageView: View {
     @ObservedObject var develop: DevelopController
     /// The original has taken over 0.6 s to open, so the spinner shows over the photo.
     @State private var slowLoad = false
+    /// With the Filmstrip showing, ⌃Tab's "photos" outline goes on the Filmstrip instead.
+    @AppStorage(Filmstrip.visibleKey) private var filmstripVisible = true
 
     var body: some View {
         VStack(spacing: 0) {
@@ -59,9 +61,11 @@ struct DevelopImageView: View {
                                           position: $develop.sliderPosition)
                     }
                 }
-                // Over a shown photo only when loading is slow (a NAS original): a spinner on
-                // every photo read as a delay (Rosh, Oct 31, 2026).
-                if develop.isLoading, develop.image == nil || slowLoad {
+                // Only while what's on screen isn't the photo yet: nothing, or a thumbnail or the
+                // previous photo for a while (a slow NAS original). Over the photo's own preview
+                // the editable copy decodes quietly; the photo is already there (Rosh, Oct 31 and
+                // Nov 9, 2026).
+                if develop.isLoading, develop.image == nil || (develop.showsStandIn && slowLoad) {
                     ProgressView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
@@ -75,18 +79,16 @@ struct DevelopImageView: View {
                     Badge(text: "Before").padding(14)
                 }
             }
+            .areaFocusFlash(.photo, enabled: !filmstripVisible)
             Divider()
-            // Narrow columns drop the words first, then the hint, so the bar always fits.
+            // Icons with tooltips at every width. Narrow columns drop the hint, then fold the
+            // zoom buttons into a menu, so the bar always fits.
             AdaptiveControlBar(sizingKey: develop.compareMode == .slider) {
-                bottomBar(compact: false)
+                bottomBar(showHint: true, compactZoom: false)
             } compact: {
-                bottomBar(compact: true)
+                bottomBar(showHint: false, compactZoom: false)
             } minimum: {
-                HStack {
-                    comparePicker(iconsOnly: true)
-                        .disabled(compareDisabled)
-                    Spacer(minLength: 0)
-                }
+                bottomBar(showHint: false, compactZoom: true)
             }
             .font(.callout)
             .padding(.horizontal, 12)
@@ -175,36 +177,27 @@ struct DevelopImageView: View {
         develop.isCropping || develop.isAIOpen || develop.isMasking || develop.isGuiding
     }
 
-    private func bottomBar(compact: Bool) -> some View {
+    private func bottomBar(showHint: Bool, compactZoom: Bool) -> some View {
         HStack(spacing: 10) {
-            if !compact {
-                Text("Before and After").foregroundStyle(.secondary).fixedSize()
-            }
-            comparePicker(iconsOnly: compact)
+            comparePicker
                 .disabled(compareDisabled)
-            if !compact, develop.compareMode == .slider {
+            if showHint, develop.compareMode == .slider {
                 Text("Drag the divider to compare").foregroundStyle(.secondary).fixedSize()
             }
             Spacer(minLength: 8)
-            ZoomControls(zoom: model.zoomState, compact: compact)
+            ZoomControls(zoom: model.zoomState, compact: compactZoom)
                 .disabled(develop.isCropping || develop.isAIOpen || develop.isGuiding)
         }
     }
 
-    private func comparePicker(iconsOnly: Bool) -> some View {
-        Picker("Before and After", selection: $develop.compareMode) {
-            ForEach(CompareMode.allCases, id: \.self) { mode in
-                if iconsOnly {
-                    Image(systemName: mode.symbol).tag(mode).help(mode.label)
-                } else {
-                    Label(mode.label, systemImage: mode.symbol).tag(mode)
-                }
-            }
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
+    /// Before and After as icons, each with a tooltip naming it and the key that cycles them.
+    private var comparePicker: some View {
+        let key = KeyBindings.display(KeyBindings.key(for: .compareMode))
+        return IconSegmentedControl(segments: CompareMode.allCases.map { mode in
+            IconSegmentedControl<CompareMode>.Segment(value: mode, symbol: mode.symbol, text: mode.label,
+                                         help: "Before and After: \(mode.label) (\(key) cycles)")
+        }, selection: $develop.compareMode)
         .fixedSize()
-        .help("Compare with the original: side by side, or drag a slider across the photo (Y)")
     }
 }
 
@@ -386,6 +379,7 @@ struct DevelopPanel: View {
     var body: some View {
         VStack(spacing: 0) {
             GeometryReader { geometry in
+            ScrollViewReader { scroll in
             ScrollView(.vertical) {
                 VStack(spacing: 0) {
                     PanelSection(title: "Histogram", isExpanded: isExpanded("histogram"), soloMode: $soloMode,
@@ -454,6 +448,11 @@ struct DevelopPanel: View {
                 }
                 // Lay everything out at exactly the panel's measured width so nothing spills past it.
                 .frame(width: geometry.size.width)
+                // Tab order follows where controls sit in the panel, whatever the scroll.
+                .coordinateSpace(.named(keyboardFocusSpace))
+            }
+            // A slider that gets keyboard focus (Tab, ⌃Tab) scrolls itself into view.
+            .environment(\.keyboardScroll, scroll)
             }
             }
             Divider()

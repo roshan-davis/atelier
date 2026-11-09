@@ -19,7 +19,7 @@
 <div class="chips">
   <a href="#layout">The Develop view</a><a href="#zoom">Zoom and move around</a><a href="#navigator">Navigator</a>
   <a href="#before-after">Before and after</a><a href="#panels">Panels</a><a href="#history">History and undo</a>
-  <a href="#snapshots">Snapshots</a><a href="#copy-paste">Copy and paste settings</a><a href="#histogram">Histogram</a>
+  <a href="#keyboard">Keyboard</a><a href="#snapshots">Snapshots</a><a href="#copy-paste">Copy and paste settings</a><a href="#histogram">Histogram</a>
 </div>
 
 <h2 id="layout">The Develop view</h2>
@@ -75,7 +75,7 @@
 <h2 id="zoom">Zoom and move around</h2>
 <table class="keys">
   <tr><td>Double-click the photo, or <kbd>Z</kbd></td><td>Switch between Fit and 100% at the spot you clicked. A single click does nothing, so a stray click never loses your zoom.</td></tr>
-  <tr><td>Fit · Fill · 100% · 200%</td><td>The buttons under the photo. Fit shows the whole photo; Fill fills the space.</td></tr>
+  <tr><td>Fit · Fill · 100% · 200%</td><td>The buttons under the photo. Fit (arrows pointing in) shows the whole photo; Fill (arrows pointing out) fills the space. Rest the pointer on a button for its name.</td></tr>
   <tr><td>Pinch, or <kbd>⌥</kbd>/<kbd>⌘</kbd> + scroll</td><td>Zoom freely, around the pointer.</td></tr>
   <tr><td>Drag, scroll, or hold <kbd>Space</kbd> and drag</td><td>Move around while zoomed.</td></tr>
   <tr><td><kbd>⌘=</kbd> · <kbd>⌘-</kbd> · <kbd>⌘0</kbd> · <kbd>⌥⌘1</kbd></td><td>Zoom in, zoom out, Fit, 100% (<span class="path">View</span> menu).</td></tr>
@@ -102,7 +102,7 @@
   <div class="frame compare" data-before="redwoods-flat.jpg" data-after="redwoods.jpg" data-at="0.42"></div>
   <figcaption><b>Like this.</b> The Slider view works like this picture: drag across it.</figcaption>
 </figure>
-<p>A compare view opens at Fit. Going back to Off returns you to the zoom you had. As the photo column narrows, the bar switches to icons and a zoom menu. At its narrowest, use the View menu or keyboard shortcuts to zoom.</p>
+<p>The three buttons under the photo are icons (Off, Side by Side, Slider); rest the pointer on one for its name and key. A compare view opens at Fit. Going back to Off returns you to the zoom you had. As the photo column narrows, the hint goes first and then the zoom buttons fold into a menu.</p>
 
 <h2 id="panels">Panels</h2>
 <ul>
@@ -130,6 +130,17 @@
 </ol>
 <p>Every slider in Atelier works this way, in Masking, Crop and the AI brush too.</p>
 <p>The small tick on the track is the default; the blue fill is your change. Colored tracks (Temp, Tint, Vibrance, HSL) show which way each end goes. Hold <kbd>⌥</kbd> while dragging many sliders to see what they affect: see <a href="basic.html#option-drag">⌥-drag views</a>.</p>
+
+<h3 id="keyboard">Keyboard</h3>
+<p>Develop works from the keyboard the Mac way. Whatever has keyboard focus shows a thin blue bar at its left edge and a faint tint.</p>
+<table class="keys">
+  <tr><td>Click, drag or <kbd>Tab</kbd> to a slider</td><td>Gives it focus. <kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> move it a small step; hold <kbd>⇧</kbd> for five times as much. Holding a key keeps it moving; quick presses in a row make one history step.</td></tr>
+  <tr><td><kbd>Tab</kbd> · <kbd>⇧Tab</kbd></td><td>Next or previous control in the area that has focus, down through the open panels (wraps around). Panel headers are stops too: <kbd>Return</kbd> or <kbd>Space</kbd> opens or closes the panel, <kbd>→</kbd> opens it, <kbd>←</kbd> closes it. After <kbd>⌃Tab</kbd> reaches an area, <kbd>Tab</kbd> walks its controls and stays in that area (in Presets it also stops at the search field). With nothing focused, <kbd>Tab</kbd> starts in the right panels.</td></tr>
+  <tr><td>Click in an area</td><td>Gives that area the keyboard, as <kbd>⌃Tab</kbd> does: anywhere in a panel focuses the control you used last there (or the top one); the photo or Filmstrip gives <kbd>←</kbd> <kbd>→</kbd> back to changing photos.</td></tr>
+  <tr><td><kbd>⌃Tab</kbd> · <kbd>⌃⇧Tab</kbd></td><td>Next or previous area: the left column (Presets), the right panels, then the photos (where <kbd>←</kbd> <kbd>→</kbd> change photo). A blue ring with a soft glow flashes around the area you land on (for the photos, around the Filmstrip when it is showing), and focus comes back to the control you used last there.</td></tr>
+  <tr><td><kbd>Esc</kbd>, or click the photo</td><td>Gives the arrow keys back to the photo, so <kbd>←</kbd> <kbd>→</kbd> move between photos again.</td></tr>
+</table>
+<p>The Presets list takes the keys too: see <a href="presets.html#keyboard">Presets from the keyboard</a>. Change <kbd>⌃Tab</kbd> and the other command keys in <span class="path">Atelier › Settings… › Keyboard</span>.</p>
 
 <h3 id="color-pickers">Color pickers</h3>
 <p>The White Balance Selector, Defringe's Fringe Color Selector and Color Grading's color picker all work the same way: click the eyedropper, then click the photo. A hint at the top of the photo says what to click (in orange if the click didn't set anything, with the reason). You can still zoom and move around while it's out, only one is out at a time, and <kbd>Esc</kbd> puts it away.</p>

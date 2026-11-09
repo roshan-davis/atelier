@@ -7,6 +7,7 @@ struct ContentView: View {
     @State private var showInspector = true
     @AppStorage("panel.width") private var panelWidth = 320.0
     @AppStorage(Theme.defaultsKey) private var theme: Theme = .system
+    @AppStorage(Filmstrip.visibleKey) private var filmstripVisible = true
 
     var body: some View {
         // Like Lightroom Classic, the Filmstrip runs the full width of the window, under
@@ -16,6 +17,7 @@ struct ContentView: View {
                 Group {
                     if model.mode == .develop {
                         DevelopSidebar(develop: model.develop)
+                            .areaFocusFlash(.leftPanel)
                     } else {
                         SidebarView()
                     }
@@ -53,12 +55,14 @@ struct ContentView: View {
                         InspectorView()
                             .frame(width: panelWidth)
                             .clipped()
+                            .areaFocusFlash(.rightPanel)
                             .layoutPriority(1)
                             .background(Color(nsColor: theme.panel))
                     }
                 }
             }
             FilmstripView()
+                .areaFocusFlash(.photo, enabled: model.mode == .develop && filmstripVisible)
         }
         // Dropping folders or photos anywhere on the window starts an import with them.
         .dropDestination(for: URL.self) { urls, _ in

@@ -156,6 +156,15 @@ final class LibraryModel: ObservableObject {
     @Published var cullSession: CullModel?
     /// The library window, which receives the single-key commands.
     weak var mainWindow: NSWindow?
+    /// Where the last click in the library window landed, the text field the user chose (by
+    /// clicking or tabbing into it), and whether the last key that went on to the window was
+    /// Tab. Together they tell a field the user is typing in from one SwiftUI gave the keyboard
+    /// on its own: with nothing else able to take it, SwiftUI hands the window's first text
+    /// field (Search Presets, in Develop) the keyboard, which silently swallowed ← →, Tab and
+    /// every single-key command (Rosh's test, Nov 9, 2026).
+    private var lastClick: NSPoint?
+    private weak var chosenTextField: NSView?
+    private var lastKeyWasTab = false
     /// The photo at the top of the grid, kept while the grid is closed and between launches.
     var gridTopID: Int64?
     /// Last launch's session, applied when its photos first load.
@@ -841,6 +850,7 @@ final class LibraryModel: ObservableObject {
         guard mode == .loupe || mode == .develop, let focusedID,
               let index = rows.firstIndex(where: { $0.id == focusedID }) else { return }
         let ids = [index + 1, index - 1].filter { rows.indices.contains($0) }.map { rows[$0].id }
+        if mode == .develop { develop.neighbours = ids }
         var ready: [(id: Int64, url: URL)] = []
         for id in [focusedID] + ids {
             if previews.has(.preview, for: id) {
@@ -876,9 +886,22 @@ final class LibraryModel: ObservableObject {
             return MainActor.assumeIsolated {
                 switch event.type {
                 case .keyDown:
-                    return self.handleKey(event) ? nil : event
-                case .leftMouseDown where self.mode == .develop && event.window === self.mainWindow:
-                    self.develop.beginPointerEdit()
+                    let handled = self.handleKey(event)
+                    self.lastKeyWasTab = !handled && event.keyCode == 48
+                    return handled ? nil : event
+                case .leftMouseDown where event.window === self.mainWindow:
+                    self.lastClick = event.locationInWindow
+                    self.chosenTextField = nil
+                    if self.mode == .develop {
+                        KeyboardFocus.shared.mouseDown()
+                        self.develop.beginPointerEdit()
+                        // After the click reaches the view, so a control it lands on takes focus first.
+                        if let content = event.window?.contentView {
+                            let local = content.convert(event.locationInWindow, from: nil)
+                            let point = CGPoint(x: local.x, y: content.isFlipped ? local.y : content.bounds.height - local.y)
+                            DispatchQueue.main.async { KeyboardFocus.shared.clicked(at: point) }
+                        }
+                    }
                 case .leftMouseUp:
                     // Let the control consume mouse-up and apply its final value first.
                     DispatchQueue.main.async { [weak self] in self?.develop.endPointerEdit() }
@@ -892,14 +915,68 @@ final class LibraryModel: ObservableObject {
 
     /// Lightroom-style culling keys. Ignored while typing in a text field or a sheet is open.
     private func handleKey(_ event: NSEvent) -> Bool {
-        if !event.modifierFlags.intersection([.command, .control, .option]).isEmpty { return false }
+        if event.modifierFlags.contains(.command) { return false }
         // Only the library window; never Settings or other windows.
         guard let window = NSApp.keyWindow, window === mainWindow, window.attachedSheet == nil else { return false }
-        if window.firstResponder is NSText { return false }
+        // ⌃Tab moves between areas from anywhere in Develop, even from a text field (the Mac's
+        // own ⌃Tab leaves a text field), so it never gets stuck.
+        if mode == .develop, let action = KeyBindings.action(for: event),
+           action == .nextArea || action == .previousArea {
+            return perform(action)
+        }
+        // Tab and ⇧Tab stay in the focused area, text fields included (Search Presets is a stop
+        // in Presets), instead of the window's Tab order, which hopped between the Presets and
+        // Library search fields (Rosh, Nov 9, 2026).
+        if mode == .develop, event.keyCode == 48, event.modifierFlags.intersection([.control, .option]).isEmpty {
+            KeyboardFocus.shared.step(forward: !event.modifierFlags.contains(.shift))
+            return true
+        }
+        if let text = window.firstResponder as? NSText {
+            // A field that is a Tab stop (Search Presets) types; Esc leaves it for the photos.
+            if mode == .develop, KeyboardFocus.shared.currentIsText {
+                if event.keyCode == 53 {
+                    KeyboardFocus.shared.release()
+                    return true
+                }
+                return false
+            }
+            if userIsTyping(in: text) {
+                // Typing in a field: it keeps the keys, and no control keeps the focus mark.
+                KeyboardFocus.shared.release(endEditing: false)
+                return false
+            }
+            window.makeFirstResponder(nil)
+        }
+        // ⌃ and ⌥ presses run only a command bound to them in Settings > Keyboard (⌃Tab).
+        if !event.modifierFlags.intersection([.control, .option]).isEmpty {
+            guard let action = KeyBindings.action(for: event) else { return false }
+            return perform(action)
+        }
 
         if mode == .develop, develop.picker != nil, event.keyCode == 53 {  // escape puts any color picker away
             develop.picker = nil
             return true
+        }
+        // A focused slider or the Presets list takes the arrows, Return, Space and Esc (Esc then
+        // gives them back to the photos).
+        if mode == .develop, KeyboardFocus.shared.current != nil {
+            let shift = event.modifierFlags.contains(.shift)
+            let key: KeyboardFocus.Key?
+            switch event.keyCode {
+            case 123: key = .left
+            case 124: key = .right
+            case 125: key = .down
+            case 126: key = .up
+            case 36, 76: key = .enter
+            case 49: key = .space
+            case 53: key = .escape
+            default: key = nil
+            }
+            if let key {
+                // Arrows never fall through to changing photos while a control has focus.
+                let handled = KeyboardFocus.shared.handle(KeyboardFocus.Press(key: key, shift: shift))
+                if handled || [.left, .right, .up, .down].contains(key) { return true }
+            }
         }
         // Arrow keys over a Color Grading wheel nudge it (Shift for bigger steps) instead of
         // changing photos.
@@ -951,9 +1028,24 @@ final class LibraryModel: ObservableObject {
         default: break
         }
 
-        guard let key = event.charactersIgnoringModifiers?.lowercased(),
-              let action = KeyBindings.action(for: key) else { return false }
+        guard let action = KeyBindings.action(for: event) else { return false }
         return perform(action)
+    }
+
+    /// Whether the text field with the keyboard is one the user is typing in: they clicked or
+    /// tabbed into it, or it has text. An empty field nobody chose (SwiftUI's automatic pick)
+    /// gives the keys back.
+    private func userIsTyping(in text: NSText) -> Bool {
+        let field = ((text as? NSTextView)?.delegate as? NSView) ?? text
+        if field === chosenTextField || lastKeyWasTab || !text.string.isEmpty {
+            chosenTextField = field
+            return true
+        }
+        if let click = lastClick, field.window != nil, field.bounds.contains(field.convert(click, from: nil)) {
+            chosenTextField = field
+            return true
+        }
+        return false
     }
 
     /// Runs a single-key command. Returns false when it doesn't apply in the current view.
@@ -1010,17 +1102,27 @@ final class LibraryModel: ObservableObject {
             if mode != .develop { openDevelop() }
             guard mode == .develop, develop.assetID != nil else { return false }
             develop.isPickingWhiteBalance.toggle()
+        case .masking:
+            if mode != .develop { openDevelop() }
+            guard mode == .develop else { return false }
+            develop.isMasking.toggle()
+        case .radialGradient:
+            if mode != .develop { openDevelop() }
+            guard mode == .develop else { return false }
+            develop.startMaskTool(.radial)
+        case .guidedUpright:
+            guard mode == .develop else { return false }
+            if develop.isGuiding { develop.isGuiding = false } else { develop.setUpright(.guided) }
+        case .nextArea, .previousArea:
+            guard mode == .develop else { return false }
+            KeyboardFocus.shared.cycle(forward: action == .nextArea)
         }
         return true
     }
 
-    /// Guided Upright, as in Lightroom: ⇧T opens it, O shows or hides the loupe, Delete removes
+    /// Guided Upright, as in Lightroom (⇧T, a `KeyAction`, opens it): O shows or hides the loupe, Delete removes
     /// the selected guide, Esc closes it.
     private func handleTransformKey(_ event: NSEvent) -> Bool {
-        if event.modifierFlags.contains(.shift), event.charactersIgnoringModifiers?.lowercased() == "t" {
-            if develop.isGuiding { develop.isGuiding = false } else { develop.setUpright(.guided) }
-            return true
-        }
         guard develop.isGuiding else { return false }
         if event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty,
            event.charactersIgnoringModifiers?.lowercased() == "o" {
@@ -1040,19 +1142,10 @@ final class LibraryModel: ObservableObject {
         }
     }
 
-    /// Lightroom's Masking keys: ⇧W opens it, ⇧M draws a radial gradient, [ and ] size the brush
+    /// Lightroom's Masking keys (⇧W and ⇧M are `KeyAction`s): [ and ] size the brush
     /// (with ⇧, its feather), Delete removes the selected part, Esc cancels the tool or closes.
     private func handleMaskingKey(_ event: NSEvent) -> Bool {
         let shift = event.modifierFlags.contains(.shift)
-        let key = event.charactersIgnoringModifiers?.lowercased()
-        if shift, key == "w" {
-            develop.isMasking.toggle()
-            return true
-        }
-        if shift, key == "m" {
-            develop.startMaskTool(.radial)
-            return true
-        }
         guard develop.isMasking else { return false }
         switch event.keyCode {
         case 33, 30:  // [ and ]

@@ -24,6 +24,23 @@ enum CompareMode: String, CaseIterable {
     }
 }
 
+/// A render waiting for its histogram and color scope to be counted.
+private struct DevelopMeasureRequest {
+    let image: CGImage
+    let assetID: Int64?
+    let count: Int
+    /// The open it belongs to (`DevelopController.openGeneration`), so work from before a
+    /// `reopen()` of the same photo is dropped.
+    let generation: Int
+    /// Counted from the cached preview the photo opened on, not from a render. Kept with the
+    /// request, as requests replace each other while waiting.
+    var fromPreview = false
+
+    /// Newer renders outrank older ones; for the same render count, a render outranks the cached
+    /// preview, whichever arrives first.
+    var rank: Int { count * 2 + (fromPreview ? 0 : 1) }
+}
+
 /// State for the Develop view: the open photo's settings, its live proxy render, and saving.
 ///
 /// Rendering is "latest wins": while one render runs, further slider changes collapse into a
@@ -42,7 +59,14 @@ final class DevelopController: ObservableObject {
     private(set) var showsPreviousPhoto = false
     /// `image` is the whole, uncropped photo (rendered for the crop tool) rather than the crop.
     @Published private(set) var imageIsWhole = false
+    /// The editable proxy is still decoding. Edits made meanwhile apply once it's ready; this
+    /// alone is no reason to show a spinner (`showsStandIn` is).
     @Published private(set) var isLoading = false
+    /// `image` stands in for the photo without being it: a small grid thumbnail or the previous
+    /// photo. The cached preview and every render are the photo itself. The spinner over the
+    /// photo follows this, not the decode, which also runs while the photo is already on screen
+    /// (Rosh, Nov 9, 2026).
+    @Published private(set) var showsStandIn = false
     @Published private(set) var errorMessage: String?
     @Published private(set) var asShotTemperature: Double = 5500
     /// The camera's tint, which the stored Tint is relative to; shown added, as Lightroom does.
@@ -149,6 +173,9 @@ final class DevelopController: ObservableObject {
     }
     /// The photo without edits, rendered once per open photo for the compare views.
     @Published private(set) var beforeImage: NSImage?
+    /// Before renders queued or running for the open photo; preloading the neighbours waits for
+    /// them, and stops waiting when they finish, even if one fails.
+    private var beforeRenders = 0
     /// The photo without edits at full size, for zooming in the compare views.
     @Published private(set) var fullBeforeImage: NSImage?
     private var fullBeforeSettings: DevelopSettings?
@@ -430,15 +457,66 @@ final class DevelopController: ObservableObject {
     private var session: DevelopSession?
     private var rendering = false
     private var needsRender = false
+    /// For the timing log: when the running render started, and whether a long one, or an edit
+    /// made before the editable copy was ready, has been logged.
+    private var renderStartedAt = DevelopTimingLog.now()
+    private var renderHangLogged = false
+    private var editBeforeProxyLogged = false
     private var saveTask: Task<Void, Never>?
+    /// A photo whose edits were saved before its editable copy was ready, so its Grid and Loupe
+    /// previews still need refreshing.
+    private var previewsOwed: Int64?
     private var dirty = false
     private let queue = DispatchQueue(label: "atelier.develop", qos: .userInteractive)
     /// Histogram and color scope, counted beside the render queue so the photo shows first.
     private let measureQueue = DispatchQueue(label: "atelier.develop.measure", qos: .userInitiated)
+    /// Only the newest render waits to be measured. Counting takes longer than a render, so
+    /// queueing one per render built a backlog that left the histogram spinning for seconds
+    /// after moving through photos or dragging (Rosh, Nov 9, 2026).
+    private let measureJob = LatestJob<DevelopMeasureRequest>()
+    /// Decodes for opening photos. Every photo passed with ← → used to queue its decode (and,
+    /// for an unedited RAW, a preview render) on the render queue, so after moving quickly the
+    /// photo, panels and histogram waited for every photo passed (Rosh, Nov 9, 2026). Now a
+    /// decode starts only once ← → rest (`openRest`), and runs beside one still finishing.
+    private static let openQueue = DispatchQueue(label: "atelier.develop.open", qos: .userInitiated,
+                                                 attributes: .concurrent)
+    /// How long ← → must rest before the photo is decoded, when they come faster than this.
+    private static let openRest: TimeInterval = 0.15
+    private var lastOpen = Date.distantPast
+    /// The photos either side of the open one in the Filmstrip (set by `LibraryModel`), and
+    /// their proxies, decoded and rendered once in the background after the open photo's first
+    /// render, so ← or → to one of them opens at once instead of decoding the RAW again.
+    /// Lightroom does the same for neighbouring photos.
+    var neighbours: [Int64] = [] {
+        didSet { if neighbours != oldValue, firstRenderDone { prefetchNeighboursWhenIdle() } }
+    }
+    private var prefetched: [Int64: DevelopSession] = [:]
+    /// Counts changes to each photo's original (`sourceChanged`), so a preload that read the
+    /// old file is dropped.
+    private var sourceVersions: [Int64: Int] = [:]
+    private var prefetching: Set<Int64> = []
+    private var firstRenderDone = false
+    private static let prefetchQueue = DispatchQueue(label: "atelier.develop.prefetch", qos: .utility)
+    /// How long the photo must go without a render (an edit, a drag) before its neighbours are
+    /// decoded, so they never share the CPU and GPU with your edits.
+    private static let prefetchDelay: TimeInterval = 0.8
+    /// When a render was last asked for, readable from the preload queue.
+    private let lastRenderRequest = LockedValue(Date.distantPast)
+    /// For the timing log (`DevelopTimingLog`): when the open photo was opened, how many RAW
+    /// decodes are running now, and whether its first histogram has been logged.
+    private var openedAt = DevelopTimingLog.now()
+    private let decodesRunning = LockedValue(0)
+    private var histogramLogged = false
+    /// The open photo, readable off the main thread so queued work for a photo already left is
+    /// skipped.
+    private let openAsset = LockedValue<Int64?>(nil)
+    /// Counts opens, so a decode started by an earlier open of the same photo (A, B, then A
+    /// again, or `reopen()` after Edit In) can't replace this open's session or set an error.
+    private let openGeneration = LockedValue(0)
     /// Counts proxy renders, so an older histogram never replaces a newer one.
     private var renderCount = 0
-    /// The render the shown histogram was counted from.
-    private var measuredCount = 0
+    /// The rank (`DevelopMeasureRequest.rank`) of what the shown histogram was counted from.
+    private var measuredRank = 0
     var onPreviewsUpdated: ((Int64) -> Void)?
     var onSettingsSaved: ((Int64) -> Void)?
     /// Unedited RAW files whose preview was replaced by a render this launch.
@@ -454,17 +532,39 @@ final class DevelopController: ObservableObject {
 
     // MARK: Opening
 
+    /// A photo's original changed on disk (Edit In saved, an HDR came back): its kept or
+    /// preloading proxy shows the old file, so drop it, and open it again if it is the open one.
+    func sourceChanged(_ id: Int64) {
+        prefetched[id] = nil
+        sourceVersions[id, default: 0] += 1
+        if assetID == id { reopen() }
+    }
+
     /// Opens the current photo again, after its file changed on disk.
     func reopen() {
         let id = assetID
         open(nil)
+        prefetched.removeAll()
         open(id)
     }
 
     func open(_ assetID: Int64?) {
         guard assetID != self.assetID else { return }
         flushSave()
+        if let owed = previewsOwed, owed == self.assetID {
+            // Its copy never got ready: render the saved look from its own decode.
+            previewsOwed = nil
+            refreshPreviews(for: owed, settings: settings)
+        }
+        // Kept for going straight back (← then →); dropped once it's no longer a neighbour.
+        if let previous = self.assetID, let session { prefetched[previous] = session }
         self.assetID = assetID
+        openAsset.value = assetID
+        openGeneration.value += 1
+        let generation = openGeneration.value
+        firstRenderDone = false
+        // Until the first render shows the photo, or opening fails.
+        isLoading = false
         session = nil
         // Kept on screen until the next photo has an image (AT-019), never used as this photo's.
         let previousImage = image
@@ -472,6 +572,9 @@ final class DevelopController: ObservableObject {
         showsPreviousPhoto = false
         imageIsWhole = false
         beforeImage = nil
+        beforeRenders = 0
+        // Ranks only compare within one open (requests carry the open's generation).
+        measuredRank = 0
         histogram = nil
         shootingInfo = nil
         colorScope = nil
@@ -512,6 +615,7 @@ final class DevelopController: ObservableObject {
         let url = try? catalog.fileURL(for: assetID)
         if hasPreview, let decoded = PreviewImages.shared.cached(assetID, at: cachedPreview) {
             image = decoded
+            showsStandIn = false
         } else {
             var placeholder = ThumbnailLoader.shared.cached(assetID)
             // Only while something is coming to replace it.
@@ -520,15 +624,19 @@ final class DevelopController: ObservableObject {
                 showsPreviousPhoto = true
             }
             image = placeholder
+            showsStandIn = placeholder != nil
             if hasPreview {
                 Task {
                     let decoded = await PreviewImages.shared.load(assetID, at: cachedPreview)
                     // Not once the proxy has rendered, or for another photo.
                     guard self.assetID == assetID, self.image === placeholder, let decoded else { return }
                     self.image = decoded
+                    self.showsStandIn = false
+                    if self.histogram == nil { self.measurePreview(decoded, of: assetID) }
                 }
             }
         }
+        measurePreview(image, of: assetID)
 
         guard let url else {
             errorMessage = "The original is offline. Connect its drive to edit this photo."
@@ -542,47 +650,103 @@ final class DevelopController: ObservableObject {
                 if self.assetID == assetID { self.shootingInfo = info }
             }
         }
-        queue.async {
-            let session = DevelopRenderer.shared.session(for: url, maxPixelSize: Self.proxySize, interactive: true)
-            DispatchQueue.main.async {
-                MainActor.assumeIsolated {
-                    guard self.assetID == assetID else { return }
-                    self.isLoading = false
-                    guard let session else {
-                        if self.showsPreviousPhoto { self.image = nil }
-                        self.errorMessage = "This file can't be opened for editing."
-                        return
-                    }
-                    self.session = session
-                    self.sourceSize = session.sourceSize
-                    self.asShotTemperature = session.asShotTemperature
-                    self.asShotTint = session.asShotTint
-                    self.lensName = session.lensName
-                    self.lensCorrectionSupported = session.lensCorrectionSupported
-                    self.isRAW = session.isRAW
-                    self.focalLength35 = session.focalLength35
-                    // Keep the saved crop; photos saved when Constrain Crop enlarged the photo
-                    // instead of cropping it get the largest crop.
-                    if self.settings.constrainCrop, self.settings.crop?.hasCut == true {
-                        self.constrainedGeometry = self.settings.lensGeometryKey
-                    }
-                    if self.constrainCropIfNeeded() {
-                        self.dirty = true
-                        self.scheduleSave()
-                    }
-                    self.scheduleRender()
-                    // An unedited RAW's cached preview is the camera's embedded JPEG, which has no
-                    // lens corrections, so it is framed a little wider than the render and the
-                    // photo jumped when the render replaced it. Store the render as the preview
-                    // (once per photo per launch) so the next visit opens on the same framing.
-                    if session.isRAW, session.lensCorrectionSupported, self.settings.isNeutral,
-                       self.developedPreviews.insert(assetID).inserted {
-                        self.storePreviews(session: session, settings: self.settings, assetID: assetID)
-                    }
-                    if self.compareMode != .off { self.renderBeforeIfNeeded() }
+        // While ← → are pressed in quick succession the cached preview shows and nothing is
+        // decoded; the photo you stop on starts decoding once you rest. A single move starts at once.
+        let now = Date()
+        let rushing = now.timeIntervalSince(lastOpen) < Self.openRest
+        lastOpen = now
+        openedAt = DevelopTimingLog.now()
+        histogramLogged = false
+        editBeforeProxyLogged = false
+        let preloaded = prefetched[assetID] != nil
+        DevelopTimingLog.shared.log(assetID, describing: url, "open ", (preloaded ? ", proxy preloaded" : rushing ? ", arrows still moving: decode waits for a rest" : "")
+            + ". Busy: \(decodesRunning.value) RAW decodes, render \(rendering ? "running" : "idle"), "
+            + "full-size render \(fullRendering ? "running" : "idle"), preloading \(prefetching.count)")
+        // A neighbour decoded while you looked at the last photo: no wait at all.
+        if let session = prefetched.removeValue(forKey: assetID) {
+            finishOpen(assetID, generation: generation, session: session)
+            return
+        }
+        let openGeneration = self.openGeneration
+        let decodesRunning = self.decodesRunning
+        let openedAt = self.openedAt
+        let start = {
+            // Left (or opened again) before it started: don't decode it for this open.
+            guard openGeneration.value == generation else { return }
+            // Its own queue, beside any decode still running for a photo already left, so the
+            // photo you stopped on never waits for one you passed.
+            Self.openQueue.async {
+                guard openGeneration.value == generation else {
+                    DevelopTimingLog.shared.log(assetID, "decode skipped: moved on")
+                    return
+                }
+                let began = DevelopTimingLog.now()
+                let others = decodesRunning.value
+                decodesRunning.value += 1
+                DevelopRenderer.shared.cameraMatch(for: url)
+                let matched = DevelopTimingLog.now()
+                let session = DevelopRenderer.shared.session(for: url, maxPixelSize: Self.proxySize, interactive: true)
+                decodesRunning.value -= 1
+                DevelopTimingLog.shared.log(assetID, "decode began +\(Int(((began - openedAt) * 1000).rounded())) ms "
+                    + "(beside \(others) other decodes): camera match \(Int(((matched - began) * 1000).rounded())) ms, "
+                    + "proxy open \(DevelopTimingLog.ms(since: matched)) ms" + (session == nil ? ", FAILED" : ""))
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated { self.finishOpen(assetID, generation: generation, session: session) }
                 }
             }
         }
+        if rushing {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.openRest, execute: start)
+        } else {
+            start()
+        }
+    }
+
+    /// Puts a decoded proxy to work, if its photo is still the open one.
+    private func finishOpen(_ assetID: Int64, generation: Int, session: DevelopSession?) {
+        guard self.assetID == assetID, openGeneration.value == generation else {
+            if self.assetID == assetID {
+                DevelopTimingLog.shared.log(assetID, "decode from an earlier open of this photo dropped")
+            }
+            return
+        }
+        DevelopTimingLog.shared.log(assetID, "proxy ready +\(DevelopTimingLog.ms(since: openedAt)) ms")
+        guard let session else {
+            self.isLoading = false
+            if self.showsPreviousPhoto { self.image = nil }
+            self.errorMessage = "This file can't be opened for editing."
+            return
+        }
+        self.session = session
+        self.sourceSize = session.sourceSize
+        self.asShotTemperature = session.asShotTemperature
+        self.asShotTint = session.asShotTint
+        self.lensName = session.lensName
+        self.lensCorrectionSupported = session.lensCorrectionSupported
+        self.isRAW = session.isRAW
+        self.focalLength35 = session.focalLength35
+        // Keep the saved crop; photos saved when Constrain Crop enlarged the photo
+        // instead of cropping it get the largest crop.
+        if self.settings.constrainCrop, self.settings.crop?.hasCut == true {
+            self.constrainedGeometry = self.settings.lensGeometryKey
+        }
+        if self.constrainCropIfNeeded() {
+            self.dirty = true
+            self.scheduleSave()
+        }
+        self.scheduleRender()
+        // An unedited RAW's cached preview is the camera's embedded JPEG, which has no
+        // lens corrections, so it is framed a little wider than the render and the
+        // photo jumped when the render replaced it. Store the render as the preview
+        // (once per photo per launch) so the next visit opens on the same framing.
+        if previewsOwed == assetID {
+            previewsOwed = nil
+            self.storePreviews(session: session, settings: self.settings, assetID: assetID)
+        } else if session.isRAW, session.lensCorrectionSupported, self.settings.isNeutral,
+           self.developedPreviews.insert(assetID).inserted {
+            self.storePreviews(session: session, settings: self.settings, assetID: assetID, optional: true)
+        }
+        if self.compareMode != .off { self.renderBeforeIfNeeded() }
     }
 
     func cycleCompareMode() {
@@ -1610,12 +1774,30 @@ final class DevelopController: ObservableObject {
     // MARK: Rendering
 
     private func scheduleRender() {
-        guard let session else { return }
+        guard let session else {
+            // Shown once the editable copy is ready (`finishOpen` renders the latest settings).
+            if assetID != nil, isLoading, !editBeforeProxyLogged {
+                editBeforeProxyLogged = true
+                DevelopTimingLog.shared.log(assetID, "edit made before the editable copy was ready; it shows when the copy is ready")
+            }
+            return
+        }
+        lastRenderRequest.value = Date()
         if rendering {
             needsRender = true
+            // Every later edit waits behind a render that hasn't come back (Rosh, Nov 9, 2026:
+            // B&W and sliders didn't reach the photo). Logged so a hang shows in the trace.
+            let running = DevelopTimingLog.now() - renderStartedAt
+            if running > 2, !renderHangLogged {
+                renderHangLogged = true
+                DevelopTimingLog.shared.log(assetID, "edit waiting: the render before it has run \(Int(running * 1000)) ms "
+                    + "(showing \(showingBefore ? "Before" : "After"))")
+            }
             return
         }
         rendering = true
+        renderStartedAt = DevelopTimingLog.now()
+        renderHangLogged = false
         var settings = showingBefore ? beforeSettings : self.settings
         if isGuiding { settings = guidedViewSettings(settings) }
         let cropping = !isCropping
@@ -1631,37 +1813,51 @@ final class DevelopController: ObservableObject {
         let count = renderCount
         let measures = overlay == nil && preview == nil
         let measureQueue = self.measureQueue
+        let measureJob = self.measureJob
+        let openGeneration = self.openGeneration
+        let generation = openGeneration.value
+        let queuedAt = DevelopTimingLog.now()
         queue.async {
+            let renderBegan = DevelopTimingLog.now()
             let rendered = RenderSignposts.measure("Proxy render") {
                 session.renderForDisplay(settings, cropping: cropping, overlay: overlay, preview: preview,
                                          shadowClipping: clipping.shadows, highlightClipping: clipping.highlights)
             }
             let cgImage = rendered?.image
+            let renderTook = DevelopTimingLog.ms(since: renderBegan)
+            if renderTook > 300 || cgImage == nil {
+                DevelopTimingLog.shared.log(assetID, cgImage == nil ? "render FAILED after \(renderTook) ms"
+                    : "slow render: \(renderTook) ms (waited \(Int(((renderBegan - queuedAt) * 1000).rounded())) ms for the render queue)")
+            }
             // The red overlay or an Option-drag view would skew the histogram; keep the last one
             // while it shows. It is counted after the photo is on its way, beside the next render.
             if measures, let plain = rendered?.plain {
-                measureQueue.async {
-                    let (histogram, scope) = RenderSignposts.measure("Histogram") {
-                        (Histogram(image: plain), ColorScope(image: plain))
-                    }
-                    DispatchQueue.main.async {
-                        MainActor.assumeIsolated {
-                            guard self.assetID == assetID, count >= self.measuredCount else { return }
-                            self.measuredCount = count
-                            if let histogram { self.histogram = histogram }
-                            if let scope { self.colorScope = scope }
-                        }
-                    }
+                Self.measure(DevelopMeasureRequest(image: plain, assetID: assetID, count: count, generation: generation),
+                             job: measureJob, on: measureQueue, openGeneration: openGeneration) { request, histogram, scope, took in
+                    MainActor.assumeIsolated { self.applyMeasure(request, histogram: histogram, scope: scope, took: took) }
                 }
             }
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     self.rendering = false
+                    // Rendered from this open's copy, not one from before a `reopen()` of the same
+                    // photo (the old file). An older one is still followed by any waiting render.
+                    let current = self.assetID == assetID && self.openGeneration.value == generation
                     // A render started before the crop tool opened or closed has the wrong shape; the
                     // next render replaces it.
-                    if self.assetID == assetID, cropping != self.isCropping, let cgImage {
+                    if current, cropping != self.isCropping, let cgImage {
                         self.image = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+                        self.showsStandIn = false
                         self.imageIsWhole = !cropping
+                    }
+                    if current, !self.firstRenderDone {
+                        // The photo itself is on screen now (or its render failed): no spinner.
+                        self.isLoading = false
+                        DevelopTimingLog.shared.log(assetID, "first render: waited \(Int(((renderBegan - queuedAt) * 1000).rounded())) ms "
+                            + "for the render queue, rendered in \(DevelopTimingLog.ms(since: renderBegan)) ms, "
+                            + "photo shown +\(DevelopTimingLog.ms(since: self.openedAt)) ms")
+                        self.firstRenderDone = true
+                        self.prefetchNeighboursWhenIdle()
                     }
                     if self.needsRender {
                         self.needsRender = false
@@ -1671,6 +1867,121 @@ final class DevelopController: ObservableObject {
                     }
                 }
             }
+        }
+    }
+
+    /// Preloads the neighbours once the photo has gone `prefetchDelay` without a render, checking
+    /// again until it has.
+    private func prefetchNeighboursWhenIdle() {
+        let assetID = self.assetID
+        var wait = Self.prefetchDelay - Date().timeIntervalSince(lastRenderRequest.value)
+        // The Before photo of a compare view comes first.
+        if beforeRenders > 0 { wait = max(wait, Self.prefetchDelay) }
+        guard wait <= 0 else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + wait) {
+                guard self.assetID == assetID else { return }
+                self.prefetchNeighboursWhenIdle()
+            }
+            return
+        }
+        prefetchNeighbours()
+    }
+
+    /// Decodes the neighbours' proxies and renders each once (which keeps the decoded photo in
+    /// the session), one at a time at utility priority, never for a photo you've already left.
+    private func prefetchNeighbours() {
+        guard let current = assetID else { return }
+        let wanted = Set(neighbours)
+        prefetched = prefetched.filter { wanted.contains($0.key) }
+        let openAsset = self.openAsset
+        let decodesRunning = self.decodesRunning
+        let lastRenderRequest = self.lastRenderRequest
+        for id in neighbours where prefetched[id] == nil && !prefetching.contains(id) {
+            guard let url = try? catalog.fileURL(for: id) else { continue }
+            let settings = (try? catalog.developSettings(for: id)) ?? .neutral
+            let sourceVersion = sourceVersions[id, default: 0]
+            prefetching.insert(id)
+            Self.prefetchQueue.async {
+                var session: DevelopSession?
+                var editing = false
+                // Moved on before its turn: the next photo's neighbours are wanted instead. Editing
+                // since: wait for the next quiet moment (prefetching is cleared, so it's asked again).
+                if openAsset.value == current,
+                   Date().timeIntervalSince(lastRenderRequest.value) >= Self.prefetchDelay {
+                    let began = DevelopTimingLog.now()
+                    decodesRunning.value += 1
+                    session = DevelopRenderer.shared.session(for: url, maxPixelSize: Self.proxySize, interactive: true)
+                    _ = session?.renderForDisplay(settings)
+                    decodesRunning.value -= 1
+                    DevelopTimingLog.shared.log(id, "preloaded as a neighbour of #\(current) in \(DevelopTimingLog.ms(since: began)) ms")
+                } else if openAsset.value == current {
+                    editing = true
+                }
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        self.prefetching.remove(id)
+                        // Skipped for an edit: try again once editing pauses.
+                        if editing, self.assetID == current { self.prefetchNeighboursWhenIdle() }
+                        guard let session else { return }
+                        guard self.neighbours.contains(id), self.assetID != id,
+                              self.sourceVersions[id, default: 0] == sourceVersion else { return }
+                        self.prefetched[id] = session
+                    }
+                }
+            }
+        }
+    }
+
+    /// Counts a histogram and color scope off the main thread, latest-wins. A request for a
+    /// photo already left (a late render of the last photo) is dropped before it can replace the
+    /// open photo's waiting request. `apply` must not depend on the request it was passed with:
+    /// the drain applies whichever request it takes with the first caller's closure.
+    private nonisolated static func measure(_ request: DevelopMeasureRequest, job: LatestJob<DevelopMeasureRequest>,
+                                            on queue: DispatchQueue, openGeneration: LockedValue<Int>,
+                                            apply: @escaping (DevelopMeasureRequest, Histogram?, ColorScope?, Int) -> Void) {
+        // Not for an earlier open, and never in place of a waiting request that outranks it (the
+        // render's count must not be replaced by the preview that arrived late).
+        guard job.submit(request, if: { new, pending in
+            guard new.generation == openGeneration.value else { return false }
+            guard let pending, pending.generation == new.generation else { return true }
+            return new.rank >= pending.rank
+        }) else { return }
+        queue.async {
+            while let request = job.take() {
+                let began = DevelopTimingLog.now()
+                let (histogram, scope) = RenderSignposts.measure("Histogram") {
+                    (Histogram(image: request.image), ColorScope(image: request.image))
+                }
+                let took = DevelopTimingLog.ms(since: began)
+                DispatchQueue.main.async { apply(request, histogram, scope, took) }
+            }
+        }
+    }
+
+    private func applyMeasure(_ request: DevelopMeasureRequest, histogram: Histogram?, scope: ColorScope?, took: Int) {
+        guard assetID == request.assetID, openGeneration.value == request.generation,
+              request.rank >= measuredRank else { return }
+        let fromPreview = request.fromPreview
+        if !histogramLogged || fromPreview {
+            if !fromPreview { histogramLogged = true }
+            DevelopTimingLog.shared.log(request.assetID, "histogram from the \(fromPreview ? "cached preview" : "first render"): "
+                + "counted in \(took) ms, shown +\(DevelopTimingLog.ms(since: openedAt)) ms")
+        }
+        measuredRank = request.rank
+        if let histogram { self.histogram = histogram }
+        if let scope { colorScope = scope }
+    }
+
+    /// Until the photo's first render is counted, the histogram comes from the cached preview
+    /// it opens on, as Lightroom does, so it doesn't spin while you move through photos or the
+    /// photo decodes (Rosh, Nov 9, 2026). Any render's count replaces it.
+    private func measurePreview(_ preview: NSImage?, of assetID: Int64) {
+        guard let preview, !showsPreviousPhoto,
+              let cgImage = preview.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
+        Self.measure(DevelopMeasureRequest(image: cgImage, assetID: assetID, count: renderCount,
+                                           generation: openGeneration.value, fromPreview: true),
+                     job: measureJob, on: measureQueue, openGeneration: openGeneration) { request, histogram, scope, took in
+            MainActor.assumeIsolated { self.applyMeasure(request, histogram: histogram, scope: scope, took: took) }
         }
     }
 
@@ -1707,11 +2018,14 @@ final class DevelopController: ObservableObject {
         let existing = fullSession
         let clipping = clippingOverlay
         fullQueue.async {
+            let began = DevelopTimingLog.now()
             let session = existing ?? DevelopRenderer.shared.session(for: url, maxPixelSize: nil, interactive: true)
             let cgImage = RenderSignposts.measure("Full-size render") {
                 session?.renderForDisplay(settings, shadowClipping: clipping.shadows,
                                           highlightClipping: clipping.highlights)?.image
             }
+            DevelopTimingLog.shared.log(assetID, "full-size render (zoomed in)\(existing == nil ? " with full decode" : ""): "
+                + "\(DevelopTimingLog.ms(since: began)) ms")
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     self.fullRendering = false
@@ -1775,11 +2089,29 @@ final class DevelopController: ObservableObject {
         guard beforeImage == nil, let session else { return }
         let assetID = self.assetID
         let before = beforeSettings
+        // Counts as a render, so preloading the neighbours waits for the Before photo too.
+        lastRenderRequest.value = Date()
+        let queuedAt = DevelopTimingLog.now()
+        let openedAt = self.openedAt
+        let lastRenderRequest = self.lastRenderRequest
+        beforeRenders += 1
+        let generation = openGeneration.value
         queue.async {
+            let began = DevelopTimingLog.now()
             let cgImage = session.render(before)
+            lastRenderRequest.value = Date()
+            DevelopTimingLog.shared.log(assetID, "Before render: waited \(Int(((began - queuedAt) * 1000).rounded())) ms "
+                + "for the render queue, rendered in \(DevelopTimingLog.ms(since: began)) ms, "
+                + "shown +\(Int(((DevelopTimingLog.now() - openedAt) * 1000).rounded())) ms after open")
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
-                    guard self.assetID == assetID, let cgImage else { return }
+                    // Not for an earlier open of this photo (`reopen()` reset the count).
+                    guard self.assetID == assetID, self.openGeneration.value == generation else { return }
+                    self.beforeRenders -= 1
+                    guard let cgImage else {
+                        DevelopTimingLog.shared.log(assetID, "Before render FAILED")
+                        return
+                    }
                     self.beforeImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
                 }
             }
@@ -1834,17 +2166,38 @@ final class DevelopController: ObservableObject {
         }
         if let session {
             storePreviews(session: session, settings: settings, assetID: assetID)
+        } else {
+            // Saved while the editable copy is still decoding: refresh Grid and Loupe once it's
+            // ready (`finishOpen`), or from the saved settings if the photo is left first (`open`).
+            previewsOwed = assetID
         }
     }
 
     /// Renders `settings` in the background and stores it as the photo's grid thumbnail and
-    /// loupe preview.
-    private func storePreviews(session: DevelopSession, settings: DevelopSettings, assetID: Int64) {
+    /// loupe preview. `optional` is the unedited RAW's lens-corrected preview made on first open,
+    /// which is skipped once you've moved on (it's made again next visit); saved edits always
+    /// refresh both sizes, or Grid and Loupe would keep showing the old look.
+    private func storePreviews(session: DevelopSession, settings: DevelopSettings, assetID: Int64,
+                               optional: Bool = false) {
         let previews = self.previews
+        let openAsset = self.openAsset
+        let revisions = previewRevisions
+        // Optional work never claims a revision: if it's skipped, it mustn't make a saved edit's
+        // (required) write look obsolete. It writes only while no newer saved write was asked for.
+        let revision = optional ? (previewRevisions.value[assetID] ?? 0) : nextPreviewRevision(for: assetID)
         queue.async {
+            // Moving on quickly through photos: the optional first-open preview can wait.
+            if optional, openAsset.value != assetID {
+                DispatchQueue.main.async {
+                    // Not stored, so make it again on the next visit.
+                    MainActor.assumeIsolated { _ = self.developedPreviews.remove(assetID) }
+                }
+                return
+            }
+            let began = DevelopTimingLog.now()
+            defer { DevelopTimingLog.shared.log(assetID, "preview stored\(optional ? " (lens-corrected, first open)" : " (saved edit)"): \(DevelopTimingLog.ms(since: began)) ms on the render queue") }
             if let cgImage = session.render(settings) {
-                try? previews.store(cgImage, for: assetID, size: .preview)
-                try? previews.store(cgImage, for: assetID, size: .thumbnail)
+                Self.writePreviews(cgImage, for: assetID, revision: revision, previews: previews, revisions: revisions)
             }
             DispatchQueue.main.async {
                 MainActor.assumeIsolated { self.onPreviewsUpdated?(assetID) }
@@ -1852,15 +2205,43 @@ final class DevelopController: ObservableObject {
         }
     }
 
+    /// Each photo's latest preview write asked for (`nextPreviewRevision`). Writes come from the
+    /// render queue and from independent decodes (`refreshPreviews`), so an older one can finish
+    /// last; it is dropped instead of overwriting the newer saved look.
+    private let previewRevisions = LockedValue<[Int64: Int]>([:])
+    private static let previewWriteLock = NSLock()
+
+    private func nextPreviewRevision(for assetID: Int64) -> Int {
+        var revisions = previewRevisions.value
+        let next = (revisions[assetID] ?? 0) + 1
+        revisions[assetID] = next
+        previewRevisions.value = revisions
+        return next
+    }
+
+    /// Stores both preview sizes, unless a newer write for the photo has been asked for since.
+    private nonisolated static func writePreviews(_ cgImage: CGImage, for assetID: Int64, revision: Int,
+                                                  previews: PreviewCache, revisions: LockedValue<[Int64: Int]>) {
+        previewWriteLock.lock()
+        defer { previewWriteLock.unlock() }
+        guard (revisions.value[assetID] ?? 0) == revision else {
+            DevelopTimingLog.shared.log(assetID, "older preview write dropped: a newer saved look was asked for")
+            return
+        }
+        try? previews.store(cgImage, for: assetID, size: .preview)
+        try? previews.store(cgImage, for: assetID, size: .thumbnail)
+    }
+
     /// Re-renders previews for a photo that is not open, after pasting settings onto it.
     func refreshPreviews(for assetID: Int64, settings: DevelopSettings) {
         guard let url = try? catalog.fileURL(for: assetID) else { return }
         let previews = self.previews
+        let revisions = previewRevisions
+        let revision = nextPreviewRevision(for: assetID)
         DispatchQueue.global(qos: .utility).async {
             guard let session = DevelopRenderer.shared.session(for: url, maxPixelSize: Self.proxySize),
                   let cgImage = session.render(settings) else { return }
-            try? previews.store(cgImage, for: assetID, size: .preview)
-            try? previews.store(cgImage, for: assetID, size: .thumbnail)
+            Self.writePreviews(cgImage, for: assetID, revision: revision, previews: previews, revisions: revisions)
             DispatchQueue.main.async {
                 MainActor.assumeIsolated { self.onPreviewsUpdated?(assetID) }
             }
