@@ -194,7 +194,7 @@ struct MatchLookSheet: View {
                     .monospacedDigit()
                     .frame(width: 32, alignment: .trailing)
                 Button("Show Differences") { showingDifferences = true }
-                    .disabled(match.match == nil)
+                    .disabled(!match.canApply)
                     .help("Which sliders Apply will move, and by how much")
                     .popover(isPresented: $showingDifferences, arrowEdge: .top) {
                         MatchDifferencesView(lines: match.differences)

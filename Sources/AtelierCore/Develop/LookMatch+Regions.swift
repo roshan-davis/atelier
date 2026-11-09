@@ -102,7 +102,6 @@ public struct LookSkin: Sendable {
             c += (da * da + db * db).squareRoot()
         }
         let n = Double(pixels.count)
-        guard c / n > 1e-4 else { return nil }
         return (atan2(b, a) * 180 / .pi, c / n)
     }
 
@@ -119,7 +118,7 @@ public struct LookSkin: Sendable {
     }
 
     func isWithin(_ sample: LookSample) -> Bool {
-        guard let d = drift(sample) else { return true }
+        guard let d = drift(sample) else { return false }
         return abs(d.hue) <= Self.maxHueShift && abs(d.ratio - 1) <= Self.maxChromaChange
     }
 
@@ -231,7 +230,6 @@ extension LookMatcher {
         var reference = target.whole
         var photoBox: CGRect?
         var subjectFocus: [Double]?
-        var fitBase = base
         switch target.areas {
         case .wholePhoto:
             break
@@ -244,8 +242,6 @@ extension LookMatcher {
                    isUsableSubject(values) {
                     subjectFocus = values
                     reference = background
-                    // A new match replaces the subject mask an earlier one added.
-                    fitBase.masks.removeAll { $0.name == LookMatch.subjectMaskName }
                 } else {
                     notices.insert(.noSubjectInPhoto)
                 }
@@ -262,7 +258,7 @@ extension LookMatcher {
             return measured.excluding(skinPixels)
         }
 
-        var current = fitBase
+        var current = base
         var penalty: ((LookSample) -> Double)?
         if let skin { penalty = { measured in skin.penalty(measured) } }
         fitGlobal(&current, asShot: asShot, options: options, reference: reference, measure: sample,
@@ -281,10 +277,12 @@ extension LookMatcher {
             func whole(_ settings: DevelopSettings) -> LookSample? {
                 session.renderSRGB(settings).flatMap { LookSample(image: $0) }
             }
-            protect(skin, in: &current, from: fitBase, asShot: asShot, options: options, measure: whole)
+            protect(skin, in: &current, from: base, asShot: asShot, options: options, measure: whole)
         }
         guard !isCancelled() else { return nil }
-        return LookMatch(base: base, matched: current, asShotTemperature: asShot, notices: notices)
+        var match = LookMatch(base: base, matched: current, asShotTemperature: asShot, notices: notices)
+        match.subjectFitParameters = options.subjectFitParameters
+        return match
     }
 
     // MARK: Subject & Background
@@ -299,9 +297,13 @@ extension LookMatcher {
     /// The slopes are measured by rendering a nudge of each slider, as the global fit does.
     static func fitSubject(_ settings: inout DevelopSettings, options: LookMatchOptions, reference: LookSample,
                            measure: (DevelopSettings) -> LookSample?) {
-        let part = DevelopSettings.MaskComponent(.subject(DevelopSettings.Selection(feather: subjectFeather)))
-        settings.masks.append(DevelopSettings.Mask(name: LookMatch.subjectMaskName, components: [part]))
-        let index = settings.masks.count - 1
+        let earlier = settings.masks.firstIndex { $0.name == LookMatch.subjectMaskName }
+        let index = earlier ?? settings.masks.count
+        if earlier == nil {
+            let part = DevelopSettings.MaskComponent(.subject(DevelopSettings.Selection(feather: subjectFeather)))
+            settings.masks.append(DevelopSettings.Mask(name: LookMatch.subjectMaskName, components: [part]))
+        }
+        for parameter in options.subjectFitParameters { settings.masks[index][parameter] = 0 }
         func with(_ changes: [(DevelopSettings.LocalParameter, Double)]) -> DevelopSettings {
             var out = settings
             for (parameter, value) in changes { out.masks[index][parameter] = value }
@@ -359,7 +361,7 @@ extension LookMatcher {
         }
 
         // A mask that moves nothing isn't worth adding.
-        if !settings.masks[index].hasAdjustments { settings.masks.remove(at: index) }
+        if earlier == nil, !settings.masks[index].hasAdjustments { settings.masks.remove(at: index) }
     }
 
     // MARK: Protect Skin Tones
@@ -370,7 +372,11 @@ extension LookMatcher {
     /// the grading wheels and the subject mask's color) back toward where they started.
     static func protect(_ skin: LookSkin, in settings: inout DevelopSettings, from base: DevelopSettings,
                         asShot: Double, options: LookMatchOptions, measure: (DevelopSettings) -> LookSample?) {
-        guard let start = measure(settings), !skin.isWithin(start) else { return }
+        guard let start = measure(settings) else {
+            settings = base
+            return
+        }
+        guard !skin.isWithin(start) else { return }
         // The bands skin's hue falls between, scaled so the main one moves fully.
         let shares = HSLAdjustment.weights(for: skin.hue < 0 ? skin.hue + 360 : skin.hue)
         let top = shares.max() ?? 0
@@ -410,7 +416,7 @@ extension LookMatcher {
                 settings = moved(settings, .saturation, by: min(60, max(-60, -excess / slope)))
             }
         }
-        guard let now = measure(settings), !skin.isWithin(now) else { return }
+        if let now = measure(settings), skin.isWithin(now) { return }
 
         // Pull back: the smallest pull (0 to 1) that brings the skin inside its limits.
         let matched = settings
@@ -426,24 +432,46 @@ extension LookMatcher {
             for (band, _) in bands { parameters += [.hsl(.hue, band), .hsl(.saturation, band)] }
             for region in LookMatch.gradeRegions { parameters.append(region.saturation) }
             for parameter in parameters where matched[parameter] != base[parameter] {
-                out[parameter] = (base[parameter] + (matched[parameter] - base[parameter]) * k).rounded()
+                let from = base[parameter]
+                out[parameter] = k == 0 ? from : (from + (matched[parameter] - from) * k).rounded()
             }
             if let index = out.masks.firstIndex(where: { $0.name == LookMatch.subjectMaskName }) {
+                let previous = base.masks.first { $0.id == out.masks[index].id }
                 for parameter in [DevelopSettings.LocalParameter.temperature, .tint, .saturation] {
-                    out.masks[index][parameter] = (matched.masks[index][parameter] * k).rounded()
+                    let from = previous?[parameter] ?? 0
+                    let to = matched.masks[index][parameter]
+                    if from != to { out.masks[index][parameter] = k == 0 ? from : (from + (to - from) * k).rounded() }
                 }
             }
             return out
         }
+        // If pulling back only color still leaves a shift, reduce the whole match. The
+        // original render is the known safe endpoint, including Tone and any existing mask.
+        let colorRestored = pulled(1)
+        if let sample = measure(colorRestored), skin.isWithin(sample) {
+            settings = strongestSafeMatch(from: colorRestored, skin: skin, measure: measure) { pulled(1 - $0) }
+        } else {
+            var match = LookMatch(base: base, matched: matched, asShotTemperature: asShot)
+            match.subjectFitParameters = options.subjectFitParameters
+            settings = strongestSafeMatch(from: base, skin: skin, measure: measure) { match.settings(strength: $0) }
+        }
+    }
+
+    private static func strongestSafeMatch(from safe: DevelopSettings, skin: LookSkin,
+                                           measure: (DevelopSettings) -> LookSample?,
+                                           candidate: (Double) -> DevelopSettings) -> DevelopSettings {
         var low = 0.0, high = 1.0
-        guard let full = measure(pulled(1)), skin.isWithin(full) else {
-            settings = pulled(1)
-            return
-        }
+        var best = safe
         for _ in 0..<6 {
-            let mid = (low + high) / 2
-            if let s = measure(pulled(mid)), skin.isWithin(s) { high = mid } else { low = mid }
+            let strength = (low + high) / 2
+            let settings = candidate(strength)
+            if let sample = measure(settings), skin.isWithin(sample) {
+                best = settings
+                low = strength
+            } else {
+                high = strength
+            }
         }
-        settings = pulled(high)
+        return best
     }
 }

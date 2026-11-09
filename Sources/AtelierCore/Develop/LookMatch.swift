@@ -16,6 +16,7 @@ public struct LookMatch: Sendable, Equatable {
 
     /// What the dialog should say about the match, such as no subject found.
     public var notices: Set<LookMatchNotice>
+    var subjectFitParameters = Self.subjectParameters
 
     public init(base: DevelopSettings, matched: DevelopSettings, asShotTemperature: Double,
                 notices: Set<LookMatchNotice> = []) {
@@ -75,17 +76,21 @@ public struct LookMatch: Sendable, Equatable {
             // Subject & Background: the "Match Look: Subject" mask replaces one from an earlier
             // match, its sliders blended from that mask's (or from nothing) at `strength`.
             let index = out.masks.firstIndex { $0.name == LookMatch.subjectMaskName }
-            let old = index.map { out.masks[$0] } ?? base.masks.first { $0.name == LookMatch.subjectMaskName }
-            var mask = subject
-            for parameter in LookMatch.subjectParameters {
-                let from = old?[parameter] ?? 0
-                let value = from + (subject[parameter] - from) * s
-                mask[parameter] = parameter == .exposure ? (value * 100).rounded() / 100 : value.rounded()
+            let old = index.map { out.masks[$0] }
+            var mask = old ?? DevelopSettings.Mask(name: subject.name, components: subject.components)
+            if old == nil { mask.id = subject.id }
+            for parameter in subjectFitParameters {
+                if full {
+                    mask[parameter] = subject[parameter]
+                } else {
+                    let from = old?[parameter] ?? 0
+                    let value = from + (subject[parameter] - from) * s
+                    mask[parameter] = parameter == .exposure ? (value * 100).rounded() / 100 : value.rounded()
+                }
             }
             if let index {
-                mask.id = out.masks[index].id
                 out.masks[index] = mask
-            } else {
+            } else if mask.hasAdjustments {
                 out.masks.append(mask)
             }
         }
@@ -123,6 +128,14 @@ public struct LookMatchOptions: Sendable, Equatable {
     }
 
     public var isEmpty: Bool { !whiteBalance && !tone && !color }
+
+    var subjectFitParameters: [DevelopSettings.LocalParameter] {
+        var parameters: [DevelopSettings.LocalParameter] = []
+        if whiteBalance { parameters += [.temperature, .tint] }
+        if tone { parameters.append(.exposure) }
+        if color { parameters.append(.saturation) }
+        return parameters
+    }
 }
 
 /// An image's colors in Oklab, measured on a small copy. `area` (0 to 1 from the top left)

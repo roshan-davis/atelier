@@ -66,15 +66,15 @@
 </ol>
 
 <h2 id="skin">Protect Skin Tones</h2>
-<p>A strong look, such as teal and orange or a cold film stock, can turn skin orange, green or grey. With <b>Protect Skin Tones</b> on, the skin on the faces Atelier finds is left out of the match, and the match may move its color by only a little (at most 5° of hue and 15% of saturation). The rest of the photo still takes the full look.</p>
-<p>Atelier does this with ordinary sliders. It first turns back the HSL Hue and Saturation of the colors skin falls in (Orange, usually), when <b>Color</b> is on. If that isn't enough, it pulls White Balance, Saturation and Color Grading back toward where they were, just as far as needed. Show Differences lists every change.</p>
+<p>A strong look, such as teal and orange or a cold film stock, can turn skin orange, green or grey. With <b>Protect Skin Tones</b> on, the skin on the faces Atelier finds is left out of the match, and the match may move its color by only a little (at most 5° of hue and 15% of saturation). The match can be weaker if the reference would push skin outside those limits.</p>
+<p>Atelier does this with ordinary sliders. It first turns back the HSL Hue and Saturation of the colors skin falls in (Orange, usually), when <b>Color</b> is on. If that isn't enough, it pulls White Balance, Saturation and Color Grading back toward where they were, just as far as needed. If that still leaves the skin outside the limits, Atelier backs off the rest of the match too. Show Differences lists the changes once the new match is ready.</p>
 <p>It turns on by itself when Atelier finds a face in your photo. You can turn it on or off for each match. If no face is found, the dialog says there was no skin to protect.</p>
 
 <h2 id="areas">Match Areas</h2>
 <p>When the reference shows different things from your photo, choose how they match in the <b>Match Areas</b> pop-up menu:</p>
 <dl class="defs">
   <dt>Whole Photo</dt><dd>The whole reference sets the look for the whole photo. This is the default.</dd>
-  <dt>Subject &amp; Background</dt><dd>Atelier finds the subject (people, animals, objects in front) in both pictures, so there is nothing to draw. The background is matched to the reference's background with the usual sliders. Then a mask named <b>Match Look: Subject</b> (a <a href="masking.html#subject">Select Subject</a> mask) gets its own Temp, Tint, Exposure and Saturation, so your subject matches the reference's subject. You can edit or delete the mask in Masking like any other. Running Match Look again replaces it instead of adding another. If Atelier can't find a subject in either picture, it matches the whole photo and says so.</dd>
+  <dt>Subject &amp; Background</dt><dd>Atelier finds the subject (people, animals, objects in front) in both pictures, so there is nothing to draw. The background is matched to the reference's background with the usual sliders. Then a mask named <b>Match Look: Subject</b> (a <a href="masking.html#subject">Select Subject</a> mask) gets its own Temp, Tint, Exposure and Saturation, so your subject matches the reference's subject. You can edit or delete the mask in Masking like any other. Running Match Look again updates the same mask and keeps adjustments outside the checked categories. If Atelier can't find a subject in either picture, it matches the whole photo and says so.</dd>
   <dt>Boxes</dt><dd>A box appears on each image: drag them over the parts that should match (skin to skin, sky to sky) and drag a corner to resize. The boxed areas count most, and the rest of each picture a little, so the whole photo still moves sensibly.</dd>
 </dl>
 

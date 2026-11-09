@@ -236,7 +236,7 @@ final class MatchLookModel: ObservableObject, Identifiable {
 
     /// Show Differences at the current strength.
     var differences: [MatchDifference] {
-        guard let match else { return [] }
+        guard canApply, let match else { return [] }
         return MatchDifference.list(from: base, to: match.settings(strength: strength / 100),
                                     asShot: match.asShotTemperature)
     }
@@ -342,6 +342,8 @@ final class MatchLookModel: ObservableObject, Identifiable {
     func scheduleMatch(delay: Int = 250) {
         let generation = latest.next()
         debounce?.cancel()
+        isMatching = fitSession != nil && referenceCG != nil
+        if isMatching { message = nil }
         debounce = Task { [weak self] in
             if delay > 0 { try? await Task.sleep(for: .milliseconds(delay)) }
             guard !Task.isCancelled else { return }
@@ -358,8 +360,6 @@ final class MatchLookModel: ObservableObject, Identifiable {
             renderPreview()
             return
         }
-        isMatching = true
-        message = nil
         let areas = lookAreas
         let options = self.options, base = self.base, latest = self.latest, features = self.features
         let photoFaces = self.photoFaces
@@ -432,7 +432,7 @@ final class MatchLookModel: ObservableObject, Identifiable {
     // MARK: Apply
 
     func apply() {
-        guard let match, let library, let referenceCG else { return }
+        guard canApply, let match, let library, let referenceCG else { return }
         let strength = self.strength / 100
         let step = "Match Look: \(referenceName ?? "Reference")"
         library.develop.apply(match.settings(strength: strength), onto: [assetID], step: step)
