@@ -2181,6 +2181,8 @@ final class DevelopController: ObservableObject {
                                optional: Bool = false) {
         let previews = self.previews
         let openAsset = self.openAsset
+        let revisions = previewRevisions
+        let revision = nextPreviewRevision(for: assetID)
         queue.async {
             // Moving on quickly through photos: the optional first-open preview can wait.
             if optional, openAsset.value != assetID {
@@ -2193,8 +2195,7 @@ final class DevelopController: ObservableObject {
             let began = DevelopTimingLog.now()
             defer { DevelopTimingLog.shared.log(assetID, "preview stored\(optional ? " (lens-corrected, first open)" : " (saved edit)"): \(DevelopTimingLog.ms(since: began)) ms on the render queue") }
             if let cgImage = session.render(settings) {
-                try? previews.store(cgImage, for: assetID, size: .preview)
-                try? previews.store(cgImage, for: assetID, size: .thumbnail)
+                Self.writePreviews(cgImage, for: assetID, revision: revision, previews: previews, revisions: revisions)
             }
             DispatchQueue.main.async {
                 MainActor.assumeIsolated { self.onPreviewsUpdated?(assetID) }
@@ -2202,15 +2203,43 @@ final class DevelopController: ObservableObject {
         }
     }
 
+    /// Each photo's latest preview write asked for (`nextPreviewRevision`). Writes come from the
+    /// render queue and from independent decodes (`refreshPreviews`), so an older one can finish
+    /// last; it is dropped instead of overwriting the newer saved look.
+    private let previewRevisions = LockedValue<[Int64: Int]>([:])
+    private static let previewWriteLock = NSLock()
+
+    private func nextPreviewRevision(for assetID: Int64) -> Int {
+        var revisions = previewRevisions.value
+        let next = (revisions[assetID] ?? 0) + 1
+        revisions[assetID] = next
+        previewRevisions.value = revisions
+        return next
+    }
+
+    /// Stores both preview sizes, unless a newer write for the photo has been asked for since.
+    private nonisolated static func writePreviews(_ cgImage: CGImage, for assetID: Int64, revision: Int,
+                                                  previews: PreviewCache, revisions: LockedValue<[Int64: Int]>) {
+        previewWriteLock.lock()
+        defer { previewWriteLock.unlock() }
+        guard revisions.value[assetID] == revision else {
+            DevelopTimingLog.shared.log(assetID, "older preview write dropped: a newer saved look was asked for")
+            return
+        }
+        try? previews.store(cgImage, for: assetID, size: .preview)
+        try? previews.store(cgImage, for: assetID, size: .thumbnail)
+    }
+
     /// Re-renders previews for a photo that is not open, after pasting settings onto it.
     func refreshPreviews(for assetID: Int64, settings: DevelopSettings) {
         guard let url = try? catalog.fileURL(for: assetID) else { return }
         let previews = self.previews
+        let revisions = previewRevisions
+        let revision = nextPreviewRevision(for: assetID)
         DispatchQueue.global(qos: .utility).async {
             guard let session = DevelopRenderer.shared.session(for: url, maxPixelSize: Self.proxySize),
                   let cgImage = session.render(settings) else { return }
-            try? previews.store(cgImage, for: assetID, size: .preview)
-            try? previews.store(cgImage, for: assetID, size: .thumbnail)
+            Self.writePreviews(cgImage, for: assetID, revision: revision, previews: previews, revisions: revisions)
             DispatchQueue.main.async {
                 MainActor.assumeIsolated { self.onPreviewsUpdated?(assetID) }
             }
