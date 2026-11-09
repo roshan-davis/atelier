@@ -24,12 +24,7 @@ struct DevelopImageView: View {
                     } else if develop.isMasking {
                         MaskEditorView(develop: develop, image: image, display: develop.displayImage ?? image,
                                        pixelSize: pixelSize, zoom: model.zoomState,
-                                       onReport: { report in
-                                           if model.zoomReport != report { model.zoomReport = report }
-                                           if develop.wantsFullResolution != report.isZoomedPastFit {
-                                               develop.wantsFullResolution = report.isZoomedPastFit
-                                           }
-                                       })
+                                       onReport: onZoomReport)
                     } else if develop.isGuiding {
                         GuidedUprightView(develop: develop, image: image)
                     } else if develop.showingBefore || develop.compareMode == .off {
@@ -102,6 +97,9 @@ struct DevelopImageView: View {
             if !Task.isCancelled, develop.isLoading { slowLoad = true }
         }
         .onChange(of: develop.compareMode) { old, new in compareModeChanged(from: old, to: new) }
+        .onReceive(model.zoomState.$level) { level in
+            if level == .fit, develop.wantsFullResolution { develop.wantsFullResolution = false }
+        }
         .onChange(of: CropOfPhoto(assetID: develop.assetID, crop: develop.crop)) { old, new in
             // The zoomed spot follows the photo through a crop (the crop tool, undo, a preset).
             guard old.assetID == new.assetID, let size = develop.sourceSize else { return }
@@ -163,8 +161,11 @@ struct DevelopImageView: View {
 
     private func onZoomReport(_ report: ZoomReport) {
         if model.zoomReport != report { model.zoomReport = report }
-        if develop.wantsFullResolution != report.isZoomedPastFit {
-            develop.wantsFullResolution = report.isZoomedPastFit
+        // Scroll views report after layout. A late report from a zoomed pane must not
+        // request full-resolution work after the shared zoom has already returned to Fit.
+        let wantsFullResolution = model.zoomState.level != .fit && report.isZoomedPastFit
+        if develop.wantsFullResolution != wantsFullResolution {
+            develop.wantsFullResolution = wantsFullResolution
         }
     }
 
@@ -272,16 +273,25 @@ private struct ComparePane: View {
             if let image {
                 ZoomableImageView(image: image, pixelSize: pixelSize, zoom: zoom, onReport: onReport, menu: menu)
             } else {
-                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                BeforeLoadingView()
             }
             Badge(text: label).padding(8).allowsHitTesting(false)
         }
     }
 }
 
+private struct BeforeLoadingView: View {
+    var body: some View {
+        ProgressView()
+            .accessibilityLabel("Loading Before image")
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
 /// The edited photo with the original revealed to the left of a draggable divider. Both zoom
 /// and pan together: drag the photo to move around, drag the divider to compare.
-private struct SliderCompareView: View {
+struct SliderCompareView: View {
+    @Environment(\.theme) private var theme
     let before: NSImage?
     let after: NSImage
     let pixelSize: CGSize?
@@ -299,6 +309,12 @@ private struct SliderCompareView: View {
                 if let before {
                     ZoomableImageView(image: before, pixelSize: pixelSize, zoom: zoom, visibleWidth: CGFloat(position),
                                       onReport: onReport, menu: menu)
+                } else if dividerX > 0 {
+                    BeforeLoadingView()
+                        .frame(width: dividerX, height: size.height)
+                        .background(Color(nsColor: theme.surround.withAlphaComponent(1)))
+                        .clipped()
+                        .allowsHitTesting(false)
                 }
                 Rectangle()
                     .fill(Color.white)

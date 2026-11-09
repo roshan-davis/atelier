@@ -286,6 +286,57 @@ final class TransformTests: XCTestCase {
         XCTAssertTrue(refitted.fits(imageAspect: 1 / 1.5, onPhoto: geometry.showsPhoto(at:)))
     }
 
+    func testAffineWarpTileMatchesTheSameRegionOfTheFullRender() throws {
+        var settings = DevelopSettings.neutral
+        settings[.transformAspect] = 13
+        settings[.transformRotate] = 8
+        settings[.transformOffsetX] = 35
+        try assertWarpTilesMatchFullRender(settings)
+    }
+
+    func testPerspectiveWarpTilesMatchFullRender() throws {
+        var settings = DevelopSettings.neutral
+        settings[.transformVertical] = 20
+        try assertWarpTilesMatchFullRender(settings)
+    }
+
+    func testDistortionWarpTilesMatchFullRender() throws {
+        for distortion in [-50.0, 50.0] {
+            var settings = DevelopSettings.neutral
+            settings[.lensDistortion] = distortion
+            try assertWarpTilesMatchFullRender(settings)
+            settings[.transformVertical] = 20
+            try assertWarpTilesMatchFullRender(settings)
+        }
+    }
+
+    private func assertWarpTilesMatchFullRender(_ settings: DevelopSettings) throws {
+        let renderer = DevelopRenderer()
+        let extent = CGRect(x: 0, y: 0, width: 640, height: 480)
+        let gradient = CIFilter(name: "CILinearGradient", parameters: [
+            "inputPoint0": CIVector(x: 0, y: 0),
+            "inputPoint1": CIVector(x: 640, y: 480),
+            "inputColor0": CIColor(red: 0.8, green: 0.2, blue: 0.1),
+            "inputColor1": CIColor(red: 0.1, green: 0.2, blue: 0.8),
+        ])
+        let source = try XCTUnwrap(gradient?.outputImage).cropped(to: extent)
+        let warped = LensGeometry(settings: settings, size: extent.size, focalLength35: 35).apply(to: source)
+        let full = try XCTUnwrap(renderer.cgImage(warped, colorSpace: DevelopRenderer.sRGB))
+
+        for tile in [CGRect(x: 260, y: 170, width: 120, height: 140),
+                     CGRect(x: 0, y: 180, width: 90, height: 120)] {
+            let image = try XCTUnwrap(renderer.cgImage(warped.cropped(to: tile), colorSpace: DevelopRenderer.sRGB))
+            let bitmapTile = CGRect(x: tile.minX, y: extent.maxY - tile.maxY,
+                                    width: tile.width, height: tile.height)
+            let expected = try XCTUnwrap(full.cropping(to: bitmapTile))
+            let renderedPixels = try XCTUnwrap(CameraMatch.pixels(image))
+            let expectedPixels = try XCTUnwrap(CameraMatch.pixels(expected))
+            XCTAssertEqual(renderedPixels.count, expectedPixels.count)
+            let largestDifference = zip(renderedPixels, expectedPixels).map { abs(Int($0) - Int($1)) }.max()
+            XCTAssertLessThanOrEqual(try XCTUnwrap(largestDifference), 1)
+        }
+    }
+
     /// Real camera files, when CI has downloaded some: whether Apple's RAW engine has lens
     /// corrections for them, and Upright Auto's result side by side with the original.
     func testSampleRAWsUpright() throws {
