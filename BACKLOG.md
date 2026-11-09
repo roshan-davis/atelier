@@ -442,3 +442,11 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 **Mac validation (Nov 9):** Codex merged main at `624918f` and regenerated the Help index. At `3f510d3`, `python3 Scripts/check_pr.py --samples /private/tmp/preset-raws` passed the build, all 290 Swift tests (Nikon Z6 and Zf, zero skips), script checks and Help checks. Logs: `/private/tmp/atelier-pr84-review/.build/local-checks/20261109-085259-690988`. Reviewed the Help page in Chrome and the Whole Photo, Boxes, Show Differences and Subject & Background snapshots from that revision. The subject snapshot exercises the fallback, so a real portrait and successful automatic mask still need manual acceptance. GitHub Actions assigned no runner.
 
 **Approved review fixes (Nov 9):** Rosh approved all three in the PR #84 Codex chat. Apply and Show Differences wait for the current refit, a repeat match updates checked sliders on the existing subject mask, and skin protection reduces the whole fit when restoring color sliders alone misses the limits. The focused Match Look run passed all 19 tests, including the real portrait, Yosemite landscape, camera product photo, and the dialog debounce. Logs: `/private/tmp/atelier-pr84-artifacts/targeted.log`. Manual acceptance remains pending.
+
+## AT-030 — Run routine UI checks without agent-driven desktop testing
+
+**Status:** In progress. **Owner:** Codex. **Chat:** [PR planning](codex://threads/01a1c1fe-a0b2-7f00-aa05-a3c288cfc592). **Branch:** `codex/pr-ui-automation`. **Approved:** Rosh, November 9, 2026.
+
+**Evidence and scope:** At `5b8bf19`, CI uploaded layout screenshots but did not compare them, and local pre-PR checks excluded GUI snapshots. Build on the existing snapshot generator and require full Xcode and a logged-in Mac desktop session. Use isolated fixture data, compare PR and base pixels on the same runner, and run one native Exposure and Undo smoke test.
+
+**Acceptance:** One scripted command and one concise CI report give the tested revision, test result, and only the changed screenshots for visual review. Manual acceptance remains for intentional design changes and uncovered workflows.

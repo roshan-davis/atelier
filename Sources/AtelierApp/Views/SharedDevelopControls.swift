@@ -155,6 +155,7 @@ struct SliderRow: View {
                         .onSubmit(commit)
                         .onChange(of: fieldFocused) { if !fieldFocused { commit() } }
                         .onExitCommand { editing = false }
+                        .accessibilityIdentifier("develop-slider-field-\(label)")
                 } else {
                     Text(format(value))
                         .monospacedDigit()
@@ -167,6 +168,7 @@ struct SliderRow: View {
                             fieldFocused = true
                         }
                         .help("Click to type a value")
+                        .accessibilityIdentifier("develop-slider-value-\(label)")
                 }
             }
             .frame(width: valueWidth)

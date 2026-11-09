@@ -33,6 +33,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--samples", type=Path, help="Existing sample RAW directory (no downloads)")
     parser.add_argument("--base", default="origin/main", help="Fetched PR base ref (default: origin/main)")
+    parser.add_argument("--ui", action="store_true", help="Also run native UI and visual checks in a logged-in session")
+    parser.add_argument("--quiet", action="store_true", help="Show progress and the summary, with detailed output in logs")
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     if sys.platform != "darwin":
@@ -90,7 +92,8 @@ def main():
                 try:
                     for line in process.stdout:
                         has_output = True
-                        print(line, end="", flush=True)
+                        if not args.quiet:
+                            print(line, end="", flush=True)
                         log.write(line)
                     code = check_exit_code(command, process.wait(), has_output)
                 except KeyboardInterrupt:
@@ -115,10 +118,16 @@ def main():
     check("help", [sys.executable, str(root / "Scripts/help/build_help_index.py"), "--check"])
     check("build", ["xcrun", "swift", "build"])
     check("tests", ["xcrun", "swift", "test"])
+    if args.ui:
+        check("ui", [sys.executable, str(root / "Scripts/check_ui.py"), "--base", args.base,
+                     "--output", str(out / "ui")])
     if fingerprint() != before or untracked_hashes() != untracked_before:
         results.append(("source-changed-during-checks", 1))
-    notes = ["Layout snapshots: NOT RUN; render and inspect separately for UI changes.",
-             "Real RAW coverage: inspect tests.log for skipped tests; sample files are never downloaded."]
+    notes = ["Real RAW coverage: inspect tests.log for skipped tests; sample files are never downloaded."]
+    if args.ui:
+        notes.append("UI results: " + str(out / "ui"))
+    else:
+        notes.append("UI checks: NOT RUN. Use --ui for native smoke and visual checks.")
     if not samples:
         notes.append("No sample RAW directory supplied; real-RAW tests may skip.")
     summary = "Revision: " + before[0].strip() + "\n"

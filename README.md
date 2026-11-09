@@ -98,11 +98,36 @@ It honors `DEVELOPER_DIR`, otherwise uses selected Xcode or `/Applications/Xcode
 Command Line Tools are selected. It never changes the global Xcode selection.
 
 Report failures and skipped RAW tests in the PR; a successful run does not certify real-RAW
-coverage or visual layout. For UI changes, render and inspect layout snapshots separately.
+coverage or visual layout. Use the separate UI check below for app interactions and screenshots.
 This local check requires no GitHub configuration and leaves the existing Actions workflow intact.
 Use `--base <ref>` to check against a different fetched PR base. Agent workspace and environment
 rules are in [AGENTS.md](AGENTS.md#where-you-work). Cloud Claude cannot execute this Mac-only
 command; its PR must disclose that and receive a Mac check before validation is complete.
+
+
+## Automated UI checks
+
+GitHub Actions runs the native smoke test and compares snapshots on each PR. Look for
+**Atelier UI checks** in the run summary and download **layout-snapshots** for the logs,
+the native test result, and changed screenshots. The smoke test opens a fixture photo in
+Develop, enters an Exposure value, and checks that ⌘Z restores the original value.
+
+If Actions is unavailable, use a task worktree on a Mac with full Xcode and a logged-in
+desktop session. The script opens temporary app windows and uses a disposable catalog,
+temporary home directory and separate app identifiers.
+
+```sh
+git fetch origin main
+python3 Scripts/check_pr.py --ui --quiet
+```
+
+That command runs the usual pre-PR checks and writes the UI report in the same log folder.
+Run `python3 Scripts/check_ui.py` for UI checks alone. Use `--base <revision>` for a
+different fetched base, or `--smoke-only` to skip screenshots. Read `ui/summary.txt` in the
+pre-PR log folder or `.build/ui-checks/<run>/summary.txt` for a UI-only run. The report
+identifies the checked revision and baseline. Pixel differences are review items, with before, after and highlighted diff images
+in `visual/`. Build, capture and test failures exit nonzero. Review intentional visual changes
+and manually test interactions outside the suite.
 
 
 ## Single-image HDR MVP (work in progress)

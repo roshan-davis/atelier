@@ -110,7 +110,7 @@ Either way, GitHub is the only hand-off: Rosh sees a change after it's pushed an
 - Mac agents run `python3 Scripts/check_pr.py` in the task worktree before opening or updating a PR. Cl/Claude in the cloud follows the environment rule above. Command options, logs and prerequisites are documented in [README.md > Local pre-PR checks](README.md#local-pre-pr-checks-mac-agents).
 - Include the checked commit, working changes, summary/log location, failures and skipped tests in the PR. A failed build/test is not a pass. Resolve failures or explicitly report the blocker.
 - Fetch the PR base first. Whitespace validation compares the working tree to the merge base with `origin/main`, including committed changes and new files; use `--base <ref>` for another base. Inspect test logs for skipped RAW fixtures.
-- The local check does not render or inspect GUI snapshots. UI changes still require the snapshot review below. No GitHub setup is needed for the local check.
+- Pass `--ui` to include the native smoke test and screenshot comparison in the local check. Review intentional visual changes as described below. No GitHub setup is needed for the local check.
 
 ### Cloud review when macOS is unavailable
 
@@ -147,11 +147,9 @@ Keep the description current: when you push more commits, update the bullets and
 
 ## UI changes
 
-Nobody but Rosh can see the running app, so don't guess at layout.
-
-- The Actions workflow is configured to render with `ATELIER_SNAPSHOTS` and publish PR PNGs to `layout-snapshots`. Confirm the run and head SHA before using them. If Actions is unavailable, render locally on a Mac with `ATELIER_SNAPSHOTS` (see `Sources/AtelierApp/LayoutSnapshots.swift`).
-- Before saying a UI change works, inspect snapshots generated for the latest PR commit, from Actions or a local Mac run. Report which revision produced them.
-- If a new screen or state matters, add it to `LayoutSnapshots.swift`.
+- For routine native UI checks, read the PR's **Atelier UI checks** summary and `layout-snapshots` artifact. Confirm the tested revision. If Actions is unavailable, run `python3 Scripts/check_ui.py` from the task worktree on a Mac with a logged-in desktop session. Read the summary and open the relevant diffs or failure artifacts.
+- Passing covered checks need no agent-driven desktop replay. Review intentional visual changes in the generated screenshots before handoff. List uncovered gestures and workflows that still need manual acceptance.
+- For a new screen or state, add coverage to `LayoutSnapshots.swift`. For repeatable interactions, extend the native smoke suite under `Tests/AtelierUITests`.
 
 ## Handing off to Rosh
 
