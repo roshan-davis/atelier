@@ -2182,7 +2182,9 @@ final class DevelopController: ObservableObject {
         let previews = self.previews
         let openAsset = self.openAsset
         let revisions = previewRevisions
-        let revision = nextPreviewRevision(for: assetID)
+        // Optional work never claims a revision: if it's skipped, it mustn't make a saved edit's
+        // (required) write look obsolete. It writes only while no newer saved write was asked for.
+        let revision = optional ? (previewRevisions.value[assetID] ?? 0) : nextPreviewRevision(for: assetID)
         queue.async {
             // Moving on quickly through photos: the optional first-open preview can wait.
             if optional, openAsset.value != assetID {
@@ -2222,7 +2224,7 @@ final class DevelopController: ObservableObject {
                                                   previews: PreviewCache, revisions: LockedValue<[Int64: Int]>) {
         previewWriteLock.lock()
         defer { previewWriteLock.unlock() }
-        guard revisions.value[assetID] == revision else {
+        guard (revisions.value[assetID] ?? 0) == revision else {
             DevelopTimingLog.shared.log(assetID, "older preview write dropped: a newer saved look was asked for")
             return
         }
