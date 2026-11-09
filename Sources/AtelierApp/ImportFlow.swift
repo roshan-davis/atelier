@@ -35,6 +35,8 @@ final class ImportFlow: ObservableObject {
     @Published var destinationPath = UserDefaults.standard.string(forKey: "import.destination") ?? ImportFlow.defaultLibrary {
         didSet { UserDefaults.standard.set(destinationPath, forKey: "import.destination") }
     }
+    var retiredPreset: DevelopPreset? { DevelopPreset.retiredImportPreset(id: presetID) }
+
     @Published var presetID = UserDefaults.standard.string(forKey: "import.developPreset") ?? "" {
         didSet { UserDefaults.standard.set(presetID, forKey: "import.developPreset") }
     }
@@ -133,7 +135,7 @@ final class ImportFlow: ObservableObject {
             : .reference
         let target: ImportTarget = existingGroup.map { .existingGroup($0) } ?? .newGroup(name: effectiveName)
         return ImportOptions(mode: mode, target: target, keywords: keywords.split(separator: ",").map(String.init),
-                             developPreset: model?.develop.presets.first { $0.id.uuidString == presetID })
+                             developPreset: model?.develop.presets.first { $0.id.uuidString == presetID } ?? retiredPreset)
     }
 
     /// Import, or with culling on, the Cull step. Both stay in the dialog.

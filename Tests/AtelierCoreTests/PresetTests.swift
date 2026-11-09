@@ -23,13 +23,9 @@ final class PresetTests: XCTestCase {
         var groups: [String] = []
         for preset in presets where groups.last != preset.group { groups.append(preset.group) }
         XCTAssertEqual(groups, DevelopPreset.builtInGroups)
-        // The original five keep the IDs photos and import settings already point at.
+        // Names and list positions can change while import keeps resolving the same IDs.
         XCTAssertEqual(presets.first { $0.name == "Punchy" }?.id.uuidString, "6E2B6B5A-0002-4C5E-9A7E-0A7E11E50002")
         XCTAssertEqual(presets.first { $0.name == "Gold 200" }?.id.uuidString, "6E2B6B5A-0202-4C5E-9A7E-0A7E11E50202")
-        for group in DevelopPreset.builtInGroups {
-            let count = presets.filter { $0.group == group }.count
-            XCTAssertTrue((4...9).contains(count), "\(group) has \(count) presets")
-        }
         XCTAssertTrue(presets.allSatisfy(\.isBuiltIn))
     }
 
@@ -66,6 +62,34 @@ final class PresetTests: XCTestCase {
                        "6E2B6B5A-0801-4C5E-9A7E-0A7E11E50801")
         XCTAssertEqual(DevelopPreset.builtIn.first { $0.name == "Teal & Orange" }?.id.uuidString,
                        "6E2B6B5A-0701-4C5E-9A7E-0A7E11E50701")
+    }
+
+    func testRetiredPresetResolvesOnlyForExistingImportSelection() throws {
+        let id = "6E2B6B5A-0004-4C5E-9A7E-0A7E11E50004"
+        let preset = try XCTUnwrap(DevelopPreset.retiredImportPreset(id: id))
+        XCTAssertEqual(preset.name, "Warm Film")
+        XCTAssertEqual(preset.applied(to: .neutral).grain, 18)
+        XCTAssertFalse(DevelopPreset.builtIn.contains { $0.id == preset.id })
+        XCTAssertNil(DevelopPreset.retiredImportPreset(id: ""))
+        let copper = DevelopPreset.builtIn.first { $0.name == "Copper Negative" }
+        XCTAssertEqual(copper?.id.uuidString, "6E2B6B5A-0806-4C5E-9A7E-0A7E11E50806")
+    }
+
+    func testBuiltInGlowStylesApplyThroughPresetAmounts() throws {
+        let looks: [(String, DevelopSettings.GlowStyle)] = [
+            ("Tungsten 800T", .halation), ("Soft Glow", .diffusion), ("Infrared Glow", .bloom),
+        ]
+        for (name, style) in looks {
+            let preset = try XCTUnwrap(DevelopPreset.builtIn.first { $0.name == name })
+            XCTAssertTrue(preset.parts.contains(.effects), name)
+            let full = preset.applied(to: .neutral)
+            let half = preset.applied(to: .neutral, amount: 0.5)
+            XCTAssertEqual(full.glowStyle, style, name)
+            XCTAssertEqual(half.glowStyle, style, name)
+            XCTAssertGreaterThan(full[.glowAmount], 0, name)
+            XCTAssertEqual(half[.glowAmount], full[.glowAmount] / 2, name)
+            XCTAssertEqual(preset.applied(to: .neutral, amount: 0), .neutral, name)
+        }
     }
 
     // MARK: Recent

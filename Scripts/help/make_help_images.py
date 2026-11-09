@@ -8,6 +8,8 @@ real renders from DevelopRenderer; keep the file names so the pages don't change
 
     pip install numpy scipy opencv-python-headless pillow
     python3 Scripts/help/make_help_images.py
+
+For preset examples, use --presets-from RENDER_DIR (see Scripts/presets/README.md).
 """
 
 import json
@@ -510,6 +512,10 @@ def make_hdr_images(base):
 
 def main():
     os.makedirs(OUT, exist_ok=True)
+    if len(sys.argv) == 3 and sys.argv[1] in ("--presets-from", "--check-presets-from"):
+        from preset_lookbook import build
+        build(sys.argv[2], check=sys.argv[1] == "--check-presets-from")
+        return 0
     if "--hdr-only" in sys.argv:
         make_hdr_images(flat(load("splash-redwoods.jpg")))
         return 0
@@ -616,24 +622,6 @@ def main():
     bright = smoothstep(0.55, 0.75, luma(base))
     save(red_overlay(base, bright), "mask-luminance-overlay.jpg")
     pair("mask-luminance", base, mix(base, highlights(base, -0.6), bright))
-
-    # Presets: the real built-in looks, read from BuiltInPresets.swift and rendered with the
-    # renderer's numpy port (Scripts/presets/develop_sim.py).
-    sys.path.insert(0, os.path.join(ROOT, "Scripts/presets"))
-    import develop_sim
-    from preset_sheets import parse_presets
-    presets = {name: s for _, name, s in parse_presets()[1]}
-    shown = ["Portrait 400", "Pastel 400", "Chrome 64", "Vivid Slide", "Golden Hour", "Muted Chrome",
-             "Teal & Orange", "Dark & Moody", "Faded Matte", "Classic 400", "Dark Sky", "Noir"]
-    small_base = cv2.resize(base, (480, round(480 * H / W)), interpolation=cv2.INTER_AREA)
-    linear = develop_sim.from_srgb_encoded(small_base)
-    scale = 480 / Image.open(os.path.join(SPLASH, "splash-redwoods.jpg")).width
-    for name in shown:
-        image = develop_sim.to_srgb_encoded(develop_sim.develop(linear, presets[name], scale))
-        slug = name.lower().replace(" & ", "-").replace(" ", "-")
-        save(image, f"preset-{slug}.jpg", quality=76)
-    small = cv2.resize(base, (480, round(480 * H / W)), interpolation=cv2.INTER_AREA)
-    save(small, "preset-none.jpg", quality=76)
 
     # Match Look: Reinhard transfer in Lab, as a stand-in for the slider fit
     reference = load("splash-eagle.jpg")

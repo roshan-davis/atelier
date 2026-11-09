@@ -376,6 +376,9 @@ private struct ImportChooseStep: View {
                 Text("Develop settings").font(.caption).foregroundStyle(.secondary)
                 Picker("Develop settings", selection: $flow.presetID) {
                     Text("None").tag("")
+                    if let retired = flow.retiredPreset {
+                        Text("\(retired.name) (Retired)").tag(retired.id.uuidString)
+                    }
                     ForEach(presetGroups, id: \.0) { group in
                         Section(group.0) {
                             ForEach(group.1) { preset in

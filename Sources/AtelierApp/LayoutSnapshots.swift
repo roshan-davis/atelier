@@ -235,8 +235,8 @@ enum LayoutSnapshots {
                           to: folder.appendingPathComponent("presets-navigator-preview-280x700.png"))
             develop.previewPreset(nil)
         }
-        if let highContrast = develop.presets.first(where: { $0.name == "High Contrast" }) {
-            develop.applyPreset(highContrast)
+        if let darkSky = develop.presets.first(where: { $0.name == "Dark Sky" }) {
+            develop.applyPreset(darkSky)
         }
         try? await Task.sleep(for: .seconds(2))
         print("SNAPSHOT: presets \(develop.presets.count), monochrome \(develop.settings.monochrome)")
@@ -634,6 +634,12 @@ enum LayoutSnapshots {
         model.pendingImportSources = [dir]
         await capture(AnyView(ImportSheet(model: model).environmentObject(model)), size: ImportSheet.size,
                       to: folder.appendingPathComponent("import-choose.png"))
+        let importPresetKey = "import.developPreset"
+        let savedPreset = UserDefaults.standard.string(forKey: importPresetKey)
+        UserDefaults.standard.set("6E2B6B5A-0004-4C5E-9A7E-0A7E11E50004", forKey: importPresetKey)
+        await capture(AnyView(ImportSheet(model: model).environmentObject(model)), size: ImportSheet.size,
+                      to: folder.appendingPathComponent("import-retired-preset.png"))
+        UserDefaults.standard.set(savedPreset, forKey: importPresetKey)
         model.pendingImportSources = []
         let cull = CullModel(source: .importing(sources: files, options: ImportOptions(target: .newGroup(name: "Cull Test"))),
                              title: "Cull Before Importing \u{201C}Cull Test\u{201D}", model: model)

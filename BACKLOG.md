@@ -134,6 +134,12 @@ Evidence baseline, October 30, 2026:
 
 **Scope/acceptance to agree:** skin, foliage, sky, artwork, grayscale and low-light reference set across cameras; full images plus 100% grain crops; display/export consistency and mask geometry. Reproduce cache issues before deciding a fix; bump PreviewCache.version if rendering changes. Do not claim measured film matching without evidence.
 
+### AT-010a — Curate and qualify the built-in Develop presets
+
+**Status:** Implemented, manual acceptance open. Rosh approved auditing every built-in Develop look, removing overlap, retuning and documenting the result on November 9, 2026. **Owner:** Codex. **Chat:** [PR planning: Develop preset audit](codex://threads/01a1c0c9-32df-7b50-a968-b9056ebc9a74). **Branch:** `codex/develop-preset-audit`. **Base:** `4b7adb3`. **Dependencies:** fixed photo fixtures and Atelier's existing Develop renderer.
+
+**Acceptance:** every shipped look has a named target, a suitable example and a reproducible native before/after pair in Help. Check redundant looks, visually compare each preset on representative scenes, preserve previously applied settings and saved import selections, and verify the curated list in Develop, the photo menu and Import. Rosh's visual acceptance remains open. Measured stock calibration, RAW camera/profile comparisons, export parity and the rest of AT-010 remain separate. Native JPEG audit evidence covers 54 baseline and 45 shipped looks across ten fixed scenes, with selected 100% crops and measurable clipping reductions. Reference and regeneration steps are in [Preset qualification](Scripts/presets/README.md).
+
 ## AT-011 — Performance and concurrency measurements
 
 **Status:** Proposed / discuss; targets unverified. **Owner/chat/branch/PR:** unassigned. **Dependencies:** agreed hardware/library/NAS fixtures and measurement protocol.
