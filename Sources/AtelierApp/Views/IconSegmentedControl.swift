@@ -58,7 +58,6 @@ struct IconSegmentedControl<Value: Hashable>: NSViewRepresentable {
         case .mini: return .mini
         case .small: return .small
         case .large: return .large
-        case .extraLarge: return .extraLarge
         default: return .regular
         }
     }
