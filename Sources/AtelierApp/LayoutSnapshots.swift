@@ -17,6 +17,10 @@ enum LayoutSnapshots {
 
     static func run(model: LibraryModel, into folder: URL) async {
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        // This picker is independent of the snapshot catalog and fits in a standalone window.
+        await capture(AnyView(BuiltInReferencePicker(selection: .furyRoadScene) { _ in }),
+                      size: CGSize(width: BuiltInReferencePicker.width, height: 510),
+                      to: folder.appendingPathComponent("match-look-built-in-picker.png"))
         await snapshotCatalogRecovery(into: folder)
         await importSamplePhoto(into: model)
         let panels = ["histogram"] + DevelopSettings.Panel.allCases.map(\.rawValue)
@@ -283,7 +287,7 @@ enum LayoutSnapshots {
         match.useFile(url)
         func waitForMatch() async {
             try? await Task.sleep(for: .milliseconds(500))
-            for _ in 0..<60 where match.match == nil || match.isMatching { try? await Task.sleep(for: .milliseconds(250)) }
+            for _ in 0..<60 where !match.canApply { try? await Task.sleep(for: .milliseconds(250)) }
             try? await Task.sleep(for: .seconds(1))
         }
         await waitForMatch()
@@ -303,6 +307,10 @@ enum LayoutSnapshots {
         print("SNAPSHOT: match look subject \(match.match.flatMap { try? $0.matched.encoded() } ?? "none"), message \(match.message ?? "-")")
         await capture(AnyView(MatchLookSheet(match: match).environmentObject(model)), size: CGSize(width: 900, height: 660),
                       to: folder.appendingPathComponent("match-look-subject.png"))
+        match.useBuiltIn(.furyRoadScene)
+        await waitForMatch()
+        await capture(AnyView(MatchLookSheet(match: match).environmentObject(model)), size: CGSize(width: 900, height: 660),
+                      to: folder.appendingPathComponent("match-look-built-in.png"))
         model.matchLook = nil
     }
 

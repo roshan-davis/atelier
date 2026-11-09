@@ -135,7 +135,10 @@ final class MatchLookModel: ObservableObject, Identifiable {
 
     @Published private(set) var referenceName: String?
     @Published private(set) var referenceImage: NSImage?
+    @Published private(set) var builtInReference: BuiltInLookReference?
+    @Published private var referenceRequest: UUID?
     private var referenceCG: CGImage?
+    var isLoadingReference: Bool { referenceRequest != nil }
     @Published private(set) var recent = RecentReference.load()
 
     @Published var options = MatchLookModel.savedOptions {
@@ -156,8 +159,15 @@ final class MatchLookModel: ObservableObject, Identifiable {
             options.protectSkin = newValue
         }
     }
-    @Published var areaMode: MatchAreaMode = .wholePhoto {
-        didSet { if areaMode != oldValue { scheduleMatch() } }
+    /// Keep the external image's area choice while a study uses Whole Photo.
+    @Published private var externalAreaMode: MatchAreaMode = .wholePhoto
+    var areaMode: MatchAreaMode {
+        get { builtInReference == nil ? externalAreaMode : .wholePhoto }
+        set {
+            guard builtInReference == nil, newValue != externalAreaMode else { return }
+            externalAreaMode = newValue
+            scheduleMatch()
+        }
     }
     var usesAreas: Bool { areaMode == .boxes }
     /// Match Areas' boxes, 0 to 1 from the top left of each image.
@@ -178,7 +188,9 @@ final class MatchLookModel: ObservableObject, Identifiable {
     @Published private(set) var preview: NSImage?
     @Published private(set) var before: NSImage?
     @Published private(set) var isMatching = false
-    @Published private(set) var message: String?
+    @Published private var referenceError: String?
+    @Published private var fitMessage: String?
+    var message: String? { referenceError ?? fitMessage }
     @Published private(set) var match: LookMatch?
 
     private var fitSession: DevelopSession?
@@ -225,7 +237,7 @@ final class MatchLookModel: ObservableObject, Identifiable {
                         self.before = image
                         if self.preview == nil { self.preview = image }
                     }
-                    if fit == nil { self.message = "This photo can't be opened for matching." }
+                    if fit == nil { self.fitMessage = "This photo can't be opened for matching." }
                     self.scheduleMatch(delay: 0)
                 }
             }
@@ -240,7 +252,7 @@ final class MatchLookModel: ObservableObject, Identifiable {
         return MatchDifference.list(from: base, to: match.settings(strength: strength / 100),
                                     asShot: match.asShotTemperature)
     }
-    var canApply: Bool { match != nil && !isMatching }
+    var canApply: Bool { match != nil && !isMatching && !isLoadingReference }
 
     // MARK: Reference
 
@@ -257,25 +269,18 @@ final class MatchLookModel: ObservableObject, Identifiable {
 
     /// Any image file: a downloaded photo, a film still, a screenshot, or a RAW's embedded preview.
     func useFile(_ url: URL) {
-        message = nil
-        DispatchQueue.global(qos: .userInitiated).async {
-            let image = LookReference.image(at: url)
-            DispatchQueue.main.async {
-                MainActor.assumeIsolated {
-                    guard let image else {
-                        self.message = "Atelier can't read “\(url.lastPathComponent)” as an image."
-                        return
-                    }
-                    self.setReference(image, name: url.lastPathComponent)
-                    self.remember(url, image: image)
-                }
-            }
+        loadReference(name: url.lastPathComponent, file: url) {
+            LookReference.image(at: url)
         }
+    }
+
+    func useBuiltIn(_ reference: BuiltInLookReference) {
+        loadReference(name: reference.name, builtIn: reference) { reference.image() }
     }
 
     func useRecent(_ reference: RecentReference) {
         guard reference.exists else {
-            message = "“\(reference.name)” was moved or deleted."
+            failReference("“\(reference.name)” was moved or deleted.")
             return
         }
         useFile(reference.url)
@@ -289,30 +294,50 @@ final class MatchLookModel: ObservableObject, Identifiable {
     /// A catalog photo with its current edits.
     func useCatalogPhoto(_ id: Int64) {
         guard let library, let url = try? library.catalog.fileURL(for: id) else {
-            message = "That photo's original is offline."
+            failReference("That photo's original is offline.")
             return
         }
         let settings = (try? library.catalog.developSettings(for: id)) ?? .neutral
-        let name = url.lastPathComponent
-        message = nil
+        loadReference(name: url.lastPathComponent) {
+            DevelopRenderer.shared.session(for: url, maxPixelSize: 1024)?.renderSRGB(settings)
+        }
+    }
+
+    /// All sources share one request token, so an earlier decode can't replace a later pick.
+    private func loadReference(name: String, builtIn: BuiltInLookReference? = nil, file: URL? = nil,
+                               render: @escaping @Sendable () -> CGImage?) {
+        let request = UUID()
+        referenceRequest = request
+        referenceError = nil
         DispatchQueue.global(qos: .userInitiated).async {
-            let image = DevelopRenderer.shared.session(for: url, maxPixelSize: 1024)?.renderSRGB(settings)
+            let image = render()
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
+                    guard self.referenceRequest == request else { return }
                     guard let image else {
-                        self.message = "“\(name)” can't be opened."
+                        self.failReference("Atelier can't open “\(name)” as a reference.")
                         return
                     }
-                    self.setReference(image, name: name)
+                    self.setReference(image, name: name, builtIn: builtIn)
+                    self.referenceRequest = nil
+                    if let file { self.remember(file, image: image) }
                 }
             }
         }
     }
 
-    private func setReference(_ image: CGImage, name: String) {
+    private func failReference(_ reason: String) {
+        referenceRequest = nil
+        referenceError = reason
+    }
+
+    private func setReference(_ image: CGImage, name: String, builtIn: BuiltInLookReference?) {
         referenceCG = image
         referenceImage = NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))
         referenceName = name
+        builtInReference = builtIn
+        match = nil
+        preview = before
         scheduleMatch(delay: 0)
     }
 
@@ -343,7 +368,7 @@ final class MatchLookModel: ObservableObject, Identifiable {
         let generation = latest.next()
         debounce?.cancel()
         isMatching = fitSession != nil && referenceCG != nil
-        if isMatching { message = nil }
+        if isMatching { fitMessage = nil }
         debounce = Task { [weak self] in
             if delay > 0 { try? await Task.sleep(for: .milliseconds(delay)) }
             guard !Task.isCancelled else { return }
@@ -356,7 +381,7 @@ final class MatchLookModel: ObservableObject, Identifiable {
         guard !options.isEmpty else {
             match = nil
             isMatching = false
-            message = "Turn on White Balance, Tone or Color to match."
+            fitMessage = "Turn on White Balance, Tone or Color to match."
             renderPreview()
             return
         }
@@ -376,7 +401,7 @@ final class MatchLookModel: ObservableObject, Identifiable {
                     guard self.latest.current == generation else { return }
                     self.isMatching = false
                     self.match = result
-                    self.message = result.map { Self.message(for: $0.notices) } ?? "This photo can't be matched."
+                    self.fitMessage = result.map { Self.message(for: $0.notices) } ?? "This photo can't be matched."
                     self.renderPreview()
                 }
             }
@@ -411,13 +436,14 @@ final class MatchLookModel: ObservableObject, Identifiable {
             return
         }
         previewRendering = true
+        let generation = latest.current
         let settings = match?.settings(strength: strength / 100) ?? base
         previewQueue.async {
             let cgImage = previewSession.render(settings)
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     self.previewRendering = false
-                    if let cgImage {
+                    if self.latest.current == generation, let cgImage {
                         self.preview = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
                     }
                     if self.previewPending {

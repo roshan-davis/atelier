@@ -442,3 +442,11 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 **Mac validation (Nov 9):** Codex merged main at `624918f` and regenerated the Help index. At `3f510d3`, `python3 Scripts/check_pr.py --samples /private/tmp/preset-raws` passed the build, all 290 Swift tests (Nikon Z6 and Zf, zero skips), script checks and Help checks. Logs: `/private/tmp/atelier-pr84-review/.build/local-checks/20261109-085259-690988`. Reviewed the Help page in Chrome and the Whole Photo, Boxes, Show Differences and Subject & Background snapshots from that revision. The subject snapshot exercises the fallback, so a real portrait and successful automatic mask still need manual acceptance. GitHub Actions assigned no runner.
 
 **Approved review fixes (Nov 9):** Rosh approved all three in the PR #84 Codex chat. Apply and Show Differences wait for the current refit, a repeat match updates checked sliders on the existing subject mask, and skin protection reduces the whole fit when restoring color sliders alone misses the limits. The focused Match Look run passed all 19 tests, including the real portrait, Yosemite landscape, camera product photo, and the dialog debounce. Logs: `/private/tmp/atelier-pr84-artifacts/targeted.log`. Manual acceptance remains pending.
+
+## AT-030 — Built-in References for Match Look
+
+**Status:** In progress. **Owner:** Codex. **Chat:** [Match Look Built-in References](codex://threads/01a1c197-aa52-7d60-be48-b20e2b243b9f). **Branch:** `codex/match-look-built-in-references`. **PR:** pending. **Baseline:** freshly fetched `5b8bf1919e3047a125d86a37fbbd3e133ecccd92`. **Dependencies:** AT-029 / PR #84, merged.
+
+**Scope:** Rosh chose four pairs of original, editable vector studies inspired by The Matrix, Game of Thrones, Mad Max: Fury Road and The Dark Knight. Each pairs a portrait with a wider scene. Cards show scene tags, palette descriptions and the main color regions, such as Face & Skin, Clothing, Sky and Ground. The studies use the existing editable Whole Photo fit. Using the labeled regions in a fit is deferred.
+
+**Acceptance:** Qualify all eight through the production fit on real photo fixtures. Verify reference switching, Match Areas, Strength, Protect Skin Tones and normal Apply behavior. Inspect the dialog, picker and Help. Record Mac and GitHub checks for the PR and leave manual acceptance to Rosh.
