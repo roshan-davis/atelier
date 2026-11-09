@@ -61,9 +61,11 @@ struct DevelopImageView: View {
                                           position: $develop.sliderPosition)
                     }
                 }
-                // Over a shown photo only when loading is slow (a NAS original): a spinner on
-                // every photo read as a delay (Rosh, Oct 31, 2026).
-                if develop.isLoading, develop.image == nil || slowLoad {
+                // Only while what's on screen isn't the photo yet: nothing, or a thumbnail or the
+                // previous photo for a while (a slow NAS original). Over the photo's own preview
+                // the editable copy decodes quietly; the photo is already there (Rosh, Oct 31 and
+                // Nov 9, 2026).
+                if develop.isLoading, develop.image == nil || (develop.showsStandIn && slowLoad) {
                     ProgressView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
@@ -96,12 +98,7 @@ struct DevelopImageView: View {
         .task(id: develop.isLoading ? develop.assetID : nil) {
             slowLoad = false
             guard develop.isLoading else { return }
-            // Over the photo's own preview, the photo is already there to look at: the spinner
-            // only says a slow original (a NAS) is still decoding. Over the last photo or a
-            // thumbnail it says so sooner. It came up on ordinary photos too often at 600 ms
-            // (Rosh, Nov 9, 2026).
-            let ownPreview = develop.image != nil && !develop.showsPreviousPhoto
-            try? await Task.sleep(for: .milliseconds(ownPreview ? 2000 : 600))
+            try? await Task.sleep(for: .milliseconds(600))
             if !Task.isCancelled, develop.isLoading { slowLoad = true }
         }
         .onChange(of: develop.compareMode) { old, new in compareModeChanged(from: old, to: new) }
