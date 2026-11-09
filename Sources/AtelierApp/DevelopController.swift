@@ -1790,7 +1790,9 @@ final class DevelopController: ObservableObject {
     /// again until it has.
     private func prefetchNeighboursWhenIdle() {
         let assetID = self.assetID
-        let wait = Self.prefetchDelay - Date().timeIntervalSince(lastRenderRequest.value)
+        var wait = Self.prefetchDelay - Date().timeIntervalSince(lastRenderRequest.value)
+        // The Before photo of a compare view comes first.
+        if compareMode != .off, beforeImage == nil { wait = max(wait, Self.prefetchDelay) }
         guard wait <= 0 else {
             DispatchQueue.main.asyncAfter(deadline: .now() + wait) {
                 guard self.assetID == assetID else { return }
@@ -1990,8 +1992,18 @@ final class DevelopController: ObservableObject {
         guard beforeImage == nil, let session else { return }
         let assetID = self.assetID
         let before = beforeSettings
+        // Counts as a render, so preloading the neighbours waits for the Before photo too.
+        lastRenderRequest.value = Date()
+        let queuedAt = DevelopTimingLog.now()
+        let openedAt = self.openedAt
+        let lastRenderRequest = self.lastRenderRequest
         queue.async {
+            let began = DevelopTimingLog.now()
             let cgImage = session.render(before)
+            lastRenderRequest.value = Date()
+            DevelopTimingLog.shared.log(assetID, "Before render: waited \(Int(((began - queuedAt) * 1000).rounded())) ms "
+                + "for the render queue, rendered in \(DevelopTimingLog.ms(since: began)) ms, "
+                + "shown +\(Int(((DevelopTimingLog.now() - openedAt) * 1000).rounded())) ms after open")
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     guard self.assetID == assetID, let cgImage else { return }
