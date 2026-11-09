@@ -251,9 +251,23 @@ public struct LensGeometry: Sendable {
         if let kernel = Self.compiled.kernel {
             let m = toPixels * inverse * toCentered
             let lens = CIVector(x: width / 2, y: height / 2, z: 4 / (width * width + height * height), w: distortion)
-            warped = kernel.apply(extent: extent, roiCallback: { _, _ in extent },
-                                  arguments: [image, m.ciRow(0), m.ciRow(1), m.ciRow(2), lens,
-                                              CIVector(x: width, y: height)])
+            let sourceTransform: CGAffineTransform?
+            if distortion == 0, m.rows[2] == SIMD3(0, 0, 1) {
+                sourceTransform = CGAffineTransform(a: m.rows[0].x, b: m.rows[1].x,
+                                                    c: m.rows[0].y, d: m.rows[1].y,
+                                                    tx: m.rows[0].z, ty: m.rows[1].z)
+            } else {
+                sourceTransform = nil
+            }
+            warped = kernel.apply(extent: extent, roiCallback: { _, tile in
+                // Affine tiles only need their mapped source rectangle, plus room for the
+                // sampler's neighboring pixels. Requesting the whole RAW for every tile
+                // makes full-resolution Aspect and other affine transforms stall Core Image.
+                guard let sourceTransform else { return extent }
+                let region = tile.applying(sourceTransform).insetBy(dx: -2, dy: -2).integral.intersection(extent)
+                return region.isNull ? .zero : region
+            }, arguments: [image, m.ciRow(0), m.ciRow(1), m.ciRow(2), lens,
+                           CIVector(x: width, y: height)])
         }
         if warped == nil {
             // Without the kernel: the perspective alone, by moving the corners.
