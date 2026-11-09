@@ -399,8 +399,10 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 ## AT-027 — Before pane waits behind obsolete renders
 
-**Status:** In progress. **Owner:** Codex. **Chat:** PR #82 follow-up on Side by Side loading. **Branch:** `codex/before-render-queue`. **Dependencies:** PR #82, merged at `33fc9f5`.
+**Status:** Implementation in review. **Owner:** Codex. **Chat:** [PR #82 follow-up on Side by Side loading](codex://threads/01a1bf1b-049e-7f91-9107-2fbba69e01c0). **Branch:** `codex/before-render-queue`. **PR:** [#83](https://github.com/roshan-davis/atelier/pull/83). **Dependencies:** PR #82, merged at `33fc9f5`.
 
 **Evidence and scope:** The November 8 post-merge Develop trace recorded 18,685 ms waiting on the serial render queue and 255 ms rendering Before. Several Before requests for photos already left ran immediately afterward. Side by Side exposes the wait with a spinner. Slider draws the edited image until the shared Before render arrives. Keep one queued or running Before proxy render and the latest request, drop obsolete results, and request the foreground comparison before preview-cache writes.
 
 **Acceptance:** Both layouts show the current photo's aligned Before image after rapid navigation and geometry edits. Turning compare off clears waiting work. Review the timing trace for avoided renders on passed photos. A native check and manual timing comparison are separate. **Deferred:** determine why the preceding proxy and concurrent full-size Core Image renders stalled, and profile the full-size path separately.
+
+**Validation:** Mac build and 277 Swift tests, including the Nikon Z6 RAW tests, passed on implementation commit `eb75990` with zero skips. Whitespace, 10 script tests and Help index checks passed. Logs: `/private/tmp/atelier-before.ZW2gai/.build/local-checks/20261108-235247-715403`. The updated Help section was visually reviewed in Chrome’s print rendering. Live comparison timing and manual acceptance remain pending.
