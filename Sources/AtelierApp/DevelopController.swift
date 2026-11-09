@@ -1798,7 +1798,9 @@ final class DevelopController: ObservableObject {
         rendering = true
         renderStartedAt = DevelopTimingLog.now()
         renderHangLogged = false
-        var settings = showingBefore ? beforeSettings : self.settings
+        let preview = sliderPreview
+        let renderBefore = showingBefore && preview == nil
+        var settings = renderBefore ? beforeSettings : self.settings
         if isGuiding { settings = guidedViewSettings(settings) }
         let cropping = !isCropping
         if isCropping, var crop = settings.crop {
@@ -1807,7 +1809,6 @@ final class DevelopController: ObservableObject {
         }
         let assetID = self.assetID
         let overlay = isMasking && showMaskOverlay ? selectedMaskID : nil
-        let preview = showingBefore ? nil : sliderPreview
         let clipping = overlay == nil && preview == nil ? clippingOverlay : (shadows: false, highlights: false)
         renderCount += 1
         let count = renderCount
@@ -1845,7 +1846,8 @@ final class DevelopController: ObservableObject {
                     let current = self.assetID == assetID && self.openGeneration.value == generation
                     // A render started before the crop tool opened or closed has the wrong shape; the
                     // next render replaces it.
-                    if current, cropping != self.isCropping, let cgImage {
+                    if current, cropping != self.isCropping, preview == self.sliderPreview,
+                       renderBefore == (self.showingBefore && self.sliderPreview == nil), let cgImage {
                         self.image = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
                         self.showsStandIn = false
                         self.imageIsWhole = !cropping
@@ -2007,7 +2009,7 @@ final class DevelopController: ObservableObject {
 
     /// Full-resolution render for zoomed views, after the proxy settles. Latest wins.
     private func scheduleFullRender() {
-        guard wantsFullResolution, !showingBefore, !isCropping, !isGuiding, let url = sourceURL, fullImageSettings != settings else { return }
+        guard wantsFullResolution, sliderPreview == nil, !showingBefore, !isCropping, !isGuiding, let url = sourceURL, fullImageSettings != settings else { return }
         if fullRendering {
             fullNeedsRender = true
             return
