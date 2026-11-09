@@ -118,8 +118,9 @@ final class ProcessorDesktopSessions {
                         let settings = (try? catalog.developSettings(for: id)) ?? .neutral
                         model.previewScheduler.refresh(for: id, source: url, settings: settings)
                     }
+                    // Before opening it, so a kept or preloaded proxy of the old file isn't used.
+                    model.develop.sourceChanged(id)
                     model.selection = [id]; model.focusedID = id; model.openDevelop()
-                    if model.develop.assetID == id { model.develop.reopen() }
                     model.status = "HDR saved and returned. Finish color grading in Develop."
                 case .failure(let error): model.status = "HDR return needs attention: \(error.localizedDescription)"
                 }

@@ -48,6 +48,19 @@ final class DevelopTimingLog: @unchecked Sendable {
         }
     }
 
+    /// A line with the file described (`describe`) between `prefix` and `suffix`. The file's
+    /// size and volume are looked up on the log's queue, never on the caller's thread: on a slow
+    /// NAS that lookup can block.
+    func log(_ assetID: Int64?, describing url: URL, _ prefix: String, _ suffix: String) {
+        let elapsed = CFAbsoluteTimeGetCurrent() - start
+        queue.async {
+            let line = String(format: "%9.3f  ", elapsed) + (assetID.map { "#\($0)  " } ?? "")
+                + prefix + Self.describe(url) + suffix + "\n"
+            guard let data = line.data(using: .utf8) else { return }
+            self.handle?.write(data)
+        }
+    }
+
     private func open() {
         guard let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
         let folder = documents.appendingPathComponent("Atelier Traces", isDirectory: true)

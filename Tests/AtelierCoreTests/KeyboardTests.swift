@@ -80,3 +80,14 @@ final class LockedValueTests: XCTestCase {
         XCTAssertEqual(open.value, 7)
     }
 }
+
+final class LatestJobObsoleteTests: XCTestCase {
+    func testAnObsoleteValueNeverReplacesTheWaitingOne() {
+        let job = LatestJob<Int>()
+        XCTAssertTrue(job.submit(1))                       // photo 1 starts a drain
+        XCTAssertFalse(job.submit(2))                      // photo 2's request waits
+        XCTAssertFalse(job.submit(1, if: { $0 == 2 }))     // a late request for photo 1 is dropped
+        XCTAssertEqual(job.take(), 2)
+        XCTAssertNil(job.take())
+    }
+}

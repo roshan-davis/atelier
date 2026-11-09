@@ -105,8 +105,18 @@ final class KeyboardFocus {
         current = target
         activeArea = target.area
         lastInArea[target.area] = target.id
+        focusClick = clickCount
         changes.send(target)
     }
+
+    /// Counts mouse-downs in the window (`mouseDown()`), and the one during which a control last
+    /// took focus, so `clicked(at:)` can tell a control that handled this click from one that
+    /// merely had focus already.
+    private var clickCount = 0
+    private var focusClick = -1
+
+    /// Called as each mouse-down arrives, before any view sees it.
+    func mouseDown() { clickCount += 1 }
 
     /// Gives the arrow keys back to the photos: Esc, a click on the photo, or ⌃Tab to the photos.
     /// `endEditing` false keeps a text field the user is typing in (they clicked into it).
@@ -134,15 +144,18 @@ final class KeyboardFocus {
     }
 
     /// A click in the window: the area clicked becomes the keyboard's (Rosh, Nov 9, 2026). A
-    /// click on a control has already given it focus, and a click into a text field keeps the
-    /// field typing. A click elsewhere in a panel (the histogram, a curve, empty space) focuses
+    /// click on a control gives it focus (now, or as the click ends), and a click into a text
+    /// field keeps the field typing. A click elsewhere in a panel (the histogram, a curve, empty space) focuses
     /// the stop just above it, the section you clicked into, without scrolling; a click on the
     /// photo or the Filmstrip gives the arrows back to the photos. `point` is in SwiftUI global
     /// coordinates.
     func clicked(at point: CGPoint) {
         guard let area = areaFrames.values.first(where: { $0.frame.contains(point) })?.area else { return }
         if NSApp.keyWindow?.firstResponder is NSText { return }
-        if current?.area == area { return }
+        // A control took focus from this click itself (a slider's drag starts on mouse-down).
+        // One that only had focus before must not keep it: click the histogram after Exposure
+        // and the arrows mustn't still move Exposure.
+        if focusClick == clickCount { return }
         guard area != .photo else {
             release()
             return

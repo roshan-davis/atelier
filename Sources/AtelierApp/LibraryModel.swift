@@ -893,6 +893,7 @@ final class LibraryModel: ObservableObject {
                     self.lastClick = event.locationInWindow
                     self.chosenTextField = nil
                     if self.mode == .develop {
+                        KeyboardFocus.shared.mouseDown()
                         self.develop.beginPointerEdit()
                         // After the click reaches the view, so a control it lands on takes focus first.
                         if let content = event.window?.contentView {
