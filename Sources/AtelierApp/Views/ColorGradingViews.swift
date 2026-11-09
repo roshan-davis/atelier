@@ -229,7 +229,7 @@ struct ColorWheel: View {
             }
             .contentShape(Circle().inset(by: Self.inset - 8))
             .gesture(DragGesture(minimumDistance: 0)
-                .onChanged { value in drag(value, center: center, radius: radius, dot: dot, rimDot: rimDot) }
+                .onChanged { value in DevelopTrace.input("grading wheel", eventTime: value.time); drag(value, center: center, radius: radius, dot: dot, rimDot: rimDot) }
                 .onEnded { value in endDrag(value) })
             .cursor(.crosshair)
             .onHover { inside in

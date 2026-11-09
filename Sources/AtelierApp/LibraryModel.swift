@@ -233,6 +233,8 @@ final class LibraryModel: ObservableObject {
                     // A replaced observation can still deliver once or twice after it is cancelled;
                     // its rows belong to the old scope.
                     guard let self, !Task.isCancelled, self.filter == filter else { return }
+                    DevelopTrace.mark("library rows reload")
+                    DevelopTrace.log("rows reload \(rows.count) photos")
                     self.rows = rows
                     self.loadedRowsFilter = filter
                     let visible = Set(rows.map(\.id))
@@ -864,6 +866,7 @@ final class LibraryModel: ObservableObject {
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(150))
             revisionScheduled = false
+            DevelopTrace.mark("library previewRevision")
             previewRevision += 1
         }
     }

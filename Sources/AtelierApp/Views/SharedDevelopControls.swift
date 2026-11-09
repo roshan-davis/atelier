@@ -240,6 +240,7 @@ struct DevelopSlider: View {
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 0)
                 .onChanged { drag in
+                    DevelopTrace.input("slider", eventTime: drag.time)
                     if !isDragging { isDragging = true; onEditingChanged?(true) }
                     onOption?(NSEvent.modifierFlags.contains(.option))
                     guard width > 0 else { return }

@@ -108,6 +108,7 @@ struct PresetsSection: View {
     }
 
     var body: some View {
+        let _ = DevelopTrace.body("PresetsSection")
         SidebarSection(title: "Presets", isExpanded: $isExpanded) {
             Button {
                 develop.showingNewPreset = true

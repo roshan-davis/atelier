@@ -36,6 +36,7 @@ struct DevelopSidebar: View {
     }
 
     var body: some View {
+        let _ = DevelopTrace.body("DevelopSidebar (left)")
         // The Navigator is pinned above the scrolling sections, as in Lightroom Classic, so a
         // preset's hover preview stays in view however far down the list is scrolled.
         VStack(spacing: 0) {

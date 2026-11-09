@@ -230,6 +230,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         MainActor.assumeIsolated {
             Theme.current.apply()
+            DevelopTrace.install()
         }
         NSApp.activate(ignoringOtherApps: true)
     }

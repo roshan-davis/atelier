@@ -11,6 +11,7 @@ struct DevelopImageView: View {
     @State private var slowLoad = false
 
     var body: some View {
+        let _ = DevelopTrace.body("DevelopImageView")
         VStack(spacing: 0) {
             ZStack(alignment: .topLeading) {
                 Color(nsColor: theme.surround)
@@ -377,6 +378,7 @@ struct DevelopPanel: View {
     }
 
     var body: some View {
+        let _ = DevelopTrace.body("DevelopPanel (right)")
         VStack(spacing: 0) {
             GeometryReader { geometry in
             ScrollView(.vertical) {
@@ -499,6 +501,7 @@ private struct HistogramView: View {
     private var active: ToneRegion? { drag?.region ?? hovered }
 
     var body: some View {
+        let _ = DevelopTrace.body("HistogramView")
         VStack(alignment: .leading, spacing: 4) {
             GeometryReader { geometry in
                 graph(width: geometry.size.width)
@@ -737,6 +740,7 @@ struct ParameterSlider: View {
     }
 
     var body: some View {
+        let _ = DevelopTrace.body("ParameterSlider")
         let preview = SliderPreview(parameter: parameter)
         SliderRow(label: parameter.label, value: binding, range: develop.sliderRange(parameter), step: step,
                   origin: develop.sliderDefault(parameter), gradient: trackGradient,

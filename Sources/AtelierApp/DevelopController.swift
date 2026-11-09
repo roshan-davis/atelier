@@ -1291,6 +1291,7 @@ final class DevelopController: ObservableObject {
         constrainCropIfNeeded()
         dirty = true
         if let step { pendingStep = step }
+        DevelopTrace.mark("edit")
         scheduleRender()
         scheduleSave()
     }
@@ -1627,12 +1628,15 @@ final class DevelopController: ObservableObject {
         let count = renderCount
         let measures = overlay == nil && preview == nil
         let measureQueue = self.measureQueue
+        let queuedAt = DevelopTrace.now
         queue.async {
+            let startedAt = DevelopTrace.now
             let rendered = RenderSignposts.measure("Proxy render") {
                 session.renderForDisplay(settings, cropping: cropping, overlay: overlay, preview: preview,
                                          shadowClipping: clipping.shadows, highlightClipping: clipping.highlights)
             }
             let cgImage = rendered?.image
+            DevelopTrace.log(String(format: "render wait %.1f ms, render %.1f ms", startedAt - queuedAt, DevelopTrace.now - startedAt))
             // The red overlay or an Option-drag view would skew the histogram; keep the last one
             // while it shows. It is counted after the photo is on its way, beside the next render.
             if measures, let plain = rendered?.plain {
@@ -1644,6 +1648,7 @@ final class DevelopController: ObservableObject {
                         MainActor.assumeIsolated {
                             guard self.assetID == assetID, count >= self.measuredCount else { return }
                             self.measuredCount = count
+                            DevelopTrace.mark("histogram publish")
                             if let histogram { self.histogram = histogram }
                             if let scope { self.colorScope = scope }
                         }
@@ -1658,6 +1663,8 @@ final class DevelopController: ObservableObject {
                     if self.assetID == assetID, cropping != self.isCropping, let cgImage {
                         self.image = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
                         self.imageIsWhole = !cropping
+                        DevelopTrace.mark("image publish")
+                        DevelopTrace.log(String(format: "shown %.1f ms after edit", DevelopTrace.now - queuedAt))
                     }
                     if self.needsRender {
                         self.needsRender = false
@@ -1801,7 +1808,9 @@ final class DevelopController: ObservableObject {
         dirty = false
         let settings = self.settings
         do {
-            try catalog.saveDevelop(settings, history: history, for: assetID)
+            try DevelopTrace.time("save catalog (history \(history.steps.count) steps)") {
+                try catalog.saveDevelop(settings, history: history, for: assetID)
+            }
             onSettingsSaved?(assetID)
         } catch {
             dirty = true
@@ -1818,9 +1827,11 @@ final class DevelopController: ObservableObject {
     private func storePreviews(session: DevelopSession, settings: DevelopSettings, assetID: Int64) {
         let previews = self.previews
         queue.async {
-            if let cgImage = session.render(settings) {
-                try? previews.store(cgImage, for: assetID, size: .preview)
-                try? previews.store(cgImage, for: assetID, size: .thumbnail)
+            DevelopTrace.time("store previews on render queue") {
+                if let cgImage = session.render(settings) {
+                    try? previews.store(cgImage, for: assetID, size: .preview)
+                    try? previews.store(cgImage, for: assetID, size: .thumbnail)
+                }
             }
             DispatchQueue.main.async {
                 MainActor.assumeIsolated { self.onPreviewsUpdated?(assetID) }

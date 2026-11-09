@@ -222,6 +222,7 @@ private struct ParametricCurveView: View {
             }
             .gesture(DragGesture(minimumDistance: 1)
                 .onChanged { value in
+                    DevelopTrace.input("parametric curve", eventTime: value.time)
                     if drag == nil {
                         let x = Double(value.startLocation.x / max(1, size.width))
                         let parameter = region(at: x)
@@ -375,7 +376,7 @@ struct CurveEditor: View {
             .onChange(of: selected) { updateNudgeTarget() }
             .onDisappear { develop.hoveredCurvePoint = nil }
             .gesture(DragGesture(minimumDistance: 0)
-                .onChanged { value in drag(value, size: size) }
+                .onChanged { value in DevelopTrace.input("point curve", eventTime: value.time); drag(value, size: size) }
                 .onEnded { value in endDrag(value, size: size) })
             // A hand on a point; elsewhere a click adds one, as with Lightroom's point curve.
             .cursor(whileDragging: .grabbing) { location in nearestPoint(to: location, in: size) == nil ? .crosshair : .grab }
