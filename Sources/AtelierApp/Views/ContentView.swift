@@ -16,6 +16,7 @@ struct ContentView: View {
                 Group {
                     if model.mode == .develop {
                         DevelopSidebar(develop: model.develop)
+                            .areaFocusFlash(.leftPanel)
                     } else {
                         SidebarView()
                     }
@@ -53,6 +54,7 @@ struct ContentView: View {
                         InspectorView()
                             .frame(width: panelWidth)
                             .clipped()
+                            .areaFocusFlash(.rightPanel)
                             .layoutPriority(1)
                             .background(Color(nsColor: theme.panel))
                     }

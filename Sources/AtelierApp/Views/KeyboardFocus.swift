@@ -74,6 +74,9 @@ final class KeyboardFocus {
         requests.send(Request(target: Target(area: area, id: id)))
     }
 
+    /// The area ⌃Tab just moved to, for its brief outline (`AreaFocusFlash`).
+    let arrivals = PassthroughSubject<KeyboardFocusArea, Never>()
+
     /// ⌃Tab and ⌃⇧Tab: the next area with something to focus, wrapping around.
     func cycle(forward: Bool) {
         let areas = KeyboardFocusArea.allCases
@@ -83,6 +86,7 @@ final class KeyboardFocus {
             let area = areas[index]
             if area == .photo || !(registered[area] ?? []).isEmpty {
                 focus(area)
+                arrivals.send(area)
                 return
             }
         }
@@ -209,5 +213,50 @@ struct KeyboardSlider: ViewModifier {
                     focused = false
                 }
             }
+    }
+}
+
+/// A thin accent outline around an area that ⌃Tab just moved to, fading out after about half
+/// a second, so you can see where focus went (Rosh, Nov 9, 2026). With Reduce Motion it shows
+/// and hides without fading.
+struct AreaFocusFlash: ViewModifier {
+    let area: KeyboardFocusArea
+    @State private var visible = false
+    @State private var hideTask: Task<Void, Never>?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .overlay {
+                Rectangle()
+                    .strokeBorder(Color.accentColor.opacity(0.8), lineWidth: 2)
+                    .opacity(visible ? 1 : 0)
+                    .allowsHitTesting(false)
+            }
+            .onReceive(KeyboardFocus.shared.arrivals) { arrived in
+                hideTask?.cancel()
+                guard arrived == area else {
+                    visible = false
+                    return
+                }
+                visible = true
+                hideTask = Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(reduceMotion ? 600 : 250))
+                    guard !Task.isCancelled else { return }
+                    if reduceMotion {
+                        visible = false
+                    } else {
+                        withAnimation(.easeOut(duration: 0.4)) { visible = false }
+                    }
+                }
+            }
+            .onDisappear { hideTask?.cancel() }
+    }
+}
+
+extension View {
+    /// Outlines this area briefly when ⌃Tab moves focus to it.
+    func areaFocusFlash(_ area: KeyboardFocusArea) -> some View {
+        modifier(AreaFocusFlash(area: area))
     }
 }

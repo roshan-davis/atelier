@@ -75,6 +75,7 @@ struct DevelopImageView: View {
                     Badge(text: "Before").padding(14)
                 }
             }
+            .areaFocusFlash(.photo)
             Divider()
             // Icons with tooltips at every width. Narrow columns drop the hint, then fold the
             // zoom buttons into a menu, so the bar always fits.
