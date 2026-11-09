@@ -399,8 +399,10 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 ## AT-028 — Restore Option-drag previews in Develop
 
-**Status:** Implementation in progress. **Owner:** Codex. **Chat:** [Develop follow-up](codex://threads/01a1bf1b-049e-7f91-9107-2fbba69e01c0). **Branch:** `codex/detail-option-preview`. **Dependencies:** PR #82 merged at `33fc9f5`.
+**Status:** Implementation in review. **Owner:** Codex. **Chat:** [Develop follow-up](codex://threads/01a1bf1b-049e-7f91-9107-2fbba69e01c0). **Branch:** `codex/detail-option-preview`. **PR:** [#85](https://github.com/roshan-davis/atelier/pull/85). **Dependencies:** PR #82 merged at `33fc9f5`.
 
 **Evidence and scope:** Rosh reported that the Sharpening Option-drag views did not show. The shared drag controls only polled Option on mouse movement, and pointer focus could scroll the panel during a drag. Keep the controls stationary, listen for modifier transitions during the drag, and give the temporary preview priority over full-size work.
 
 **Acceptance:** Amount shows grayscale, Radius and Detail show halos, and Masking shows its black and white mask. Press and release Option with the mouse held still, then release the mouse. Check Basic clipping, Color Grading and Lens Corrections > Defringe as shared callers.
+
+**Validation:** Mac build, all 278 Swift tests including the Nikon RAW fixture, Help and script checks passed at `a1b95ba` with zero skips. Logs: `/private/tmp/atelier-option.KES5VC/.build/local-checks/20261109-010613-850250`. Reviewed the grayscale, halo and mask snapshots plus the updated Help section. Manual Option-drag verification remains pending.
