@@ -412,3 +412,13 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 **Cause isolated:** Rosh reproduced waits on `05daa83`. A local 6048×4024 Nikon RAW with Transform > Aspect at +13 repeatedly stalled full-size rendering for about 21 seconds in the app. A read-only probe reproduced a 10,152 ms Core Image output stage with the saved settings, and an independent control took 127 ms with Aspect reset. Requesting the mapped source rectangle per affine tile reduced the same full-size render to 130 ms. The tested 2560 px proxy matched exactly and 39 of 97,353,728 full-size bytes differed by one level. The neighboring render matched exactly. Live acceptance on the affected photos remains pending.
 
 **Claude review follow-up:** Bounds now cover perspective and radial distortion, with a full-source fallback near the projective horizon. On the same Nikon RAW, full-size output for Vertical +20, Distortion −50, Distortion +50, and Vertical +20 combined with Distortion +50 took 11,685 / 10,321 / 10,133 / 10,456 ms on `50c883e` and 122 / 204 / 172 / 171 ms with the new bounds. All four proxy buffers and the earlier affine proxy matched byte for byte, so cache version 8 is retained. AppKit republishes the committed pinch report even when its magnification was reported mid-gesture. Tile and pinch regression coverage added. The cached Before stand-in remains a separate UX proposal.
+
+## AT-028 — Restore Option-drag previews in Develop
+
+**Status:** Implementation in review. **Owner:** Codex. **Chat:** [Develop follow-up](codex://threads/01a1bf1b-049e-7f91-9107-2fbba69e01c0). **Branch:** `codex/detail-option-preview`. **PR:** [#85](https://github.com/roshan-davis/atelier/pull/85). **Dependencies:** PR #82 merged at `33fc9f5`.
+
+**Evidence and scope:** Rosh reported that the Sharpening Option-drag views did not show. The shared drag controls only polled Option on mouse movement, and pointer focus could scroll the panel during a drag. Keep the controls stationary, listen for modifier transitions during the drag, and give the temporary preview priority over full-size work.
+
+**Acceptance:** Amount shows grayscale, Radius and Detail show halos, and Masking shows its black and white mask. Press and release Option with the mouse held still, then release the mouse. Check Basic clipping, Color Grading and Lens Corrections > Defringe as shared callers.
+
+**Validation:** Mac build, all 278 Swift tests including the Nikon RAW fixture, Help and script checks passed at `a1b95ba` with zero skips. Logs: `/private/tmp/atelier-option.KES5VC/.build/local-checks/20261109-010613-850250`. Reviewed the grayscale, halo and mask snapshots plus the updated Help section. Manual Option-drag verification remains pending.

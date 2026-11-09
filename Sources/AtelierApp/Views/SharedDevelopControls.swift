@@ -271,5 +271,11 @@ struct DevelopSlider: View {
                 })
         }
         .frame(height: 16)
+        .onReceive(ModifierKeys.shared.$option) { held in
+            if isDragging { onOption?(held) }
+        }
+        .onDisappear {
+            if isDragging { onOption?(false) }
+        }
     }
 }
