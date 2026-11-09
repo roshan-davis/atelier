@@ -76,17 +76,14 @@ struct DevelopImageView: View {
                 }
             }
             Divider()
-            // Narrow columns drop the words first, then the hint, so the bar always fits.
+            // Icons with tooltips at every width. Narrow columns drop the hint, then fold the
+            // zoom buttons into a menu, so the bar always fits.
             AdaptiveControlBar(sizingKey: develop.compareMode == .slider) {
-                bottomBar(compact: false)
+                bottomBar(showHint: true, compactZoom: false)
             } compact: {
-                bottomBar(compact: true)
+                bottomBar(showHint: false, compactZoom: false)
             } minimum: {
-                HStack {
-                    comparePicker(iconsOnly: true)
-                        .disabled(compareDisabled)
-                    Spacer(minLength: 0)
-                }
+                bottomBar(showHint: false, compactZoom: true)
             }
             .font(.callout)
             .padding(.horizontal, 12)
@@ -175,36 +172,27 @@ struct DevelopImageView: View {
         develop.isCropping || develop.isAIOpen || develop.isMasking || develop.isGuiding
     }
 
-    private func bottomBar(compact: Bool) -> some View {
+    private func bottomBar(showHint: Bool, compactZoom: Bool) -> some View {
         HStack(spacing: 10) {
-            if !compact {
-                Text("Before and After").foregroundStyle(.secondary).fixedSize()
-            }
-            comparePicker(iconsOnly: compact)
+            comparePicker
                 .disabled(compareDisabled)
-            if !compact, develop.compareMode == .slider {
+            if showHint, develop.compareMode == .slider {
                 Text("Drag the divider to compare").foregroundStyle(.secondary).fixedSize()
             }
             Spacer(minLength: 8)
-            ZoomControls(zoom: model.zoomState, compact: compact)
+            ZoomControls(zoom: model.zoomState, compact: compactZoom)
                 .disabled(develop.isCropping || develop.isAIOpen || develop.isGuiding)
         }
     }
 
-    private func comparePicker(iconsOnly: Bool) -> some View {
-        Picker("Before and After", selection: $develop.compareMode) {
-            ForEach(CompareMode.allCases, id: \.self) { mode in
-                if iconsOnly {
-                    Image(systemName: mode.symbol).tag(mode).help(mode.label)
-                } else {
-                    Label(mode.label, systemImage: mode.symbol).tag(mode)
-                }
-            }
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
+    /// Before and After as icons, each with a tooltip naming it and the key that cycles them.
+    private var comparePicker: some View {
+        let key = KeyBindings.display(KeyBindings.key(for: .compareMode))
+        return IconSegmentedControl(segments: CompareMode.allCases.map { mode in
+            IconSegmentedControl<CompareMode>.Segment(value: mode, symbol: mode.symbol, text: mode.label,
+                                         help: "Before and After: \(mode.label) (\(key) cycles)")
+        }, selection: $develop.compareMode)
         .fixedSize()
-        .help("Compare with the original: side by side, or drag a slider across the photo (Y)")
     }
 }
 

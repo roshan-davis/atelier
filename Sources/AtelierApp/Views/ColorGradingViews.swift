@@ -137,6 +137,9 @@ private struct WheelBlock: View {
                               range: region.luminance.range, step: 1, origin: 0,
                               gradient: [Color.black, Color.white])
                     .frame(width: size)
+                    .modifier(KeyboardSlider(value: Binding(get: { develop.value(region.luminance) },
+                                                            set: { develop.set(region.luminance, to: $0) }),
+                                             range: region.luminance.range, step: 1))
                     .help("Luminance (double-click the wheel's name to reset the wheel)")
                 Text("H \(Int(develop.value(region.hue))) · S \(Int(develop.value(region.saturation))) · L \(Int(develop.value(region.luminance)))")
                     .font(.caption2)

@@ -160,6 +160,8 @@ struct SliderRow: View {
         }
         .font(.callout)
         .frame(height: 20)
+        // Click, drag or Tab to focus; the arrow keys then move it (⇧ for bigger steps).
+        .modifier(KeyboardSlider(value: $value, range: range, step: step, logarithmic: logarithmic))
     }
 
     private func commit() {
@@ -185,6 +187,7 @@ struct DevelopSlider: View {
     var onOption: ((Bool) -> Void)?
     var onEditingChanged: ((Bool) -> Void)?
     @State private var isDragging = false
+    @Environment(\.takeKeyboardFocus) private var takeKeyboardFocus
 
     private func fraction(_ v: Double) -> Double {
         let clamped = min(max(v, range.lowerBound), range.upperBound)
@@ -240,7 +243,11 @@ struct DevelopSlider: View {
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 0)
                 .onChanged { drag in
-                    if !isDragging { isDragging = true; onEditingChanged?(true) }
+                    if !isDragging {
+                        isDragging = true
+                        takeKeyboardFocus?()
+                        onEditingChanged?(true)
+                    }
                     onOption?(NSEvent.modifierFlags.contains(.option))
                     guard width > 0 else { return }
                     let newValue = value(at: Double(drag.location.x / width))

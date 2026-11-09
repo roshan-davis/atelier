@@ -892,14 +892,25 @@ final class LibraryModel: ObservableObject {
 
     /// Lightroom-style culling keys. Ignored while typing in a text field or a sheet is open.
     private func handleKey(_ event: NSEvent) -> Bool {
-        if !event.modifierFlags.intersection([.command, .control, .option]).isEmpty { return false }
+        if event.modifierFlags.contains(.command) { return false }
         // Only the library window; never Settings or other windows.
         guard let window = NSApp.keyWindow, window === mainWindow, window.attachedSheet == nil else { return false }
         if window.firstResponder is NSText { return false }
+        // ⌃ and ⌥ presses run only a command bound to them in Settings > Keyboard (⌃Tab).
+        if !event.modifierFlags.intersection([.control, .option]).isEmpty {
+            guard let action = KeyBindings.action(for: event) else { return false }
+            return perform(action)
+        }
 
         if mode == .develop, develop.picker != nil, event.keyCode == 53 {  // escape puts any color picker away
             develop.picker = nil
             return true
+        }
+        // A focused slider or the Presets list takes the arrows, Return and Esc itself; Esc there
+        // gives them back to the photo.
+        if mode == .develop, KeyboardFocus.shared.current != nil,
+           [123, 124, 125, 126, 36, 76, 53].contains(event.keyCode) {
+            return false
         }
         // Arrow keys over a Color Grading wheel nudge it (Shift for bigger steps) instead of
         // changing photos.
@@ -951,8 +962,7 @@ final class LibraryModel: ObservableObject {
         default: break
         }
 
-        guard let key = event.charactersIgnoringModifiers?.lowercased(),
-              let action = KeyBindings.action(for: key) else { return false }
+        guard let action = KeyBindings.action(for: event) else { return false }
         return perform(action)
     }
 
@@ -1010,17 +1020,27 @@ final class LibraryModel: ObservableObject {
             if mode != .develop { openDevelop() }
             guard mode == .develop, develop.assetID != nil else { return false }
             develop.isPickingWhiteBalance.toggle()
+        case .masking:
+            if mode != .develop { openDevelop() }
+            guard mode == .develop else { return false }
+            develop.isMasking.toggle()
+        case .radialGradient:
+            if mode != .develop { openDevelop() }
+            guard mode == .develop else { return false }
+            develop.startMaskTool(.radial)
+        case .guidedUpright:
+            guard mode == .develop else { return false }
+            if develop.isGuiding { develop.isGuiding = false } else { develop.setUpright(.guided) }
+        case .nextArea, .previousArea:
+            guard mode == .develop else { return false }
+            KeyboardFocus.shared.cycle(forward: action == .nextArea)
         }
         return true
     }
 
-    /// Guided Upright, as in Lightroom: ⇧T opens it, O shows or hides the loupe, Delete removes
+    /// Guided Upright, as in Lightroom (⇧T, a `KeyAction`, opens it): O shows or hides the loupe, Delete removes
     /// the selected guide, Esc closes it.
     private func handleTransformKey(_ event: NSEvent) -> Bool {
-        if event.modifierFlags.contains(.shift), event.charactersIgnoringModifiers?.lowercased() == "t" {
-            if develop.isGuiding { develop.isGuiding = false } else { develop.setUpright(.guided) }
-            return true
-        }
         guard develop.isGuiding else { return false }
         if event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty,
            event.charactersIgnoringModifiers?.lowercased() == "o" {
@@ -1040,19 +1060,10 @@ final class LibraryModel: ObservableObject {
         }
     }
 
-    /// Lightroom's Masking keys: ⇧W opens it, ⇧M draws a radial gradient, [ and ] size the brush
+    /// Lightroom's Masking keys (⇧W and ⇧M are `KeyAction`s): [ and ] size the brush
     /// (with ⇧, its feather), Delete removes the selected part, Esc cancels the tool or closes.
     private func handleMaskingKey(_ event: NSEvent) -> Bool {
         let shift = event.modifierFlags.contains(.shift)
-        let key = event.charactersIgnoringModifiers?.lowercased()
-        if shift, key == "w" {
-            develop.isMasking.toggle()
-            return true
-        }
-        if shift, key == "m" {
-            develop.startMaskTool(.radial)
-            return true
-        }
         guard develop.isMasking else { return false }
         switch event.keyCode {
         case 33, 30:  // [ and ]
