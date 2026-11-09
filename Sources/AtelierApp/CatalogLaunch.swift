@@ -55,6 +55,16 @@ final class CatalogLaunch: ObservableObject {
                 if !offline.isEmpty { text += " · \(ListFormatter.localizedString(byJoining: offline)) offline" }
                 splash.finishLaunch(text)
             }
+            #if DEBUG
+            // The native smoke test boots with a seeded catalog and uses real controls from here.
+            let environment = ProcessInfo.processInfo.environment
+            if environment["ATELIER_UI_SMOKE"] == "1", environment["ATELIER_CATALOG_PATH"] != nil {
+                UserDefaults.standard.set("basic", forKey: "develop.expandedPanels")
+                await LayoutSnapshots.importSamplePhoto(
+                    into: library, at: opening.packageURL.deletingLastPathComponent().appendingPathComponent("smoke.jpg")
+                )
+            }
+            #endif
             model = library
         }
     }

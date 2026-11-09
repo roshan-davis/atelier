@@ -18,7 +18,8 @@ enum LayoutSnapshots {
     static func run(model: LibraryModel, into folder: URL) async {
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         await snapshotCatalogRecovery(into: folder)
-        await importSamplePhoto(into: model)
+        let sample = fixtures(in: folder).appendingPathComponent("atelier-snapshot.jpg")
+        await importSamplePhoto(into: model, at: sample)
         let panels = ["histogram"] + DevelopSettings.Panel.allCases.map(\.rawValue)
         UserDefaults.standard.set(panels.joined(separator: ","), forKey: "develop.expandedPanels")
         UserDefaults.standard.removeObject(forKey: "panel.width")
@@ -98,7 +99,7 @@ enum LayoutSnapshots {
         await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
                       to: folder.appendingPathComponent("loupe-1280x800.png"))
         model.mode = .grid
-        // Edit In end to end, with Preview standing in for Photoshop: the copy is stacked next to the original.
+        // Render and catalog an Edit In copy to show the stack without opening Preview.
         model.selection = Set(model.rows.map(\.id))
         model.editIn(ExternalEditor(name: "Preview", appURL: URL(fileURLWithPath: "/System/Applications/Preview.app")))
         for _ in 0..<40 where model.rows.count < 2 { try? await Task.sleep(for: .milliseconds(250)) }
@@ -176,7 +177,8 @@ enum LayoutSnapshots {
             else { UserDefaults.standard.removeObject(forKey: Theme.defaultsKey) }
             Theme.current.apply()
         }
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let root = fixtures(in: folder).appendingPathComponent("recovery")
+        guard (try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)) != nil else { return }
         defer { try? FileManager.default.removeItem(at: root) }
         let package = root.appendingPathComponent("Atelier Catalog.atelier")
         try? FileManager.default.createDirectory(at: package, withIntermediateDirectories: true)
@@ -255,7 +257,7 @@ enum LayoutSnapshots {
 
     /// The Match Look dialog with a warm, teal-shadowed reference, then with Match Areas on.
     private static func snapshotMatchLook(model: LibraryModel, into folder: URL) async {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("atelier-reference.jpg")
+        let url = fixtures(in: folder).appendingPathComponent("atelier-reference.jpg")
         let width = 1200, height = 800
         let space = CGColorSpace(name: CGColorSpace.sRGB)!
         if let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
@@ -626,7 +628,7 @@ enum LayoutSnapshots {
     /// Culling before an import: three takes of one scene (one soft), two of another, and a
     /// single shot. Captures the Cull view, then imports and prints how the photos landed.
     private static func snapshotCulling(model: LibraryModel, into folder: URL) async {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("atelier-cull-\(UUID().uuidString)")
+        let dir = fixtures(in: folder).appendingPathComponent("culling")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let shots: [(String, Int, Int, Bool)] = [("Beach-1", 0, 0, false), ("Beach-2", 0, 1, true), ("Beach-3", 0, 2, false),
                                                  ("Market-1", 1, 20, false), ("Market-2", 1, 21, false), ("Portrait", 2, 300, false)]
@@ -724,7 +726,7 @@ enum LayoutSnapshots {
     /// A RAW+JPEG pair (the "RAW" is a JPEG renamed; the catalog goes by name) next to a lone
     /// JPEG: the grid shows two photos, the RAW marked RAW+JPG.
     private static func snapshotRawPair(model: LibraryModel, into folder: URL) async {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("atelier-pair-\(UUID().uuidString)")
+        let dir = fixtures(in: folder).appendingPathComponent("raw-pair")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         writeScene(0, shift: 0, soft: false, second: 400, to: dir.appendingPathComponent("DSC_0101.NEF"))
         writeScene(0, shift: 0, soft: false, second: 400, to: dir.appendingPathComponent("DSC_0101.JPG"))
@@ -855,9 +857,15 @@ enum LayoutSnapshots {
         CGImageDestinationFinalize(destination)
     }
 
+    /// Keep sample files and the resulting Edit In copy within the snapshot run.
+    private static func fixtures(in folder: URL) -> URL {
+        let directory = folder.appendingPathComponent("fixtures", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }
+
     /// A synthetic 3000x2000 photo, imported into the snapshot catalog.
-    private static func importSamplePhoto(into model: LibraryModel) async {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("atelier-snapshot.jpg")
+    static func importSamplePhoto(into model: LibraryModel, at url: URL) async {
         let width = 3000, height = 2000
         let space = CGColorSpace(name: CGColorSpace.sRGB)!
         guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
