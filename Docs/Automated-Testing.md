@@ -4,17 +4,25 @@ Atelier's checks write a short summary and keep detailed logs on disk. Agents ca
 checks once, read the summary, and open the relevant artifacts when a test fails or a
 screenshot changes.
 
-## Run the checks
+## Run from App
 
-Use a task worktree on a Mac with Python 3 and full Xcode installed. The UI groups need a
-logged-in desktop session. They open a temporary Atelier instance with a disposable
-catalog and synthetic photos. Fetch the comparison base before running `checks` or
-`visual`. Use `--base <ref>` if the PR targets a different branch.
+Run these commands from the `App` folder after checking out the branch you want to test.
+That branch must include the automation runner.
 
-```sh
-git fetch origin main
-python3 Scripts/check_pr.py --group all --quiet
-```
+| What to run | Command |
+| --- | --- |
+| Both UI groups, one after the other | `python3 Scripts/check_ui.py` |
+| Native smoke test only | `python3 Scripts/check_ui.py --group smoke` |
+| Screenshot comparison only | `python3 Scripts/check_ui.py --group visual` |
+| All checks, including both UI groups | `python3 Scripts/check_pr.py --group all --quiet` |
+
+Use Python 3 and full Xcode. The UI groups need a logged-in Mac desktop session and open
+temporary Atelier windows with a disposable catalog. The visual group uses a locally
+available `origin/main` as its default baseline. Run `git fetch origin main` to refresh it,
+or pass `--base <ref>` to compare against a different fetched revision.
+
+`check_ui.py` prints the path to `.build/ui-checks/<run>/summary.txt`. The combined
+`check_pr.py` command writes its summary under `.build/local-checks/<run>/`.
 
 Repeat `--group` to combine any groups in one run. With no group specified, the command runs
 `checks`, `build`, and `swift`. The existing `--ui` option is an alias for `--group all`.
@@ -78,7 +86,3 @@ On GitHub, open the PR's Actions run and read **Atelier UI checks**. Download th
 **layout-snapshots** artifact for the UI report, logs, and changed images. Confirm the
 reported revision matches the PR head. If GitHub never starts a runner, use the local Mac
 command above and record the CI blocker separately.
-
-For UI-only runs, `python3 Scripts/check_ui.py --group smoke` or
-`python3 Scripts/check_ui.py --group visual` writes the same UI report directly under
-`.build/ui-checks/<run>/`. Omit the group to run both.
