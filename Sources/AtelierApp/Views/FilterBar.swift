@@ -8,10 +8,20 @@ struct FilterBar: View {
     @EnvironmentObject private var model: LibraryModel
     @AppStorage(GridThumbnails.sizeKey) private var thumbnailSize = GridThumbnails.defaultSize
 
+    private struct SizingKey: Hashable {
+        let showsSizeSlider: Bool
+        let rating: Int
+        let flag: Flag?
+        let label: ColorLabel?
+        let edited: Bool?
+    }
+
     var body: some View {
-        ViewThatFits(in: .horizontal) {
+        let key = SizingKey(showsSizeSlider: model.mode == .grid, rating: model.filter.minRating,
+                            flag: model.filter.flag, label: model.filter.colorLabel, edited: model.filter.edited)
+        AdaptiveControlBar(sizingKey: key) {
             HStack(spacing: 14) {
-                search.frame(minWidth: 180, maxWidth: 320)
+                search.frame(minWidth: 180, idealWidth: 180, maxWidth: 320)
                 ratingPicker.fixedSize()
                 flagPicker.fixedSize()
                 labelPicker.fixedSize()
@@ -19,8 +29,9 @@ struct FilterBar: View {
                 Spacer(minLength: 0)
                 sizeSlider
             }
+        } compact: {
             HStack(spacing: 10) {
-                search.frame(minWidth: 120, maxWidth: 320)
+                search.frame(minWidth: 120, idealWidth: 120, maxWidth: 320)
                 Menu {
                     ratingPicker
                     flagPicker
@@ -34,6 +45,7 @@ struct FilterBar: View {
                 Spacer(minLength: 0)
                 sizeSlider
             }
+        } minimum: {
             search
         }
         .padding(.horizontal, 12)

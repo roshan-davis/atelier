@@ -142,6 +142,16 @@ Evidence baseline, October 30, 2026:
 
 **Scope/acceptance to agree:** record exact SHA/toolchain, proxy latency, NAS timing, large-library scrolling, peak memory and concurrency diagnostics. Measure before optimization; follow with bounded fixes. Controller decomposition is a review suggestion, not an approved rewrite.
 
+### AT-011a — Local Develop drag responsiveness
+
+**Status:** Approved, in progress. **Owner:** Codex. **Chat:** App planning chat covering the local Develop drag-lag review. **Branch:** `codex/develop-drag-latency`. **Dependencies:** AT-011 measurement protocol and an isolated macOS catalog and preference domain.
+
+**Evidence:** At `e19599a`, scripted local Nikon Z6 Point Curve updates in Debug took 78 ms median to graph draw, 144 ms to publish the photo and 11 ms to render the proxy. The single-toolbar probe measured 36 ms, 63 ms and 11 ms respectively. Real mouse drags and paused saves require separate measurement.
+
+**Scope:** Select one adaptive bar layout at a time in Develop, Loupe and Filter. Trace saves, row updates and stored previews during paused drags before changing those paths. Limit observation changes to demonstrated remaining cost. HSL photo latency is reported separately, and HSL rendering optimization is deferred.
+
+**Acceptance:** On repeated local Release drags, target graph draw at or below 16.7 ms median and 33 ms p95. For representative warm Tone Curve and Basic edits at Fit, target visible photo updates under 50 ms median and at or below 100 ms p95. Time live feedback and the final sharp frame separately at 100%. A paused drag yields one history step, one undo to the starting value and no main-thread stall over 100 ms. Check all Develop drag controls and resize the three bars with Slider Compare included.
+
 ## AT-012 — Recovery drills
 
 **Status:** Proposed / discuss; acceptance unverified. **Owner/chat/branch/PR:** unassigned. **Dependencies:** agree disposable fixtures and coverage; AT-003/004/005/006 as relevant.

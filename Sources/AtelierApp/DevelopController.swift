@@ -360,6 +360,7 @@ final class DevelopController: ObservableObject {
     @Published private(set) var history = DevelopHistory()
     private var committed = DevelopSettings()
     private var pendingStep: String?
+    private var pointerEditInProgress = false
 
     /// Built-in and user presets, shared across catalogs.
     @Published private(set) var presets: [DevelopPreset] = []
@@ -1784,12 +1785,32 @@ final class DevelopController: ObservableObject {
 
     // MARK: Saving
 
+    /// All mouse-driven tools share this boundary, including AppKit overlays.
+    func beginPointerEdit() {
+        commitPendingStep()
+        pointerEditInProgress = true
+    }
+
+    func endPointerEdit() {
+        guard pointerEditInProgress, NSEvent.pressedMouseButtons & 1 == 0 else { return }
+        pointerEditInProgress = false
+        if dirty { flushSave() }
+    }
+
     private func scheduleSave() {
         saveTask?.cancel()
         saveTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(400))
-            guard !Task.isCancelled else { return }
-            self?.flushSave()
+            guard let self, !Task.isCancelled else { return }
+            if self.pointerEditInProgress, NSEvent.pressedMouseButtons & 1 != 0 {
+                // A stationary pointer can still be part of a drag. The timer also handles
+                // mouse-up events consumed by a native control's tracking loop.
+                self.scheduleSave()
+            } else if self.pointerEditInProgress {
+                self.endPointerEdit()
+            } else {
+                self.flushSave()
+            }
         }
     }
 

@@ -77,11 +77,14 @@ struct DevelopImageView: View {
             }
             Divider()
             // Narrow columns drop the words first, then the hint, so the bar always fits.
-            ViewThatFits(in: .horizontal) {
+            AdaptiveControlBar(sizingKey: develop.compareMode == .slider) {
                 bottomBar(compact: false)
+            } compact: {
                 bottomBar(compact: true)
+            } minimum: {
                 HStack {
                     comparePicker(iconsOnly: true)
+                        .disabled(compareDisabled)
                     Spacer(minLength: 0)
                 }
             }
@@ -168,13 +171,17 @@ struct DevelopImageView: View {
         return develop.croppedPixelSize(assetSize: CGSize(width: width, height: height))
     }
 
+    private var compareDisabled: Bool {
+        develop.isCropping || develop.isAIOpen || develop.isMasking || develop.isGuiding
+    }
+
     private func bottomBar(compact: Bool) -> some View {
         HStack(spacing: 10) {
             if !compact {
                 Text("Before and After").foregroundStyle(.secondary).fixedSize()
             }
             comparePicker(iconsOnly: compact)
-                .disabled(develop.isCropping || develop.isAIOpen || develop.isMasking || develop.isGuiding)
+                .disabled(compareDisabled)
             if !compact, develop.compareMode == .slider {
                 Text("Drag the divider to compare").foregroundStyle(.secondary).fixedSize()
             }

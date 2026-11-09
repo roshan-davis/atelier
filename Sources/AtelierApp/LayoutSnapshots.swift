@@ -45,6 +45,15 @@ enum LayoutSnapshots {
         for (name, size, view) in shots {
             await capture(view, size: size, to: folder.appendingPathComponent(name + ".png"))
         }
+        // Slider Compare adds a hint to the wide toolbar. Check it both with room and
+        // with the editing panels open in the smallest supported window.
+        model.develop.compareMode = .slider
+        for width in [1000, 1728] {
+            await capture(AnyView(ContentView().environmentObject(model)),
+                          size: CGSize(width: width, height: 640),
+                          to: folder.appendingPathComponent("develop-slider-compare-\(width)x640.png"))
+        }
+        model.develop.compareMode = .off
         // The crop tool, straightened a little.
         model.develop.isCropping = true
         var crop = model.develop.crop
