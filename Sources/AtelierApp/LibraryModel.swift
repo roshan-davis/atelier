@@ -169,7 +169,7 @@ final class LibraryModel: ObservableObject {
 
     private var rowsTask: Task<Void, Never>?
     private var sidebarTask: Task<Void, Never>?
-    private var keyMonitor: Any?
+    private var inputMonitor: Any?
     private var revisionScheduled = false
 
     /// Called once, when the library's first sidebar data has loaded.
@@ -189,7 +189,7 @@ final class LibraryModel: ObservableObject {
         restoreSessionFilter()
         observeRows()
         observeSidebar()
-        installKeyMonitor()
+        installInputMonitor()
         observeMounts()
         // Settings > Import > "Show RAW+JPEG pairs as one photo".
         NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil,
@@ -868,13 +868,25 @@ final class LibraryModel: ObservableObject {
         }
     }
 
-    // MARK: Keyboard
+    // MARK: Window input
 
-    private func installKeyMonitor() {
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+    private func installInputMonitor() {
+        inputMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseDown, .leftMouseUp]) { [weak self] event in
             guard let self else { return event }
-            let handled = MainActor.assumeIsolated { self.handleKey(event) }
-            return handled ? nil : event
+            return MainActor.assumeIsolated {
+                switch event.type {
+                case .keyDown:
+                    return self.handleKey(event) ? nil : event
+                case .leftMouseDown where self.mode == .develop && event.window === self.mainWindow:
+                    self.develop.beginPointerEdit()
+                case .leftMouseUp:
+                    // Let the control consume mouse-up and apply its final value first.
+                    DispatchQueue.main.async { [weak self] in self?.develop.endPointerEdit() }
+                default:
+                    break
+                }
+                return event
+            }
         }
     }
 

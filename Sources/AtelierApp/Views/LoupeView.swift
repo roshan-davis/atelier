@@ -42,7 +42,7 @@ struct LoupeView: View {
                 }
             }
             Divider()
-            ViewThatFits(in: .horizontal) {
+            AdaptiveControlBar(sizingKey: false) {
                 HStack {
                     Text("Double-click the photo to zoom, drag to move around")
                         .foregroundStyle(.secondary)
@@ -50,10 +50,12 @@ struct LoupeView: View {
                     Spacer(minLength: 8)
                     ZoomControls(zoom: zoom)
                 }
+            } compact: {
                 HStack {
                     Spacer(minLength: 0)
                     ZoomControls(zoom: zoom)
                 }
+            } minimum: {
                 HStack {
                     Spacer(minLength: 0)
                     ZoomControls(zoom: zoom, compact: true)
