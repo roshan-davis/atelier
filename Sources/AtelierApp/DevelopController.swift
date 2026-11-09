@@ -170,7 +170,14 @@ final class DevelopController: ObservableObject {
 
     @Published var compareMode: CompareMode = .off {
         didSet {
-            if compareMode == .off { beforeRequest.value = nil } else { renderBeforeIfNeeded() }
+            if compareMode == .off {
+                beforeRequest.value = nil
+            } else {
+                // The view enters Compare at Fit. Drop the previous view's zoom report before
+                // it can launch full-size work alongside the two foreground comparison renders.
+                if oldValue == .off { wantsFullResolution = false }
+                renderBeforeIfNeeded()
+            }
         }
     }
     /// The photo without edits, rendered once per open photo for the compare views.
@@ -1877,6 +1884,7 @@ final class DevelopController: ObservableObject {
                         self.scheduleRender()
                     } else {
                         self.scheduleFullRender()
+                        if self.compareMode != .off { self.scheduleFullBeforeRender() }
                     }
                 }
             }
@@ -2018,9 +2026,15 @@ final class DevelopController: ObservableObject {
         scheduleRender()
     }
 
+    /// The comparison proxies come first. The full-size queue also uses Core Image and can
+    /// compete with the foreground queue even though it runs on a separate thread.
+    private var canRenderFullResolution: Bool {
+        wantsFullResolution && (compareMode == .off || (firstRenderDone && beforeRequest.value == nil))
+    }
+
     /// Full-resolution render for zoomed views, after the proxy settles. Latest wins.
     private func scheduleFullRender() {
-        guard wantsFullResolution, !showingBefore, !isCropping, !isGuiding, let url = sourceURL, fullImageSettings != settings else { return }
+        guard canRenderFullResolution, !showingBefore, !isCropping, !isGuiding, let url = sourceURL, fullImageSettings != settings else { return }
         if fullRendering {
             fullNeedsRender = true
             return
@@ -2064,7 +2078,7 @@ final class DevelopController: ObservableObject {
     /// Renders the unedited photo at full size while a compare view is zoomed past fit, sharing
     /// the full-size session with the edited render.
     private func scheduleFullBeforeRender() {
-        guard wantsFullResolution, compareMode != .off, let url = sourceURL else { return }
+        guard canRenderFullResolution, compareMode != .off, let url = sourceURL else { return }
         let before = beforeSettings
         guard fullBeforeSettings != before else { return }
         // Wait for the edited render when it is still opening the full-size photo, so the
@@ -2077,8 +2091,10 @@ final class DevelopController: ObservableObject {
         let assetID = self.assetID
         let existing = fullSession
         fullQueue.async {
+            let began = DevelopTimingLog.now()
             let session = existing ?? DevelopRenderer.shared.session(for: url, maxPixelSize: nil, interactive: true)
-            let cgImage = session?.render(before)
+            let cgImage = RenderSignposts.measure("Full-size Before render") { session?.render(before) }
+            DevelopTimingLog.shared.log(assetID, "full-size Before render: \(DevelopTimingLog.ms(since: began)) ms")
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     self.fullBeforeRendering = false
@@ -2098,8 +2114,10 @@ final class DevelopController: ObservableObject {
     }
 
     private func renderBeforeIfNeeded() {
-        scheduleFullBeforeRender()
-        guard beforeImage == nil, let assetID, let session else { return }
+        guard beforeImage == nil, let assetID, let session else {
+            scheduleFullBeforeRender()
+            return
+        }
         let key = BeforeRenderRequest.Key(generation: openGeneration.value, settings: beforeSettings)
         guard beforeRequest.value?.key != key else { return }
         lastRenderRequest.value = Date()
@@ -2116,7 +2134,9 @@ final class DevelopController: ObservableObject {
         queue.async {
             let request = beforeRequest.value
             let began = DevelopTimingLog.now()
-            let cgImage = request.flatMap { $0.session.render($0.key.settings) }
+            let cgImage = request.flatMap { request in
+                RenderSignposts.measure("Before proxy render") { request.session.render(request.key.settings) }
+            }
             if let request {
                 lastRenderRequest.value = Date()
                 DevelopTimingLog.shared.log(request.assetID, "Before render: waited \(Int(((began - request.queuedAt) * 1000).rounded())) ms "
@@ -2132,6 +2152,8 @@ final class DevelopController: ObservableObject {
                         if let cgImage {
                             self.beforeImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
                         }
+                        if !self.rendering { self.scheduleFullRender() }
+                        self.scheduleFullBeforeRender()
                     }
                     self.scheduleBeforeRender()
                 }

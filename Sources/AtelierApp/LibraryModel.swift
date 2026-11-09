@@ -98,6 +98,7 @@ final class LibraryModel: ObservableObject {
             zoomForNextPhoto(leaving: oldValue)
             reloadDetail()
             if mode == .develop {
+                if zoomState.level == .fit, develop.wantsFullResolution { develop.wantsFullResolution = false }
                 develop.open(focusedID)
                 if let image = develop.image, !develop.showsPreviousPhoto, let width = detail?.asset.width, let height = detail?.asset.height {
                     zoomState.showNow(image, pixelSize: develop.croppedPixelSize(assetSize: CGSize(width: width, height: height)))
