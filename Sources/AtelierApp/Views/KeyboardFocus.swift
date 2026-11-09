@@ -80,6 +80,7 @@ final class KeyboardFocus {
     /// Gives a control focus: a click or drag on it, Tab, or ⌃Tab.
     func focus(_ target: Target) {
         guard entries[target] != nil else { return }
+        Self.endTextEditing()
         current = target
         activeArea = target.area
         lastInArea[target.area] = target.id
@@ -87,10 +88,20 @@ final class KeyboardFocus {
     }
 
     /// Gives the arrow keys back to the photos: Esc, a click on the photo, or ⌃Tab to the photos.
-    func release() {
+    /// `endEditing` false keeps a text field the user is typing in (they clicked into it).
+    func release(endEditing: Bool = true) {
+        if endEditing { Self.endTextEditing() }
+        guard current != nil || activeArea != .photo else { return }
         current = nil
         activeArea = .photo
         changes.send(nil)
+    }
+
+    /// Takes the keyboard away from a text field in the key window, so the keys go where the
+    /// focus mark is (as the Mac's own ⌃Tab leaves a text field).
+    static func endTextEditing() {
+        guard let window = NSApp.keyWindow, window.firstResponder is NSText else { return }
+        window.makeFirstResponder(nil)
     }
 
     /// An area's controls, top to bottom.

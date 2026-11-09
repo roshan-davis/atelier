@@ -156,6 +156,15 @@ final class LibraryModel: ObservableObject {
     @Published var cullSession: CullModel?
     /// The library window, which receives the single-key commands.
     weak var mainWindow: NSWindow?
+    /// Where the last click in the library window landed, the text field the user chose (by
+    /// clicking or tabbing into it), and whether the last key that went on to the window was
+    /// Tab. Together they tell a field the user is typing in from one SwiftUI gave the keyboard
+    /// on its own: with nothing else able to take it, SwiftUI hands the window's first text
+    /// field (Search Presets, in Develop) the keyboard, which silently swallowed ← →, Tab and
+    /// every single-key command (Rosh's test, Nov 9, 2026).
+    private var lastClick: NSPoint?
+    private weak var chosenTextField: NSView?
+    private var lastKeyWasTab = false
     /// The photo at the top of the grid, kept while the grid is closed and between launches.
     var gridTopID: Int64?
     /// Last launch's session, applied when its photos first load.
@@ -876,9 +885,13 @@ final class LibraryModel: ObservableObject {
             return MainActor.assumeIsolated {
                 switch event.type {
                 case .keyDown:
-                    return self.handleKey(event) ? nil : event
-                case .leftMouseDown where self.mode == .develop && event.window === self.mainWindow:
-                    self.develop.beginPointerEdit()
+                    let handled = self.handleKey(event)
+                    self.lastKeyWasTab = !handled && event.keyCode == 48
+                    return handled ? nil : event
+                case .leftMouseDown where event.window === self.mainWindow:
+                    self.lastClick = event.locationInWindow
+                    self.chosenTextField = nil
+                    if self.mode == .develop { self.develop.beginPointerEdit() }
                 case .leftMouseUp:
                     // Let the control consume mouse-up and apply its final value first.
                     DispatchQueue.main.async { [weak self] in self?.develop.endPointerEdit() }
@@ -901,7 +914,14 @@ final class LibraryModel: ObservableObject {
            action == .nextArea || action == .previousArea {
             return perform(action)
         }
-        if window.firstResponder is NSText { return false }
+        if let text = window.firstResponder as? NSText {
+            if userIsTyping(in: text) {
+                // Typing in a field: it keeps the keys, and no control keeps the focus mark.
+                KeyboardFocus.shared.release(endEditing: false)
+                return false
+            }
+            window.makeFirstResponder(nil)
+        }
         // ⌃ and ⌥ presses run only a command bound to them in Settings > Keyboard (⌃Tab).
         if !event.modifierFlags.intersection([.control, .option]).isEmpty {
             guard let action = KeyBindings.action(for: event) else { return false }
@@ -988,6 +1008,22 @@ final class LibraryModel: ObservableObject {
 
         guard let action = KeyBindings.action(for: event) else { return false }
         return perform(action)
+    }
+
+    /// Whether the text field with the keyboard is one the user is typing in: they clicked or
+    /// tabbed into it, or it has text. An empty field nobody chose (SwiftUI's automatic pick)
+    /// gives the keys back.
+    private func userIsTyping(in text: NSText) -> Bool {
+        let field = ((text as? NSTextView)?.delegate as? NSView) ?? text
+        if field === chosenTextField || lastKeyWasTab || !text.string.isEmpty {
+            chosenTextField = field
+            return true
+        }
+        if let click = lastClick, field.window != nil, field.bounds.contains(field.convert(click, from: nil)) {
+            chosenTextField = field
+            return true
+        }
+        return false
     }
 
     /// Runs a single-key command. Returns false when it doesn't apply in the current view.
