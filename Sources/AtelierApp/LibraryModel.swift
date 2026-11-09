@@ -891,7 +891,15 @@ final class LibraryModel: ObservableObject {
                 case .leftMouseDown where event.window === self.mainWindow:
                     self.lastClick = event.locationInWindow
                     self.chosenTextField = nil
-                    if self.mode == .develop { self.develop.beginPointerEdit() }
+                    if self.mode == .develop {
+                        self.develop.beginPointerEdit()
+                        // After the click reaches the view, so a control it lands on takes focus first.
+                        if let content = event.window?.contentView {
+                            let local = content.convert(event.locationInWindow, from: nil)
+                            let point = CGPoint(x: local.x, y: content.isFlipped ? local.y : content.bounds.height - local.y)
+                            DispatchQueue.main.async { KeyboardFocus.shared.clicked(at: point) }
+                        }
+                    }
                 case .leftMouseUp:
                     // Let the control consume mouse-up and apply its final value first.
                     DispatchQueue.main.async { [weak self] in self?.develop.endPointerEdit() }

@@ -112,6 +112,26 @@ final class KeyboardFocus {
         window.makeFirstResponder(nil)
     }
 
+    /// Where each area is in the window (SwiftUI global coordinates), by the view that reported
+    /// it: the photos area is both the photo and the Filmstrip.
+    private var areaFrames: [String: (area: KeyboardFocusArea, frame: CGRect)] = [:]
+
+    func setAreaFrame(_ area: KeyboardFocusArea, key: String, frame: CGRect?) {
+        areaFrames[key] = frame.map { (area, $0) }
+    }
+
+    /// A click in the window: the area clicked becomes the keyboard's, as if ⌃Tab had gone there
+    /// (Rosh, Nov 9, 2026). A click on a control has already given it focus, and a click into a
+    /// text field keeps the field typing; anywhere else in a panel focuses the control used last
+    /// there (or the top one), and a click on the photo or the Filmstrip gives the arrows back
+    /// to the photos. `point` is in SwiftUI global coordinates.
+    func clicked(at point: CGPoint) {
+        guard let area = areaFrames.values.first(where: { $0.frame.contains(point) })?.area else { return }
+        if NSApp.keyWindow?.firstResponder is NSText { return }
+        if current?.area == area { return }
+        if area == .photo { release() } else { focus(area) }
+    }
+
     /// An area's controls, top to bottom.
     private func targets(in area: KeyboardFocusArea) -> [Target] {
         entries.filter { $0.key.area == area }
@@ -352,6 +372,7 @@ struct AreaFocusFlash: ViewModifier {
     let area: KeyboardFocusArea
     var enabled = true
     @State private var visible = false
+    @State private var frameKey = UUID().uuidString
     @State private var hideTask: Task<Void, Never>?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -376,6 +397,10 @@ struct AreaFocusFlash: ViewModifier {
                     .opacity(visible ? 1 : 0)
                     .allowsHitTesting(false)
             }
+            // Where the area is, so a click in it makes it the keyboard's.
+            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { frame in
+                KeyboardFocus.shared.setAreaFrame(area, key: frameKey, frame: frame)
+            }
             .onReceive(KeyboardFocus.shared.arrivals) { arrived in
                 hideTask?.cancel()
                 guard enabled, arrived == area else {
@@ -397,7 +422,10 @@ struct AreaFocusFlash: ViewModifier {
                     }
                 }
             }
-            .onDisappear { hideTask?.cancel() }
+            .onDisappear {
+                hideTask?.cancel()
+                KeyboardFocus.shared.setAreaFrame(area, key: frameKey, frame: nil)
+            }
     }
 }
 
