@@ -163,16 +163,28 @@ struct MatchLookSheet: View {
                 Toggle("Tone", isOn: $match.options.tone)
                     .help("Exposure and the Tone Curve")
                 Toggle("Color", isOn: $match.options.color)
-                    .help("Saturation and Color Grading (shadows and highlights)")
+                    .help("Saturation, HSL and Color Grading (shadows and highlights)")
                 Divider().frame(height: 16)
-                Toggle("Match Areas", isOn: $match.usesAreas)
-                    .help("Match one part of the reference to one part of your photo")
+                Toggle("Protect Skin Tones", isOn: $match.protectSkin)
+                    .help(match.photoHasFaces
+                          ? "Keep faces' skin close to its color now while the rest of the photo takes the look"
+                          : "No faces found in this photo. Turn on to protect skin if Atelier missed a face")
             }
             .toggleStyle(.checkbox)
-            if match.usesAreas {
-                Text("Drag each box over the parts that should match, such as skin to skin or sky to sky. Drag a box's corner to resize it.")
+            HStack(spacing: 10) {
+                Picker("Match Areas:", selection: $match.areaMode) {
+                    ForEach(MatchAreaMode.allCases, id: \.self) { mode in
+                        Text(mode.label).tag(mode)
+                    }
+                }
+                .pickerStyle(.menu)
+                .fixedSize()
+                .help(match.areaMode.help)
+                Text(areaHint)
                     .font(.callout)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
             HStack {
                 Text("Strength")
@@ -182,7 +194,7 @@ struct MatchLookSheet: View {
                     .monospacedDigit()
                     .frame(width: 32, alignment: .trailing)
                 Button("Show Differences") { showingDifferences = true }
-                    .disabled(match.match == nil)
+                    .disabled(!match.canApply)
                     .help("Which sliders Apply will move, and by how much")
                     .popover(isPresented: $showingDifferences, arrowEdge: .top) {
                         MatchDifferencesView(lines: match.differences)
@@ -200,6 +212,14 @@ struct MatchLookSheet: View {
         }
     }
 
+    private var areaHint: String {
+        switch match.areaMode {
+        case .wholePhoto: return "The whole reference sets the look for the whole photo."
+        case .subject: return "Background matches background; a Match Look: Subject mask matches the subject."
+        case .boxes: return "Drag each box over the parts that should match. Drag a corner to resize."
+        }
+    }
+
     private var footer: some View {
         HStack {
             if let message = match.message {
@@ -209,8 +229,10 @@ struct MatchLookSheet: View {
                 Text("Matching…").foregroundStyle(.secondary)
             } else if match.referenceImage == nil {
                 Text("Choose a reference image to start.").foregroundStyle(.secondary)
-            } else if match.match != nil {
-                Text("Apply sets White Balance, Tone and Color sliders you can keep editing.")
+            } else if let result = match.match {
+                Text(result.subjectMask != nil
+                     ? "Apply sets sliders you can keep editing, plus a Match Look: Subject mask."
+                     : "Apply sets White Balance, Tone and Color sliders you can keep editing.")
                     .foregroundStyle(.secondary)
             }
             Spacer()

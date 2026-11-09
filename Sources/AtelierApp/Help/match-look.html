@@ -15,7 +15,7 @@
 <h1>Match Look to a Reference</h1>
 <p class="lede">Give your photo the color and tone of another picture: a photo you admire, a film still, or one of your own edited shots. The result is ordinary sliders you can keep editing.</p>
 
-<div class="chips"><a href="#open">Open it</a><a href="#reference">Choose a reference</a><a href="#preview">Preview and Strength</a><a href="#areas">Match Areas</a><a href="#several">Several photos</a></div>
+<div class="chips"><a href="#open">Open it</a><a href="#reference">Choose a reference</a><a href="#preview">Preview and Strength</a><a href="#skin">Protect Skin Tones</a><a href="#areas">Match Areas</a><a href="#several">Several photos</a></div>
 
 <figure>
   <div class="trio">
@@ -39,15 +39,44 @@
 <h2 id="preview">Preview, Strength and Show Differences</h2>
 <ol class="steps">
   <li>The reference is on the left, a live preview of your photo on the right. <b>Press and hold</b> the preview to see it before the match.</li>
-  <li>Choose what to match: <b>White Balance</b> (Temp and Tint), <b>Tone</b> (Exposure and the Tone Curve), <b>Color</b> (Saturation, HSL and Color Grading).</li>
+  <li>Choose what to match: <b>White Balance</b> (Temp and Tint), <b>Tone</b> (Exposure and the Tone Curve), <b>Color</b> (Saturation, HSL and Color Grading). <b>Protect Skin Tones</b> keeps faces natural (see below).</li>
   <li>Drag <b>Strength</b> (0 to 100) to blend between your current look and the full match.</li>
   <li>Click <b>Show Differences</b> to list every slider that will move, from its current value to the new one.</li>
   <li>Click <b>Apply</b>. Nothing changes on your photo until then; <b>Cancel</b> leaves it exactly as it was.</li>
 </ol>
 <p>Apply is one history step (Match Look: name). Everything it sets is an ordinary slider, so you can adjust, undo, copy or save it as a preset. No AI touches the pixels.</p>
 
+<figure>
+  <div class="pins pinned wide" style="max-width:640px">
+  <div class="panel" style="background:#323232">
+    <div class="pb" style="gap:9px">
+      <div class="row" data-pin="1"><span class="name" style="width:auto">Match:</span><span class="check"><i class="on"></i>White Balance</span><span class="check"><i class="on"></i>Tone</span><span class="check"><i class="on"></i>Color</span><span class="muted">|</span><span class="check" data-pin="2" data-pin-side="right"><i class="on"></i>Protect Skin Tones</span></div>
+      <div class="row" data-pin="3"><span class="name" style="width:auto">Match Areas:</span><span class="popup" style="flex:none;width:180px">Subject &amp; Background</span><span class="muted">Background matches background; a Match Look: Subject mask matches the subject.</span></div>
+      <div class="sl" data-pin="4" data-pin-side="right" data-name="Strength" data-value="100" data-at="1" data-def="1"></div>
+      <div class="row" style="justify-content:flex-end;gap:8px"><span class="btn">Show Differences</span><span class="grow" style="flex:1"></span><span class="btn">Cancel</span><span class="btn on">Apply</span></div>
+    </div>
+  </div>
+  </div>
+</figure>
+<ol class="legend">
+  <li><b>Match</b>: what the match may change. Turn off any of the three to leave those sliders alone.</li>
+  <li><b>Protect Skin Tones</b>: on by itself when Atelier finds a face in your photo.</li>
+  <li><b>Match Areas</b>: Whole Photo, Subject &amp; Background, or Boxes.</li>
+  <li><b>Strength</b> scales everything the match sets, the subject mask's sliders included.</li>
+</ol>
+
+<h2 id="skin">Protect Skin Tones</h2>
+<p>A strong look, such as teal and orange or a cold film stock, can turn skin orange, green or grey. With <b>Protect Skin Tones</b> on, the skin on the faces Atelier finds is left out of the match, and the match may move its color by only a little (at most 5° of hue and 15% of saturation). The match can be weaker if the reference would push skin outside those limits.</p>
+<p>Atelier does this with ordinary sliders. It first turns back the HSL Hue and Saturation of the colors skin falls in (Orange, usually), when <b>Color</b> is on. If that isn't enough, it pulls White Balance, Saturation and Color Grading back toward where they were, just as far as needed. If that still leaves the skin outside the limits, Atelier backs off the rest of the match too. Show Differences lists the changes once the new match is ready.</p>
+<p>It turns on by itself when Atelier finds a face in your photo. You can turn it on or off for each match. If no face is found, the dialog says there was no skin to protect.</p>
+
 <h2 id="areas">Match Areas</h2>
-<p>When the reference shows different things from your photo, turn on <b>Match Areas</b>. A box appears on each image: drag them over the parts that should match (skin to skin, sky to sky) and drag a corner to resize. The boxed areas count most, and the rest of each picture a little, so the whole photo still moves sensibly.</p>
+<p>When the reference shows different things from your photo, choose how they match in the <b>Match Areas</b> pop-up menu:</p>
+<dl class="defs">
+  <dt>Whole Photo</dt><dd>The whole reference sets the look for the whole photo. This is the default.</dd>
+  <dt>Subject &amp; Background</dt><dd>Atelier finds the subject (people, animals, objects in front) in both pictures, so there is nothing to draw. The background is matched to the reference's background with the usual sliders. Then a mask named <b>Match Look: Subject</b> (a <a href="masking.html#subject">Select Subject</a> mask) gets its own Temp, Tint, Exposure and Saturation, so your subject matches the reference's subject. You can edit or delete the mask in Masking like any other. Running Match Look again updates the same mask and keeps adjustments outside the checked categories. If Atelier can't find a subject in either picture, it matches the whole photo and says so.</dd>
+  <dt>Boxes</dt><dd>A box appears on each image: drag them over the parts that should match (skin to skin, sky to sky) and drag a corner to resize. The boxed areas count most, and the rest of each picture a little, so the whole photo still moves sensibly.</dd>
+</dl>
 
 <h2 id="several">Several photos</h2>
 <p>With several photos selected in the filmstrip, choose:</p>
@@ -56,7 +85,7 @@
   <dt>Match each photo</dt><dd>Each photo matched on its own, for mixed light. Runs in the background with progress and Cancel in the status bar.</dd>
 </dl>
 
-<div class="see-also">See also: <a href="presets.html">Presets</a> · <a href="color-grading.html">Color Grading</a></div>
+<div class="see-also">See also: <a href="masking.html">Masking</a> · <a href="presets.html">Presets</a> · <a href="color-grading.html">Color Grading</a></div>
 
 </main>
 </body>

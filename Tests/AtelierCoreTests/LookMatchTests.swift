@@ -169,4 +169,202 @@ final class LookMatchTests: XCTestCase {
             XCTAssertEqual(LookMatcher.gradeHue(towards: SIMD2(cos(angle), sin(angle))), Double(hue), accuracy: 3)
         }
     }
+
+    // MARK: Phase 3: Protect Skin Tones and Subject & Background
+
+    /// The sample photo's skin-colored patch (the fifth), as a face box: 0 to 1 from the top left.
+    private let skinPatch = CGRect(x: 600.0 / 900, y: 160.0 / 600, width: 110.0 / 900, height: 110.0 / 600)
+
+    func testSkinIsFoundInsideTheFace() throws {
+        let session = try XCTUnwrap(DevelopRenderer.shared.session(for: try samplePhoto(), maxPixelSize: LookSample.size))
+        let plain = try sample(session, .neutral)
+        let skin = try XCTUnwrap(LookSkin(sample: plain, faces: [skinPatch]))
+        XCTAssertGreaterThan(skin.pixels.count, 100)
+        XCTAssertTrue(skin.isWithin(plain))
+        XCTAssertNil(LookSkin(sample: plain, faces: []))
+        // A face box over the blue sky finds no skin.
+        XCTAssertNil(LookSkin(sample: plain, faces: [CGRect(x: 0.05, y: 0.02, width: 0.1, height: 0.1)]))
+    }
+
+    func testProtectSkinTonesKeepsSkinInsideItsLimits() throws {
+        let session = try XCTUnwrap(DevelopRenderer.shared.session(for: try samplePhoto(), maxPixelSize: LookSample.size))
+        // A strong teal look that turns orange skin green and grey.
+        var look = DevelopSettings()
+        look.temperature = 3800
+        look.tint = -25
+        look[.hsl(.hue, .orange)] = 60
+        look[.hsl(.saturation, .orange)] = -50
+        let reference = try XCTUnwrap(LookTarget(image: try XCTUnwrap(session.renderSRGB(look)), areas: .wholePhoto,
+                                                 protectSkin: false))
+        let plain = try sample(session, .neutral)
+        let skin = try XCTUnwrap(LookSkin(sample: plain, faces: [skinPatch]))
+
+        let free = try XCTUnwrap(LookMatcher.match(session: session, settings: .neutral, target: reference))
+        let freeDrift = try XCTUnwrap(skin.drift(try sample(session, free.matched)))
+        let guarded = try XCTUnwrap(LookMatcher.match(session: session, settings: .neutral, target: reference,
+                                                      options: LookMatchOptions(protectSkin: true),
+                                                      photoFaces: [skinPatch]))
+        let guardedDrift = try XCTUnwrap(skin.drift(try sample(session, guarded.matched)))
+        print("LOOK MATCH skin: free \(freeDrift), protected \(guardedDrift); \(try guarded.matched.encoded())")
+        XCTAssertFalse(guarded.notices.contains(.noFaces))
+        XCTAssertLessThanOrEqual(abs(guardedDrift.hue), LookSkin.maxHueShift + 0.5)
+        XCTAssertLessThanOrEqual(abs(guardedDrift.ratio - 1), LookSkin.maxChromaChange + 0.02)
+        // The rest of the photo still takes the look.
+        XCTAssertNotEqual(guarded.matched, DevelopSettings.neutral)
+    }
+
+    func testProtectSkinTonesWithoutFacesSaysSo() throws {
+        let session = try XCTUnwrap(DevelopRenderer.shared.session(for: try samplePhoto(), maxPixelSize: LookSample.size))
+        let reference = try XCTUnwrap(LookTarget(image: try XCTUnwrap(session.renderSRGB(.neutral)), areas: .wholePhoto,
+                                                 protectSkin: false))
+        let match = try XCTUnwrap(LookMatcher.match(session: session, settings: .neutral, target: reference,
+                                                    options: LookMatchOptions(protectSkin: true), photoFaces: []))
+        XCTAssertTrue(match.notices.contains(.noFaces))
+    }
+
+    func testFocusMaskCarriesItsShare() {
+        let width = 40, height = 20
+        var pixels = [UInt8]()
+        for _ in 0..<height {
+            for x in 0..<width { pixels += x < width / 2 ? [200, 40, 40, 255] : [40, 60, 200, 255] }
+        }
+        let focus = (0..<(width * height)).map { Double($0 % width < width / 2 ? 1 : 0) }
+        var subject = LookSample(pixels: pixels, width: width, height: height)
+        subject.focusWeights(focus, share: 1)
+        XCTAssertEqual(subject.weight.reduce(0, +), 1, accuracy: 1e-9)
+        XCTAssertEqual(subject.weight[width - 1], 0, accuracy: 1e-12)
+        var background = LookSample(pixels: pixels, width: width, height: height)
+        background.focusWeights(focus.map { 1 - $0 }, share: 0.75)
+        XCTAssertLessThan(background.midtoneAB.x, subject.midtoneAB.x - 0.05)
+        // Leaving pixels out moves their weight to the rest.
+        let without = subject.excluding([0, 1, 2])
+        XCTAssertEqual(without.weight[0], 0)
+        XCTAssertEqual(without.weight.reduce(0, +), 1, accuracy: 1e-9)
+    }
+
+    func testSubjectMaskBlendsAndReplacesAnEarlierOne() {
+        var mask = DevelopSettings.Mask(name: LookMatch.subjectMaskName,
+                                        components: [.init(.subject(.init(feather: LookMatcher.subjectFeather)))])
+        mask[.temperature] = 20
+        mask[.exposure] = 0.5
+        var matched = DevelopSettings()
+        matched.masks = [mask]
+        let match = LookMatch(base: .neutral, matched: matched, asShotTemperature: 6000)
+        XCTAssertEqual(match.subjectMask?[.temperature], 20)
+        let half = match.settings(strength: 0.5)
+        XCTAssertEqual(half.masks.count, 1)
+        XCTAssertEqual(half.masks[0][.temperature], 10)
+        XCTAssertEqual(half.masks[0][.exposure], 0.25, accuracy: 1e-9)
+        // Same settings on a photo that already has an earlier match's subject mask: it is replaced.
+        var earlier = DevelopSettings.Mask(name: LookMatch.subjectMaskName, components: mask.components)
+        earlier[.temperature] = -40
+        var other = DevelopSettings()
+        other.masks = [earlier]
+        let synced = match.applied(to: other, strength: 1)
+        XCTAssertEqual(synced.masks.count, 1)
+        XCTAssertEqual(synced.masks[0].id, earlier.id)
+        XCTAssertEqual(synced.masks[0][.temperature], 20)
+    }
+
+    private func fixture(_ name: String) -> URL {
+        URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("Scripts/presets/fixtures/\(name).jpg")
+    }
+
+    func testToneOnlyPortraitMatchPullsBackExposureWhenColorCorrectionCannotHelp() throws {
+        let url = fixture("portrait")
+        let session = try XCTUnwrap(DevelopRenderer.shared.session(for: url, maxPixelSize: LookSample.size))
+        let preview = try XCTUnwrap(DevelopRenderer.shared.session(for: url, maxPixelSize: 1400))
+        let faces = LookSkin.faces(in: try XCTUnwrap(preview.renderSRGB(.neutral)))
+        let skin = try XCTUnwrap(LookSkin(sample: try sample(session, .neutral), faces: faces))
+        var look = DevelopSettings.neutral
+        look[.exposure] = 2
+        let reference = try XCTUnwrap(LookTarget(image: try XCTUnwrap(session.renderSRGB(look)), areas: .wholePhoto,
+                                                 protectSkin: false))
+        var options = LookMatchOptions(whiteBalance: false, color: false)
+        let free = try XCTUnwrap(LookMatcher.match(session: session, settings: .neutral, target: reference, options: options))
+        XCTAssertFalse(skin.isWithin(try sample(session, free.settings(strength: 1))))
+
+        options.protectSkin = true
+        let guarded = try XCTUnwrap(LookMatcher.match(session: session, settings: .neutral, target: reference,
+                                                       options: options, photoFaces: faces))
+        let applied = guarded.settings(strength: 1)
+        XCTAssertTrue(skin.isWithin(try sample(session, applied)))
+        XCTAssertGreaterThan(applied.exposure, 0)
+        XCTAssertLessThan(applied.exposure, free.matched.exposure)
+        XCTAssertEqual(applied.saturation, 0)
+    }
+
+    func testGraySkinFailsChromaLimit() throws {
+        let pixels = Array(repeating: [185, 129, 108, 255] as [UInt8], count: 400).flatMap { $0 }
+        let gray = Array(repeating: [145, 145, 145, 255] as [UInt8], count: 400).flatMap { $0 }
+        let plain = LookSample(pixels: pixels, width: 20, height: 20)
+        let skin = try XCTUnwrap(LookSkin(sample: plain, faces: [CGRect(x: 0, y: 0, width: 1, height: 1)]))
+        XCTAssertFalse(skin.isWithin(LookSample(pixels: gray, width: 20, height: 20)))
+    }
+
+    func testLandscapeMatchesWithoutFaceProtection() throws {
+        let session = try XCTUnwrap(DevelopRenderer.shared.session(for: fixture("landscape"), maxPixelSize: LookSample.size))
+        var look = DevelopSettings.neutral
+        look[.exposure] = -0.7
+        let image = try XCTUnwrap(session.renderSRGB(look))
+        let reference = try XCTUnwrap(LookTarget(image: image, areas: .wholePhoto, protectSkin: true))
+        let match = try XCTUnwrap(LookMatcher.match(session: session, settings: .neutral, target: reference,
+                                                    options: .init(whiteBalance: false, color: false, protectSkin: true)))
+        XCTAssertTrue(match.notices.contains(.noFaces))
+        XCTAssertTrue(match.matched.masks.isEmpty)
+        let expected = try XCTUnwrap(LookSample(image: image))
+        XCTAssertLessThan(try sample(session, match.settings(strength: 1)).distance(to: expected),
+                          try sample(session, .neutral).distance(to: expected))
+    }
+
+    func testProductRepeatMatchKeepsUncheckedSubjectSlidersOnEachPhoto() throws {
+        let session = try XCTUnwrap(DevelopRenderer.shared.session(for: fixture("product"), maxPixelSize: LookSample.size))
+        var earlier = DevelopSettings.Mask(name: LookMatch.subjectMaskName,
+                                           components: [.init(.subject(.init(feather: LookMatcher.subjectFeather)))])
+        earlier[.temperature] = 20
+        earlier[.exposure] = 0.45
+        earlier[.clarity] = 12
+        var base = DevelopSettings.neutral
+        base.masks = [earlier]
+        var look = base
+        look.masks[0][.temperature] = -45
+        let reference = try XCTUnwrap(LookTarget(image: try XCTUnwrap(session.renderSRGB(look)), areas: .subject,
+                                                 protectSkin: false))
+        let match = try XCTUnwrap(LookMatcher.match(session: session, settings: base, target: reference,
+                                                    options: .init(tone: false, color: false)))
+        XCTAssertTrue(match.notices.isEmpty)
+        let updated = try XCTUnwrap(match.subjectMask)
+        XCTAssertNotEqual(updated[.temperature], earlier[.temperature])
+        let applied = match.settings(strength: 1)
+        XCTAssertEqual(applied.masks, [updated])
+        XCTAssertEqual(updated.id, earlier.id)
+        XCTAssertEqual(updated[.exposure], 0.45)
+        XCTAssertEqual(updated[.clarity], 12)
+
+        var other = base
+        other.masks[0][.exposure] = -0.7
+        let synced = match.applied(to: other, strength: 0.5)
+        XCTAssertEqual(synced.masks[0][.exposure], -0.7)
+        XCTAssertEqual(synced.masks[0][.temperature], ((earlier[.temperature] + updated[.temperature]) / 2).rounded())
+        XCTAssertEqual(synced.masks[0][.clarity], 12)
+        XCTAssertEqual(match.applied(to: .neutral, strength: 1).masks.first?[.exposure], 0)
+    }
+
+    func testSubjectAreasFallBackWhenTheReferenceHasNoSubject() throws {
+        // A plain gradient: Vision finds no subject, so the whole reference is matched.
+        let width = 300, height = 200
+        var pixels = [UInt8]()
+        for _ in 0..<height {
+            for x in 0..<width { pixels += [UInt8(x * 255 / width), 120, 160, 255] }
+        }
+        let provider = try XCTUnwrap(CGDataProvider(data: Data(pixels) as CFData))
+        let image = try XCTUnwrap(CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32,
+                                          bytesPerRow: width * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                          bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipLast.rawValue),
+                                          provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent))
+        let target = try XCTUnwrap(LookTarget(image: image, areas: .subject, protectSkin: false))
+        XCTAssertTrue(target.notices.contains(.noSubjectInReference))
+        XCTAssertNil(target.subject)
+    }
 }
