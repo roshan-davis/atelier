@@ -73,7 +73,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base", default="origin/main", help="Revision to compare against")
     parser.add_argument("--output", type=Path, help="New directory for results (default: .build/ui-checks/...)")
-    parser.add_argument("--smoke-only", action="store_true", help="Skip the visual comparison")
+    selection = parser.add_mutually_exclusive_group()
+    selection.add_argument("--group", choices=("all", "smoke", "visual"), default="all",
+                           help="Choose native smoke, visual comparison, or both (default: all)")
+    selection.add_argument("--smoke-only", action="store_true", help="Alias for --group smoke")
     args = parser.parse_args()
     if sys.platform != "darwin":
         parser.error("Run on a Mac with full Xcode and a logged-in desktop session.")
@@ -91,7 +94,8 @@ def main():
 
     revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     status = subprocess.check_output(["git", "status", "--short"], cwd=ROOT, text=True).strip()
-    results = [f"Revision: {revision}", "Working changes: " + (status or "(clean)")]
+    group = "smoke" if args.smoke_only else args.group
+    results = [f"Revision: {revision}", f"UI selection: {group}", "Working changes: " + (status or "(clean)")]
     failed = False
     visual_done = False
     with tempfile.TemporaryDirectory(prefix="atelier-ui-") as directory:
@@ -99,14 +103,19 @@ def main():
         app = scratch / "Atelier.app"
         try:
             package(ROOT, app, "head", output, env)
-            try:
-                smoke(app, scratch, output, env)
-                results.append("Native smoke: PASS")
-            except (OSError, RuntimeError) as error:
-                failed = True
-                results.append(f"Native smoke: FAIL ({error})")
+            if group != "visual":
+                try:
+                    smoke(app, scratch, output, env)
+                    results.append("Native smoke: PASS")
+                except (OSError, RuntimeError) as error:
+                    failed = True
+                    results.append(f"Native smoke: FAIL ({error})")
+            else:
+                results.append("Native smoke: NOT SELECTED")
 
-            if not args.smoke_only:
+            if group == "smoke":
+                results.append("Visual comparison: NOT SELECTED")
+            else:
                 base = subprocess.check_output(
                     ["git", "rev-parse", "--verify", args.base + "^{commit}"], cwd=ROOT, text=True
                 ).strip()

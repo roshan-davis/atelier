@@ -105,30 +105,10 @@ rules are in [AGENTS.md](AGENTS.md#where-you-work). Cloud Claude cannot execute 
 command; its PR must disclose that and receive a Mac check before validation is complete.
 
 
-## Automated UI checks
+## Automated testing
 
-GitHub Actions runs the native smoke test and compares snapshots on each PR. Look for
-**Atelier UI checks** in the run summary and download **layout-snapshots** for the logs,
-the native test result, and changed screenshots. The smoke test opens a fixture photo in
-Develop, enters an Exposure value, and checks that ⌘Z restores the original value.
-
-If Actions is unavailable, use a task worktree on a Mac with full Xcode and a logged-in
-desktop session. The script opens temporary app windows and uses a disposable catalog,
-temporary home directory and separate app identifiers.
-
-```sh
-git fetch origin main
-python3 Scripts/check_pr.py --ui --quiet
-```
-
-That command runs the usual pre-PR checks and writes the UI report in the same log folder.
-Run `python3 Scripts/check_ui.py` for UI checks alone. Use `--base <revision>` for a
-different fetched base, or `--smoke-only` to skip screenshots. Read `ui/summary.txt` in the
-pre-PR log folder or `.build/ui-checks/<run>/summary.txt` for a UI-only run. The report
-identifies the checked revision and baseline. Pixel differences are review items, with before, after and highlighted diff images
-in `visual/`. Build, capture and test failures exit nonzero. Review intentional visual changes
-and manually test interactions outside the suite.
-
+See the [Automated testing guide](Docs/Automated-Testing.md) for the full suite, repeatable
+group selectors, suggested checks by change type, and how to read the reports.
 
 ## Single-image HDR MVP (work in progress)
 

@@ -451,4 +451,6 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 **Acceptance:** One scripted command and one concise CI report give the tested revision, test result, and only the changed screenshots for visual review. Manual acceptance remains for intentional design changes and uncovered workflows.
 
-**Validation:** Build, Help, script checks and all 295 Swift tests passed on Mac at `0ace368`, with both Nikon RAW fixtures and zero skips. The native smoke and the initial 98-screen comparison passed on the working patch. The committed revision's UI run is still in progress. GitHub Actions reported a billing/spending-limit block before starting a runner.
+**Validation:** Build, Help, script checks and all 295 Swift tests passed on Mac at `0ace368`, with both Nikon RAW fixtures and zero skips. The native smoke and the initial 98-screen comparison passed on the working patch. The complete one-command run passed at `0ace368`, including the native smoke and a comparison of 98 screenshots. Fifty images were flagged for review against the old snapshot fixtures. Logs: `/private/tmp/atelier-pr-ui-automation/.build/local-checks/20261109-131534-464163`. GitHub Actions reported a billing/spending-limit block before starting a runner.
+
+**Grouping and documentation:** Rosh requested a testing guide with report interpretation and recommended groups. Added selectable checks, build, Swift, smoke and visual groups to the same PR.

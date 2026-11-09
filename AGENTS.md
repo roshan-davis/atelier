@@ -107,7 +107,7 @@ Either way, GitHub is the only hand-off: Rosh sees a change after it's pushed an
 
 ## Local checks before a PR
 
-- Mac agents run `python3 Scripts/check_pr.py` in the task worktree before opening or updating a PR. Cl/Claude in the cloud follows the environment rule above. Command options, logs and prerequisites are documented in [README.md > Local pre-PR checks](README.md#local-pre-pr-checks-mac-agents).
+- Mac agents run `python3 Scripts/check_pr.py` in the task worktree before opening or updating a PR. Cl/Claude in the cloud follows the environment rule above. The [Automated testing guide](Docs/Automated-Testing.md) explains the group selectors, when to use them, and how to read the reports.
 - Include the checked commit, working changes, summary/log location, failures and skipped tests in the PR. A failed build/test is not a pass. Resolve failures or explicitly report the blocker.
 - Fetch the PR base first. Whitespace validation compares the working tree to the merge base with `origin/main`, including committed changes and new files; use `--base <ref>` for another base. Inspect test logs for skipped RAW fixtures.
 - Pass `--ui` to include the native smoke test and screenshot comparison in the local check. Review intentional visual changes as described below. No GitHub setup is needed for the local check.
