@@ -2,8 +2,8 @@
 """Contact sheets of the built-in presets on test photos, for tuning them without a Mac.
 
 Reads the presets straight from Sources/AtelierCore/Develop/BuiltInPresets.swift (so the
-sheet always shows what ships) and renders each with develop_sim, a numpy port of
-DevelopRenderer. One sheet per pack: a column per photo, a row per preset, the unedited
+sheet always reads the current recipes) and renders each with develop_sim, a numpy port of
+parts of DevelopRenderer. Glow is omitted. Use PresetQualification on macOS for native review. One sheet per pack: a column per photo, a row per preset, the unedited
 photo on top.
 
     pip install numpy opencv-python-headless pillow rawpy
@@ -32,7 +32,8 @@ GRAIN_TYPES = ["standard", "fine", "cubic", "tabular"]  # DevelopSettings.GrainT
 
 
 def parse_presets(path=SOURCE):
-    text = open(path).read()
+    with open(path) as source:
+        text = source.read().split("private static let retired:", 1)[0]
     groups = re.search(r"builtInGroups = \[(.*?)\]", text, re.S).group(1)
     group_names = re.findall(r'"([^"]+)"', groups)
     presets = []
@@ -45,6 +46,8 @@ def parse_presets(path=SOURCE):
                 continue
             if mm := re.fullmatch(r"s\.(\w+) = (true|false|-?[\d.]+)", line):
                 s[mm.group(1)] = mm.group(2) == "true" if mm.group(2) in ("true", "false") else float(mm.group(2))
+            elif re.fullmatch(r"s\.glowStyle = \.\w+", line):
+                continue  # The portable renderer does not implement Glow.
             elif mm := re.fullmatch(r"s\.grainType = \.(\w+)", line):
                 s["grainType"] = GRAIN_TYPES.index(mm.group(1))
             elif mm := re.fullmatch(r"s\[\.hsl\(\.(\w+), \.(\w+)\)\] = (-?[\d.]+)", line):

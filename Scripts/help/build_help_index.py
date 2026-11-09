@@ -49,6 +49,7 @@ GROUPS = [
         ("crop.html", "Crop & Straighten"),
         ("masking.html", "Masking"),
         ("presets.html", "Presets"),
+        ("preset-lookbook.html", "Built-in preset lookbook"),
         ("match-look.html", "Match Look"),
         ("ai.html", "AI tools"),
     ]),
