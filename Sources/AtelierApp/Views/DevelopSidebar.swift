@@ -51,7 +51,6 @@ struct DevelopSidebar: View {
                 ScrollView(.vertical) {
                     VStack(spacing: 0) {
                         PresetsSection(develop: develop, isExpanded: isExpanded("presets"))
-                            .environment(\.sidebarScroll, scroll)
 
                         SidebarSection(title: "Snapshots", isExpanded: isExpanded("snapshots")) {
                             Button {
@@ -117,6 +116,7 @@ struct DevelopSidebar: View {
                         }
                     }
                 }
+                .environment(\.keyboardScroll, scroll)
             }
         }
         // ⌃Tab counts this column as the left area.

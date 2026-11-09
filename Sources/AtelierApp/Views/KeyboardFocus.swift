@@ -11,11 +11,18 @@ enum KeyboardFocusArea: Int, CaseIterable {
 }
 
 /// Keyboard focus in Develop, shared by every control that takes keys (sliders, the Presets
-/// list) and the window's key handler in `LibraryModel`.
+/// list) and the window's key handler in `LibraryModel`, which routes keys here.
 ///
-/// A control with focus takes the arrow keys, Return and Esc; with none (the photo has focus),
-/// ← and → move between photos. Tab and ⇧Tab move between controls in SwiftUI's own order;
-/// ⌃Tab and ⌃⇧Tab (changeable in Settings > Keyboard) move between the areas.
+/// Focus is kept here, not in SwiftUI's focus system: SwiftUI only moves focus while its
+/// hosting view is the window's first responder, which the photo view takes on a click, so a
+/// slider "focused" from ⌃Tab could show its mark while ← → still changed photo (Rosh's test,
+/// Nov 9, 2026). Here the window's key handler asks this object first, so what shows the mark
+/// is always what gets the keys.
+///
+/// A control with focus takes the arrow keys, Return, Space and Esc; Tab and ⇧Tab move to the
+/// next or previous control in the same area, top to bottom. With none (the photos have focus),
+/// ← and → move between photos. ⌃Tab and ⌃⇧Tab (changeable in Settings > Keyboard) move
+/// between the areas.
 @MainActor
 final class KeyboardFocus {
     static let shared = KeyboardFocus()
@@ -25,84 +32,120 @@ final class KeyboardFocus {
         let id: String
     }
 
-    /// A request for one control to take focus, or, with no target, for every control to let go.
-    struct Request {
-        let target: Target?
+    /// A key a focused control can take.
+    enum Key {
+        case left, right, up, down, enter, space, escape
     }
 
-    /// The control with focus; nil while the photo has it.
+    struct Press {
+        let key: Key
+        let shift: Bool
+    }
+
+    private struct Entry {
+        var handler: (Press) -> Bool
+        /// Where the control is on screen, for Tab order and the first control of an area.
+        var minY: CGFloat
+    }
+
+    private var entries: [Target: Entry] = [:]
+    /// The control with focus; nil while the photos have it.
     private(set) var current: Target?
-    /// Controls listen for requests rather than observing an object, so a request never
-    /// redraws every slider.
-    let requests = PassthroughSubject<Request, Never>()
-    /// The controls on screen in each area, roughly in the order they appeared.
-    private var registered: [KeyboardFocusArea: [String]] = [:]
+    /// The area ⌃Tab counts from: where it last moved to, or the focused control's area.
+    private(set) var activeArea: KeyboardFocusArea = .photo
     /// The control last focused in each area, to come back to on ⌃Tab.
     private var lastInArea: [KeyboardFocusArea: String] = [:]
+    /// Tells controls which one has focus now, so each shows or hides its mark. A subject rather
+    /// than a published value, so a change never redraws every slider.
+    let changes = PassthroughSubject<Target?, Never>()
+    /// The area ⌃Tab just moved to, for its brief ring (`AreaFocusFlash`).
+    let arrivals = PassthroughSubject<KeyboardFocusArea, Never>()
 
-    func register(_ target: Target) {
-        if !registered[target.area, default: []].contains(target.id) {
-            registered[target.area, default: []].append(target.id)
-        }
+    func register(_ target: Target, handler: @escaping (Press) -> Bool) {
+        entries[target] = Entry(handler: handler, minY: entries[target]?.minY ?? .greatestFiniteMagnitude)
     }
 
     func unregister(_ target: Target) {
-        registered[target.area]?.removeAll { $0 == target.id }
-        didBlur(target)
+        entries.removeValue(forKey: target)
+        if current == target {
+            current = nil
+            changes.send(nil)
+        }
     }
 
-    /// The area ⌃Tab counts from. Kept apart from `current` so ⌃Tab always moves on, even
-    /// when a control was slow to take focus (or the photo, which has no control, has it).
-    private(set) var activeArea: KeyboardFocusArea = .photo
+    func setPosition(_ target: Target, minY: CGFloat) {
+        entries[target]?.minY = minY
+    }
 
-    func didFocus(_ target: Target) {
+    /// Gives a control focus: a click or drag on it, Tab, or ⌃Tab.
+    func focus(_ target: Target) {
+        guard entries[target] != nil else { return }
         current = target
         activeArea = target.area
         lastInArea[target.area] = target.id
+        changes.send(target)
     }
 
-    func didBlur(_ target: Target) {
-        if current == target { current = nil }
-    }
-
-    /// Gives the arrow keys back to the photo: Esc, a click on the photo, or ⌃Tab to the photo.
+    /// Gives the arrow keys back to the photos: Esc, a click on the photo, or ⌃Tab to the photos.
     func release() {
         current = nil
         activeArea = .photo
-        requests.send(Request(target: nil))
+        changes.send(nil)
     }
 
-    /// Focuses the control last used in an area, or its first one.
+    /// An area's controls, top to bottom.
+    private func targets(in area: KeyboardFocusArea) -> [Target] {
+        entries.filter { $0.key.area == area }
+            .sorted { $0.value.minY < $1.value.minY }
+            .map(\.key)
+    }
+
+    /// Focuses the control last used in an area, or its top one.
     func focus(_ area: KeyboardFocusArea) {
-        guard area != .photo, let ids = registered[area], let first = ids.first else {
+        let candidates = targets(in: area)
+        guard area != .photo, let first = candidates.first else {
             release()
             return
         }
-        let id = lastInArea[area].flatMap { ids.contains($0) ? $0 : nil } ?? first
-        // Let go of the old area first, so its control never keeps focus (and the arrows).
-        requests.send(Request(target: nil))
-        current = nil
-        activeArea = area
-        requests.send(Request(target: Target(area: area, id: id)))
+        let last = lastInArea[area].map { Target(area: area, id: $0) }
+        focus(last.flatMap { candidates.contains($0) ? $0 : nil } ?? first)
     }
 
-    /// The area ⌃Tab just moved to, for its brief outline (`AreaFocusFlash`).
-    let arrivals = PassthroughSubject<KeyboardFocusArea, Never>()
-
-    /// ⌃Tab and ⌃⇧Tab: the next area with something to focus, wrapping around. Each press
+    /// ⌃Tab and ⌃⇧Tab: the next area with something to focus, wrapping around. Every press
     /// moves on, so holding ⌃ and tapping Tab walks the areas in turn.
     func cycle(forward: Bool) {
         let areas = KeyboardFocusArea.allCases
-        var index = areas.firstIndex(of: activeArea) ?? areas.count - 1
+        var index = areas.firstIndex(of: current?.area ?? activeArea) ?? areas.count - 1
         for _ in areas.indices {
             index = (index + (forward ? 1 : areas.count - 1)) % areas.count
             let area = areas[index]
-            if area == .photo || !(registered[area] ?? []).isEmpty {
+            if area == .photo || !targets(in: area).isEmpty {
                 focus(area)
                 arrivals.send(area)
                 return
             }
         }
+    }
+
+    /// Tab and ⇧Tab: the next or previous control in the focused control's area, wrapping
+    /// around. False when nothing has focus.
+    func step(forward: Bool) -> Bool {
+        guard let current else { return false }
+        let ordered = targets(in: current.area)
+        guard let index = ordered.firstIndex(of: current), ordered.count > 1 else { return true }
+        focus(ordered[(index + (forward ? 1 : ordered.count - 1)) % ordered.count])
+        return true
+    }
+
+    /// Hands a key to the focused control. Esc always lets go afterwards.
+    func handle(_ press: Press) -> Bool {
+        guard let current, let entry = entries[current] else { return false }
+        let handled = entry.handler(press)
+        if press.key == .escape {
+            release()
+            return true
+        }
+        return handled
     }
 }
 
@@ -114,7 +157,7 @@ private struct TakeKeyboardFocusKey: EnvironmentKey {
     static let defaultValue: (() -> Void)? = nil
 }
 
-private struct SidebarScrollKey: EnvironmentKey {
+private struct KeyboardScrollKey: EnvironmentKey {
     static let defaultValue: ScrollViewProxy? = nil
 }
 
@@ -132,10 +175,11 @@ extension EnvironmentValues {
         set { self[TakeKeyboardFocusKey.self] = newValue }
     }
 
-    /// The left column's scroll view, so the Presets list can keep its keyboard row in view.
-    var sidebarScroll: ScrollViewProxy? {
-        get { self[SidebarScrollKey.self] }
-        set { self[SidebarScrollKey.self] = newValue }
+    /// The column's scroll view, so a control (or the Presets list's row) that gets keyboard
+    /// focus can scroll itself into view.
+    var keyboardScroll: ScrollViewProxy? {
+        get { self[KeyboardScrollKey.self] }
+        set { self[KeyboardScrollKey.self] = newValue }
     }
 }
 
@@ -177,54 +221,67 @@ extension View {
     }
 }
 
-/// Makes a slider row take keyboard focus (click, drag or Tab) and the arrow keys: each press
-/// moves 1/200 of the track, ⇧ five times that. Esc lets go and gives the arrows back to the
-/// photo. Every Develop slider gets it through `SliderRow`.
+/// Makes a slider row take keyboard focus (click, drag, Tab or ⌃Tab) and the arrow keys: each
+/// press moves 1/200 of the track, ⇧ five times that. Esc lets go and gives the arrows back to
+/// the photos. Every Develop slider gets it through `SliderRow`.
 struct KeyboardSlider: ViewModifier {
     @Binding var value: Double
     let range: ClosedRange<Double>
     let step: Double
     var logarithmic = false
 
-    @FocusState private var focused: Bool
+    /// The latest binding and range, read by the key handler (registered once) on each press.
+    private final class Config {
+        var value: Binding<Double>?
+        var range: ClosedRange<Double> = 0...1
+        var step = 1.0
+        var logarithmic = false
+    }
+
     @State private var id = UUID().uuidString
+    @State private var config = Config()
+    @State private var focused = false
     @Environment(\.keyboardFocusArea) private var area
+    @Environment(\.keyboardScroll) private var scroll
 
     private var target: KeyboardFocus.Target { KeyboardFocus.Target(area: area, id: id) }
 
     func body(content: Content) -> some View {
-        content
-            .environment(\.takeKeyboardFocus, { focused = true })
+        // Not state: the handler reads these when a key comes, never during a redraw.
+        config.value = $value
+        config.range = range
+        config.step = step
+        config.logarithmic = logarithmic
+        let target = self.target
+        let config = self.config
+        return content
+            .environment(\.takeKeyboardFocus, { KeyboardFocus.shared.focus(target) })
             .keyboardFocusHighlight(focused)
-            .focusable(interactions: .edit)
-            .focused($focused)
-            .focusEffectDisabled()
-            .onKeyPress(keys: [.leftArrow, .rightArrow, .upArrow, .downArrow]) { press in
-                let up = press.key == .rightArrow || press.key == .upArrow
-                value = SliderNudge.value(from: value, range: range, step: step, logarithmic: logarithmic,
-                                          direction: up ? 1 : -1, large: press.modifiers.contains(.shift))
-                return .handled
+            .id(target.id)
+            .onGeometryChange(for: CGFloat.self, of: { $0.frame(in: .global).minY }) { minY in
+                KeyboardFocus.shared.setPosition(target, minY: minY)
             }
-            .onKeyPress(.escape) {
-                focused = false
-                KeyboardFocus.shared.release()
-                return .handled
-            }
-            .onChange(of: focused) { _, isFocused in
-                if isFocused {
-                    KeyboardFocus.shared.didFocus(target)
-                } else {
-                    KeyboardFocus.shared.didBlur(target)
+            .onAppear {
+                KeyboardFocus.shared.register(target) { press in
+                    guard let binding = config.value else { return false }
+                    let direction: Int
+                    switch press.key {
+                    case .right, .up: direction = 1
+                    case .left, .down: direction = -1
+                    default: return false
+                    }
+                    binding.wrappedValue = SliderNudge.value(from: binding.wrappedValue, range: config.range,
+                                                             step: config.step, logarithmic: config.logarithmic,
+                                                             direction: direction, large: press.shift)
+                    return true
                 }
+                focused = KeyboardFocus.shared.current == target
             }
-            .onAppear { KeyboardFocus.shared.register(target) }
             .onDisappear { KeyboardFocus.shared.unregister(target) }
-            .onReceive(KeyboardFocus.shared.requests) { request in
-                if let wanted = request.target {
-                    if wanted == target { focused = true }
-                } else if focused {
-                    focused = false
-                }
+            .onReceive(KeyboardFocus.shared.changes) { now in
+                let isMe = now == target
+                if isMe != focused { focused = isMe }
+                if isMe { scroll?.scrollTo(target.id, anchor: nil) }
             }
     }
 }

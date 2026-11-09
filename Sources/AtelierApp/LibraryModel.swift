@@ -912,11 +912,29 @@ final class LibraryModel: ObservableObject {
             develop.picker = nil
             return true
         }
-        // A focused slider or the Presets list takes the arrows, Return and Esc itself; Esc there
-        // gives them back to the photo.
-        if mode == .develop, KeyboardFocus.shared.current != nil,
-           [123, 124, 125, 126, 36, 76, 53].contains(event.keyCode) {
-            return false
+        // A focused slider or the Presets list takes the arrows, Return, Space and Esc (Esc then
+        // gives them back to the photos); Tab and ⇧Tab move to the next control in its area.
+        if mode == .develop, KeyboardFocus.shared.current != nil {
+            let shift = event.modifierFlags.contains(.shift)
+            if event.keyCode == 48 {  // Tab
+                return KeyboardFocus.shared.step(forward: !shift)
+            }
+            let key: KeyboardFocus.Key?
+            switch event.keyCode {
+            case 123: key = .left
+            case 124: key = .right
+            case 125: key = .down
+            case 126: key = .up
+            case 36, 76: key = .enter
+            case 49: key = .space
+            case 53: key = .escape
+            default: key = nil
+            }
+            if let key {
+                // Arrows never fall through to changing photos while a control has focus.
+                let handled = KeyboardFocus.shared.handle(KeyboardFocus.Press(key: key, shift: shift))
+                if handled || [.left, .right, .up, .down].contains(key) { return true }
+            }
         }
         // Arrow keys over a Color Grading wheel nudge it (Shift for bigger steps) instead of
         // changing photos.

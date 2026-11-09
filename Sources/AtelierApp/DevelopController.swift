@@ -24,6 +24,13 @@ enum CompareMode: String, CaseIterable {
     }
 }
 
+/// A render waiting for its histogram and color scope to be counted.
+private struct DevelopMeasureRequest {
+    let image: CGImage
+    let assetID: Int64?
+    let count: Int
+}
+
 /// State for the Develop view: the open photo's settings, its live proxy render, and saving.
 ///
 /// Rendering is "latest wins": while one render runs, further slider changes collapse into a
@@ -435,6 +442,10 @@ final class DevelopController: ObservableObject {
     private let queue = DispatchQueue(label: "atelier.develop", qos: .userInteractive)
     /// Histogram and color scope, counted beside the render queue so the photo shows first.
     private let measureQueue = DispatchQueue(label: "atelier.develop.measure", qos: .userInitiated)
+    /// Only the newest render waits to be measured. Counting takes longer than a render, so
+    /// queueing one per render built a backlog that left the histogram spinning for seconds
+    /// after moving through photos or dragging (Rosh, Nov 9, 2026).
+    private let measureJob = LatestJob<DevelopMeasureRequest>()
     /// Counts proxy renders, so an older histogram never replaces a newer one.
     private var renderCount = 0
     /// The render the shown histogram was counted from.
@@ -1631,6 +1642,7 @@ final class DevelopController: ObservableObject {
         let count = renderCount
         let measures = overlay == nil && preview == nil
         let measureQueue = self.measureQueue
+        let measureJob = self.measureJob
         queue.async {
             let rendered = RenderSignposts.measure("Proxy render") {
                 session.renderForDisplay(settings, cropping: cropping, overlay: overlay, preview: preview,
@@ -1639,17 +1651,20 @@ final class DevelopController: ObservableObject {
             let cgImage = rendered?.image
             // The red overlay or an Option-drag view would skew the histogram; keep the last one
             // while it shows. It is counted after the photo is on its way, beside the next render.
-            if measures, let plain = rendered?.plain {
+            if measures, let plain = rendered?.plain,
+               measureJob.submit(DevelopMeasureRequest(image: plain, assetID: assetID, count: count)) {
                 measureQueue.async {
-                    let (histogram, scope) = RenderSignposts.measure("Histogram") {
-                        (Histogram(image: plain), ColorScope(image: plain))
-                    }
-                    DispatchQueue.main.async {
-                        MainActor.assumeIsolated {
-                            guard self.assetID == assetID, count >= self.measuredCount else { return }
-                            self.measuredCount = count
-                            if let histogram { self.histogram = histogram }
-                            if let scope { self.colorScope = scope }
+                    while let request = measureJob.take() {
+                        let (histogram, scope) = RenderSignposts.measure("Histogram") {
+                            (Histogram(image: request.image), ColorScope(image: request.image))
+                        }
+                        DispatchQueue.main.async {
+                            MainActor.assumeIsolated {
+                                guard self.assetID == request.assetID, request.count >= self.measuredCount else { return }
+                                self.measuredCount = request.count
+                                if let histogram { self.histogram = histogram }
+                                if let scope { self.colorScope = scope }
+                            }
                         }
                     }
                 }

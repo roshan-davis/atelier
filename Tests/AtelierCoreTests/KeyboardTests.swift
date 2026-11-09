@@ -57,3 +57,17 @@ final class KeyboardTests: XCTestCase {
         XCTAssertLessThan(warmer, 5700)
     }
 }
+
+final class LatestJobTests: XCTestCase {
+    func testOnlyTheNewestValueWaits() {
+        let job = LatestJob<Int>()
+        XCTAssertTrue(job.submit(1))   // starts a drain
+        XCTAssertFalse(job.submit(2))  // replaces 1 while the drain is pending
+        XCTAssertFalse(job.submit(3))
+        XCTAssertEqual(job.take(), 3)
+        XCTAssertNil(job.take())       // drain ends
+        XCTAssertTrue(job.submit(4))   // the next value starts a new drain
+        XCTAssertEqual(job.take(), 4)
+        XCTAssertNil(job.take())
+    }
+}

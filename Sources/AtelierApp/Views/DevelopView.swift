@@ -377,6 +377,7 @@ struct DevelopPanel: View {
     var body: some View {
         VStack(spacing: 0) {
             GeometryReader { geometry in
+            ScrollViewReader { scroll in
             ScrollView(.vertical) {
                 VStack(spacing: 0) {
                     PanelSection(title: "Histogram", isExpanded: isExpanded("histogram"), soloMode: $soloMode,
@@ -445,6 +446,9 @@ struct DevelopPanel: View {
                 }
                 // Lay everything out at exactly the panel's measured width so nothing spills past it.
                 .frame(width: geometry.size.width)
+            }
+            // A slider that gets keyboard focus (Tab, ⌃Tab) scrolls itself into view.
+            .environment(\.keyboardScroll, scroll)
             }
             }
             Divider()

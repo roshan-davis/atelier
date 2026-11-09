@@ -33,10 +33,10 @@ struct PresetsSection: View {
     @State private var deleting: DevelopPreset?
     @State private var deletingGroup: PresetGroup?
     /// Keyboard focus on the list: ↑ ↓ move a highlight and preview, Return applies.
-    @FocusState private var listFocused: Bool
+    @State private var listFocused = false
     @State private var keyRow: String?
     @State private var focusID = UUID().uuidString
-    @Environment(\.sidebarScroll) private var sidebarScroll
+    @Environment(\.keyboardScroll) private var keyboardScroll
 
     /// One line of the list the keyboard can stop on: a group, or a preset in an open group.
     private enum KeyRow {
@@ -170,20 +170,19 @@ struct PresetsSection: View {
                         }
                     }
                 }
-                .focusable(interactions: .edit)
-                .focused($listFocused)
-                .focusEffectDisabled()
-                .onKeyPress(keys: [.upArrow, .downArrow, .leftArrow, .rightArrow, .return, .space, .escape]) { press in
-                    handleListKey(press.key)
+                .onGeometryChange(for: CGFloat.self, of: { $0.frame(in: .global).minY }) { minY in
+                    KeyboardFocus.shared.setPosition(focusTarget, minY: minY)
                 }
-                .onChange(of: listFocused) { _, focused in listFocusChanged(focused) }
-                .onAppear { KeyboardFocus.shared.register(focusTarget) }
+                .onAppear {
+                    KeyboardFocus.shared.register(focusTarget) { press in handleListKey(press.key) }
+                    listFocused = KeyboardFocus.shared.current == focusTarget
+                }
                 .onDisappear { KeyboardFocus.shared.unregister(focusTarget) }
-                .onReceive(KeyboardFocus.shared.requests) { request in
-                    if let wanted = request.target {
-                        if wanted == focusTarget { listFocused = true }
-                    } else if listFocused {
-                        listFocused = false
+                .onReceive(KeyboardFocus.shared.changes) { now in
+                    let isMe = now == focusTarget
+                    if isMe != listFocused {
+                        listFocused = isMe
+                        listFocusChanged(isMe)
                     }
                 }
             }
@@ -247,7 +246,7 @@ struct PresetsSection: View {
             apply(preset)
             // The keyboard carries on from the preset clicked: ↓ goes to the next one.
             keyRow = keyID
-            listFocused = true
+            KeyboardFocus.shared.focus(focusTarget)
         } label: {
             SidebarRow(isCurrent: develop.presetAmount?.preset.id == preset.id, onHover: { hover(preset, $0) }) {
                 Label(preset.name, systemImage: preset.isBuiltIn ? "wand.and.stars" : "slider.horizontal.3")
@@ -330,7 +329,7 @@ struct PresetsSection: View {
         .onTapGesture {
             withAnimation(.easeInOut(duration: 0.15)) { open.wrappedValue.toggle() }
             keyRow = KeyRow.group(group).id
-            listFocused = true
+            KeyboardFocus.shared.focus(focusTarget)
         }
         .contextMenu { groupMenu(group) }
     }
@@ -370,7 +369,6 @@ struct PresetsSection: View {
 
     private func listFocusChanged(_ focused: Bool) {
         if focused {
-            KeyboardFocus.shared.didFocus(focusTarget)
             // Start from the highlighted row, else the preset on the photo, else the top.
             let rows = keyRows
             if !rows.contains(where: { $0.id == keyRow }) {
@@ -382,8 +380,8 @@ struct PresetsSection: View {
                 }
                 keyRow = (current ?? rows.first)?.id
             }
+            if let keyRow { keyboardScroll?.scrollTo(keyRow, anchor: nil) }
         } else {
-            KeyboardFocus.shared.didBlur(focusTarget)
             hoverTask?.cancel()
             if develop.previewingPreset != nil { develop.previewPreset(nil) }
         }
@@ -392,15 +390,15 @@ struct PresetsSection: View {
     /// Finder's keys for a list with groups: ↑ ↓ move, → opens a group (or goes into it),
     /// ← closes it (or goes up to it), Return or Space applies a preset or opens a group,
     /// Esc puts the preview away and gives the arrows back to the photo.
-    private func handleListKey(_ key: KeyEquivalent) -> KeyPress.Result {
+    private func handleListKey(_ key: KeyboardFocus.Key) -> Bool {
         let rows = keyRows
-        guard !rows.isEmpty else { return .ignored }
+        guard !rows.isEmpty else { return false }
         let index = rows.firstIndex { $0.id == keyRow }
         switch key {
-        case .downArrow, .upArrow:
-            let next = index.map { min(max($0 + (key == .downArrow ? 1 : -1), 0), rows.count - 1) } ?? 0
+        case .down, .up:
+            let next = index.map { min(max($0 + (key == .down ? 1 : -1), 0), rows.count - 1) } ?? 0
             moveKeyRow(to: rows[next])
-        case .rightArrow:
+        case .right:
             guard let index else { moveKeyRow(to: rows[0]); break }
             if case .group(let group) = rows[index] {
                 let open = isExpanded(group)
@@ -410,7 +408,7 @@ struct PresetsSection: View {
                     moveKeyRow(to: rows[index + 1])
                 }
             }
-        case .leftArrow:
+        case .left:
             guard let index else { break }
             switch rows[index] {
             case .group(let group):
@@ -419,7 +417,7 @@ struct PresetsSection: View {
             case .preset(_, let group):
                 moveKeyRow(to: .group(group))
             }
-        case .return, .space:
+        case .enter, .space:
             guard let index else { break }
             switch rows[index] {
             case .group(let group):
@@ -429,19 +427,16 @@ struct PresetsSection: View {
                 if develop.assetID != nil { apply(preset) }
             }
         case .escape:
+            // KeyboardFocus lets go after this; the preview goes with it.
             hoverTask?.cancel()
             develop.previewPreset(nil)
-            listFocused = false
-            KeyboardFocus.shared.release()
-        default:
-            return .ignored
         }
-        return .handled
+        return true
     }
 
     private func moveKeyRow(to row: KeyRow) {
         keyRow = row.id
-        sidebarScroll?.scrollTo(row.id, anchor: nil)
+        keyboardScroll?.scrollTo(row.id, anchor: nil)
         switch row {
         case .preset(let preset, _):
             // The same short rest as hovering, so holding ↓ doesn't render every preset.
