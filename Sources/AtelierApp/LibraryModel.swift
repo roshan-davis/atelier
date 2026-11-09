@@ -868,7 +868,7 @@ final class LibraryModel: ObservableObject {
         }
     }
 
-    // MARK: Keyboard
+    // MARK: Window input
 
     private func installInputMonitor() {
         inputMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseDown, .leftMouseUp]) { [weak self] event in

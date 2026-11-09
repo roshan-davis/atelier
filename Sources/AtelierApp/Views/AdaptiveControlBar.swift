@@ -52,5 +52,4 @@ struct AdaptiveControlBar<SizingKey: Hashable, Wide: View, Compact: View, Minimu
             }
             .id(sizingKey)
     }
-
 }

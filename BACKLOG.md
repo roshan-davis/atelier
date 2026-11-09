@@ -144,13 +144,15 @@ Evidence baseline, October 30, 2026:
 
 ### AT-011a — Local Develop drag responsiveness
 
-**Status:** Approved, in progress. **Owner:** Codex. **Chat:** App planning chat covering the local Develop drag-lag review. **Branch:** `codex/develop-drag-latency`. **Dependencies:** AT-011 measurement protocol and an isolated macOS catalog and preference domain.
+**Status:** Implemented on branch, manual acceptance pending. **Owner:** Codex. **Chat:** App planning chat covering the local Develop drag-lag review. **Branch:** `codex/develop-drag-latency`. **Dependencies:** AT-011 measurement protocol and an isolated macOS catalog and preference domain.
 
 **Evidence:** At `e19599a`, scripted local Nikon Z6 Point Curve updates in Debug took 78 ms median to graph draw, 144 ms to publish the photo and 11 ms to render the proxy. The single-toolbar probe measured 36 ms, 63 ms and 11 ms respectively. Real mouse drags and paused saves require separate measurement.
 
 **Scope:** Select one adaptive bar layout at a time in Develop, Loupe and Filter. Trace saves, row updates and stored previews during paused drags before changing those paths. Limit observation changes to demonstrated remaining cost. HSL photo latency is reported separately, and HSL rendering optimization is deferred.
 
 **Acceptance:** On repeated local Release drags, target graph draw at or below 16.7 ms median and 33 ms p95. For representative warm Tone Curve and Basic edits at Fit, target visible photo updates under 50 ms median and at or below 100 ms p95. Time live feedback and the final sharp frame separately at 100%. A paused drag yields one history step, one undo to the starting value and no main-thread stall over 100 ms. Check all Develop drag controls and resize the three bars with Slider Compare included.
+
+**Validation:** Matched instrumented Release runs used a local Nikon Z6 NEF in a disposable backup of the Mac catalog with isolated preferences. In three scripted drags at Fit, settings-to-graph moved from 79.1/95.7 ms (median/p95) to 10.2/17.6 ms. Settings-to-photo publication moved from 152.0/185.9 ms to 37.5/55.4 ms. The actual screen-presentation and real paused-drag criteria remain pending. The baseline logged a write with the pointer down. The app regression test exercises a held pointer through the debounce and verifies one persisted curve step and one undo. Resize snapshots cover narrow and wide Slider Compare, with the Grid Filter and Loupe bars inspected separately. HSL render timings are reported separately in the PR.
 
 ## AT-012 — Recovery drills
 

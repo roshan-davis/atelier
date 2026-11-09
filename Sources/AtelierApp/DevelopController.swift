@@ -361,6 +361,7 @@ final class DevelopController: ObservableObject {
     private var committed = DevelopSettings()
     private var pendingStep: String?
     private var pointerEditInProgress = false
+    private let isPrimaryButtonPressed: () -> Bool
 
     /// Built-in and user presets, shared across catalogs.
     @Published private(set) var presets: [DevelopPreset] = []
@@ -443,9 +444,11 @@ final class DevelopController: ObservableObject {
     /// Unedited RAW files whose preview was replaced by a render this launch.
     private var developedPreviews = Set<Int64>()
 
-    init(catalog: Catalog, previews: PreviewCache) {
+    init(catalog: Catalog, previews: PreviewCache,
+         isPrimaryButtonPressed: @escaping () -> Bool = { NSEvent.pressedMouseButtons & 1 != 0 }) {
         self.catalog = catalog
         self.previews = previews
+        self.isPrimaryButtonPressed = isPrimaryButtonPressed
         presets = presetStore.all()
     }
 
@@ -1792,7 +1795,7 @@ final class DevelopController: ObservableObject {
     }
 
     func endPointerEdit() {
-        guard pointerEditInProgress, NSEvent.pressedMouseButtons & 1 == 0 else { return }
+        guard pointerEditInProgress, !isPrimaryButtonPressed() else { return }
         pointerEditInProgress = false
         if dirty { flushSave() }
     }
@@ -1802,7 +1805,7 @@ final class DevelopController: ObservableObject {
         saveTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(400))
             guard let self, !Task.isCancelled else { return }
-            if self.pointerEditInProgress, NSEvent.pressedMouseButtons & 1 != 0 {
+            if self.pointerEditInProgress, self.isPrimaryButtonPressed() {
                 // A stationary pointer can still be part of a drag. The timer also handles
                 // mouse-up events consumed by a native control's tracking loop.
                 self.scheduleSave()
