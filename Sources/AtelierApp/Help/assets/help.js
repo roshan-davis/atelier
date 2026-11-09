@@ -51,7 +51,10 @@
     document.body.appendChild(layout);
 
     const current = nav.querySelector("a.current");
-    if (current) current.scrollIntoView({ block: "center" });
+    if (current && sidebar.scrollHeight > sidebar.clientHeight) {
+      const center = current.getBoundingClientRect().top + current.offsetHeight / 2;
+      sidebar.scrollTop += center - sidebar.getBoundingClientRect().top - sidebar.clientHeight / 2;
+    }
     setupSearch(sidebar);
   }
 
