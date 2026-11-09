@@ -6,6 +6,8 @@ struct SectionBand<Trailing: View>: View {
     var isModified = false
     @ViewBuilder var trailing: (_ hovering: Bool) -> Trailing
     @State private var hovering = false
+    /// Set when the band is a keyboard stop (`PanelSection`), so a click focuses it.
+    @Environment(\.takeKeyboardFocus) private var takeKeyboardFocus
 
     var body: some View {
         HStack(spacing: 2) {
@@ -28,6 +30,7 @@ struct SectionBand<Trailing: View>: View {
         .background(Color.primary.opacity(hovering ? 0.09 : 0.05))
         .contentShape(Rectangle())
         .onTapGesture {
+            takeKeyboardFocus?()
             withAnimation(.easeInOut(duration: 0.18)) { isExpanded.toggle() }
         }
         .onHover { hovering = $0 }

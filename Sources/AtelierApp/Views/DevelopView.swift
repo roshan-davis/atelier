@@ -446,6 +446,8 @@ struct DevelopPanel: View {
                 }
                 // Lay everything out at exactly the panel's measured width so nothing spills past it.
                 .frame(width: geometry.size.width)
+                // Tab order follows where controls sit in the panel, whatever the scroll.
+                .coordinateSpace(.named(keyboardFocusSpace))
             }
             // A slider that gets keyboard focus (Tab, ⌃Tab) scrolls itself into view.
             .environment(\.keyboardScroll, scroll)

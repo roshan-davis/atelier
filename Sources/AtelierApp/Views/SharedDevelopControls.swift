@@ -70,6 +70,19 @@ struct PanelSection<Content: View>: View {
                     }
                 }
             }
+            // A Tab stop, so a closed panel can be opened from the keyboard (Rosh, Nov 9, 2026):
+            // Return or Space opens or closes it, → opens, ← closes.
+            .modifier(KeyboardControl { press in
+                let open: Bool
+                switch press.key {
+                case .enter, .space: open = !isExpanded
+                case .right: open = true
+                case .left: open = false
+                default: return false
+                }
+                if open != isExpanded { withAnimation(.easeInOut(duration: 0.18)) { isExpanded = open } }
+                return true
+            })
             .contextMenu {
                 Toggle("Solo Mode", isOn: $soloMode)
                 Divider()

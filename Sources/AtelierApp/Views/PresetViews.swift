@@ -171,7 +171,7 @@ struct PresetsSection: View {
                         }
                     }
                 }
-                .onGeometryChange(for: CGFloat.self, of: { $0.frame(in: .global).minY }) { minY in
+                .onGeometryChange(for: CGFloat.self, of: { $0.frame(in: .named(keyboardFocusSpace)).minY }) { minY in
                     KeyboardFocus.shared.setPosition(focusTarget, minY: minY)
                 }
                 .onAppear {

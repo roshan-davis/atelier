@@ -115,6 +115,8 @@ struct DevelopSidebar: View {
                             }
                         }
                     }
+                    // Tab order follows where controls sit in the column, whatever the scroll.
+                    .coordinateSpace(.named(keyboardFocusSpace))
                 }
                 .environment(\.keyboardScroll, scroll)
             }

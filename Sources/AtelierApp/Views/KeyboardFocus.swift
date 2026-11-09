@@ -264,21 +264,20 @@ extension View {
     }
 }
 
-/// Makes a slider row take keyboard focus (click, drag, Tab or ⌃Tab) and the arrow keys: each
-/// press moves 1/200 of the track, ⇧ five times that. Esc lets go and gives the arrows back to
-/// the photos. Every Develop slider gets it through `SliderRow`.
-struct KeyboardSlider: ViewModifier {
-    @Binding var value: Double
-    let range: ClosedRange<Double>
-    let step: Double
-    var logarithmic = false
+/// The coordinate space a column's scrolling content declares, so Tab order comes from where
+/// controls sit in the column, not on screen: it doesn't change while the column scrolls.
+let keyboardFocusSpace = "keyboardFocusSpace"
 
-    /// The latest binding and range, read by the key handler (registered once) on each press.
+/// Makes a control a keyboard stop of its area: a click (through `takeKeyboardFocus`), Tab or
+/// ⌃Tab gives it focus, it shows the focus mark, scrolls into view, and `handle` gets the
+/// arrows, Return, Space and Esc while it has focus. Sliders (`KeyboardSlider`) and panel
+/// headers (`PanelSection`) use it.
+struct KeyboardControl: ViewModifier {
+    let handle: (KeyboardFocus.Press) -> Bool
+
+    /// The latest handler, read when a key comes (registered once).
     private final class Config {
-        var value: Binding<Double>?
-        var range: ClosedRange<Double> = 0...1
-        var step = 1.0
-        var logarithmic = false
+        var handle: ((KeyboardFocus.Press) -> Bool)?
     }
 
     @State private var id = UUID().uuidString
@@ -290,34 +289,19 @@ struct KeyboardSlider: ViewModifier {
     private var target: KeyboardFocus.Target { KeyboardFocus.Target(area: area, id: id) }
 
     func body(content: Content) -> some View {
-        // Not state: the handler reads these when a key comes, never during a redraw.
-        config.value = $value
-        config.range = range
-        config.step = step
-        config.logarithmic = logarithmic
+        // Not state: the handler reads it when a key comes, never during a redraw.
+        config.handle = handle
         let target = self.target
         let config = self.config
         return content
             .environment(\.takeKeyboardFocus, { KeyboardFocus.shared.focus(target) })
             .keyboardFocusHighlight(focused)
             .id(target.id)
-            .onGeometryChange(for: CGFloat.self, of: { $0.frame(in: .global).minY }) { minY in
+            .onGeometryChange(for: CGFloat.self, of: { $0.frame(in: .named(keyboardFocusSpace)).minY }) { minY in
                 KeyboardFocus.shared.setPosition(target, minY: minY)
             }
             .onAppear {
-                KeyboardFocus.shared.register(target) { press in
-                    guard let binding = config.value else { return false }
-                    let direction: Int
-                    switch press.key {
-                    case .right, .up: direction = 1
-                    case .left, .down: direction = -1
-                    default: return false
-                    }
-                    binding.wrappedValue = SliderNudge.value(from: binding.wrappedValue, range: config.range,
-                                                             step: config.step, logarithmic: config.logarithmic,
-                                                             direction: direction, large: press.shift)
-                    return true
-                }
+                KeyboardFocus.shared.register(target) { press in config.handle?(press) ?? false }
                 focused = KeyboardFocus.shared.current == target
             }
             .onDisappear { KeyboardFocus.shared.unregister(target) }
@@ -326,6 +310,31 @@ struct KeyboardSlider: ViewModifier {
                 if isMe != focused { focused = isMe }
                 if isMe { scroll?.scrollTo(target.id, anchor: nil) }
             }
+    }
+}
+
+/// Makes a slider row a keyboard stop that takes the arrow keys: each press moves 1/200 of the
+/// track, ⇧ five times that. Esc lets go and gives the arrows back to the photos. Every Develop
+/// slider gets it through `SliderRow`.
+struct KeyboardSlider: ViewModifier {
+    @Binding var value: Double
+    let range: ClosedRange<Double>
+    let step: Double
+    var logarithmic = false
+
+    func body(content: Content) -> some View {
+        let value = $value, range = range, step = step, logarithmic = logarithmic
+        return content.modifier(KeyboardControl { press in
+            let direction: Int
+            switch press.key {
+            case .right, .up: direction = 1
+            case .left, .down: direction = -1
+            default: return false
+            }
+            value.wrappedValue = SliderNudge.value(from: value.wrappedValue, range: range, step: step,
+                                                   logarithmic: logarithmic, direction: direction, large: press.shift)
+            return true
+        })
     }
 }
 
@@ -343,7 +352,7 @@ struct KeyboardTextField: ViewModifier {
         let target = self.target
         return content
             .focused($typing)
-            .onGeometryChange(for: CGFloat.self, of: { $0.frame(in: .global).minY }) { minY in
+            .onGeometryChange(for: CGFloat.self, of: { $0.frame(in: .named(keyboardFocusSpace)).minY }) { minY in
                 KeyboardFocus.shared.setPosition(target, minY: minY)
             }
             .onAppear {

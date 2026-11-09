@@ -31,12 +31,6 @@ private struct DevelopMeasureRequest {
     let count: Int
 }
 
-/// A photo waiting for its editable proxy to be decoded.
-private struct DevelopOpenRequest {
-    let url: URL
-    let assetID: Int64
-}
-
 /// State for the Develop view: the open photo's settings, its live proxy render, and saving.
 ///
 /// Rendering is "latest wins": while one render runs, further slider changes collapse into a
@@ -452,10 +446,15 @@ final class DevelopController: ObservableObject {
     /// queueing one per render built a backlog that left the histogram spinning for seconds
     /// after moving through photos or dragging (Rosh, Nov 9, 2026).
     private let measureJob = LatestJob<DevelopMeasureRequest>()
-    /// Only the newest photo waits to be decoded. Every photo passed with ← → used to queue its
-    /// decode (and, for an unedited RAW, a preview render) on the render queue, so after moving
-    /// quickly the photo, panels and histogram waited for every photo passed (Rosh, Nov 9, 2026).
-    private let openJob = LatestJob<DevelopOpenRequest>()
+    /// Decodes for opening photos. Every photo passed with ← → used to queue its decode (and,
+    /// for an unedited RAW, a preview render) on the render queue, so after moving quickly the
+    /// photo, panels and histogram waited for every photo passed (Rosh, Nov 9, 2026). Now a
+    /// decode starts only once ← → rest (`openRest`), and runs beside one still finishing.
+    private static let openQueue = DispatchQueue(label: "atelier.develop.open", qos: .userInitiated,
+                                                 attributes: .concurrent)
+    /// How long ← → must rest before the photo is decoded, when they come faster than this.
+    private static let openRest: TimeInterval = 0.15
+    private var lastOpen = Date.distantPast
     /// The open photo, readable off the main thread so queued work for a photo already left is
     /// skipped.
     private let openAsset = LockedValue<Int64?>(nil)
@@ -567,18 +566,29 @@ final class DevelopController: ObservableObject {
                 if self.assetID == assetID { self.shootingInfo = info }
             }
         }
-        guard openJob.submit(DevelopOpenRequest(url: url, assetID: assetID)) else { return }
-        let openJob = self.openJob
+        // While ← → are pressed in quick succession the cached preview shows and nothing is
+        // decoded; the photo you stop on starts decoding once you rest. A single move starts at once.
+        let now = Date()
+        let rushing = now.timeIntervalSince(lastOpen) < Self.openRest
+        lastOpen = now
         let openAsset = self.openAsset
-        queue.async {
-            while let request = openJob.take() {
-                // Left before its turn: don't decode it.
-                guard openAsset.value == request.assetID else { continue }
-                let session = DevelopRenderer.shared.session(for: request.url, maxPixelSize: Self.proxySize, interactive: true)
+        let start = {
+            // Left before it started: don't decode it.
+            guard openAsset.value == assetID else { return }
+            // Its own queue, beside any decode still running for a photo already left, so the
+            // photo you stopped on never waits for one you passed.
+            Self.openQueue.async {
+                guard openAsset.value == assetID else { return }
+                let session = DevelopRenderer.shared.session(for: url, maxPixelSize: Self.proxySize, interactive: true)
                 DispatchQueue.main.async {
-                    MainActor.assumeIsolated { self.finishOpen(request.assetID, session: session) }
+                    MainActor.assumeIsolated { self.finishOpen(assetID, session: session) }
                 }
             }
+        }
+        if rushing {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.openRest, execute: start)
+        } else {
+            start()
         }
     }
 
