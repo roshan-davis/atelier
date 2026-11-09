@@ -454,3 +454,5 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 **Validation:** Build, Help, script checks and all 295 Swift tests passed on Mac at `0ace368`, with both Nikon RAW fixtures and zero skips. The native smoke and the initial 98-screen comparison passed on the working patch. The complete one-command run passed at `0ace368`, including the native smoke and a comparison of 98 screenshots. Fifty images were flagged for review against the old snapshot fixtures. Logs: `/private/tmp/atelier-pr-ui-automation/.build/local-checks/20261109-131534-464163`. GitHub Actions reported a billing/spending-limit block before starting a runner.
 
 **Grouping and documentation:** Rosh requested a testing guide with report interpretation and recommended groups. Added selectable checks, build, Swift, smoke and visual groups to the same PR.
+
+**Local packaging fix:** The visual run at `a6aa648` from the App checkout stopped before launch because its existing SwiftPM output contained a stale HDR Help symlink. The UI runner now packages the current revision from a fresh SwiftPM build directory.

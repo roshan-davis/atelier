@@ -19,10 +19,12 @@ APP_ICON = ROOT / "Sources/AtelierApp/Resources/AppIcon.icns"
 MIN_MACOS = "15.0"
 
 
-def swift_build(configuration, arch, env):
+def swift_build(configuration, arch, env, scratch_path):
     """Builds every product for one processor (or this Mac's when arch is None) and
     returns the folder holding the executables and resource bundles."""
     flags = ["-c", configuration]
+    if scratch_path is not None:
+        flags += ["--scratch-path", str(scratch_path.resolve())]
     if arch:
         # One triple per build keeps SwiftPM's own build system (and its resource bundle
         # layout); the two results are joined with lipo for universal.
@@ -41,6 +43,7 @@ def main():
     parser.add_argument("--output", type=Path,
                         help="Default .build/Applications/Atelier.app (native) or "
                              ".build/Applications/<arch>/Atelier.app")
+    parser.add_argument("--scratch-path", type=Path, help="Use a separate SwiftPM build directory")
     parser.add_argument("--bundle-id", default="local.atelier.app")
     parser.add_argument("--test-catalog", type=Path, help="Debug only: disposable catalog override")
     parser.add_argument("--snapshots", type=Path, help="Debug only: HDR layout snapshot folder")
@@ -56,7 +59,7 @@ def main():
     products = {}
     wanted = ["native"] if args.arch == "native" else (ARCHS if args.arch in ("universal", "all") else [args.arch])
     for arch in wanted:
-        products[arch] = swift_build(args.configuration, None if arch == "native" else arch, env)
+        products[arch] = swift_build(args.configuration, None if arch == "native" else arch, env, args.scratch_path)
     targets = ["arm64", "x86_64", "universal"] if args.arch == "all" else [args.arch]
     built = []
     for arch in targets:

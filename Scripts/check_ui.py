@@ -33,9 +33,13 @@ def isolated_data(path):
 
 def package(source, app, name, output, env):
     # Separate preference domains even when the current desktop has Atelier open.
-    run([sys.executable, "Scripts/build_macos_app.py", "--configuration", "debug",
-         "--output", str(app), "--bundle-id", "local.atelier.pr-" + uuid.uuid4().hex],
-        cwd=source, env=env, log=output / f"build-{name}.log")
+    command = [sys.executable, "Scripts/build_macos_app.py", "--configuration", "debug",
+               "--output", str(app), "--bundle-id", "local.atelier.pr-" + uuid.uuid4().hex]
+    if name == "head":
+        # Avoid reusing SwiftPM resources left by other branches. The baseline
+        # already builds in a fresh checkout, including revisions predating this option.
+        command += ["--scratch-path", str(app.parent / "swift-build")]
+    run(command, cwd=source, env=env, log=output / f"build-{name}.log")
 
 
 def smoke(app, scratch, output, env):
