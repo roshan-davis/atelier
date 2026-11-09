@@ -14,10 +14,15 @@ public struct LookMatch: Sendable, Equatable {
     /// The photo's as-shot white balance, for blending a temperature that was left as shot.
     public var asShotTemperature: Double
 
-    public init(base: DevelopSettings, matched: DevelopSettings, asShotTemperature: Double) {
+    /// What the dialog should say about the match, such as no subject found.
+    public var notices: Set<LookMatchNotice>
+
+    public init(base: DevelopSettings, matched: DevelopSettings, asShotTemperature: Double,
+                notices: Set<LookMatchNotice> = []) {
         self.base = base
         self.matched = matched
         self.asShotTemperature = asShotTemperature
+        self.notices = notices
     }
 
     /// Plain sliders the match may move; temperature, the RGB curve and the grading wheels are
@@ -66,7 +71,35 @@ public struct LookMatch: Sendable, Equatable {
             if mixed.saturation > 0.05 { out[region.hue] = (mixed.hue * 10).rounded() / 10 }
             out[region.saturation] = (mixed.saturation * 10).rounded() / 10
         }
+        if let subject = subjectMask {
+            // Subject & Background: the "Match Look: Subject" mask replaces one from an earlier
+            // match, its sliders blended from that mask's (or from nothing) at `strength`.
+            let index = out.masks.firstIndex { $0.name == LookMatch.subjectMaskName }
+            let old = index.map { out.masks[$0] } ?? base.masks.first { $0.name == LookMatch.subjectMaskName }
+            var mask = subject
+            for parameter in LookMatch.subjectParameters {
+                let from = old?[parameter] ?? 0
+                let value = from + (subject[parameter] - from) * s
+                mask[parameter] = parameter == .exposure ? (value * 100).rounded() / 100 : value.rounded()
+            }
+            if let index {
+                mask.id = out.masks[index].id
+                out.masks[index] = mask
+            } else {
+                out.masks.append(mask)
+            }
+        }
         return out
+    }
+
+    /// The mask Subject & Background adds, named so a later match replaces it.
+    public static let subjectMaskName = "Match Look: Subject"
+    /// The mask sliders Subject & Background fits.
+    public static let subjectParameters: [DevelopSettings.LocalParameter] = [.temperature, .tint, .exposure, .saturation]
+
+    /// The "Match Look: Subject" mask the match adds, if it adds one.
+    public var subjectMask: DevelopSettings.Mask? {
+        matched.masks.first { $0.name == Self.subjectMaskName && !base.masks.contains($0) }
     }
 }
 
@@ -78,18 +111,23 @@ public struct LookMatchOptions: Sendable, Equatable {
     public var tone = true
     /// Saturation, the HSL bands and the Shadows and Highlights grading wheels.
     public var color = true
+    /// Protect Skin Tones: faces' skin is left out of the fit, and the match may move its hue by
+    /// at most `LookSkin.maxHueShift` and its saturation by at most `LookSkin.maxChromaChange`.
+    public var protectSkin = false
 
-    public init(whiteBalance: Bool = true, tone: Bool = true, color: Bool = true) {
+    public init(whiteBalance: Bool = true, tone: Bool = true, color: Bool = true, protectSkin: Bool = false) {
         self.whiteBalance = whiteBalance
         self.tone = tone
         self.color = color
+        self.protectSkin = protectSkin
     }
 
     public var isEmpty: Bool { !whiteBalance && !tone && !color }
 }
 
 /// An image's colors in Oklab, measured on a small copy. `area` (0 to 1 from the top left)
-/// marks the part that should match: it carries three quarters of the weight.
+/// marks the part that should match: it carries three quarters of the weight. A `focus` mask
+/// does the same pixel by pixel (white is the part to match), with the share it is given.
 public struct LookSample: Sendable {
     /// Long edge the images are measured at.
     public static let size = 384
@@ -101,32 +139,25 @@ public struct LookSample: Sendable {
     /// sRGB-encoded luma, as the tone curve sees it.
     var luma: [Float] = []
     var weight: [Double] = []
+    /// The sample's size in pixels, rows from the top.
+    public private(set) var width = 0
+    public private(set) var height = 0
 
     public init?(image: CGImage, area: CGRect? = nil) {
-        let factor = min(1, Double(Self.size) / Double(max(image.width, image.height)))
-        let width = max(1, Int((Double(image.width) * factor).rounded()))
-        let height = max(1, Int((Double(image.height) * factor).rounded()))
-        var data = [UInt8](repeating: 0, count: width * height * 4)
-        let drawn: Bool = data.withUnsafeMutableBytes { buffer in
-            guard let context = CGContext(data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8,
-                                          bytesPerRow: width * 4, space: DevelopRenderer.sRGB,
-                                          bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return false }
-            context.interpolationQuality = .medium
-            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
-            return true
-        }
-        guard drawn else { return nil }
-        self.init(pixels: data, width: width, height: height, area: area)
+        guard let data = Self.pixels(of: image) else { return nil }
+        self.init(pixels: data.pixels, width: data.width, height: data.height, area: area)
     }
 
     /// Packed RGBA8 sRGB pixels, rows from the top.
     public init(pixels: [UInt8], width: Int, height: Int, area: CGRect? = nil) {
         let count = min(pixels.count / 4, width * height)
+        self.width = width
+        self.height = height
         lightness.reserveCapacity(count)
         a.reserveCapacity(count)
         b.reserveCapacity(count)
         luma.reserveCapacity(count)
-        var inside = [Bool](repeating: false, count: count)
+        var inside = [Double](repeating: 0, count: count)
         let linear = Self.linearTable
         for i in 0..<count {
             let r8 = Int(pixels[i * 4]), g8 = Int(pixels[i * 4 + 1]), b8 = Int(pixels[i * 4 + 2])
@@ -137,19 +168,78 @@ public struct LookSample: Sendable {
             luma.append(Float((0.2126 * Double(r8) + 0.7152 * Double(g8) + 0.0722 * Double(b8)) / 255))
             if let area {
                 let x = (Double(i % width) + 0.5) / Double(width), y = (Double(i / width) + 0.5) / Double(height)
-                inside[i] = area.contains(CGPoint(x: x, y: y))
+                inside[i] = area.contains(CGPoint(x: x, y: y)) ? 1 : 0
             }
         }
-        let insideCount = inside.filter { $0 }.count
-        if area != nil, insideCount > 0, insideCount < count {
-            let wIn = Self.areaShare / Double(insideCount), wOut = (1 - Self.areaShare) / Double(count - insideCount)
-            weight = inside.map { $0 ? wIn : wOut }
-        } else {
-            weight = [Double](repeating: 1 / Double(max(1, count)), count: count)
+        weight = [Double](repeating: 1 / Double(max(1, count)), count: count)
+        if area != nil { focusWeights(inside, share: Self.areaShare) }
+    }
+
+    /// Weights from a focus mask: `share` of the total spread over the mask's pixels by their
+    /// value, the rest over the other pixels. A mask that covers nothing or everything leaves
+    /// every pixel the same weight.
+    mutating func focusWeights(_ focus: [Double], share: Double) {
+        guard focus.count == count else { return }
+        let inside = focus.reduce(0) { $0 + min(1, max(0, $1)) }
+        let outside = Double(count) - inside
+        guard inside > 0.5, outside > 0.5 || share >= 1 else { return }
+        weight = focus.map { value in
+            let m = min(1, max(0, value))
+            return share * m / inside + (outside > 0.5 ? (1 - share) * (1 - m) / outside : 0)
         }
     }
 
+    /// The sample with these pixels left out (their weight moved to the rest), as Protect Skin
+    /// Tones leaves skin out of the fit.
+    func excluding(_ pixels: [Int]) -> LookSample {
+        guard !pixels.isEmpty else { return self }
+        var out = self
+        for i in pixels where i < count { out.weight[i] = 0 }
+        let total = out.weight.reduce(0, +)
+        guard total > 1e-9 else { return self }
+        out.weight = out.weight.map { $0 / total }
+        return out
+    }
+
     var count: Int { lightness.count }
+
+    /// The size an image is measured at: `size` on the long edge, never enlarged.
+    static func sampleSize(of image: CGImage) -> (width: Int, height: Int) {
+        let factor = min(1, Double(size) / Double(max(image.width, image.height)))
+        return (max(1, Int((Double(image.width) * factor).rounded())), max(1, Int((Double(image.height) * factor).rounded())))
+    }
+
+    static func pixels(of image: CGImage, width: Int? = nil, height: Int? = nil) -> (pixels: [UInt8], width: Int, height: Int)? {
+        let natural = sampleSize(of: image)
+        let width = width ?? natural.width, height = height ?? natural.height
+        var data = [UInt8](repeating: 0, count: width * height * 4)
+        let drawn: Bool = data.withUnsafeMutableBytes { buffer in
+            guard let context = CGContext(data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8,
+                                          bytesPerRow: width * 4, space: DevelopRenderer.sRGB,
+                                          bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return false }
+            context.interpolationQuality = .medium
+            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        return drawn ? (data, width, height) : nil
+    }
+
+    /// A gray mask (white is 1) drawn at a sample's size, rows from the top, for `focus`. It is
+    /// drawn in its own gray space, so its values arrive unchanged.
+    public static func focusValues(_ mask: CGImage, width: Int, height: Int) -> [Double]? {
+        let space = mask.colorSpace.flatMap { $0.model == .monochrome ? $0 : nil }
+            ?? CGColorSpace(name: CGColorSpace.linearGray) ?? CGColorSpaceCreateDeviceGray()
+        var data = [UInt8](repeating: 0, count: width * height)
+        let drawn: Bool = data.withUnsafeMutableBytes { buffer in
+            guard let context = CGContext(data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8,
+                                          bytesPerRow: width, space: space,
+                                          bitmapInfo: CGImageAlphaInfo.none.rawValue) else { return false }
+            context.interpolationQuality = .medium
+            context.draw(mask, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        return drawn ? data.map { Double($0) / 255 } : nil
+    }
 
     // MARK: Statistics
 
@@ -371,6 +461,17 @@ public enum LookMatcher {
         guard measure(base) != nil else { return nil }
         var current = base
         let asShot = session.asShotTemperature
+        fitGlobal(&current, asShot: asShot, options: options, reference: reference, measure: measure,
+                  isCancelled: isCancelled)
+        guard !isCancelled() else { return nil }
+        return LookMatch(base: base, matched: current, asShotTemperature: asShot)
+    }
+
+    /// The whole-photo fit, step by step. `penalty` adds to the refinement's score (Protect Skin
+    /// Tones counts skin moved past its limits).
+    static func fitGlobal(_ current: inout DevelopSettings, asShot: Double, options: LookMatchOptions,
+                          reference: LookSample, measure: (DevelopSettings) -> LookSample?,
+                          penalty: ((LookSample) -> Double)? = nil, isCancelled: () -> Bool) {
         if options.whiteBalance, !isCancelled() {
             fitWhiteBalance(&current, asShot: asShot, reference: reference, measure: measure)
         }
@@ -385,10 +486,8 @@ public enum LookMatcher {
         }
         if !isCancelled() {
             refine(&current, asShot: asShot, options: options, reference: reference, measure: measure,
-                   isCancelled: isCancelled)
+                   penalty: penalty, isCancelled: isCancelled)
         }
-        guard !isCancelled() else { return nil }
-        return LookMatch(base: base, matched: current, asShotTemperature: asShot)
     }
 
     /// Temp and Tint: Newton steps on the midtones' average color, with the slopes measured by
@@ -477,7 +576,7 @@ public enum LookMatcher {
     }
 
     /// HSL: per band, moves hue, saturation and luminance toward the reference's average for that
-    /// band. Bands covering less than about 1% of either image are left alone. Two damped rounds, each
+    /// band. Bands covering less than about 1% of either image (0.8%) are left alone. Two damped rounds, each
     /// measured on a fresh render, since neighboring bands overlap.
     static func fitHSL(_ settings: inout DevelopSettings, reference: LookSample,
                        measure: (DevelopSettings) -> LookSample?) {
@@ -518,10 +617,11 @@ public enum LookMatcher {
     /// color distribution closer to the reference's (sliced Wasserstein distance), so the sliders
     /// fitted one at a time settle together.
     static func refine(_ settings: inout DevelopSettings, asShot: Double, options: LookMatchOptions,
-                       reference: LookSample, measure: (DevelopSettings) -> LookSample?, isCancelled: () -> Bool) {
+                       reference: LookSample, measure: (DevelopSettings) -> LookSample?,
+                       penalty: ((LookSample) -> Double)? = nil, isCancelled: () -> Bool) {
         let target = reference.projectedQuantiles()
         func score(_ candidate: DevelopSettings) -> Double? {
-            measure(candidate).map { LookSample.slicedDistance($0.projectedQuantiles(), target) }
+            measure(candidate).map { LookSample.slicedDistance($0.projectedQuantiles(), target) + (penalty?($0) ?? 0) }
         }
         guard var best = score(settings) else { return }
         var knobs: [(DevelopSettings, Double) -> DevelopSettings] = []

@@ -771,6 +771,25 @@ public final class DevelopSession: @unchecked Sendable {
         return subject(of: source, key: settings.lensGeometryKey, box: selection.box) != nil
     }
 
+    /// Select Subject's mask on the cropped photo, as `renderSRGB` frames it (white is the
+    /// subject), or nil when Vision finds nothing. Match Look's Subject & Background measures the
+    /// subject and the background with it, so it sees the same subject the mask it adds will.
+    public func subjectMask(_ settings: DevelopSettings, feather: Double = LookMatcher.subjectFeather) -> CGImage? {
+        let settings = settings.applyingPanelSwitches()
+        lock.lock()
+        defer { lock.unlock() }
+        guard let source = corrected(settings) else { return nil }
+        let key = settings.lensGeometryKey
+        let component = DevelopSettings.MaskComponent(.subject(DevelopSettings.Selection(feather: feather)))
+        guard var mask = DevelopRenderer.sourceMask(component, extent: source.extent,
+                                                    subject: { self.subject(of: source, key: key, box: $0) },
+                                                    brushCache: brushCache) else { return nil }
+        if let crop = settings.crop { mask = DevelopRenderer.applyGeometry(crop, to: mask) }
+        // Mask values are stored as is, so linear gray keeps them unchanged.
+        return renderer.context.createCGImage(mask, from: mask.extent.integral, format: .L8,
+                                              colorSpace: CGColorSpace(name: CGColorSpace.linearGray), deferred: false)
+    }
+
     /// The working-space colors in a square `radius` pixels around `point` (0...1 from the top
     /// left of the cropped photo), after chromatic aberration and before Defringe, for the
     /// Fringe Color Selector.

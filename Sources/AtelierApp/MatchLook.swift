@@ -53,6 +53,18 @@ struct MatchDifference: Identifiable, Hashable {
         for parameter in changed where parameter.panel != .basic {
             lines.append(line(parameter, old[parameter], new[parameter]))
         }
+        // Subject & Background's mask, after the global sliders, as the Masks panel lists them.
+        let name = LookMatch.subjectMaskName
+        if let mask = new.masks.first(where: { $0.name == name }) {
+            let before = old.masks.first { $0.name == name }
+            for parameter in LookMatch.subjectParameters {
+                let from = before?[parameter] ?? 0, to = mask[parameter]
+                guard abs(from - to) > 1e-6 else { continue }
+                let change = parameter == .exposure ? String(format: "%+.2f → %+.2f", from, to)
+                    : String(format: "%+.0f → %+.0f", from, to)
+                lines.append(MatchDifference(name: "Subject \(parameter.label)", change: change))
+            }
+        }
         return lines
     }
 
@@ -78,6 +90,27 @@ struct MatchDifference: Identifiable, Hashable {
         if let pair = parameter.hslBand { return "\(pair.0.rawValue) \(pair.1.rawValue)" }
         if parameter.panel == .colorGrading { return "Grading \(parameter.group) \(parameter.label)" }
         return parameter.label
+    }
+}
+
+/// Match Areas: which parts of the two images should match.
+enum MatchAreaMode: String, CaseIterable {
+    case wholePhoto, subject, boxes
+
+    var label: String {
+        switch self {
+        case .wholePhoto: return "Whole Photo"
+        case .subject: return "Subject & Background"
+        case .boxes: return "Boxes"
+        }
+    }
+
+    var help: String {
+        switch self {
+        case .wholePhoto: return "Match the whole reference to the whole photo"
+        case .subject: return "Match background to background, and the subject to the subject with a mask"
+        case .boxes: return "Drag a box on each image over the parts that should match"
+        }
     }
 }
 
@@ -111,9 +144,20 @@ final class MatchLookModel: ObservableObject, Identifiable {
             scheduleMatch()
         }
     }
-    @Published var usesAreas = false {
-        didSet { scheduleMatch() }
+    /// Protect Skin Tones starts on when the photo has a face, until the user sets it.
+    @Published private(set) var photoHasFaces = false
+    private var userSetSkin = false
+    var protectSkin: Bool {
+        get { options.protectSkin }
+        set {
+            userSetSkin = true
+            options.protectSkin = newValue
+        }
     }
+    @Published var areaMode: MatchAreaMode = .wholePhoto {
+        didSet { if areaMode != oldValue { scheduleMatch() } }
+    }
+    var usesAreas: Bool { areaMode == .boxes }
     /// Match Areas' boxes, 0 to 1 from the top left of each image.
     @Published var referenceArea = CGRect(x: 0.3, y: 0.3, width: 0.4, height: 0.4) {
         didSet { if usesAreas { scheduleMatch() } }
@@ -121,6 +165,8 @@ final class MatchLookModel: ObservableObject, Identifiable {
     @Published var photoArea = CGRect(x: 0.3, y: 0.3, width: 0.4, height: 0.4) {
         didSet { if usesAreas { scheduleMatch() } }
     }
+    /// What Vision finds in the reference, once per reference.
+    private let features = FeatureCache()
     /// 0 to 100.
     @Published var strength = 100.0 {
         didSet { renderPreview() }
@@ -161,10 +207,13 @@ final class MatchLookModel: ObservableObject, Identifiable {
             let fit = DevelopRenderer.shared.session(for: url, maxPixelSize: LookSample.size)
             let preview = DevelopRenderer.shared.session(for: url, maxPixelSize: Self.previewSize)
             let beforeImage = preview?.render(settings)
+            let hasFaces = fit?.renderSRGB(settings).map { !LookSkin.faces(in: $0).isEmpty } ?? false
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     self.fitSession = fit
                     self.previewSession = preview
+                    self.photoHasFaces = hasFaces
+                    if !self.userSetSkin, self.options.protectSkin != hasFaces { self.options.protectSkin = hasFaces }
                     if let beforeImage {
                         let image = NSImage(cgImage: beforeImage, size: NSSize(width: beforeImage.width, height: beforeImage.height))
                         self.before = image
@@ -305,25 +354,46 @@ final class MatchLookModel: ObservableObject, Identifiable {
         }
         isMatching = true
         message = nil
-        let referenceArea = usesAreas ? self.referenceArea : nil
-        let photoArea = usesAreas ? self.photoArea : nil
-        let options = self.options, base = self.base, latest = self.latest
+        let areas = lookAreas
+        let options = self.options, base = self.base, latest = self.latest, features = self.features
         fitQueue.async {
             guard latest.current == generation else { return }
-            let result = LookSample(image: referenceCG, area: referenceArea).flatMap { reference in
-                LookMatcher.match(session: fitSession, settings: base, reference: reference, options: options,
-                                  photoArea: photoArea, isCancelled: { latest.current != generation })
+            let needsFeatures = areas == .subject || options.protectSkin
+            let result = LookTarget(image: referenceCG, features: needsFeatures ? features.features(for: referenceCG) : nil,
+                                    areas: areas, protectSkin: options.protectSkin).flatMap { target in
+                LookMatcher.match(session: fitSession, settings: base, target: target, options: options,
+                                  isCancelled: { latest.current != generation })
             }
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     guard self.latest.current == generation else { return }
                     self.isMatching = false
                     self.match = result
-                    if result == nil { self.message = "This photo can't be matched." }
+                    self.message = result.map { Self.message(for: $0.notices) } ?? "This photo can't be matched."
                     self.renderPreview()
                 }
             }
         }
+    }
+
+    private var lookAreas: LookAreas {
+        switch areaMode {
+        case .wholePhoto: return .wholePhoto
+        case .subject: return .subject
+        case .boxes: return .boxes(reference: referenceArea, photo: photoArea)
+        }
+    }
+
+    /// What to tell the user about a match that couldn't do all it was asked.
+    static func message(for notices: Set<LookMatchNotice>) -> String? {
+        var parts: [String] = []
+        if notices.contains(.noSubjectInReference) {
+            parts.append("No subject found in the reference, so the whole photo was matched.")
+        } else if notices.contains(.noSubjectInPhoto) {
+            parts.append("No subject found in your photo, so the whole photo was matched.")
+        }
+        if notices.contains(.noFaces) { parts.append("No faces found, so there was no skin to protect.") }
+        return parts.isEmpty ? nil : parts.joined(separator: " ")
     }
 
     /// The preview at the current strength. Latest wins, as in Develop.
@@ -371,10 +441,35 @@ final class MatchLookModel: ObservableObject, Identifiable {
             }
             library.status = "Matched \(targets.count) photos to \(referenceName ?? "the reference")"
         case .each:
-            guard let reference = LookSample(image: referenceCG, area: usesAreas ? referenceArea : nil) else { return }
-            library.matchEach(others, reference: reference, options: options, photoArea: usesAreas ? photoArea : nil,
-                              strength: strength, step: step)
+            let needsFeatures = areaMode == .subject || options.protectSkin
+            guard let target = LookTarget(image: referenceCG,
+                                          features: needsFeatures ? features.features(for: referenceCG) : nil,
+                                          areas: lookAreas, protectSkin: options.protectSkin) else { return }
+            library.matchEach(others, target: target, options: options, strength: strength, step: step)
         }
+    }
+}
+
+/// The reference's Vision results (subject mask, faces), found once per reference image and read
+/// from the fitting queue.
+final class FeatureCache: @unchecked Sendable {
+    private let lock = NSLock()
+    private var image: CGImage?
+    private var found: LookReferenceFeatures?
+
+    func features(for reference: CGImage) -> LookReferenceFeatures {
+        lock.lock()
+        if image === reference, let found {
+            lock.unlock()
+            return found
+        }
+        lock.unlock()
+        let features = LookReferenceFeatures(image: reference)
+        lock.lock()
+        image = reference
+        found = features
+        lock.unlock()
+        return features
     }
 }
 
@@ -432,8 +527,7 @@ extension LibraryModel {
     }
 
     /// Match each photo: fits every photo to the reference on its own, in the background.
-    func matchEach(_ ids: [Int64], reference: LookSample, options: LookMatchOptions, photoArea: CGRect?,
-                   strength: Double, step: String) {
+    func matchEach(_ ids: [Int64], target: LookTarget, options: LookMatchOptions, strength: Double, step: String) {
         let total = ids.count
         matchProgress = ImportStatus(phase: "Matching 1 of \(total)", fraction: 0)
         matchTask = Task.detached(priority: .userInitiated) { [weak self] in
@@ -449,9 +543,8 @@ extension LibraryModel {
                 }
                 guard let found,
                       let session = DevelopRenderer.shared.session(for: found.0, maxPixelSize: LookSample.size),
-                      let match = LookMatcher.match(session: session, settings: found.1, reference: reference,
-                                                    options: options, photoArea: photoArea,
-                                                    isCancelled: { Task.isCancelled })
+                      let match = LookMatcher.match(session: session, settings: found.1, target: target,
+                                                    options: options, isCancelled: { Task.isCancelled })
                 else {
                     failed += 1
                     continue
