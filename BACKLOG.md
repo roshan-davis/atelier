@@ -445,8 +445,10 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 ## AT-030 — Run routine UI checks without agent-driven desktop testing
 
-**Status:** In progress. **Owner:** Codex. **Chat:** [PR planning](codex://threads/01a1c1fe-a0b2-7f00-aa05-a3c288cfc592). **Branch:** `codex/pr-ui-automation`. **Approved:** Rosh, November 9, 2026.
+**Status:** Implemented in draft [PR #88](https://github.com/roshan-davis/atelier/pull/88). Validation and acceptance pending. **Owner:** Codex. **Chat:** [PR planning](codex://threads/01a1c1fe-a0b2-7f00-aa05-a3c288cfc592). **Branch:** `codex/pr-ui-automation`. **Approved:** Rosh, November 9, 2026.
 
 **Evidence and scope:** At `5b8bf19`, CI uploaded layout screenshots but did not compare them, and local pre-PR checks excluded GUI snapshots. Build on the existing snapshot generator and require full Xcode and a logged-in Mac desktop session. Use isolated fixture data, compare PR and base pixels on the same runner, and run one native Exposure and Undo smoke test.
 
 **Acceptance:** One scripted command and one concise CI report give the tested revision, test result, and only the changed screenshots for visual review. Manual acceptance remains for intentional design changes and uncovered workflows.
+
+**Validation:** Build, Help, script checks and all 295 Swift tests passed on Mac at `0ace368`, with both Nikon RAW fixtures and zero skips. The native smoke and the initial 98-screen comparison passed on the working patch. The committed revision's UI run is still in progress. GitHub Actions reported a billing/spending-limit block before starting a runner.
