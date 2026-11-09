@@ -31,3 +31,17 @@ public final class LatestJob<Value>: @unchecked Sendable {
         return value
     }
 }
+
+/// A value read and written from several threads, such as the photo that is open now, which
+/// background work checks so it can skip a photo that was left before its turn came.
+public final class LockedValue<Value>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: Value
+
+    public init(_ value: Value) { stored = value }
+
+    public var value: Value {
+        get { lock.lock(); defer { lock.unlock() }; return stored }
+        set { lock.lock(); stored = newValue; lock.unlock() }
+    }
+}

@@ -152,6 +152,7 @@ struct PresetsSection: View {
                     .textFieldStyle(.roundedBorder)
                     .controlSize(.small)
                     .labelsHidden()
+                    .keyboardTextField()
                     .padding(.bottom, 4)
                 if groups.isEmpty, !query.isEmpty {
                     Text("No presets named \"\(query)\".")

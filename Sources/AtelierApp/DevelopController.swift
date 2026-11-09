@@ -31,6 +31,12 @@ private struct DevelopMeasureRequest {
     let count: Int
 }
 
+/// A photo waiting for its editable proxy to be decoded.
+private struct DevelopOpenRequest {
+    let url: URL
+    let assetID: Int64
+}
+
 /// State for the Develop view: the open photo's settings, its live proxy render, and saving.
 ///
 /// Rendering is "latest wins": while one render runs, further slider changes collapse into a
@@ -446,6 +452,13 @@ final class DevelopController: ObservableObject {
     /// queueing one per render built a backlog that left the histogram spinning for seconds
     /// after moving through photos or dragging (Rosh, Nov 9, 2026).
     private let measureJob = LatestJob<DevelopMeasureRequest>()
+    /// Only the newest photo waits to be decoded. Every photo passed with ← → used to queue its
+    /// decode (and, for an unedited RAW, a preview render) on the render queue, so after moving
+    /// quickly the photo, panels and histogram waited for every photo passed (Rosh, Nov 9, 2026).
+    private let openJob = LatestJob<DevelopOpenRequest>()
+    /// The open photo, readable off the main thread so queued work for a photo already left is
+    /// skipped.
+    private let openAsset = LockedValue<Int64?>(nil)
     /// Counts proxy renders, so an older histogram never replaces a newer one.
     private var renderCount = 0
     /// The render the shown histogram was counted from.
@@ -476,6 +489,7 @@ final class DevelopController: ObservableObject {
         guard assetID != self.assetID else { return }
         flushSave()
         self.assetID = assetID
+        openAsset.value = assetID
         session = nil
         // Kept on screen until the next photo has an image (AT-019), never used as this photo's.
         let previousImage = image
@@ -553,47 +567,57 @@ final class DevelopController: ObservableObject {
                 if self.assetID == assetID { self.shootingInfo = info }
             }
         }
+        guard openJob.submit(DevelopOpenRequest(url: url, assetID: assetID)) else { return }
+        let openJob = self.openJob
+        let openAsset = self.openAsset
         queue.async {
-            let session = DevelopRenderer.shared.session(for: url, maxPixelSize: Self.proxySize, interactive: true)
-            DispatchQueue.main.async {
-                MainActor.assumeIsolated {
-                    guard self.assetID == assetID else { return }
-                    self.isLoading = false
-                    guard let session else {
-                        if self.showsPreviousPhoto { self.image = nil }
-                        self.errorMessage = "This file can't be opened for editing."
-                        return
-                    }
-                    self.session = session
-                    self.sourceSize = session.sourceSize
-                    self.asShotTemperature = session.asShotTemperature
-                    self.asShotTint = session.asShotTint
-                    self.lensName = session.lensName
-                    self.lensCorrectionSupported = session.lensCorrectionSupported
-                    self.isRAW = session.isRAW
-                    self.focalLength35 = session.focalLength35
-                    // Keep the saved crop; photos saved when Constrain Crop enlarged the photo
-                    // instead of cropping it get the largest crop.
-                    if self.settings.constrainCrop, self.settings.crop?.hasCut == true {
-                        self.constrainedGeometry = self.settings.lensGeometryKey
-                    }
-                    if self.constrainCropIfNeeded() {
-                        self.dirty = true
-                        self.scheduleSave()
-                    }
-                    self.scheduleRender()
-                    // An unedited RAW's cached preview is the camera's embedded JPEG, which has no
-                    // lens corrections, so it is framed a little wider than the render and the
-                    // photo jumped when the render replaced it. Store the render as the preview
-                    // (once per photo per launch) so the next visit opens on the same framing.
-                    if session.isRAW, session.lensCorrectionSupported, self.settings.isNeutral,
-                       self.developedPreviews.insert(assetID).inserted {
-                        self.storePreviews(session: session, settings: self.settings, assetID: assetID)
-                    }
-                    if self.compareMode != .off { self.renderBeforeIfNeeded() }
+            while let request = openJob.take() {
+                // Left before its turn: don't decode it.
+                guard openAsset.value == request.assetID else { continue }
+                let session = DevelopRenderer.shared.session(for: request.url, maxPixelSize: Self.proxySize, interactive: true)
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated { self.finishOpen(request.assetID, session: session) }
                 }
             }
         }
+    }
+
+    /// Puts a decoded proxy to work, if its photo is still the open one.
+    private func finishOpen(_ assetID: Int64, session: DevelopSession?) {
+        guard self.assetID == assetID else { return }
+        self.isLoading = false
+        guard let session else {
+            if self.showsPreviousPhoto { self.image = nil }
+            self.errorMessage = "This file can't be opened for editing."
+            return
+        }
+        self.session = session
+        self.sourceSize = session.sourceSize
+        self.asShotTemperature = session.asShotTemperature
+        self.asShotTint = session.asShotTint
+        self.lensName = session.lensName
+        self.lensCorrectionSupported = session.lensCorrectionSupported
+        self.isRAW = session.isRAW
+        self.focalLength35 = session.focalLength35
+        // Keep the saved crop; photos saved when Constrain Crop enlarged the photo
+        // instead of cropping it get the largest crop.
+        if self.settings.constrainCrop, self.settings.crop?.hasCut == true {
+            self.constrainedGeometry = self.settings.lensGeometryKey
+        }
+        if self.constrainCropIfNeeded() {
+            self.dirty = true
+            self.scheduleSave()
+        }
+        self.scheduleRender()
+        // An unedited RAW's cached preview is the camera's embedded JPEG, which has no
+        // lens corrections, so it is framed a little wider than the render and the
+        // photo jumped when the render replaced it. Store the render as the preview
+        // (once per photo per launch) so the next visit opens on the same framing.
+        if session.isRAW, session.lensCorrectionSupported, self.settings.isNeutral,
+           self.developedPreviews.insert(assetID).inserted {
+            self.storePreviews(session: session, settings: self.settings, assetID: assetID)
+        }
+        if self.compareMode != .off { self.renderBeforeIfNeeded() }
     }
 
     func cycleCompareMode() {
@@ -1856,7 +1880,10 @@ final class DevelopController: ObservableObject {
     /// loupe preview.
     private func storePreviews(session: DevelopSession, settings: DevelopSettings, assetID: Int64) {
         let previews = self.previews
+        let openAsset = self.openAsset
         queue.async {
+            // Moving on quickly through photos: storing it for the next visit can wait.
+            guard openAsset.value == assetID else { return }
             if let cgImage = session.render(settings) {
                 try? previews.store(cgImage, for: assetID, size: .preview)
                 try? previews.store(cgImage, for: assetID, size: .thumbnail)

@@ -914,7 +914,22 @@ final class LibraryModel: ObservableObject {
            action == .nextArea || action == .previousArea {
             return perform(action)
         }
+        // Tab and ⇧Tab stay in the focused area, text fields included (Search Presets is a stop
+        // in Presets), instead of the window's Tab order, which hopped between the Presets and
+        // Library search fields (Rosh, Nov 9, 2026).
+        if mode == .develop, event.keyCode == 48, event.modifierFlags.intersection([.control, .option]).isEmpty {
+            KeyboardFocus.shared.step(forward: !event.modifierFlags.contains(.shift))
+            return true
+        }
         if let text = window.firstResponder as? NSText {
+            // A field that is a Tab stop (Search Presets) types; Esc leaves it for the photos.
+            if mode == .develop, KeyboardFocus.shared.currentIsText {
+                if event.keyCode == 53 {
+                    KeyboardFocus.shared.release()
+                    return true
+                }
+                return false
+            }
             if userIsTyping(in: text) {
                 // Typing in a field: it keeps the keys, and no control keeps the focus mark.
                 KeyboardFocus.shared.release(endEditing: false)
@@ -933,12 +948,9 @@ final class LibraryModel: ObservableObject {
             return true
         }
         // A focused slider or the Presets list takes the arrows, Return, Space and Esc (Esc then
-        // gives them back to the photos); Tab and ⇧Tab move to the next control in its area.
+        // gives them back to the photos).
         if mode == .develop, KeyboardFocus.shared.current != nil {
             let shift = event.modifierFlags.contains(.shift)
-            if event.keyCode == 48 {  // Tab
-                return KeyboardFocus.shared.step(forward: !shift)
-            }
             let key: KeyboardFocus.Key?
             switch event.keyCode {
             case 123: key = .left

@@ -71,3 +71,12 @@ final class LatestJobTests: XCTestCase {
         XCTAssertNil(job.take())
     }
 }
+
+final class LockedValueTests: XCTestCase {
+    func testReadsTheLastWrite() {
+        let open = LockedValue<Int64?>(nil)
+        XCTAssertNil(open.value)
+        open.value = 7
+        XCTAssertEqual(open.value, 7)
+    }
+}

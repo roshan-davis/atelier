@@ -46,6 +46,8 @@ final class KeyboardFocus {
         var handler: (Press) -> Bool
         /// Where the control is on screen, for Tab order and the first control of an area.
         var minY: CGFloat
+        /// A text field (Search Presets): a Tab stop that types, never where ⌃Tab lands.
+        var isText = false
     }
 
     private var entries: [Target: Entry] = [:]
@@ -61,9 +63,13 @@ final class KeyboardFocus {
     /// The area ⌃Tab just moved to, for its brief ring (`AreaFocusFlash`).
     let arrivals = PassthroughSubject<KeyboardFocusArea, Never>()
 
-    func register(_ target: Target, handler: @escaping (Press) -> Bool) {
-        entries[target] = Entry(handler: handler, minY: entries[target]?.minY ?? .greatestFiniteMagnitude)
+    func register(_ target: Target, isText: Bool = false, handler: @escaping (Press) -> Bool) {
+        entries[target] = Entry(handler: handler, minY: entries[target]?.minY ?? .greatestFiniteMagnitude,
+                                isText: isText)
     }
+
+    /// Whether the focused control is a text field, which keeps the keys it types.
+    var currentIsText: Bool { current.flatMap { entries[$0]?.isText } ?? false }
 
     func unregister(_ target: Target) {
         entries.removeValue(forKey: target)
@@ -79,8 +85,10 @@ final class KeyboardFocus {
 
     /// Gives a control focus: a click or drag on it, Tab, or ⌃Tab.
     func focus(_ target: Target) {
-        guard entries[target] != nil else { return }
-        Self.endTextEditing()
+        guard let entry = entries[target] else { return }
+        // A text field takes the keyboard itself (`KeyboardTextField`); anything else takes it
+        // from whichever field had it.
+        if !entry.isText { Self.endTextEditing() }
         current = target
         activeArea = target.area
         lastInArea[target.area] = target.id
@@ -111,10 +119,11 @@ final class KeyboardFocus {
             .map(\.key)
     }
 
-    /// Focuses the control last used in an area, or its top one.
+    /// Focuses the control last used in an area, or its top one that isn't a text field (⌃Tab to
+    /// Presets lands on the list, so the arrows work at once; Tab reaches the search field).
     func focus(_ area: KeyboardFocusArea) {
         let candidates = targets(in: area)
-        guard area != .photo, let first = candidates.first else {
+        guard area != .photo, let first = candidates.first(where: { entries[$0]?.isText == false }) ?? candidates.first else {
             release()
             return
         }
@@ -138,14 +147,17 @@ final class KeyboardFocus {
         }
     }
 
-    /// Tab and ⇧Tab: the next or previous control in the focused control's area, wrapping
-    /// around. False when nothing has focus.
-    func step(forward: Bool) -> Bool {
-        guard let current else { return false }
+    /// Tab and ⇧Tab: the next or previous control in the focused area, wrapping around. With
+    /// nothing focused, the area ⌃Tab last went to (the right panel from the photos) takes focus,
+    /// so Tab never wanders into a text field of another area.
+    func step(forward: Bool) {
+        guard let current else {
+            focus(activeArea == .photo ? .rightPanel : activeArea)
+            return
+        }
         let ordered = targets(in: current.area)
-        guard let index = ordered.firstIndex(of: current), ordered.count > 1 else { return true }
+        guard let index = ordered.firstIndex(of: current), ordered.count > 1 else { return }
         focus(ordered[(index + (forward ? 1 : ordered.count - 1)) % ordered.count])
-        return true
     }
 
     /// Hands a key to the focused control. Esc always lets go afterwards.
@@ -295,6 +307,42 @@ struct KeyboardSlider: ViewModifier {
                 if isMe { scroll?.scrollTo(target.id, anchor: nil) }
             }
     }
+}
+
+/// Makes a text field (Search Presets) a Tab stop of its area: Tab and ⇧Tab move into and out of
+/// it like any control, a click in it gives its area focus, and Esc leaves it for the photos.
+struct KeyboardTextField: ViewModifier {
+    @State private var id = UUID().uuidString
+    @FocusState private var typing: Bool
+    @State private var focused = false
+    @Environment(\.keyboardFocusArea) private var area
+
+    private var target: KeyboardFocus.Target { KeyboardFocus.Target(area: area, id: id) }
+
+    func body(content: Content) -> some View {
+        let target = self.target
+        return content
+            .focused($typing)
+            .onGeometryChange(for: CGFloat.self, of: { $0.frame(in: .global).minY }) { minY in
+                KeyboardFocus.shared.setPosition(target, minY: minY)
+            }
+            .onAppear {
+                KeyboardFocus.shared.register(target, isText: true) { _ in false }
+            }
+            .onDisappear { KeyboardFocus.shared.unregister(target) }
+            .onReceive(KeyboardFocus.shared.changes) { now in
+                focused = now == target
+                if typing != focused { typing = focused }
+            }
+            .onChange(of: typing) { _, now in
+                // Clicked into: its area has focus now.
+                if now, !focused { KeyboardFocus.shared.focus(target) }
+            }
+    }
+}
+
+extension View {
+    func keyboardTextField() -> some View { modifier(KeyboardTextField()) }
 }
 
 /// An accent ring with a soft glow around the area ⌃Tab just moved to: it eases in (settling
