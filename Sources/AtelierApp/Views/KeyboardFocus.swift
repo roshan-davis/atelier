@@ -54,6 +54,12 @@ final class KeyboardFocus {
     /// registers it, and a position dropped then left the control sorted last, so Tab skipped
     /// Basic and came back to it out of order (Rosh's test, Nov 9, 2026).
     private var positions: [Target: CGFloat] = [:]
+    /// Where each control is in the window (SwiftUI global coordinates), for a click.
+    private var windowPositions: [Target: CGFloat] = [:]
+    /// False while a click moves focus: the control is where you clicked, so nothing scrolls.
+    /// Scrolling the panel under a drag (on the histogram, say) moved the panel away from the
+    /// pointer (Rosh's test, Nov 9, 2026).
+    private(set) var reveals = true
     /// The control with focus; nil while the photos have it.
     private(set) var current: Target?
     /// The area ⌃Tab counts from: where it last moved to, or the focused control's area.
@@ -84,6 +90,10 @@ final class KeyboardFocus {
 
     func setPosition(_ target: Target, minY: CGFloat) {
         positions[target] = minY
+    }
+
+    func setWindowPosition(_ target: Target, minY: CGFloat) {
+        windowPositions[target] = minY
     }
 
     /// Gives a control focus: a click or drag on it, Tab, or ⌃Tab.
@@ -123,16 +133,26 @@ final class KeyboardFocus {
         areaFrames[key] = frame.map { (area, $0) }
     }
 
-    /// A click in the window: the area clicked becomes the keyboard's, as if ⌃Tab had gone there
-    /// (Rosh, Nov 9, 2026). A click on a control has already given it focus, and a click into a
-    /// text field keeps the field typing; anywhere else in a panel focuses the control used last
-    /// there (or the top one), and a click on the photo or the Filmstrip gives the arrows back
-    /// to the photos. `point` is in SwiftUI global coordinates.
+    /// A click in the window: the area clicked becomes the keyboard's (Rosh, Nov 9, 2026). A
+    /// click on a control has already given it focus, and a click into a text field keeps the
+    /// field typing. A click elsewhere in a panel (the histogram, a curve, empty space) focuses
+    /// the stop just above it, the section you clicked into, without scrolling; a click on the
+    /// photo or the Filmstrip gives the arrows back to the photos. `point` is in SwiftUI global
+    /// coordinates.
     func clicked(at point: CGPoint) {
         guard let area = areaFrames.values.first(where: { $0.frame.contains(point) })?.area else { return }
         if NSApp.keyWindow?.firstResponder is NSText { return }
         if current?.area == area { return }
-        if area == .photo { release() } else { focus(area) }
+        guard area != .photo else {
+            release()
+            return
+        }
+        let candidates = targets(in: area).filter { entries[$0]?.isText == false }
+        let above = candidates.last { (windowPositions[$0] ?? .greatestFiniteMagnitude) <= point.y }
+        guard let target = above ?? candidates.first else { return }
+        reveals = false
+        focus(target)
+        reveals = true
     }
 
     /// An area's controls, top to bottom.
@@ -305,6 +325,9 @@ struct KeyboardControl: ViewModifier {
             .onGeometryChange(for: CGFloat.self, of: { $0.frame(in: .named(keyboardFocusSpace)).minY }) { minY in
                 KeyboardFocus.shared.setPosition(target, minY: minY)
             }
+            .onGeometryChange(for: CGFloat.self, of: { $0.frame(in: .global).minY }) { minY in
+                KeyboardFocus.shared.setWindowPosition(target, minY: minY)
+            }
             .onAppear {
                 KeyboardFocus.shared.register(target) { press in config.handle?(press) ?? false }
                 focused = KeyboardFocus.shared.current == target
@@ -313,7 +336,7 @@ struct KeyboardControl: ViewModifier {
             .onReceive(KeyboardFocus.shared.changes) { now in
                 let isMe = now == target
                 if isMe != focused { focused = isMe }
-                if isMe { scroll?.scrollTo(target.id, anchor: nil) }
+                if isMe, KeyboardFocus.shared.reveals { scroll?.scrollTo(target.id, anchor: nil) }
             }
     }
 }

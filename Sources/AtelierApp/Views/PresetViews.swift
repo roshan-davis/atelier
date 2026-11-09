@@ -174,6 +174,9 @@ struct PresetsSection: View {
                 .onGeometryChange(for: CGFloat.self, of: { $0.frame(in: .named(keyboardFocusSpace)).minY }) { minY in
                     KeyboardFocus.shared.setPosition(focusTarget, minY: minY)
                 }
+                .onGeometryChange(for: CGFloat.self, of: { $0.frame(in: .global).minY }) { minY in
+                    KeyboardFocus.shared.setWindowPosition(focusTarget, minY: minY)
+                }
                 .onAppear {
                     KeyboardFocus.shared.register(focusTarget) { press in handleListKey(press.key) }
                     listFocused = KeyboardFocus.shared.current == focusTarget
@@ -381,7 +384,7 @@ struct PresetsSection: View {
                 }
                 keyRow = (current ?? rows.first)?.id
             }
-            if let keyRow { keyboardScroll?.scrollTo(keyRow, anchor: nil) }
+            if let keyRow, KeyboardFocus.shared.reveals { keyboardScroll?.scrollTo(keyRow, anchor: nil) }
         } else {
             hoverTask?.cancel()
             if develop.previewingPreset != nil { develop.previewPreset(nil) }

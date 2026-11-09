@@ -96,7 +96,12 @@ struct DevelopImageView: View {
         .task(id: develop.isLoading ? develop.assetID : nil) {
             slowLoad = false
             guard develop.isLoading else { return }
-            try? await Task.sleep(for: .milliseconds(600))
+            // Over the photo's own preview, the photo is already there to look at: the spinner
+            // only says a slow original (a NAS) is still decoding. Over the last photo or a
+            // thumbnail it says so sooner. It came up on ordinary photos too often at 600 ms
+            // (Rosh, Nov 9, 2026).
+            let ownPreview = develop.image != nil && !develop.showsPreviousPhoto
+            try? await Task.sleep(for: .milliseconds(ownPreview ? 2000 : 600))
             if !Task.isCancelled, develop.isLoading { slowLoad = true }
         }
         .onChange(of: develop.compareMode) { old, new in compareModeChanged(from: old, to: new) }

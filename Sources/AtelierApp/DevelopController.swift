@@ -460,12 +460,17 @@ final class DevelopController: ObservableObject {
     /// render, so ← or → to one of them opens at once instead of decoding the RAW again.
     /// Lightroom does the same for neighbouring photos.
     var neighbours: [Int64] = [] {
-        didSet { if neighbours != oldValue, firstRenderDone { prefetchNeighbours() } }
+        didSet { if neighbours != oldValue, firstRenderDone { prefetchNeighboursWhenIdle() } }
     }
     private var prefetched: [Int64: DevelopSession] = [:]
     private var prefetching: Set<Int64> = []
     private var firstRenderDone = false
     private static let prefetchQueue = DispatchQueue(label: "atelier.develop.prefetch", qos: .utility)
+    /// How long the photo must go without a render (an edit, a drag) before its neighbours are
+    /// decoded, so they never share the CPU and GPU with your edits.
+    private static let prefetchDelay: TimeInterval = 0.8
+    /// When a render was last asked for, readable from the preload queue.
+    private let lastRenderRequest = LockedValue(Date.distantPast)
     /// The open photo, readable off the main thread so queued work for a photo already left is
     /// skipped.
     private let openAsset = LockedValue<Int64?>(nil)
@@ -1678,6 +1683,7 @@ final class DevelopController: ObservableObject {
 
     private func scheduleRender() {
         guard let session else { return }
+        lastRenderRequest.value = Date()
         if rendering {
             needsRender = true
             return
@@ -1724,7 +1730,7 @@ final class DevelopController: ObservableObject {
                     }
                     if self.assetID == assetID, !self.firstRenderDone {
                         self.firstRenderDone = true
-                        self.prefetchNeighbours()
+                        self.prefetchNeighboursWhenIdle()
                     }
                     if self.needsRender {
                         self.needsRender = false
@@ -1737,6 +1743,21 @@ final class DevelopController: ObservableObject {
         }
     }
 
+    /// Preloads the neighbours once the photo has gone `prefetchDelay` without a render, checking
+    /// again until it has.
+    private func prefetchNeighboursWhenIdle() {
+        let assetID = self.assetID
+        let wait = Self.prefetchDelay - Date().timeIntervalSince(lastRenderRequest.value)
+        guard wait <= 0 else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + wait) {
+                guard self.assetID == assetID else { return }
+                self.prefetchNeighboursWhenIdle()
+            }
+            return
+        }
+        prefetchNeighbours()
+    }
+
     /// Decodes the neighbours' proxies and renders each once (which keeps the decoded photo in
     /// the session), one at a time at utility priority, never for a photo you've already left.
     private func prefetchNeighbours() {
@@ -1744,21 +1765,30 @@ final class DevelopController: ObservableObject {
         let wanted = Set(neighbours)
         prefetched = prefetched.filter { wanted.contains($0.key) }
         let openAsset = self.openAsset
+        let lastRenderRequest = self.lastRenderRequest
         for id in neighbours where prefetched[id] == nil && !prefetching.contains(id) {
             guard let url = try? catalog.fileURL(for: id) else { continue }
             let settings = (try? catalog.developSettings(for: id)) ?? .neutral
             prefetching.insert(id)
             Self.prefetchQueue.async {
                 var session: DevelopSession?
-                // Moved on before its turn: the next photo's neighbours are wanted instead.
-                if openAsset.value == current {
+                var editing = false
+                // Moved on before its turn: the next photo's neighbours are wanted instead. Editing
+                // since: wait for the next quiet moment (prefetching is cleared, so it's asked again).
+                if openAsset.value == current,
+                   Date().timeIntervalSince(lastRenderRequest.value) >= Self.prefetchDelay {
                     session = DevelopRenderer.shared.session(for: url, maxPixelSize: Self.proxySize, interactive: true)
                     _ = session?.renderForDisplay(settings)
+                } else if openAsset.value == current {
+                    editing = true
                 }
                 DispatchQueue.main.async {
                     MainActor.assumeIsolated {
                         self.prefetching.remove(id)
-                        guard let session, self.neighbours.contains(id), self.assetID != id else { return }
+                        // Skipped for an edit: try again once editing pauses.
+                        if editing, self.assetID == current { self.prefetchNeighboursWhenIdle() }
+                        guard let session else { return }
+                        guard self.neighbours.contains(id), self.assetID != id else { return }
                         self.prefetched[id] = session
                     }
                 }
