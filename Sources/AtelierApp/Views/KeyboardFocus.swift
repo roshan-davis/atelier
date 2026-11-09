@@ -97,8 +97,11 @@ final class KeyboardFocus {
     }
 
     /// Gives a control focus: a click or drag on it, Tab, or ⌃Tab.
-    func focus(_ target: Target) {
+    func focus(_ target: Target, reveals: Bool = true) {
         guard let entry = entries[target] else { return }
+        let previousReveals = self.reveals
+        self.reveals = reveals
+        defer { self.reveals = previousReveals }
         // A text field takes the keyboard itself (`KeyboardTextField`); anything else takes it
         // from whichever field had it.
         if !entry.isText { Self.endTextEditing() }
@@ -163,9 +166,7 @@ final class KeyboardFocus {
         let candidates = targets(in: area).filter { entries[$0]?.isText == false }
         let above = candidates.last { (windowPositions[$0] ?? .greatestFiniteMagnitude) <= point.y }
         guard let target = above ?? candidates.first else { return }
-        reveals = false
-        focus(target)
-        reveals = true
+        focus(target, reveals: false)
     }
 
     /// An area's controls, top to bottom.
@@ -332,7 +333,7 @@ struct KeyboardControl: ViewModifier {
         let target = self.target
         let config = self.config
         return content
-            .environment(\.takeKeyboardFocus, { KeyboardFocus.shared.focus(target) })
+            .environment(\.takeKeyboardFocus, { KeyboardFocus.shared.focus(target, reveals: false) })
             .keyboardFocusHighlight(focused)
             .id(target.id)
             .onGeometryChange(for: CGFloat.self, of: { $0.frame(in: .named(keyboardFocusSpace)).minY }) { minY in

@@ -600,6 +600,12 @@ struct HueRangeSlider: View {
                 })
         }
         .frame(height: 16)
+        .onReceive(ModifierKeys.shared.$option) { held in
+            if grab != nil { onOption?(held) }
+        }
+        .onDisappear {
+            if grab != nil { onOption?(false) }
+        }
     }
 
     /// An end when the drag starts on or outside it (the nearer one), both between them.

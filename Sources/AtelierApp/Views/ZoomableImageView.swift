@@ -567,7 +567,9 @@ final class ZoomScrollView: NSScrollView {
     @objc private func didEndMagnify() {
         level = .percent(Double(magnification * 100))
         onZoomChange?(level)
-        report()
+        // A layout pass during the gesture may already have reported the same magnification
+        // while the shared level was still Fit. Send it again with the pinch now committed.
+        report(force: true)
         updatePhotoFrame()
         Cursors.shared.refresh()
     }
@@ -584,9 +586,9 @@ final class ZoomScrollView: NSScrollView {
         onZoomChange?(newLevel)
     }
 
-    private func report() {
+    private func report(force: Bool = false) {
         let report = ZoomReport(percent: Double(magnification * 100), fitPercent: Double(fitMagnification * 100))
-        guard report != lastReport else { return }
+        guard force || report != lastReport else { return }
         lastReport = report
         let onReport = self.onReport
         // Reports can arrive during SwiftUI layout; publish afterwards.

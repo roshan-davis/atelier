@@ -53,6 +53,12 @@ enum LayoutSnapshots {
                           size: CGSize(width: width, height: 640),
                           to: folder.appendingPathComponent("develop-slider-compare-\(width)x640.png"))
         }
+        if let after = model.develop.image {
+            let waiting = SliderCompareView(before: nil, after: after, pixelSize: nil, zoom: ZoomState(),
+                                            onReport: { _ in }, menu: { nil }, position: .constant(0.5))
+            await capture(AnyView(waiting), size: CGSize(width: 640, height: 380),
+                          to: folder.appendingPathComponent("develop-slider-compare-loading.png"))
+        }
         model.develop.compareMode = .off
         // The crop tool, straightened a little.
         model.develop.isCropping = true

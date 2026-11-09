@@ -56,10 +56,12 @@ public struct LookSkin: Sendable {
         guard !faces.isEmpty, sample.width > 0, sample.height > 0 else { return nil }
         var picked: [Int] = []
         for face in faces {
-            let x0 = Int(((face.minX + face.width * 0.18) * Double(sample.width)).rounded())
-            let x1 = Int(((face.maxX - face.width * 0.18) * Double(sample.width)).rounded())
-            let y0 = Int(((face.minY + face.height * 0.2) * Double(sample.height)).rounded())
-            let y1 = Int(((face.maxY - face.height * 0.08) * Double(sample.height)).rounded())
+            let minX = Double(face.minX), maxX = Double(face.maxX), minY = Double(face.minY), maxY = Double(face.maxY)
+            let w = Double(face.width), h = Double(face.height)
+            let x0 = Int(((minX + w * 0.18) * Double(sample.width)).rounded())
+            let x1 = Int(((maxX - w * 0.18) * Double(sample.width)).rounded())
+            let y0 = Int(((minY + h * 0.2) * Double(sample.height)).rounded())
+            let y1 = Int(((maxY - h * 0.08) * Double(sample.height)).rounded())
             guard x1 > x0, y1 > y0 else { continue }
             for y in max(0, y0)..<min(sample.height, y1) {
                 for x in max(0, x0)..<min(sample.width, x1) {
@@ -208,8 +210,10 @@ extension LookMatcher {
     }
 
     /// Fits `settings` on `session`'s photo to `target`, with Match Areas, Subject & Background
-    /// and Protect Skin Tones. `photoFaces` (0 to 1 from the top left) stands in for Vision's
-    /// face finding, for tests. Returns nil when the photo can't be rendered.
+    /// and Protect Skin Tones. `photoFaces` (0 to 1 from the top left) are the photo's faces when
+    /// already found (the dialog finds them on its larger preview, so small faces aren't missed;
+    /// tests pass their own); nil finds them on the fit render. Returns nil when the photo can't be
+    /// rendered.
     public static func match(session: DevelopSession, settings base: DevelopSettings, target: LookTarget,
                              options: LookMatchOptions = LookMatchOptions(), photoFaces: [CGRect]? = nil,
                              isCancelled: () -> Bool = { false }) -> LookMatch? {
@@ -259,7 +263,8 @@ extension LookMatcher {
         }
 
         var current = fitBase
-        let penalty: ((LookSample) -> Double)? = skin.map { skin in { skin.penalty($0) } }
+        var penalty: ((LookSample) -> Double)?
+        if let skin { penalty = { measured in skin.penalty(measured) } }
         fitGlobal(&current, asShot: asShot, options: options, reference: reference, measure: sample,
                   penalty: penalty, isCancelled: isCancelled)
 
@@ -414,7 +419,8 @@ extension LookMatcher {
             let k = 1 - t
             let fromMired = 1e6 / (base.temperature ?? asShot), toMired = 1e6 / (matched.temperature ?? asShot)
             if matched.temperature != base.temperature {
-                out.temperature = (1e6 / (fromMired + (toMired - fromMired) * k)).rounded()
+                // Fully pulled back is the photo's own setting, As Shot included.
+                out.temperature = k == 0 ? base.temperature : Optional((1e6 / (fromMired + (toMired - fromMired) * k)).rounded())
             }
             var parameters: [DevelopSettings.Parameter] = [.tint, .saturation, .vibrance]
             for (band, _) in bands { parameters += [.hsl(.hue, band), .hsl(.saturation, band)] }

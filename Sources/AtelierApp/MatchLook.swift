@@ -146,6 +146,8 @@ final class MatchLookModel: ObservableObject, Identifiable {
     }
     /// Protect Skin Tones starts on when the photo has a face, until the user sets it.
     @Published private(set) var photoHasFaces = false
+    /// The open photo's faces, 0 to 1 from the top left; nil until they've been looked for.
+    private var photoFaces: [CGRect]?
     private var userSetSkin = false
     var protectSkin: Bool {
         get { options.protectSkin }
@@ -207,11 +209,15 @@ final class MatchLookModel: ObservableObject, Identifiable {
             let fit = DevelopRenderer.shared.session(for: url, maxPixelSize: LookSample.size)
             let preview = DevelopRenderer.shared.session(for: url, maxPixelSize: Self.previewSize)
             let beforeImage = preview?.render(settings)
-            let hasFaces = fit?.renderSRGB(settings).map { !LookSkin.faces(in: $0).isEmpty } ?? false
+            // Faces are found on the larger preview, so small faces the 384 px fit render would
+            // miss still count; Vision's boxes are 0 to 1, so they fit either size.
+            let faces = (beforeImage ?? fit?.renderSRGB(settings)).map { LookSkin.faces(in: $0) } ?? []
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     self.fitSession = fit
                     self.previewSession = preview
+                    let hasFaces = !faces.isEmpty
+                    self.photoFaces = faces
                     self.photoHasFaces = hasFaces
                     if !self.userSetSkin, self.options.protectSkin != hasFaces { self.options.protectSkin = hasFaces }
                     if let beforeImage {
@@ -356,13 +362,14 @@ final class MatchLookModel: ObservableObject, Identifiable {
         message = nil
         let areas = lookAreas
         let options = self.options, base = self.base, latest = self.latest, features = self.features
+        let photoFaces = self.photoFaces
         fitQueue.async {
             guard latest.current == generation else { return }
             let needsFeatures = areas == .subject || options.protectSkin
             let result = LookTarget(image: referenceCG, features: needsFeatures ? features.features(for: referenceCG) : nil,
                                     areas: areas, protectSkin: options.protectSkin).flatMap { target in
                 LookMatcher.match(session: fitSession, settings: base, target: target, options: options,
-                                  isCancelled: { latest.current != generation })
+                                  photoFaces: photoFaces, isCancelled: { latest.current != generation })
             }
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {

@@ -169,13 +169,36 @@ final class DevelopController: ObservableObject {
     }
 
     @Published var compareMode: CompareMode = .off {
-        didSet { if compareMode != .off { renderBeforeIfNeeded() } }
+        didSet {
+            if compareMode == .off {
+                beforeRequest.value = nil
+            } else {
+                // The view enters Compare at Fit. Drop the previous view's zoom report before
+                // it can launch full-size work alongside the two foreground comparison renders.
+                if oldValue == .off { wantsFullResolution = false }
+                renderBeforeIfNeeded()
+            }
+        }
     }
     /// The photo without edits, rendered once per open photo for the compare views.
     @Published private(set) var beforeImage: NSImage?
-    /// Before renders queued or running for the open photo; preloading the neighbours waits for
-    /// them, and stops waiting when they finish, even if one fails.
-    private var beforeRenders = 0
+    private struct BeforeRenderRequest {
+        struct Key: Equatable {
+            let generation: Int
+            let settings: DevelopSettings
+        }
+
+        let key: Key
+        let assetID: Int64
+        let session: DevelopSession
+        let queuedAt: CFAbsoluteTime
+        let openedAt: CFAbsoluteTime
+    }
+
+    /// One queue slot reads the newest request when it starts. Requests for passed photos or
+    /// older geometry can be replaced without putting another render on the serial queue.
+    private let beforeRequest = LockedValue<BeforeRenderRequest?>(nil)
+    private var beforeRenderScheduled = false
     /// The photo without edits at full size, for zooming in the compare views.
     @Published private(set) var fullBeforeImage: NSImage?
     private var fullBeforeSettings: DevelopSettings?
@@ -550,6 +573,7 @@ final class DevelopController: ObservableObject {
 
     func open(_ assetID: Int64?) {
         guard assetID != self.assetID else { return }
+        beforeRequest.value = nil
         flushSave()
         if let owed = previewsOwed, owed == self.assetID {
             // Its copy never got ready: render the saved look from its own decode.
@@ -572,7 +596,6 @@ final class DevelopController: ObservableObject {
         showsPreviousPhoto = false
         imageIsWhole = false
         beforeImage = nil
-        beforeRenders = 0
         // Ranks only compare within one open (requests carry the open's generation).
         measuredRank = 0
         histogram = nil
@@ -735,6 +758,7 @@ final class DevelopController: ObservableObject {
             self.scheduleSave()
         }
         self.scheduleRender()
+        if self.compareMode != .off { self.renderBeforeIfNeeded() }
         // An unedited RAW's cached preview is the camera's embedded JPEG, which has no
         // lens corrections, so it is framed a little wider than the render and the
         // photo jumped when the render replaced it. Store the render as the preview
@@ -746,7 +770,6 @@ final class DevelopController: ObservableObject {
            self.developedPreviews.insert(assetID).inserted {
             self.storePreviews(session: session, settings: self.settings, assetID: assetID, optional: true)
         }
-        if self.compareMode != .off { self.renderBeforeIfNeeded() }
     }
 
     func cycleCompareMode() {
@@ -910,7 +933,6 @@ final class DevelopController: ObservableObject {
         if (parameter.panel == .lensCorrections && !parameter.isDefringe) || parameter.panel == .transform { beforeImage = nil }
         let shown = parameter == .tint ? asShotTint + settings[parameter] : settings[parameter]
         changed(step: Self.stepName(parameter, value: shown))
-        if beforeImage == nil, compareMode != .off { renderBeforeIfNeeded() }
     }
 
     func reset(_ parameter: DevelopSettings.Parameter) {
@@ -1123,7 +1145,6 @@ final class DevelopController: ObservableObject {
         settings.crop = crop
         beforeImage = nil
         changed(step: Self.cropStepName(from: previous, to: crop))
-        if compareMode != .off { renderBeforeIfNeeded() }
     }
 
     /// The photo without edits but with the same shape (lens corrections, Transform and crop),
@@ -1390,7 +1411,6 @@ final class DevelopController: ObservableObject {
     private func shapeChanged(step: String) {
         beforeImage = nil
         changed(step: step)
-        if compareMode != .off { renderBeforeIfNeeded() }
     }
 
     /// The full-size photo's size after the crop, for 100% zoom. `assetSize` is the original's
@@ -1460,6 +1480,7 @@ final class DevelopController: ObservableObject {
         dirty = true
         if let step { pendingStep = step }
         scheduleRender()
+        if beforeImage == nil, compareMode != .off { renderBeforeIfNeeded() }
         scheduleSave()
     }
 
@@ -1679,7 +1700,6 @@ final class DevelopController: ObservableObject {
         beforeImage = nil
         validateMaskSelection()
         changed(step: nil)
-        if compareMode != .off { renderBeforeIfNeeded() }
     }
 
     func clearHistory() {
@@ -1798,7 +1818,9 @@ final class DevelopController: ObservableObject {
         rendering = true
         renderStartedAt = DevelopTimingLog.now()
         renderHangLogged = false
-        var settings = showingBefore ? beforeSettings : self.settings
+        let preview = sliderPreview
+        let renderBefore = showingBefore && preview == nil
+        var settings = renderBefore ? beforeSettings : self.settings
         if isGuiding { settings = guidedViewSettings(settings) }
         let cropping = !isCropping
         if isCropping, var crop = settings.crop {
@@ -1807,7 +1829,6 @@ final class DevelopController: ObservableObject {
         }
         let assetID = self.assetID
         let overlay = isMasking && showMaskOverlay ? selectedMaskID : nil
-        let preview = showingBefore ? nil : sliderPreview
         let clipping = overlay == nil && preview == nil ? clippingOverlay : (shadows: false, highlights: false)
         renderCount += 1
         let count = renderCount
@@ -1845,7 +1866,8 @@ final class DevelopController: ObservableObject {
                     let current = self.assetID == assetID && self.openGeneration.value == generation
                     // A render started before the crop tool opened or closed has the wrong shape; the
                     // next render replaces it.
-                    if current, cropping != self.isCropping, let cgImage {
+                    if current, cropping != self.isCropping, preview == self.sliderPreview,
+                       renderBefore == (self.showingBefore && self.sliderPreview == nil), let cgImage {
                         self.image = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
                         self.showsStandIn = false
                         self.imageIsWhole = !cropping
@@ -1864,6 +1886,7 @@ final class DevelopController: ObservableObject {
                         self.scheduleRender()
                     } else {
                         self.scheduleFullRender()
+                        if self.compareMode != .off { self.scheduleFullBeforeRender() }
                     }
                 }
             }
@@ -1876,7 +1899,7 @@ final class DevelopController: ObservableObject {
         let assetID = self.assetID
         var wait = Self.prefetchDelay - Date().timeIntervalSince(lastRenderRequest.value)
         // The Before photo of a compare view comes first.
-        if beforeRenders > 0 { wait = max(wait, Self.prefetchDelay) }
+        if beforeRequest.value != nil { wait = max(wait, Self.prefetchDelay) }
         guard wait <= 0 else {
             DispatchQueue.main.asyncAfter(deadline: .now() + wait) {
                 guard self.assetID == assetID else { return }
@@ -2005,9 +2028,15 @@ final class DevelopController: ObservableObject {
         scheduleRender()
     }
 
+    /// The comparison proxies come first. The full-size queue also uses Core Image and can
+    /// compete with the foreground queue even though it runs on a separate thread.
+    private var canRenderFullResolution: Bool {
+        wantsFullResolution && (compareMode == .off || (firstRenderDone && beforeRequest.value == nil))
+    }
+
     /// Full-resolution render for zoomed views, after the proxy settles. Latest wins.
     private func scheduleFullRender() {
-        guard wantsFullResolution, !showingBefore, !isCropping, !isGuiding, let url = sourceURL, fullImageSettings != settings else { return }
+        guard canRenderFullResolution, sliderPreview == nil, !showingBefore, !isCropping, !isGuiding, let url = sourceURL, fullImageSettings != settings else { return }
         if fullRendering {
             fullNeedsRender = true
             return
@@ -2051,7 +2080,7 @@ final class DevelopController: ObservableObject {
     /// Renders the unedited photo at full size while a compare view is zoomed past fit, sharing
     /// the full-size session with the edited render.
     private func scheduleFullBeforeRender() {
-        guard wantsFullResolution, compareMode != .off, let url = sourceURL else { return }
+        guard canRenderFullResolution, compareMode != .off, let url = sourceURL else { return }
         let before = beforeSettings
         guard fullBeforeSettings != before else { return }
         // Wait for the edited render when it is still opening the full-size photo, so the
@@ -2064,8 +2093,10 @@ final class DevelopController: ObservableObject {
         let assetID = self.assetID
         let existing = fullSession
         fullQueue.async {
+            let began = DevelopTimingLog.now()
             let session = existing ?? DevelopRenderer.shared.session(for: url, maxPixelSize: nil, interactive: true)
-            let cgImage = session?.render(before)
+            let cgImage = RenderSignposts.measure("Full-size Before render") { session?.render(before) }
+            DevelopTimingLog.shared.log(assetID, "full-size Before render: \(DevelopTimingLog.ms(since: began)) ms")
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     self.fullBeforeRendering = false
@@ -2085,34 +2116,48 @@ final class DevelopController: ObservableObject {
     }
 
     private func renderBeforeIfNeeded() {
-        scheduleFullBeforeRender()
-        guard beforeImage == nil, let session else { return }
-        let assetID = self.assetID
-        let before = beforeSettings
-        // Counts as a render, so preloading the neighbours waits for the Before photo too.
+        guard beforeImage == nil, let assetID, let session else {
+            scheduleFullBeforeRender()
+            return
+        }
+        let key = BeforeRenderRequest.Key(generation: openGeneration.value, settings: beforeSettings)
+        guard beforeRequest.value?.key != key else { return }
         lastRenderRequest.value = Date()
-        let queuedAt = DevelopTimingLog.now()
-        let openedAt = self.openedAt
+        beforeRequest.value = BeforeRenderRequest(key: key, assetID: assetID, session: session,
+                                                  queuedAt: DevelopTimingLog.now(), openedAt: openedAt)
+        scheduleBeforeRender()
+    }
+
+    private func scheduleBeforeRender() {
+        guard !beforeRenderScheduled, beforeRequest.value != nil else { return }
+        beforeRenderScheduled = true
+        let beforeRequest = self.beforeRequest
         let lastRenderRequest = self.lastRenderRequest
-        beforeRenders += 1
-        let generation = openGeneration.value
         queue.async {
+            let request = beforeRequest.value
             let began = DevelopTimingLog.now()
-            let cgImage = session.render(before)
-            lastRenderRequest.value = Date()
-            DevelopTimingLog.shared.log(assetID, "Before render: waited \(Int(((began - queuedAt) * 1000).rounded())) ms "
-                + "for the render queue, rendered in \(DevelopTimingLog.ms(since: began)) ms, "
-                + "shown +\(Int(((DevelopTimingLog.now() - openedAt) * 1000).rounded())) ms after open")
+            let cgImage = request.flatMap { request in
+                RenderSignposts.measure("Before proxy render") { request.session.render(request.key.settings) }
+            }
+            if let request {
+                lastRenderRequest.value = Date()
+                DevelopTimingLog.shared.log(request.assetID, "Before render: waited \(Int(((began - request.queuedAt) * 1000).rounded())) ms "
+                    + "for the render queue, rendered in \(DevelopTimingLog.ms(since: began)) ms, "
+                    + "finished +\(DevelopTimingLog.ms(since: request.openedAt)) ms after open"
+                    + (cgImage == nil ? " (failed)" : ""))
+            }
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
-                    // Not for an earlier open of this photo (`reopen()` reset the count).
-                    guard self.assetID == assetID, self.openGeneration.value == generation else { return }
-                    self.beforeRenders -= 1
-                    guard let cgImage else {
-                        DevelopTimingLog.shared.log(assetID, "Before render FAILED")
-                        return
+                    self.beforeRenderScheduled = false
+                    if let request, beforeRequest.value?.key == request.key {
+                        beforeRequest.value = nil
+                        if let cgImage {
+                            self.beforeImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+                        }
+                        if !self.rendering { self.scheduleFullRender() }
+                        self.scheduleFullBeforeRender()
                     }
-                    self.beforeImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+                    self.scheduleBeforeRender()
                 }
             }
         }
