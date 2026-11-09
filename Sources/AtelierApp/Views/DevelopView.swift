@@ -9,6 +9,8 @@ struct DevelopImageView: View {
     @ObservedObject var develop: DevelopController
     /// The original has taken over 0.6 s to open, so the spinner shows over the photo.
     @State private var slowLoad = false
+    /// With the Filmstrip showing, ⌃Tab's "photos" outline goes on the Filmstrip instead.
+    @AppStorage(Filmstrip.visibleKey) private var filmstripVisible = true
 
     var body: some View {
         VStack(spacing: 0) {
@@ -75,7 +77,7 @@ struct DevelopImageView: View {
                     Badge(text: "Before").padding(14)
                 }
             }
-            .areaFocusFlash(.photo)
+            .areaFocusFlash(.photo, enabled: !filmstripVisible)
             Divider()
             // Icons with tooltips at every width. Narrow columns drop the hint, then fold the
             // zoom buttons into a menu, so the bar always fits.

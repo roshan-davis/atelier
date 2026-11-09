@@ -3,9 +3,11 @@ import AtelierCore
 import Combine
 import SwiftUI
 
-/// The window's areas, in ⌃Tab order: left to right.
+/// The window's areas, in ⌃Tab order: the left column, the right panels, then the photos.
+/// `photo` is where ← → move between photos; it is outlined on the Filmstrip when the
+/// Filmstrip is showing (that's where the arrows visibly act), else on the photo.
 enum KeyboardFocusArea: Int, CaseIterable {
-    case leftPanel, photo, rightPanel
+    case leftPanel, rightPanel, photo
 }
 
 /// Keyboard focus in Develop, shared by every control that takes keys (sliders, the Presets
@@ -80,7 +82,7 @@ final class KeyboardFocus {
     /// ⌃Tab and ⌃⇧Tab: the next area with something to focus, wrapping around.
     func cycle(forward: Bool) {
         let areas = KeyboardFocusArea.allCases
-        var index = areas.firstIndex(of: current?.area ?? .photo) ?? 1
+        var index = areas.firstIndex(of: current?.area ?? .photo) ?? areas.count - 1
         for _ in areas.indices {
             index = (index + (forward ? 1 : areas.count - 1)) % areas.count
             let area = areas[index]
@@ -221,6 +223,7 @@ struct KeyboardSlider: ViewModifier {
 /// and hides without fading.
 struct AreaFocusFlash: ViewModifier {
     let area: KeyboardFocusArea
+    var enabled = true
     @State private var visible = false
     @State private var hideTask: Task<Void, Never>?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -235,7 +238,7 @@ struct AreaFocusFlash: ViewModifier {
             }
             .onReceive(KeyboardFocus.shared.arrivals) { arrived in
                 hideTask?.cancel()
-                guard arrived == area else {
+                guard enabled, arrived == area else {
                     visible = false
                     return
                 }
@@ -256,7 +259,7 @@ struct AreaFocusFlash: ViewModifier {
 
 extension View {
     /// Outlines this area briefly when ⌃Tab moves focus to it.
-    func areaFocusFlash(_ area: KeyboardFocusArea) -> some View {
-        modifier(AreaFocusFlash(area: area))
+    func areaFocusFlash(_ area: KeyboardFocusArea, enabled: Bool = true) -> some View {
+        modifier(AreaFocusFlash(area: area, enabled: enabled))
     }
 }

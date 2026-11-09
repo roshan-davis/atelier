@@ -46,7 +46,7 @@ enum KeyAction: String, CaseIterable, Identifiable {
         case .masking: return "Masking: open or close"
         case .radialGradient: return "Masking: Radial Gradient"
         case .guidedUpright: return "Transform: Guided Upright"
-        case .nextArea: return "Focus: next area (Presets, photo, right panel)"
+        case .nextArea: return "Focus: next area (Presets, right panel, Filmstrip)"
         case .previousArea: return "Focus: previous area"
         }
     }
