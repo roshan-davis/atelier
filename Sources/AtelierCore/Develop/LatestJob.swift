@@ -12,12 +12,13 @@ public final class LatestJob<Value>: @unchecked Sendable {
     public init() {}
 
     /// Stores the newest value. True when the caller must start a drain (none is running).
-    /// `isWanted` is checked under the lock, so a value that is already obsolete (work for a
-    /// photo you've left) never replaces a waiting one; it is dropped and false is returned.
-    public func submit(_ value: Value, if isWanted: (Value) -> Bool = { _ in true }) -> Bool {
+    /// `isWanted` sees the new value and the one waiting (if any) under the lock, so a value
+    /// that is obsolete (work for a photo you've left) or outranked by the waiting one never
+    /// replaces it; it is dropped and false is returned.
+    public func submit(_ value: Value, if isWanted: (_ new: Value, _ pending: Value?) -> Bool = { _, _ in true }) -> Bool {
         lock.lock()
         defer { lock.unlock() }
-        guard isWanted(value) else { return false }
+        guard isWanted(value, pending) else { return false }
         pending = value
         if draining { return false }
         draining = true

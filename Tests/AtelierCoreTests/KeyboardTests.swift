@@ -86,8 +86,18 @@ final class LatestJobObsoleteTests: XCTestCase {
         let job = LatestJob<Int>()
         XCTAssertTrue(job.submit(1))                       // photo 1 starts a drain
         XCTAssertFalse(job.submit(2))                      // photo 2's request waits
-        XCTAssertFalse(job.submit(1, if: { $0 == 2 }))     // a late request for photo 1 is dropped
+        XCTAssertFalse(job.submit(1, if: { new, _ in new == 2 }))  // a late request for photo 1 is dropped
         XCTAssertEqual(job.take(), 2)
+        XCTAssertNil(job.take())
+    }
+
+    func testAWaitingValueThatOutranksTheNewOneStays() {
+        let job = LatestJob<Int>()
+        let higherWins: (Int, Int?) -> Bool = { new, pending in new >= (pending ?? .min) }
+        XCTAssertTrue(job.submit(0))
+        XCTAssertFalse(job.submit(5, if: higherWins))      // the render's request waits
+        XCTAssertFalse(job.submit(4, if: higherWins))      // a lower-ranked preview arriving late is dropped
+        XCTAssertEqual(job.take(), 5)
         XCTAssertNil(job.take())
     }
 }

@@ -29,9 +29,16 @@ private struct DevelopMeasureRequest {
     let image: CGImage
     let assetID: Int64?
     let count: Int
+    /// The open it belongs to (`DevelopController.openGeneration`), so work from before a
+    /// `reopen()` of the same photo is dropped.
+    let generation: Int
     /// Counted from the cached preview the photo opened on, not from a render. Kept with the
     /// request, as requests replace each other while waiting.
     var fromPreview = false
+
+    /// Newer renders outrank older ones; for the same render count, a render outranks the cached
+    /// preview, whichever arrives first.
+    var rank: Int { count * 2 + (fromPreview ? 0 : 1) }
 }
 
 /// State for the Develop view: the open photo's settings, its live proxy render, and saving.
@@ -456,6 +463,9 @@ final class DevelopController: ObservableObject {
     private var renderHangLogged = false
     private var editBeforeProxyLogged = false
     private var saveTask: Task<Void, Never>?
+    /// A photo whose edits were saved before its editable copy was ready, so its Grid and Loupe
+    /// previews still need refreshing.
+    private var previewsOwed: Int64?
     private var dirty = false
     private let queue = DispatchQueue(label: "atelier.develop", qos: .userInteractive)
     /// Histogram and color scope, counted beside the render queue so the photo shows first.
@@ -505,8 +515,8 @@ final class DevelopController: ObservableObject {
     private let openGeneration = LockedValue(0)
     /// Counts proxy renders, so an older histogram never replaces a newer one.
     private var renderCount = 0
-    /// The render the shown histogram was counted from.
-    private var measuredCount = 0
+    /// The rank (`DevelopMeasureRequest.rank`) of what the shown histogram was counted from.
+    private var measuredRank = 0
     var onPreviewsUpdated: ((Int64) -> Void)?
     var onSettingsSaved: ((Int64) -> Void)?
     /// Unedited RAW files whose preview was replaced by a render this launch.
@@ -541,6 +551,11 @@ final class DevelopController: ObservableObject {
     func open(_ assetID: Int64?) {
         guard assetID != self.assetID else { return }
         flushSave()
+        if let owed = previewsOwed, owed == self.assetID {
+            // Its copy never got ready: render the saved look from its own decode.
+            previewsOwed = nil
+            refreshPreviews(for: owed, settings: settings)
+        }
         // Kept for going straight back (← then →); dropped once it's no longer a neighbour.
         if let previous = self.assetID, let session { prefetched[previous] = session }
         self.assetID = assetID
@@ -558,6 +573,8 @@ final class DevelopController: ObservableObject {
         imageIsWhole = false
         beforeImage = nil
         beforeRenders = 0
+        // Ranks only compare within one open (requests carry the open's generation).
+        measuredRank = 0
         histogram = nil
         shootingInfo = nil
         colorScope = nil
@@ -722,7 +739,10 @@ final class DevelopController: ObservableObject {
         // lens corrections, so it is framed a little wider than the render and the
         // photo jumped when the render replaced it. Store the render as the preview
         // (once per photo per launch) so the next visit opens on the same framing.
-        if session.isRAW, session.lensCorrectionSupported, self.settings.isNeutral,
+        if previewsOwed == assetID {
+            previewsOwed = nil
+            self.storePreviews(session: session, settings: self.settings, assetID: assetID)
+        } else if session.isRAW, session.lensCorrectionSupported, self.settings.isNeutral,
            self.developedPreviews.insert(assetID).inserted {
             self.storePreviews(session: session, settings: self.settings, assetID: assetID, optional: true)
         }
@@ -1794,7 +1814,8 @@ final class DevelopController: ObservableObject {
         let measures = overlay == nil && preview == nil
         let measureQueue = self.measureQueue
         let measureJob = self.measureJob
-        let openAsset = self.openAsset
+        let openGeneration = self.openGeneration
+        let generation = openGeneration.value
         let queuedAt = DevelopTimingLog.now()
         queue.async {
             let renderBegan = DevelopTimingLog.now()
@@ -1811,22 +1832,25 @@ final class DevelopController: ObservableObject {
             // The red overlay or an Option-drag view would skew the histogram; keep the last one
             // while it shows. It is counted after the photo is on its way, beside the next render.
             if measures, let plain = rendered?.plain {
-                Self.measure(DevelopMeasureRequest(image: plain, assetID: assetID, count: count),
-                             job: measureJob, on: measureQueue, openAsset: openAsset) { request, histogram, scope, took in
+                Self.measure(DevelopMeasureRequest(image: plain, assetID: assetID, count: count, generation: generation),
+                             job: measureJob, on: measureQueue, openGeneration: openGeneration) { request, histogram, scope, took in
                     MainActor.assumeIsolated { self.applyMeasure(request, histogram: histogram, scope: scope, took: took) }
                 }
             }
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     self.rendering = false
+                    // Rendered from this open's copy, not one from before a `reopen()` of the same
+                    // photo (the old file). An older one is still followed by any waiting render.
+                    let current = self.assetID == assetID && self.openGeneration.value == generation
                     // A render started before the crop tool opened or closed has the wrong shape; the
                     // next render replaces it.
-                    if self.assetID == assetID, cropping != self.isCropping, let cgImage {
+                    if current, cropping != self.isCropping, let cgImage {
                         self.image = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
                         self.showsStandIn = false
                         self.imageIsWhole = !cropping
                     }
-                    if self.assetID == assetID, !self.firstRenderDone {
+                    if current, !self.firstRenderDone {
                         // The photo itself is on screen now (or its render failed): no spinner.
                         self.isLoading = false
                         DevelopTimingLog.shared.log(assetID, "first render: waited \(Int(((renderBegan - queuedAt) * 1000).rounded())) ms "
@@ -1913,9 +1937,15 @@ final class DevelopController: ObservableObject {
     /// open photo's waiting request. `apply` must not depend on the request it was passed with:
     /// the drain applies whichever request it takes with the first caller's closure.
     private nonisolated static func measure(_ request: DevelopMeasureRequest, job: LatestJob<DevelopMeasureRequest>,
-                                            on queue: DispatchQueue, openAsset: LockedValue<Int64?>,
+                                            on queue: DispatchQueue, openGeneration: LockedValue<Int>,
                                             apply: @escaping (DevelopMeasureRequest, Histogram?, ColorScope?, Int) -> Void) {
-        guard job.submit(request, if: { $0.assetID == openAsset.value }) else { return }
+        // Not for an earlier open, and never in place of a waiting request that outranks it (the
+        // render's count must not be replaced by the preview that arrived late).
+        guard job.submit(request, if: { new, pending in
+            guard new.generation == openGeneration.value else { return false }
+            guard let pending, pending.generation == new.generation else { return true }
+            return new.rank >= pending.rank
+        }) else { return }
         queue.async {
             while let request = job.take() {
                 let began = DevelopTimingLog.now()
@@ -1929,14 +1959,15 @@ final class DevelopController: ObservableObject {
     }
 
     private func applyMeasure(_ request: DevelopMeasureRequest, histogram: Histogram?, scope: ColorScope?, took: Int) {
-        guard assetID == request.assetID, request.count >= measuredCount else { return }
+        guard assetID == request.assetID, openGeneration.value == request.generation,
+              request.rank >= measuredRank else { return }
         let fromPreview = request.fromPreview
         if !histogramLogged || fromPreview {
             if !fromPreview { histogramLogged = true }
             DevelopTimingLog.shared.log(request.assetID, "histogram from the \(fromPreview ? "cached preview" : "first render"): "
                 + "counted in \(took) ms, shown +\(DevelopTimingLog.ms(since: openedAt)) ms")
         }
-        measuredCount = request.count
+        measuredRank = request.rank
         if let histogram { self.histogram = histogram }
         if let scope { colorScope = scope }
     }
@@ -1947,8 +1978,9 @@ final class DevelopController: ObservableObject {
     private func measurePreview(_ preview: NSImage?, of assetID: Int64) {
         guard let preview, !showsPreviousPhoto,
               let cgImage = preview.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
-        Self.measure(DevelopMeasureRequest(image: cgImage, assetID: assetID, count: renderCount, fromPreview: true),
-                     job: measureJob, on: measureQueue, openAsset: openAsset) { request, histogram, scope, took in
+        Self.measure(DevelopMeasureRequest(image: cgImage, assetID: assetID, count: renderCount,
+                                           generation: openGeneration.value, fromPreview: true),
+                     job: measureJob, on: measureQueue, openGeneration: openGeneration) { request, histogram, scope, took in
             MainActor.assumeIsolated { self.applyMeasure(request, histogram: histogram, scope: scope, took: took) }
         }
     }
@@ -2134,6 +2166,10 @@ final class DevelopController: ObservableObject {
         }
         if let session {
             storePreviews(session: session, settings: settings, assetID: assetID)
+        } else {
+            // Saved while the editable copy is still decoding: refresh Grid and Loupe once it's
+            // ready (`finishOpen`), or from the saved settings if the photo is left first (`open`).
+            previewsOwed = assetID
         }
     }
 
