@@ -617,7 +617,7 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 ## AT-042 — Masking: Select People parts in any combination, facial features, shared Grow / Refine Edge
 
-**Status:** PR open, never compiled (cloud has no Swift toolchain); needs a Mac build and tests, then Rosh's acceptance. **Owner:** Claude. **Chat:** Claude project thread "Improve people and object selection masks". **Branch:** `claude/project-thread-m96qwc`. **Baseline:** `89edcd1`. **Dependencies:** AT-033 (merged).
+**Status:** Merged at Rosh's ask (2026-11-10). Rosh built and ran `428bdf0` in Xcode (new parts and sliders show); the follow-up `cc2d78e` (keep faces whose skin color can't be learned) was not built. Tests not run; Rosh's acceptance open. **Owner:** Claude. **Chat:** Claude project thread "Improve people and object selection masks". **PR:** [#100](https://github.com/roshan-davis/atelier/pull/100). **Branch:** `claude/project-thread-m96qwc`. **Baseline:** `89edcd1`. **Dependencies:** AT-033 (merged).
 
 **Evidence:** Rosh (2026-11-10): Select People's Face/Body checkboxes force one or two parts, lips are left out, clothes are taken for body skin, and Feather is the only detail control; Select Object is weak. Analysis and model licenses: `reports/people-object-selection-2026-11-10.md` (project files).
 
