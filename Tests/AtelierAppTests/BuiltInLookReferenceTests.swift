@@ -58,9 +58,10 @@ final class BuiltInLookReferenceTests: XCTestCase {
         }
     }
 
-    /// Each study has real blacks (so matching it never fades a photo), a wide tonal range, and
-    /// smooth shading rather than a few flat colors.
-    func testStudiesHaveRealBlacksAndSmoothShading() throws {
+    /// Each study has real blacks (so matching it never fades a photo) and a wide tonal range,
+    /// and is built from many flat tones: no single color (after the faint grain) covers a big
+    /// share of the drawing.
+    func testStudiesHaveRealBlacksAndManyFlatTones() throws {
         for study in BuiltInLookReference.allCases {
             let image = try XCTUnwrap(study.image())
             let sample = try XCTUnwrap(LookSample(image: image))
@@ -73,7 +74,7 @@ final class BuiltInLookReferenceTests: XCTestCase {
                 counts[Int(pixels[i]) << 16 | Int(pixels[i + 1]) << 8 | Int(pixels[i + 2]), default: 0] += 1
             }
             let largest = Double(counts.values.max() ?? 0) / Double(pixels.count / 4)
-            XCTAssertLessThan(largest, 0.05, study.name)
+            XCTAssertLessThan(largest, 0.1, study.name)
         }
     }
 

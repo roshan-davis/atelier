@@ -135,9 +135,10 @@ struct StudyLight {
 }
 
 // Coordinates are in a 120 × 80 canvas with the origin at the top left. Broad fields set the
-// palette's proportions. Every shape is drawn as a smooth curve through its points and shaded
-// from its lit side to its shaded side, so light and shadow carry the look's colors on every
-// surface. Small near-black accents and soft glints give each study a full tonal range.
+// palette's proportions. Every shape is drawn like a simple vector poster: flat areas of four
+// tones (highlight, midtone, shadow and dark), the highlight on the side facing the light and the
+// shadow and dark bands on the side away from it, each leaning to the look's light and shade
+// colors. So every area shows plainly what its lights, midtones and shadows look like.
 private struct StudyCanvas {
     typealias Point = (CGFloat, CGFloat)
     let context: CGContext
@@ -146,55 +147,43 @@ private struct StudyCanvas {
     /// A rounded shape through the points. Points on the canvas edge stay corners, so fields
     /// still reach the frame.
     func shape(_ color: UInt32, _ first: Point, _ rest: Point...) {
-        paint(smooth([first] + rest), color)
+        form(Self.rgb(color), [first] + rest)
     }
 
     /// A shape with straight sides, for buildings, roads and trees.
     func facet(_ color: UInt32, _ first: Point, _ rest: Point...) {
-        paint(straight([first] + rest), color)
+        form(Self.rgb(color), [first] + rest, rounded: false)
     }
 
     func rect(_ color: UInt32, _ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) {
-        paint(CGPath(rect: CGRect(x: x, y: y, width: w, height: h), transform: nil), color)
+        form(Self.rgb(color), [(x, y), (x + w, y), (x + w, y + h), (x, y + h)], rounded: false)
     }
 
-    /// A rounded form lit like a sphere: brightest toward the light, falling off to its shaded side.
     func ellipse(_ color: UInt32, _ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) {
-        let box = CGRect(x: x, y: y, width: w, height: h)
-        let center = CGPoint(x: box.midX, y: box.midY), radius = max(w, h) / 2
-        let hot = CGPoint(x: center.x + light.dx * radius * 0.45, y: center.y + light.dy * radius * 0.45)
-        context.saveGState()
-        context.addEllipse(in: box)
-        context.clip()
-        context.drawRadialGradient(gradient(color), startCenter: hot, startRadius: 0, endCenter: center,
-                                   endRadius: radius * 1.05, options: [.drawsAfterEndLocation])
-        context.restoreGState()
+        let oval = CGPath(ellipseIn: CGRect(x: x, y: y, width: w, height: h), transform: nil)
+        paint(oval, outline: oval, Self.rgb(color))
     }
 
     /// The deepest shadow: close to black, leaning to the look's shade color.
     func deep(_ first: Point, _ rest: Point...) {
-        context.setFillColor(Self.cgColor(Self.mix(Self.rgb(light.shade), .zero, 0.82)))
-        context.addPath(smooth([first] + rest))
-        context.fillPath()
+        fill(Self.mix(Self.rgb(light.shade), .zero, 0.82), smooth([first] + rest))
     }
 
-    /// A soft glint, close to white and leaning to the look's light color.
+    /// A glint: a small flat oval close to white, leaning to the look's light color.
     func spark(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) {
         let white = Self.mix(Self.rgb(light.glow), SIMD3(1, 1, 1), 0.7)
-        let colors = [Self.cgColor(white), Self.cgColor(white, alpha: 0)] as CFArray
-        guard let glint = CGGradient(colorsSpace: Self.space, colors: colors, locations: [0, 1]) else { return }
-        let box = CGRect(x: x, y: y, width: w, height: h)
-        context.saveGState()
-        context.translateBy(x: box.midX, y: box.midY)
-        context.scaleBy(x: w / 2, y: h / 2)
-        context.drawRadialGradient(glint, startCenter: .zero, startRadius: 0, endCenter: .zero, endRadius: 1, options: [])
-        context.restoreGState()
+        fill(white, CGPath(ellipseIn: CGRect(x: x + w * 0.2, y: y + h * 0.2, width: w * 0.6, height: h * 0.6),
+                           transform: nil))
     }
 
+    /// The sky in four flat bands: lit at the top, then down to the horizon color.
     func sky(_ top: UInt32, _ bottom: UInt32) {
-        let colors = [Self.cgColor(lit(Self.rgb(top))), Self.cgColor(Self.rgb(top)), Self.cgColor(Self.rgb(bottom))] as CFArray
-        guard let gradient = CGGradient(colorsSpace: Self.space, colors: colors, locations: [0, 0.3, 1]) else { return }
-        context.drawLinearGradient(gradient, start: .zero, end: CGPoint(x: 0, y: 80), options: [])
+        let upper = Self.rgb(top), lower = Self.rgb(bottom)
+        let bands = [Self.mix(upper, Self.rgb(light.glow), 0.2) * 1.05, upper, Self.mix(upper, lower, 0.5), lower]
+        let edges: [CGFloat] = [0, 12, 30, 52, 80]
+        for (i, color) in bands.enumerated() {
+            fill(color, CGPath(rect: CGRect(x: 0, y: edges[i], width: 120, height: edges[i + 1] - edges[i]), transform: nil))
+        }
     }
 
     /// Faint grain (about ±2 levels), so brightness and color are continuous, not a few spikes.
@@ -219,37 +208,72 @@ private struct StudyCanvas {
 
     // MARK: Paths and light
 
-    private func paint(_ path: CGPath, _ hex: UInt32) {
-        let box = path.boundingBox
-        let center = CGPoint(x: box.midX, y: box.midY)
-        let reach = (abs(light.dx) * box.width + abs(light.dy) * box.height) / 2
-        let start = CGPoint(x: center.x + light.dx * reach, y: center.y + light.dy * reach)
-        let end = CGPoint(x: center.x - light.dx * reach, y: center.y - light.dy * reach)
+    /// A shape through the points in four flat tones.
+    func form(_ color: SIMD3<Double>, _ points: [Point], rounded: Bool = true) {
+        let outline = Self.pushed(points)
+        if rounded {
+            paint(smooth(points), outline: smooth(outline), color)
+        } else {
+            paint(straight(points), outline: straight(outline), color)
+        }
+    }
+
+    /// Fills `path` with its highlight, then lays the midtone where a copy of the shape moved
+    /// away from the light still covers it (leaving a highlight rim on the lit side), and the
+    /// shadow and dark bands where copies moved toward the light no longer cover it (crescents
+    /// on the shaded side). `outline` is the same shape with its canvas-edge points pushed off
+    /// the canvas, so moving it never opens a gap along the frame.
+    private func paint(_ path: CGPath, outline: CGPath, _ color: SIMD3<Double>) {
+        let tone = tones(color)
+        let box = path.boundingBoxOfPath
+        let reach = abs(light.dx) * min(12, box.width) + abs(light.dy) * min(12, box.height)
+        func moved(_ k: CGFloat) -> CGPath {
+            var shift = CGAffineTransform(translationX: light.dx * k * reach, y: light.dy * k * reach)
+            return outline.copy(using: &shift) ?? outline
+        }
         context.saveGState()
         context.addPath(path)
         context.clip()
-        context.drawLinearGradient(gradient(hex), start: start, end: end,
-                                   options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
+        fill(tone.highlight, path)
+        fill(tone.midtone, moved(-0.18))
+        for (color, k) in [(tone.shadow, CGFloat(0.38)), (tone.dark, 0.14)] {
+            let crescent = CGMutablePath()
+            crescent.addRect(CGRect(x: -1000, y: -1000, width: 2000, height: 2000))
+            crescent.addPath(moved(k))
+            context.setFillColor(Self.cgColor(color))
+            context.addPath(crescent)
+            context.fillPath(using: .evenOdd)
+        }
         context.restoreGState()
     }
 
-    /// Lit side, the base color near the lit side, shaded side (so most of a surface turns to shade).
-    private func gradient(_ hex: UInt32) -> CGGradient {
-        let base = Self.rgb(hex)
-        let colors = [Self.cgColor(lit(base)), Self.cgColor(base), Self.cgColor(shaded(base))] as CFArray
-        return CGGradient(colorsSpace: Self.space, colors: colors, locations: [0, 0.3, 1])!
+    /// The four tones of a color under this light.
+    func tones(_ c: SIMD3<Double>) -> (highlight: SIMD3<Double>, midtone: SIMD3<Double>,
+                                       shadow: SIMD3<Double>, dark: SIMD3<Double>) {
+        let glow = Self.rgb(light.glow), shade = Self.rgb(light.shade)
+        return (Self.mix(c, glow, 0.35) * 1.15 + 0.04, c, Self.mix(c, shade, 0.4) * 0.66, Self.mix(c, shade, 0.6) * 0.38)
     }
 
-    private func lit(_ color: SIMD3<Double>) -> SIMD3<Double> {
-        Self.mix(color, Self.rgb(light.glow), 0.3) * 1.18 + 0.03
+    func fill(_ color: SIMD3<Double>, _ path: CGPath) {
+        context.setFillColor(Self.cgColor(color))
+        context.addPath(path)
+        context.fillPath()
     }
 
-    private func shaded(_ color: SIMD3<Double>) -> SIMD3<Double> {
-        Self.mix(color, Self.rgb(light.shade), 0.45) * 0.5
+    /// Canvas-edge points moved well off the canvas.
+    private static func pushed(_ points: [Point]) -> [Point] {
+        points.map { point in
+            var (x, y) = point
+            if x <= 0 { x -= 40 }
+            if x >= 120 { x += 40 }
+            if y <= 0 { y -= 40 }
+            if y >= 80 { y += 40 }
+            return (x, y)
+        }
     }
 
     /// Catmull-Rom through the points, closed. A point on the canvas edge keeps a sharp corner.
-    private func smooth(_ points: [Point]) -> CGPath {
+    func smooth(_ points: [Point]) -> CGPath {
         let p = points.map { CGPoint(x: $0.0, y: $0.1) }
         let n = p.count
         guard n > 2 else { return straight(points) }
@@ -267,20 +291,18 @@ private struct StudyCanvas {
         return path
     }
 
-    private func straight(_ points: [Point]) -> CGPath {
+    func straight(_ points: [Point]) -> CGPath {
         let path = CGMutablePath()
         path.addLines(between: points.map { CGPoint(x: $0.0, y: $0.1) })
         path.closeSubpath()
         return path
     }
 
-    private static let space = CGColorSpace(name: CGColorSpace.sRGB)!
-
-    private static func rgb(_ hex: UInt32) -> SIMD3<Double> {
+    static func rgb(_ hex: UInt32) -> SIMD3<Double> {
         SIMD3(Double(hex >> 16), Double((hex >> 8) & 255), Double(hex & 255)) / 255
     }
 
-    private static func mix(_ a: SIMD3<Double>, _ b: SIMD3<Double>, _ t: Double) -> SIMD3<Double> {
+    static func mix(_ a: SIMD3<Double>, _ b: SIMD3<Double>, _ t: Double) -> SIMD3<Double> {
         a + (b - a) * t
     }
 
@@ -469,8 +491,7 @@ private func drawNightCity(_ a: StudyCanvas) {
 }
 
 /// A portrait head in a study: where it sits (the face's center on the 120 × 80 canvas) and its
-/// colors. It is drawn with the study's light: a lit side and a shadow side split down the face,
-/// eye sockets, the nose's shadow plane, lips, and hair with a sheen.
+/// colors. It is drawn with the study's light in flat tones (see `StudyCanvas.head`).
 struct StudyHead {
     var x: CGFloat
     var y: CGFloat
@@ -493,150 +514,143 @@ struct StudyHead {
         return CGPoint(x: x + u * halfWidth + turn * halfWidth * (1 - abs(u)) * 0.6, y: y + v * halfHeight)
     }
 
-    /// The lit cheek, below the eye socket and beside the nose: the authored skin sample.
+    /// The lit cheek between the cheekbone's highlight and the mouth, in the skin's plain
+    /// midtone: the authored skin sample.
     func cheek(litOnRight: Bool) -> CGRect {
-        let center = point(litOnRight ? 0.52 : -0.52, 0.16, litOnRight: litOnRight)
-        let w = halfWidth * 0.3, h = halfHeight * 0.18
+        let center = point(litOnRight ? 0.55 : -0.55, 0.38, litOnRight: litOnRight)
+        let w = halfWidth * 0.24, h = halfHeight * 0.14
         return CGRect(x: center.x - w / 2, y: center.y - h / 2, width: w, height: h)
     }
 }
 
 extension StudyCanvas {
+    /// A portrait head in flat tones: the face's midtone, a shadow side whose edge follows the
+    /// brow, cheek and jaw, a dark band at the far edge, highlight planes on the lit forehead,
+    /// cheekbone, nose bridge and chin, then sockets, eyes, brows, the nose's shadow plane, lips
+    /// in four tones and hair.
     func head(_ head: StudyHead) {
         let right = light.dx > 0
-        let side: CGFloat = right ? 1 : -1
+        let side: CGFloat = right ? 1 : -1, away = -side
         let x = head.x, y = head.y, w = head.halfWidth, h = head.halfHeight
         func f(_ u: CGFloat, _ v: CGFloat) -> Point {
             let p = head.point(u, v, litOnRight: right)
             return (p.x, p.y)
         }
-        let skin = Self.rgb(head.skin)
-        let shade = shaded(skin), glow = lit(skin)
+        func region(_ color: SIMD3<Double>, _ points: [Point], within clip: CGPath? = nil, rounded: Bool = true) {
+            context.saveGState()
+            if let clip {
+                context.addPath(clip)
+                context.clip()
+            }
+            fill(color, rounded ? smooth(points) : straight(points))
+            context.restoreGState()
+        }
+        let skin = tones(Self.rgb(head.skin))
+        let white = SIMD3<Double>(1, 1, 1)
 
-        // Neck, in the jaw's shadow.
+        // Neck: midtone, the side away from the light in shadow, the jaw's dark shadow across the top.
         let neck = smooth([(x - 0.42 * w, y + 0.55 * h), (x + 0.42 * w, y + 0.55 * h), (x + 0.48 * w, y + 1.05 * h),
                            (x + 0.6 * w, y + 1.25 * h), (x - 0.6 * w, y + 1.25 * h), (x - 0.48 * w, y + 1.05 * h)])
-        paint(neck, head.skin)
-        soft(shade, 0.85, x - 0.8 * w, y + 0.45 * h, 1.6 * w, 0.55 * h, within: neck)
-        soft(shade, 0.5, x - side * 0.9 * w - 0.5 * w, y + 0.6 * h, w, 0.9 * h, within: neck)
+        fill(skin.midtone, neck)
+        region(skin.shadow, [(x - side * 0.7 * w, y + 0.5 * h), (x + side * 0.1 * w, y + 0.5 * h),
+                             (x + side * 0.05 * w, y + 0.85 * h), (x - side * 0.2 * w, y + 1.3 * h),
+                             (x - side * 0.7 * w, y + 1.3 * h)], within: neck, rounded: false)
+        region(skin.dark, [(x - 0.7 * w, y + 0.5 * h), (x + 0.7 * w, y + 0.5 * h), (x + 0.5 * w, y + 0.78 * h),
+                           (x, y + 0.86 * h), (x - 0.5 * w, y + 0.78 * h)], within: neck)
 
-        // Hair behind the head.
+        // Hair behind the head: a rounded crown, falling past the jaw and tapering to the shoulders.
         let length = head.hairLength
-        paint(smooth([(x - 1.12 * w, y - 0.35 * h), (x - 0.95 * w, y - 0.95 * h), (x, y - 1.18 * h),
-                      (x + 0.95 * w, y - 0.95 * h), (x + 1.12 * w, y - 0.35 * h), (x + 1.08 * w, y + (0.2 + length) * h),
-                      (x + 0.8 * w, y + (0.15 + length) * h), (x - 0.8 * w, y + (0.15 + length) * h),
-                      (x - 1.08 * w, y + (0.2 + length) * h)]), head.hair)
+        form(Self.rgb(head.hair), [(x - 1.1 * w, y - 0.35 * h), (x - 0.92 * w, y - 0.95 * h), (x, y - 1.18 * h),
+                                   (x + 0.92 * w, y - 0.95 * h), (x + 1.1 * w, y - 0.35 * h),
+                                   (x + 1.12 * w, y + (0.1 + length * 0.6) * h), (x + 0.98 * w, y + (0.2 + length) * h),
+                                   (x + 0.62 * w, y + (0.1 + length * 0.8) * h), (x - 0.62 * w, y + (0.1 + length * 0.8) * h),
+                                   (x - 0.98 * w, y + (0.2 + length) * h), (x - 1.12 * w, y + (0.1 + length * 0.6) * h)])
 
-        // Ears.
+        // Ears: midtone on the lit side, shadow on the other.
         for s: CGFloat in [-1, 1] {
-            ellipse(head.skin, x + s * 0.98 * w - 0.16 * w, y - 0.12 * h, 0.32 * w, 0.36 * h)
-            soft(shade, 0.5, x + s * 0.98 * w - 0.08 * w, y - 0.05 * h, 0.16 * w, 0.22 * h)
+            let ex = x + s * 0.98 * w
+            region(s == side ? skin.midtone : skin.shadow,
+                   [(ex - 0.16 * w, y - 0.3 * h), (ex + 0.16 * w, y - 0.25 * h), (ex + 0.12 * w, y + 0.1 * h),
+                    (ex - 0.1 * w, y + 0.12 * h)])
         }
 
-        // The face, then its form: the side away from the light falls into shadow, the lit
-        // cheekbone and forehead catch the light.
+        // The face in midtone, its shadow side, the dark band at the far edge, the lit planes.
         let face = smooth([f(0, -1), f(0.62, -0.9), f(0.95, -0.5), f(1, -0.05), f(0.9, 0.38), f(0.62, 0.72),
                            f(0.3, 0.93), f(0, 0.98), f(-0.3, 0.93), f(-0.62, 0.72), f(-0.9, 0.38), f(-1, -0.05),
                            f(-0.95, -0.5), f(-0.62, -0.9)])
-        paint(face, head.skin)
-        band(shade, 0.8, from: x + side * 0.05 * w, to: x - side * 0.45 * w, within: face)
-        soft(shade, 0.45, x - 0.9 * w, y + 0.55 * h, 1.8 * w, 0.6 * h, within: face)
-        soft(glow, 0.55, x + side * 0.45 * w - 0.35 * w, y - 0.05 * h, 0.7 * w, 0.45 * h, within: face)
-        soft(glow, 0.5, x + side * 0.15 * w - 0.5 * w, y - 0.92 * h, w, 0.5 * h, within: face)
+        fill(skin.midtone, face)
+        region(skin.shadow, [f(away * 0.2, -1.2), f(away * 0.3, -0.55), f(away * 0.22, -0.2), f(away * 0.42, 0.1),
+                             f(away * 0.3, 0.55), f(away * 0.05, 0.75), f(side * 0.15, 1.2), f(away * 1.4, 1.2),
+                             f(away * 1.4, -1.2)], within: face)
+        region(skin.dark, [f(away * 0.75, -1.2), f(away * 0.82, -0.3), f(away * 0.72, 0.35), f(away * 0.4, 0.85),
+                           f(away * 0.1, 1.2), f(away * 1.4, 1.2), f(away * 1.4, -1.2)], within: face)
+        region(skin.highlight, [f(0, -0.82), f(side * 0.35, -0.86), f(side * 0.55, -0.68), f(side * 0.35, -0.56),
+                                f(side * 0.05, -0.6)], within: face)
+        region(skin.highlight, [f(side * 0.38, 0.04), f(side * 0.7, -0.02), f(side * 0.74, 0.12), f(side * 0.5, 0.2)],
+               within: face)
+        region(skin.highlight, [f(side * 0.03, -0.3), f(side * 0.1, -0.3), f(side * 0.12, 0.22), f(side * 0.04, 0.24)],
+               within: face, rounded: false)
+        region(skin.highlight, [f(side * -0.05, 0.8), f(side * 0.15, 0.78), f(side * 0.12, 0.88), f(side * -0.03, 0.9)],
+               within: face)
 
-        // Eye sockets, eyes and brows.
-        let turn = (right ? 0.12 : -0.12) * w
+        // Eye sockets: shadow on the lit side, dark on the other.
         for s: CGFloat in [-1, 1] {
             let (ex, ey) = f(s * 0.42, -0.12)
-            soft(shade, s == side ? 0.35 : 0.55, ex - 0.32 * w, ey - 0.16 * h, 0.64 * w, 0.34 * h, within: face)
+            region(s == side ? skin.shadow : skin.dark,
+                   [(ex - 0.32 * w, ey), (ex - 0.1 * w, ey - 0.13 * h), (ex + 0.25 * w, ey - 0.12 * h),
+                    (ex + 0.34 * w, ey + 0.02 * h), (ex + 0.05 * w, ey + 0.1 * h), (ex - 0.22 * w, ey + 0.08 * h)],
+                   within: face)
         }
-        let brow = Self.mix(Self.rgb(head.hair), .zero, 0.4)
+
+        // Eyes (a light eye white on the lit side, shaded on the other), iris, catchlight and brows.
+        let turn = (right ? 0.12 : -0.12) * w
+        let glint = Self.mix(Self.rgb(light.glow), white, 0.7)
+        let brow = Self.mix(Self.rgb(head.hair), .zero, 0.3)
         for s: CGFloat in [-1, 1] {
             let (ex, ey) = f(s * 0.42, -0.1)
-            let ew = 0.26 * w, eh = 0.06 * h
+            let ew = 0.24 * w, eh = 0.055 * h
             let eye = smooth([(ex - ew, ey), (ex - ew * 0.3, ey - eh), (ex + ew * 0.4, ey - eh * 0.9), (ex + ew, ey),
-                              (ex + ew * 0.3, ey + eh * 0.7), (ex - ew * 0.4, ey + eh * 0.6)])
-            fill(Self.mix(Self.mix(skin, SIMD3(1, 1, 1), 0.25), shade, s == side ? 0.2 : 0.45), eye)
-            soft(Self.rgb(head.iris), 1, ex - 0.13 * w + turn * 0.3, ey - 0.1 * h, 0.26 * w, 0.2 * h, within: eye)
-            fill(brow, smooth([(ex - ew * 1.05, ey + 0.01 * h), (ex - ew * 0.3, ey - eh * 1.25), (ex + ew * 0.45, ey - eh * 1.15),
-                               (ex + ew * 1.05, ey + 0.01 * h), (ex + ew * 0.4, ey - eh * 0.75), (ex - ew * 0.3, ey - eh * 0.8)]))
-            if s == side { spark(ex + 0.04 * w + turn * 0.3, ey - 0.05 * h, 0.07 * w, 0.05 * h) }
+                              (ex + ew * 0.3, ey + eh * 0.8), (ex - ew * 0.4, ey + eh * 0.7)])
+            fill(s == side ? Self.mix(skin.midtone, white, 0.3) : skin.shadow, eye)
+            let cx = ex + turn * 0.3, cy = ey - 0.005 * h
+            region(Self.rgb(head.iris), [(cx - 0.1 * w, cy), (cx, cy - 0.07 * h), (cx + 0.1 * w, cy), (cx, cy + 0.07 * h)],
+                   within: eye)
+            if s == side {
+                region(glint, [(cx + 0.03 * w, cy - 0.035 * h), (cx + 0.07 * w, cy - 0.035 * h),
+                               (cx + 0.07 * w, cy - 0.005 * h), (cx + 0.03 * w, cy - 0.005 * h)], rounded: false)
+            }
             let (bx, by) = f(s * 0.44, -0.33)
-            fill(Self.rgb(head.hair), smooth([(bx - s * 0.36 * w, by + 0.03 * h), (bx - s * 0.1 * w, by - 0.06 * h),
-                                              (bx + s * 0.3 * w, by - 0.04 * h), (bx + s * 0.38 * w, by + 0.02 * h),
-                                              (bx + s * 0.1 * w, by), (bx - s * 0.25 * w, by + 0.06 * h)]))
+            region(brow, [(bx - s * 0.36 * w, by + 0.03 * h), (bx - s * 0.1 * w, by - 0.06 * h),
+                          (bx + s * 0.3 * w, by - 0.04 * h), (bx + s * 0.38 * w, by + 0.02 * h),
+                          (bx + s * 0.1 * w, by), (bx - s * 0.25 * w, by + 0.06 * h)])
         }
 
-        // Nose: its shadow plane, the lit bridge, the shadow under it, a light on the tip.
+        // Nose: its shadow plane and the dark under it.
         let (nx, ny) = f(0, 0.18)
-        soft(shade, 0.85, nx - side * 0.16 * w - 0.14 * w, ny - 0.42 * h, 0.28 * w, 0.6 * h, within: face)
-        soft(glow, 0.45, nx + side * 0.06 * w - 0.06 * w, ny - 0.38 * h, 0.12 * w, 0.45 * h, within: face)
-        soft(shade, 0.9, nx - 0.22 * w, ny + 0.02 * h, 0.44 * w, 0.13 * h, within: face)
-        soft(glow, 0.5, nx + side * 0.05 * w - 0.08 * w, ny - 0.06 * h, 0.16 * w, 0.1 * h, within: face)
+        region(skin.shadow, [(nx - side * 0.02 * w, ny - 0.42 * h), (nx - side * 0.06 * w, ny - 0.42 * h),
+                             (nx - side * 0.24 * w, ny + 0.02 * h), (nx - side * 0.04 * w, ny + 0.05 * h)],
+               within: face, rounded: false)
+        region(skin.dark, [(nx - 0.2 * w, ny + 0.06 * h), (nx - 0.05 * w, ny + 0.01 * h), (nx + 0.05 * w, ny + 0.01 * h),
+                           (nx + 0.2 * w, ny + 0.06 * h), (nx, ny + 0.11 * h)], within: face)
 
-        // Mouth: upper lip in shade, lower lip catching light, the line between, chin.
+        // Mouth: upper lip in shadow, lower lip midtone with a highlight, the dark line between,
+        // and the shadow under the lower lip.
         let (mx, my) = f(0, 0.5)
-        let lips = Self.rgb(head.lips)
-        fill(shaded(lips) * 1.1, smooth([(mx - 0.34 * w, my), (mx - 0.12 * w, my - 0.08 * h), (mx, my - 0.05 * h),
-                                         (mx + 0.12 * w, my - 0.08 * h), (mx + 0.34 * w, my), (mx, my + 0.01 * h)]))
-        fill(lips, smooth([(mx - 0.3 * w, my + 0.005 * h), (mx, my + 0.02 * h), (mx + 0.3 * w, my + 0.005 * h),
-                           (mx + 0.14 * w, my + 0.1 * h), (mx - 0.14 * w, my + 0.1 * h)]))
-        soft(Self.mix(lips, SIMD3(1, 1, 1), 0.3), 0.6, mx + side * 0.06 * w - 0.08 * w, my + 0.035 * h, 0.16 * w, 0.05 * h)
-        fill(Self.mix(lips, .zero, 0.6), smooth([(mx - 0.33 * w, my), (mx, my + 0.012 * h), (mx + 0.33 * w, my),
-                                                 (mx, my + 0.02 * h)]))
-        soft(shade, 0.45, mx - 0.2 * w, my + 0.1 * h, 0.4 * w, 0.12 * h, within: face)
-        soft(glow, 0.35, mx + side * 0.05 * w - 0.15 * w, my + 0.25 * h, 0.3 * w, 0.15 * h, within: face)
+        let lips = tones(Self.rgb(head.lips))
+        region(lips.shadow, [(mx - 0.34 * w, my), (mx - 0.12 * w, my - 0.08 * h), (mx, my - 0.05 * h),
+                             (mx + 0.12 * w, my - 0.08 * h), (mx + 0.34 * w, my), (mx, my + 0.01 * h)])
+        region(lips.midtone, [(mx - 0.3 * w, my + 0.005 * h), (mx, my + 0.02 * h), (mx + 0.3 * w, my + 0.005 * h),
+                              (mx + 0.14 * w, my + 0.1 * h), (mx - 0.14 * w, my + 0.1 * h)])
+        region(lips.highlight, [(mx + side * 0.02 * w, my + 0.04 * h), (mx + side * 0.14 * w, my + 0.035 * h),
+                                (mx + side * 0.1 * w, my + 0.07 * h)])
+        region(lips.dark, [(mx - 0.33 * w, my), (mx, my + 0.012 * h), (mx + 0.33 * w, my), (mx, my + 0.025 * h)])
+        region(skin.shadow, [(mx - 0.16 * w, my + 0.14 * h), (mx + 0.16 * w, my + 0.14 * h), (mx, my + 0.2 * h)],
+               within: face)
 
-        // Hair over the forehead, with a sheen on the lit side.
-        let fringe = smooth([(x - 1.05 * w, y - 0.25 * h), (x - 0.98 * w, y - 0.85 * h), (x - 0.3 * w, y - 1.15 * h),
-                             (x + 0.5 * w, y - 1.12 * h), (x + 1.02 * w, y - 0.8 * h), (x + 1.08 * w, y - 0.3 * h),
-                             (x + 0.9 * w, y - 0.62 * h), (x + 0.3 * w, y - 0.78 * h), (x - 0.35 * w, y - 0.72 * h),
-                             (x - 0.88 * w, y - 0.55 * h)])
-        paint(fringe, head.hair)
-        soft(lit(Self.rgb(head.hair)), 0.5, x + side * 0.3 * w - 0.35 * w, y - 1.08 * h, 0.7 * w, 0.25 * h, within: fringe)
-    }
-
-    /// A soft spot of color: full `alpha` in the middle of the oval, fading smoothly to nothing
-    /// at its edge, optionally kept inside a shape.
-    func soft(_ color: SIMD3<Double>, _ alpha: CGFloat, _ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat,
-              within clip: CGPath? = nil) {
-        guard w > 0, h > 0, let gradient = Self.fade(color, alpha) else { return }
-        context.saveGState()
-        if let clip {
-            context.addPath(clip)
-            context.clip()
-        }
-        context.translateBy(x: x + w / 2, y: y + h / 2)
-        context.scaleBy(x: w / 2, y: h / 2)
-        context.drawRadialGradient(gradient, startCenter: .zero, startRadius: 0, endCenter: .zero, endRadius: 1, options: [])
-        context.restoreGState()
-    }
-
-    /// Color rising smoothly from nothing at `from` to `alpha` at `to` (horizontally) and beyond,
-    /// inside a shape: the line between a face's lit and shadow sides.
-    func band(_ color: SIMD3<Double>, _ alpha: CGFloat, from start: CGFloat, to end: CGFloat, within clip: CGPath) {
-        guard let gradient = Self.fade(color, alpha) else { return }
-        context.saveGState()
-        context.addPath(clip)
-        context.clip()
-        context.drawLinearGradient(gradient, start: CGPoint(x: end, y: 0), end: CGPoint(x: start, y: 0),
-                                   options: [.drawsBeforeStartLocation])
-        context.restoreGState()
-    }
-
-    func fill(_ color: SIMD3<Double>, _ path: CGPath) {
-        context.setFillColor(Self.cgColor(color))
-        context.addPath(path)
-        context.fillPath()
-    }
-
-    /// `alpha` at the start, falling off along a smoothstep to nothing at the end.
-    private static func fade(_ color: SIMD3<Double>, _ alpha: CGFloat) -> CGGradient? {
-        let steps: [CGFloat] = [0, 0.25, 0.5, 0.75, 1]
-        let colors = steps.map { d -> CGColor in
-            let t = 1 - d
-            return cgColor(color, alpha: alpha * t * t * (3 - 2 * t))
-        }
-        return CGGradient(colorsSpace: space, colors: colors as CFArray, locations: steps)
+        // Hair over the forehead.
+        form(Self.rgb(head.hair), [(x - 1.05 * w, y - 0.25 * h), (x - 0.98 * w, y - 0.85 * h), (x - 0.3 * w, y - 1.15 * h),
+                                   (x + 0.5 * w, y - 1.12 * h), (x + 1.02 * w, y - 0.8 * h), (x + 1.08 * w, y - 0.3 * h),
+                                   (x + 0.9 * w, y - 0.62 * h), (x + 0.3 * w, y - 0.78 * h), (x - 0.35 * w, y - 0.72 * h),
+                                   (x - 0.88 * w, y - 0.55 * h)])
     }
 }
