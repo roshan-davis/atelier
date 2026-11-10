@@ -631,7 +631,7 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 ## AT-043 — Select People: skin, hair and clothes from a built-in MediaPipe model
 
-**Status:** PR open, never compiled (cloud has no Swift toolchain); needs a Mac build and tests (`PeoplePartsTests` runs the real model), then Rosh's acceptance. **Owner:** Claude. **Chat:** Claude project thread "Improve people and object selection masks". **Branch:** `claude/project-thread-m96qwc` (new PR after #100 merged). **Baseline:** `464d5bf`. **Dependencies:** AT-042 (merged).
+**Status:** PR open, never compiled (cloud has no Swift toolchain); needs a Mac build and tests (`PeoplePartsTests` runs the real model), then Rosh's acceptance. **Owner:** Claude. **Chat:** Claude project thread "Improve people and object selection masks". **Branch:** `claude/project-thread-m96qwc` (restarted from main after #100 merged). **PR:** [#101](https://github.com/roshan-davis/atelier/pull/101). **Baseline:** `464d5bf`. **Dependencies:** AT-042 (merged).
 
 **Evidence:** Rosh (2026-11-10): Body Skin takes clothes; wants the AI model built into the app, no download (report `reports/people-object-selection-2026-11-10.md`). Step 2 of 5.
 
