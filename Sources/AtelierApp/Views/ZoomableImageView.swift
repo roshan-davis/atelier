@@ -1,5 +1,6 @@
 import AppKit
 import AtelierCore
+import IOSurface
 import SwiftUI
 
 /// Zoom for loupe and develop. 100% shows one pixel of the full-size photo per screen pixel.
@@ -169,6 +170,9 @@ struct ZoomableImageView: NSViewRepresentable {
     /// A tool drawn over the photo (Masking), given where the photo is as it zooms and scrolls.
     /// It stays the same size on screen; scroll and pinch on it still zoom and pan the photo.
     var overlay: ((PhotoFrame) -> AnyView)? = nil
+    /// Set on the view that shows the Develop photo: live slider frames are drawn into it
+    /// straight from the GPU instead of arriving as `image` (see `PhotoFeed`).
+    var feed: PhotoFeed? = nil
 
     func makeNSView(context: Context) -> ZoomScrollView {
         let view = ZoomScrollView()
@@ -191,6 +195,11 @@ struct ZoomableImageView: NSViewRepresentable {
         view.viewport = zoom.viewport
         view.zoomState = zoom
         zoom.views.add(view)
+        if view.feed !== feed {
+            view.feed?.detach(view)
+            view.feed = feed
+        }
+        feed?.attach(view)
         view.visibleWidth = visibleWidth
         // Only a new photo takes the position: ZoomState changes reach this view before the
         // window passes it the next photo, and the photo still shown must not use it.
@@ -211,6 +220,11 @@ struct ZoomableImageView: NSViewRepresentable {
         view.isUpdating = false
         // Published after this update, not during it.
         DispatchQueue.main.async { [weak view] in MainActor.assumeIsolated { view?.updatePhotoFrame() } }
+    }
+
+    static func dismantleNSView(_ view: ZoomScrollView, coordinator: ()) {
+        view.feed?.detach(view)
+        view.feed = nil
     }
 }
 
@@ -336,6 +350,11 @@ final class ZoomScrollView: NSScrollView {
 
     /// The image last passed to `setImage`.
     private(set) var shownImage: NSImage?
+    /// Hands this view live frames; see `PhotoFeed`.
+    weak var feed: PhotoFeed?
+
+    /// Shows a live frame in place of the image; see `ZoomCanvasView.showFrame`.
+    func showFrame(_ surface: IOSurface) -> Bool { canvas.showFrame(surface) }
 
     func setImage(_ image: NSImage?, pixelSize: CGSize?) {
         shownImage = image
@@ -647,8 +666,29 @@ final class ZoomCanvasView: NSView {
 
     func setImage(_ image: NSImage?) {
         guard image !== currentImage else { return }
+        // A published render older than the live frame on screen (SwiftUI passing it along
+        // late) would show a step back; the newer frame stays.
+        if let image, let feed = scrollView?.feed, feed.isOlderThanShown(image) { return }
         currentImage = image
         layer?.contents = image?.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        if let scrollView { scrollView.feed?.imageShown(in: scrollView) }
+    }
+
+    /// Shows a live frame, a GPU surface Core Image rendered into, as the layer's contents,
+    /// scaled like the image. Only a frame of the shown image's shape: one of another shape
+    /// needs the view's size worked out again, which the image path does.
+    func showFrame(_ surface: IOSurface) -> Bool {
+        guard let currentImage, currentImage.size.width > 0, currentImage.size.height > 0,
+              surface.width > 0, surface.height > 0 else { return false }
+        // The shown image's height at the frame's width: within rounding of a pixel when they
+        // are the same photo at two sizes (the proxy and the full-size render).
+        let expectedHeight = currentImage.size.height * CGFloat(surface.width) / currentImage.size.width
+        guard abs(CGFloat(surface.height) - expectedHeight) <= 1.5 else { return false }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        layer?.contents = surface
+        CATransaction.commit()
+        return true
     }
 
     // MARK: Cursor

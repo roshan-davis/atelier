@@ -2,6 +2,7 @@ import AppKit
 import AtelierCore
 import CoreImage
 import Foundation
+import IOSurface
 
 /// How the Develop view shows the photo before edits next to the edited one.
 enum CompareMode: String, CaseIterable {
@@ -41,10 +42,34 @@ private struct DevelopMeasureRequest {
     var rank: Int { count * 2 + (fromPreview ? 0 : 1) }
 }
 
+/// A proxy render handed to the render queue (`DevelopController.submitRender`).
+private struct ProxyRenderRequest {
+    let session: DevelopSession
+    let settings: DevelopSettings
+    let preview: SliderPreview?
+    let renderBefore: Bool
+    let cropping: Bool
+    let overlay: UUID?
+    let clipping: (shadows: Bool, highlights: Bool)
+    let assetID: Int64?
+    let count: Int
+    let measures: Bool
+    let generation: Int
+    let queuedAt: CFAbsoluteTime
+    /// Set when the frame goes straight to the photo view (`PhotoFeed`); nil renders a CGImage.
+    var surfaces: DisplaySurfaces?
+    let measureJob: LatestJob<DevelopMeasureRequest>
+    let measureQueue: DispatchQueue
+    let openGeneration: LockedValue<Int>
+    let renderBeganAt: LockedValue<CFAbsoluteTime>
+}
+
 /// State for the Develop view: the open photo's settings, its live proxy render, and saving.
 ///
 /// Rendering is "latest wins": while one render runs, further slider changes collapse into a
-/// single follow-up render, so dragging a slider never queues up stale frames.
+/// single follow-up render, so dragging a slider never queues up stale frames. The render queue
+/// starts that follow-up itself, and live frames go straight from the GPU to the photo view
+/// (`PhotoFeed`); `image` is published when the edit rests.
 @MainActor
 final class DevelopController: ObservableObject {
     /// Long edge of the live proxy, per the PRD.
@@ -482,10 +507,22 @@ final class DevelopController: ObservableObject {
     private let previews: PreviewCache
     private var session: DevelopSession?
     private var rendering = false
-    private var needsRender = false
+    /// Proxy renders, latest-wins; see `submitRender`.
+    private let renderJob = LatestJob<ProxyRenderRequest>()
+    /// The last request handed to the render queue, for the settled image (`publishWhenSettled`).
+    private var lastRender: ProxyRenderRequest?
+    private var settleItem: DispatchWorkItem?
+    /// How long an edit rests before its last live frame is published as `image`.
+    private static let settleDelay: TimeInterval = 0.12
+    /// Gives the photo view its live frames straight from the GPU; see `PhotoFeed`.
+    let photoFeed = PhotoFeed()
+    private let displaySurfaces = DisplaySurfaces()
+    /// A live frame didn't fit the photo on screen; frames take the ordinary path until the
+    /// pointer edit ends or another photo opens.
+    private var liveFramesOff = false
     /// For the timing log: when the running render started, and whether a long one, or an edit
     /// made before the editable copy was ready, has been logged.
-    private var renderStartedAt = DevelopTimingLog.now()
+    private let renderBeganAt = LockedValue(DevelopTimingLog.now())
     private var renderHangLogged = false
     private var editBeforeProxyLogged = false
     private var saveTask: Task<Void, Never>?
@@ -590,6 +627,8 @@ final class DevelopController: ObservableObject {
         openGeneration.value += 1
         let generation = openGeneration.value
         firstRenderDone = false
+        liveFramesOff = false
+        settleItem?.cancel()
         // Until the first render shows the photo, or opening fails.
         isLoading = false
         session = nil
@@ -1807,21 +1846,18 @@ final class DevelopController: ObservableObject {
             return
         }
         lastRenderRequest.value = Date()
+        settleItem?.cancel()
         if rendering {
-            needsRender = true
             // Every later edit waits behind a render that hasn't come back (Rosh, Nov 9, 2026:
             // B&W and sliders didn't reach the photo). Logged so a hang shows in the trace.
-            let running = DevelopTimingLog.now() - renderStartedAt
+            let running = DevelopTimingLog.now() - renderBeganAt.value
             if running > 2, !renderHangLogged {
                 renderHangLogged = true
                 DevelopTimingLog.shared.log(assetID, "edit waiting: the render before it has run \(Int(running * 1000)) ms "
                     + "(showing \(showingBefore ? "Before" : "After"))")
             }
-            return
         }
         rendering = true
-        renderStartedAt = DevelopTimingLog.now()
-        renderHangLogged = false
         let preview = sliderPreview
         let renderBefore = showingBefore && preview == nil
         var settings = renderBefore ? beforeSettings : self.settings
@@ -1831,70 +1867,154 @@ final class DevelopController: ObservableObject {
             crop.angle = 0
             settings.crop = crop
         }
-        let assetID = self.assetID
         let overlay = isMasking && showMaskOverlay ? selectedMaskID : nil
         let clipping = overlay == nil && preview == nil ? clippingOverlay : (shadows: false, highlights: false)
         renderCount += 1
-        let count = renderCount
-        let measures = overlay == nil && preview == nil
-        let measureQueue = self.measureQueue
-        let measureJob = self.measureJob
-        let openGeneration = self.openGeneration
-        let generation = openGeneration.value
-        let queuedAt = DevelopTimingLog.now()
-        queue.async {
-            let renderBegan = DevelopTimingLog.now()
-            let rendered = RenderSignposts.measure("Proxy render") {
-                session.renderForDisplay(settings, cropping: cropping, overlay: overlay, preview: preview,
-                                         shadowClipping: clipping.shadows, highlightClipping: clipping.highlights)
-            }
-            let cgImage = rendered?.image
-            let renderTook = DevelopTimingLog.ms(since: renderBegan)
-            if renderTook > 300 || cgImage == nil {
-                DevelopTimingLog.shared.log(assetID, cgImage == nil ? "render FAILED after \(renderTook) ms"
-                    : "slow render: \(renderTook) ms (waited \(Int(((renderBegan - queuedAt) * 1000).rounded())) ms for the render queue)")
-            }
-            // The red overlay or an Option-drag view would skew the histogram; keep the last one
-            // while it shows. It is counted after the photo is on its way, beside the next render.
-            if measures, let plain = rendered?.plain {
-                Self.measure(DevelopMeasureRequest(image: plain, assetID: assetID, count: count, generation: generation),
-                             job: measureJob, on: measureQueue, openGeneration: openGeneration) { request, histogram, scope, took in
-                    MainActor.assumeIsolated { self.applyMeasure(request, histogram: histogram, scope: scope, took: took) }
-                }
-            }
-            DispatchQueue.main.async {
-                MainActor.assumeIsolated {
-                    self.rendering = false
-                    // Rendered from this open's copy, not one from before a `reopen()` of the same
-                    // photo (the old file). An older one is still followed by any waiting render.
-                    let current = self.assetID == assetID && self.openGeneration.value == generation
-                    // A render started before the crop tool opened or closed has the wrong shape; the
-                    // next render replaces it.
-                    if current, cropping != self.isCropping, preview == self.sliderPreview,
-                       renderBefore == (self.showingBefore && self.sliderPreview == nil), let cgImage {
-                        self.image = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
-                        self.showsStandIn = false
-                        self.imageIsWhole = !cropping
-                    }
-                    if current, !self.firstRenderDone {
-                        // The photo itself is on screen now (or its render failed): no spinner.
-                        self.isLoading = false
-                        DevelopTimingLog.shared.log(assetID, "first render: waited \(Int(((renderBegan - queuedAt) * 1000).rounded())) ms "
-                            + "for the render queue, rendered in \(DevelopTimingLog.ms(since: renderBegan)) ms, "
-                            + "photo shown +\(DevelopTimingLog.ms(since: self.openedAt)) ms")
-                        self.firstRenderDone = true
-                        self.prefetchNeighboursWhenIdle()
-                    }
-                    if self.needsRender {
-                        self.needsRender = false
-                        self.scheduleRender()
-                    } else {
-                        self.scheduleFullRender()
-                        if self.compareMode != .off { self.scheduleFullBeforeRender() }
-                    }
-                }
+        // Once the photo is up, live frames go straight from the GPU to the photo view (see
+        // `PhotoFeed`); the first render is published the ordinary way, as it ends the stand-in.
+        let direct = photoFeed.isAttached && firstRenderDone && cropping && !liveFramesOff
+        submitRender(ProxyRenderRequest(
+            session: session, settings: settings, preview: preview, renderBefore: renderBefore, cropping: cropping,
+            overlay: overlay, clipping: clipping, assetID: assetID, count: renderCount,
+            measures: overlay == nil && preview == nil, generation: openGeneration.value,
+            queuedAt: DevelopTimingLog.now(), surfaces: direct ? displaySurfaces : nil,
+            measureJob: measureJob, measureQueue: measureQueue, openGeneration: openGeneration,
+            renderBeganAt: renderBeganAt))
+    }
+
+    /// Hands `request` to the render queue, latest-wins: a request still waiting is replaced, and
+    /// the queue starts the next render as soon as one finishes, without waiting for the main
+    /// thread (which used to hand out every follow-up render, so a busy main thread held the GPU
+    /// idle). Each render is a block of its own on the queue, so the Before photo and stored
+    /// previews still get their turn between frames.
+    private func submitRender(_ request: ProxyRenderRequest) {
+        lastRender = request
+        guard renderJob.submit(request) else { return }
+        let job = renderJob
+        let queue = self.queue
+        queue.async { Self.renderNext(job: job, on: queue, controller: self) }
+    }
+
+    /// Renders the newest waiting request on the render queue, posts it to the main thread and
+    /// queues itself again; the drain ends when nothing is waiting.
+    private nonisolated static func renderNext(job: LatestJob<ProxyRenderRequest>, on queue: DispatchQueue,
+                                               controller: DevelopController) {
+        guard let request = job.take() else { return }
+        let renderBegan = DevelopTimingLog.now()
+        request.renderBeganAt.value = renderBegan
+        var surface: IOSurface?
+        var cgImage: CGImage?
+        var plain: CGImage?
+        RenderSignposts.measure("Proxy render") {
+            if let surfaces = request.surfaces,
+               let frame = request.session.renderToSurface(request.settings, cropping: request.cropping,
+                                                           overlay: request.overlay, preview: request.preview,
+                                                           shadowClipping: request.clipping.shadows,
+                                                           highlightClipping: request.clipping.highlights,
+                                                           surfaces: surfaces) {
+                surface = frame.surface
+                plain = frame.plain
+            } else if let rendered = request.session.renderForDisplay(request.settings, cropping: request.cropping,
+                                                                      overlay: request.overlay, preview: request.preview,
+                                                                      shadowClipping: request.clipping.shadows,
+                                                                      highlightClipping: request.clipping.highlights) {
+                cgImage = rendered.image
+                plain = rendered.plain
             }
         }
+        let renderTook = DevelopTimingLog.ms(since: renderBegan)
+        if renderTook > 300 || (surface == nil && cgImage == nil) {
+            DevelopTimingLog.shared.log(request.assetID, surface == nil && cgImage == nil ? "render FAILED after \(renderTook) ms"
+                : "slow render: \(renderTook) ms (waited \(Int(((renderBegan - request.queuedAt) * 1000).rounded())) ms for the render queue)")
+        }
+        // The red overlay or an Option-drag view would skew the histogram; keep the last one
+        // while it shows. It is counted after the photo is on its way, beside the next render.
+        if request.measures, let plain {
+            Self.measure(DevelopMeasureRequest(image: plain, assetID: request.assetID, count: request.count,
+                                          generation: request.generation),
+                    job: request.measureJob, on: request.measureQueue,
+                    openGeneration: request.openGeneration) { measured, histogram, scope, took in
+                MainActor.assumeIsolated { controller.applyMeasure(measured, histogram: histogram, scope: scope, took: took) }
+            }
+        }
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated {
+                controller.finishRender(request, surface: surface, cgImage: cgImage, renderBegan: renderBegan)
+            }
+        }
+        queue.async { Self.renderNext(job: job, on: queue, controller: controller) }
+    }
+
+    private func finishRender(_ request: ProxyRenderRequest, surface: IOSurface?, cgImage: CGImage?,
+                              renderBegan: CFAbsoluteTime) {
+        // Nothing newer has been asked for.
+        let latest = request.count == renderCount
+        if latest { rendering = false }
+        renderHangLogged = false
+        // Rendered from this open's copy, not one from before a `reopen()` of the same photo (the
+        // old file). A render started before the crop tool opened or closed has the wrong shape;
+        // the next render replaces it.
+        let current = assetID == request.assetID && openGeneration.value == request.generation
+        let fits = current && request.cropping != isCropping && request.preview == sliderPreview
+            && request.renderBefore == (showingBefore && sliderPreview == nil)
+        var shownLive = false
+        if let surface, let surfaces = request.surfaces {
+            if fits {
+                shownLive = photoFeed.show(surface, count: request.count, from: surfaces)
+                if !shownLive {
+                    // Another shape than the photo on screen (an Aspect or crop change): frames
+                    // take the ordinary path until the edit ends, and this one is redone that way.
+                    liveFramesOff = true
+                    if latest {
+                        var ordinary = request
+                        ordinary.surfaces = nil
+                        rendering = true
+                        submitRender(ordinary)
+                        return
+                    }
+                }
+            } else {
+                surfaces.checkIn(surface)
+            }
+        }
+        if fits, let cgImage {
+            let shown = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+            image = shown
+            photoFeed.published(shown, count: request.count)
+            showsStandIn = false
+            imageIsWhole = !request.cropping
+        }
+        if current, !firstRenderDone {
+            // The photo itself is on screen now (or its render failed): no spinner.
+            isLoading = false
+            DevelopTimingLog.shared.log(request.assetID, "first render: waited \(Int(((renderBegan - request.queuedAt) * 1000).rounded())) ms "
+                + "for the render queue, rendered in \(DevelopTimingLog.ms(since: renderBegan)) ms, "
+                + "photo shown +\(DevelopTimingLog.ms(since: openedAt)) ms")
+            firstRenderDone = true
+            prefetchNeighboursWhenIdle()
+        }
+        guard latest else { return }
+        if shownLive { publishWhenSettled(request) }
+        scheduleFullRender()
+        if compareMode != .off { scheduleFullBeforeRender() }
+    }
+
+    /// Once the edit rests, renders the last live frame's settings the ordinary way and publishes
+    /// that image, so everything that reads `image` (and the photo at rest) is exactly as before.
+    /// Any newer edit cancels it; a drag publishes nothing until it pauses.
+    private func publishWhenSettled(_ request: ProxyRenderRequest) {
+        settleItem?.cancel()
+        let count = request.count
+        let item = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.renderCount == count, var settled = self.lastRender, settled.count == count else { return }
+                settled.surfaces = nil
+                self.rendering = true
+                self.submitRender(settled)
+            }
+        }
+        settleItem = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.settleDelay, execute: item)
     }
 
     /// Preloads the neighbours once the photo has gone `prefetchDelay` without a render, checking
@@ -2178,6 +2298,7 @@ final class DevelopController: ObservableObject {
     func endPointerEdit() {
         guard pointerEditInProgress, !isPrimaryButtonPressed() else { return }
         pointerEditInProgress = false
+        liveFramesOff = false
         if dirty { flushSave() }
     }
 
