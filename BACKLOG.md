@@ -503,7 +503,7 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 ## AT-035 — Match Look: fast fitter on a stand-in of the renderer
 
-**Status:** Implementation in review. Never compiled; Mac check and manual acceptance pending. **Owner:** Cl. **Chat:** Claude project thread "Match Look quality". **Branch:** `claude/match-look-fast-fitter`, stacked on AT-034 (`claude/match-look-color`, PR #91). **PR:** to be linked. **Dependencies:** AT-034.
+**Status:** Implementation in review. Never compiled; Mac check and manual acceptance pending. **Owner:** Cl. **Chat:** Claude project thread "Match Look quality". **Branch:** `claude/match-look-fast-fitter`, stacked on AT-034 (`claude/match-look-color`, PR #91). **PR:** [#92](https://github.com/roshan-davis/atelier/pull/92). **Dependencies:** AT-034.
 
 **Scope:** Rosh (2026-11-10): Match Look "still terribly slow" with poor results; asked for research into a faster, efficient way with skin protected, skin matched or neither. Rosh chose "new fitter PR". The match renders the photo for real only for White Balance and Exposure, one stage render, two renders per Match Look mask weight and a final check; every other try is computed by `LookEmulator` (`Sources/AtelierCore/Develop/LookMatch+Emulator.swift`) from the stage. Final refinement no longer moves Temp/Tint when the stand-in is on. Log line: renders, stand-in tries, seconds, stand-in error.
 
