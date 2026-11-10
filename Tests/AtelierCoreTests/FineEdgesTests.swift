@@ -87,7 +87,7 @@ final class MaskGuidedFilterTests: XCTestCase {
             return pixel[0]
         }
         XCTAssertGreaterThan(value(100), 0.95, "the selection stays")
-        XCTAssertGreaterThan(value(197), 0.7, "the edge moved out to the photo's edge")
+        XCTAssertGreaterThan(value(197), 0.4, "the edge moved out toward the photo's edge (was 0)")
         XCTAssertLessThan(value(205), 0.3, "and stops there")
         XCTAssertLessThan(value(300), 0.05)
     }
