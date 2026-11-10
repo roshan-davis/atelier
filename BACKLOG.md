@@ -525,7 +525,7 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 ## AT-036 — Develop: live slider frames straight from the GPU to the photo view
 
-**Status:** Implementation in review. Never compiled (cloud, no Swift toolchain); Mac build, tests, timings and Rosh's manual acceptance pending. **Owner:** Cl. **Chat:** Claude project thread "Make Develop sliders smooth like LightCraft". **Branch:** `claude/project-thread-f7xbz1`. **PR:** to be linked. **Baseline:** `4f6f6b8`. Part of AT-011 (drag responsiveness); follows AT-011a (PR #81).
+**Status:** Implementation in review. Never compiled (cloud, no Swift toolchain); Mac build, tests, timings and Rosh's manual acceptance pending. **Owner:** Cl. **Chat:** Claude project thread "Make Develop sliders smooth like LightCraft". **Branch:** `claude/project-thread-f7xbz1`. **PR:** [#93](https://github.com/roshan-davis/atelier/pull/93). **Baseline:** `4f6f6b8`. Part of AT-011 (drag responsiveness); follows AT-011a (PR #81).
 
 **Evidence:** `reports/develop-preview-vs-lightcraft-2026-11-10.md` (project files and `~/RoshProjects/Atelier/reports/`), findings F1–F3. A warm proxy render takes ~11 ms (Codex, Release, PR #81), but settings→photo took 37.5 ms median because every frame was read back to the CPU (`createCGImage`), published through SwiftUI, uploaded again by Core Animation, and the next render could only start after the main thread handled the last one. LightCraft draws its renders' GPU textures directly.
 
