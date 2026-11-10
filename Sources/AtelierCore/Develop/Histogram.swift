@@ -3,7 +3,8 @@ import Foundation
 
 /// RGB and luminance histogram of a rendered image, for the Develop panel.
 public struct Histogram: Sendable, Hashable {
-    public static let binCount = 64
+    /// 128 rather than 64 so the drawn graph is smooth (`HistogramPicture`).
+    public static let binCount = 128
     /// Long edge of the copy the histogram counts.
     public static let sampleSize = 256
 

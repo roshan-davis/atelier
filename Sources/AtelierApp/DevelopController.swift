@@ -49,6 +49,8 @@ private struct DevelopMeasureRequest {
 @MainActor
 final class DevelopMeasures: ObservableObject {
     @Published fileprivate(set) var histogram: Histogram?
+    /// `histogram` drawn, made beside the counting off the main thread (`HistogramPicture`).
+    @Published fileprivate(set) var histogramPicture: CGImage?
     @Published fileprivate(set) var colorScope: ColorScope?
 }
 
@@ -670,6 +672,7 @@ final class DevelopController: ObservableObject {
         // Ranks only compare within one open (requests carry the open's generation).
         measuredRank = 0
         measures.histogram = nil
+        measures.histogramPicture = nil
         shootingInfo = nil
         measures.colorScope = nil
         fullImage = nil
@@ -2005,8 +2008,10 @@ final class DevelopController: ObservableObject {
             Self.measure(DevelopMeasureRequest(image: plain, assetID: request.assetID, count: request.count,
                                           generation: request.generation),
                     job: request.measureJob, on: request.measureQueue,
-                    openGeneration: request.openGeneration) { measured, histogram, scope, took in
-                MainActor.assumeIsolated { controller.applyMeasure(measured, histogram: histogram, scope: scope, took: took) }
+                    openGeneration: request.openGeneration) { measured, histogram, picture, scope, took in
+                MainActor.assumeIsolated {
+                    controller.applyMeasure(measured, histogram: histogram, picture: picture, scope: scope, took: took)
+                }
             }
         }
         let timing = PhotoFeed.RenderTiming(count: request.count, readyAt: readyAt, duration: readyAt - renderClock,
@@ -2189,7 +2194,7 @@ final class DevelopController: ObservableObject {
     /// the drain applies whichever request it takes with the first caller's closure.
     private nonisolated static func measure(_ request: DevelopMeasureRequest, job: LatestJob<DevelopMeasureRequest>,
                                             on queue: DispatchQueue, openGeneration: LockedValue<Int>,
-                                            apply: @escaping (DevelopMeasureRequest, Histogram?, ColorScope?, Int) -> Void) {
+                                            apply: @escaping (DevelopMeasureRequest, Histogram?, CGImage?, ColorScope?, Int) -> Void) {
         // Not for an earlier open, and never in place of a waiting request that outranks it (the
         // render's count must not be replaced by the preview that arrived late).
         guard job.submit(request, if: { new, pending in
@@ -2200,16 +2205,18 @@ final class DevelopController: ObservableObject {
         queue.async {
             while let request = job.take() {
                 let began = DevelopTimingLog.now()
-                let (histogram, scope) = RenderSignposts.measure("Histogram") {
-                    (Histogram(image: request.image), ColorScope(image: request.image))
+                let (histogram, picture, scope) = RenderSignposts.measure("Histogram") { () -> (Histogram?, CGImage?, ColorScope?) in
+                    let histogram = Histogram(image: request.image)
+                    return (histogram, histogram.flatMap { HistogramPicture.make($0) }, ColorScope(image: request.image))
                 }
                 let took = DevelopTimingLog.ms(since: began)
-                DispatchQueue.main.async { apply(request, histogram, scope, took) }
+                DispatchQueue.main.async { apply(request, histogram, picture, scope, took) }
             }
         }
     }
 
-    private func applyMeasure(_ request: DevelopMeasureRequest, histogram: Histogram?, scope: ColorScope?, took: Int) {
+    private func applyMeasure(_ request: DevelopMeasureRequest, histogram: Histogram?, picture: CGImage?,
+                              scope: ColorScope?, took: Int) {
         guard assetID == request.assetID, openGeneration.value == request.generation,
               request.rank >= measuredRank else { return }
         let fromPreview = request.fromPreview
@@ -2220,7 +2227,10 @@ final class DevelopController: ObservableObject {
         }
         measuredRank = request.rank
         if histogram != nil || scope != nil { frameHUD.histogramPublished() }
-        if let histogram { measures.histogram = histogram }
+        if let histogram {
+            measures.histogram = histogram
+            measures.histogramPicture = picture
+        }
         if let scope { measures.colorScope = scope }
     }
 
@@ -2232,8 +2242,10 @@ final class DevelopController: ObservableObject {
               let cgImage = preview.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
         Self.measure(DevelopMeasureRequest(image: cgImage, assetID: assetID, count: renderCount,
                                            generation: openGeneration.value, fromPreview: true),
-                     job: measureJob, on: measureQueue, openGeneration: openGeneration) { request, histogram, scope, took in
-            MainActor.assumeIsolated { self.applyMeasure(request, histogram: histogram, scope: scope, took: took) }
+                     job: measureJob, on: measureQueue, openGeneration: openGeneration) { request, histogram, picture, scope, took in
+            MainActor.assumeIsolated {
+                self.applyMeasure(request, histogram: histogram, picture: picture, scope: scope, took: took)
+            }
         }
     }
 

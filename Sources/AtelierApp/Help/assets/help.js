@@ -353,20 +353,45 @@
     canvas.width = width * ratio;
     canvas.height = height * ratio;
     const ctx = canvas.getContext("2d");
-    ctx.scale(ratio, ratio);
-    ctx.globalCompositeOperation = "lighter";
-    const channels = canvas.dataset.channel === "l"
-      ? [[data.l, "rgba(255,255,255,0.22)"]]
-      : [[data.r, "rgba(230,51,51,0.7)"], [data.g, "rgba(51,204,77,0.7)"], [data.b, "rgba(64,102,255,0.7)"]];
-    for (const [bins, color] of channels) {
+    if (canvas.dataset.channel === "l") {
+      ctx.scale(ratio, ratio);
       ctx.beginPath();
       ctx.moveTo(0, height);
-      bins.forEach((v, i) => ctx.lineTo((width * i) / (bins.length - 1), height * (1 - v * 0.92)));
+      data.l.forEach((v, i) => ctx.lineTo((width * i) / (data.l.length - 1), height * (1 - v * 0.92)));
       ctx.lineTo(width, height);
       ctx.closePath();
-      ctx.fillStyle = color;
+      ctx.fillStyle = "rgba(255,255,255,0.22)";
       ctx.fill();
+      return;
     }
+    // As the app draws it (HistogramPicture.swift): the three channels in one pass, adding up
+    // to yellow, cyan, magenta and gray where they overlap, bins lightly smoothed.
+    const colors = [[0.56, 0.10, 0.10], [0.11, 0.50, 0.14], [0.11, 0.18, 0.54]];
+    const smooth = (b) => b.map((v, i) => (i === 0 || i === b.length - 1) ? v : (b[i - 1] + 2 * v + b[i + 1]) / 4);
+    const value = (b, f) => {
+      const last = b.length - 1, p = Math.min(last, Math.max(0, f * last));
+      const i = Math.min(last - 1, Math.floor(p)), t = p - i, e = t * t * (3 - 2 * t);
+      return Math.min(1, Math.max(0, b[i] + (b[i + 1] - b[i]) * e));
+    };
+    const bins = [data.r, data.g, data.b].map(smooth);
+    const w = canvas.width, h = canvas.height;
+    const image = ctx.createImageData(w, h);
+    for (let x = 0; x < w; x++) {
+      const tops = bins.map((b) => value(b, x / (w - 1)) * h * 0.92);
+      const rows = Math.min(h, Math.ceil(Math.max(...tops)));
+      for (let row = 0; row < rows; row++) {
+        const cover = tops.map((top) => Math.min(1, Math.max(0, top - row)));
+        const light = [0, 1, 2].map((k) => colors.reduce((sum, c, n) => sum + c[k] * cover[n], 0));
+        const alpha = Math.min(1, Math.max(...cover, ...light));
+        const o = ((h - 1 - row) * w + x) * 4;
+        // ImageData is unpremultiplied.
+        image.data[o] = Math.round(255 * Math.min(1, light[0] / alpha));
+        image.data[o + 1] = Math.round(255 * Math.min(1, light[1] / alpha));
+        image.data[o + 2] = Math.round(255 * Math.min(1, light[2] / alpha));
+        image.data[o + 3] = Math.round(255 * alpha);
+      }
+    }
+    ctx.putImageData(image, 0, 0);
   }
 
   // MARK: Numbered pins
