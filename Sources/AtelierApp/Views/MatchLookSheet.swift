@@ -249,6 +249,9 @@ struct MatchLookSheet: View {
             } else if let message = match.message {
                 Label(message, systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.secondary)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(Text(message))
+                    .accessibilityIdentifier("match-look-notice")
             } else if match.isMatching {
                 Text("Matching…").foregroundStyle(.secondary)
             } else if match.referenceImage == nil {

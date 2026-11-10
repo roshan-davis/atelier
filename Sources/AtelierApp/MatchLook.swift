@@ -258,7 +258,12 @@ final class MatchLookModel: ObservableObject, Identifiable {
     }
     var canApply: Bool {
         guard let match, !isMatching, !isLoadingReference else { return false }
-        return skinMode != .match || match.settings(strength: strength / 100) != base
+        guard skinMode == .match else { return true }
+        guard strength > 0 else { return false }
+        if match.settings(strength: strength / 100) != base { return true }
+        // A fit with no changes on the open photo can still adjust the other selected photos.
+        return otherCount > 0 && (options.whiteBalance || options.tone || options.color
+            || !match.notices.contains(.noSkinInReference))
     }
 
     // MARK: Reference
@@ -475,7 +480,11 @@ final class MatchLookModel: ObservableObject, Identifiable {
         let strength = self.strength / 100
         let step = "Match Look: \(referenceName ?? "Reference")"
         guard strength > 0 else { return }
-        library.develop.apply(match.settings(strength: strength), onto: [assetID], step: step)
+        let settings = match.settings(strength: strength)
+        let firstPhotoChanged = settings != base
+        if firstPhotoChanged {
+            library.develop.apply(settings, onto: [assetID], step: step)
+        }
         let others = Array(targets.dropFirst())
         guard !others.isEmpty else { return }
         switch applyMode {
@@ -488,7 +497,8 @@ final class MatchLookModel: ObservableObject, Identifiable {
             }
             library.status = "Matched \(targets.count) photos to \(referenceName ?? "the reference")"
         case .each:
-            library.matchEach(others, target: fittedTarget, options: options, strength: strength, step: step)
+            library.matchEach(others, target: fittedTarget, options: options, strength: strength, step: step,
+                              firstPhotoChanged: firstPhotoChanged)
         }
     }
 }
@@ -570,11 +580,13 @@ extension LibraryModel {
     }
 
     /// Match each photo: fits every photo to the reference on its own, in the background.
-    func matchEach(_ ids: [Int64], target: LookTarget, options: LookMatchOptions, strength: Double, step: String) {
+    func matchEach(_ ids: [Int64], target: LookTarget, options: LookMatchOptions, strength: Double,
+                   step: String, firstPhotoChanged: Bool) {
         let total = ids.count
         matchProgress = ImportStatus(phase: "Matching 1 of \(total)", fraction: 0)
         matchTask = Task.detached(priority: .userInitiated) { [weak self] in
-            var matched = 0, failed = 0, skinFallbacks = 0
+            var matched = firstPhotoChanged ? 1 : 0, unchanged = firstPhotoChanged ? 0 : 1
+            var failed = 0, skinFallbacks = 0
             for (index, id) in ids.enumerated() {
                 if Task.isCancelled { break }
                 let found: (URL, DevelopSettings)? = await MainActor.run { [weak self] in
@@ -622,7 +634,7 @@ extension LibraryModel {
                 }
                 if Task.isCancelled && !saved { break }
                 if saved {
-                    matched += 1
+                    if settings != found.1 { matched += 1 } else { unchanged += 1 }
                     if !match.notices.isDisjoint(with: [.noSkinInPhoto, .noSkinInReference, .skinMatchLimited]) {
                         skinFallbacks += 1
                     }
@@ -630,8 +642,11 @@ extension LibraryModel {
                     failed += 1
                 }
             }
-            var parts = ["Matched \(matched + 1) photo\(matched == 0 ? "" : "s")"]
-            if skinFallbacks > 0 { parts.append("\(skinFallbacks) additional photos matched without a face color adjustment") }
+            var parts = ["Matched \(matched) photo\(matched == 1 ? "" : "s")"]
+            if unchanged > 0 { parts.append("\(unchanged) unchanged") }
+            if skinFallbacks > 0 {
+                parts.append("Skipped face color on \(skinFallbacks) additional photo\(skinFallbacks == 1 ? "" : "s")")
+            }
             if failed > 0 { parts.append("\(failed) unavailable, changed during the match, or could not be saved") }
             if Task.isCancelled { parts.insert("Match cancelled", at: 0) }
             let status = parts.joined(separator: ", ")

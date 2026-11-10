@@ -114,7 +114,36 @@ final class MatchLookModelTests: XCTestCase {
             let history = try library.catalog.developHistory(for: id)
             XCTAssertEqual(history.steps.map(\.name), ["Import", "Match Look: The Matrix — Portrait"])
         }
-        XCTAssertTrue(library.status?.contains("1 additional photos matched without a face color adjustment") == true)
+        XCTAssertTrue(library.status?.contains("Skipped face color on 1 additional photo") == true)
+    }
+
+    @MainActor
+    func testMissingSkinAllowsGlobalFitAndDoesNotBlockOtherPortraits() async throws {
+        let (model, library) = try await makeModel(fixtures: ["landscape", "portrait"])
+        model.skinMode = .match
+        model.useBuiltIn(.furyRoadScene)
+        try await waitUntilReady(model)
+        XCTAssertEqual(model.match?.notices, [.noSkinInPhoto, .noSkinInReference])
+        XCTAssertFalse(model.differences.isEmpty)
+
+        model.options.tone = false
+        for _ in 0..<200 where model.isMatching { try await Task.sleep(for: .milliseconds(50)) }
+        XCTAssertFalse(model.isMatching)
+        XCTAssertFalse(model.canApply)
+
+        model.useBuiltIn(.matrixPortrait)
+        try await waitUntilReady(model)
+        XCTAssertEqual(model.match?.notices, [.noSkinInPhoto])
+        XCTAssertTrue(model.differences.isEmpty)
+
+        model.apply()
+        for _ in 0..<400 where library.matchProgress != nil { try await Task.sleep(for: .milliseconds(50)) }
+        XCTAssertNil(library.matchProgress)
+        XCTAssertEqual(try library.catalog.developSettings(for: model.assetID), .neutral)
+        XCTAssertTrue(try library.catalog.developHistory(for: model.assetID).steps.isEmpty)
+        XCTAssertEqual(try library.catalog.developSettings(for: model.targets[1]).masks.first?.name,
+                       LookMatch.skinMaskName)
+        XCTAssertTrue(library.status?.contains("Matched 1 photo, 1 unchanged") == true)
     }
 
     @MainActor

@@ -12,18 +12,19 @@ final class DevelopSmokeTests: XCTestCase {
         XCTAssertTrue(study.waitForExistence(timeout: 10))
         study.click()
 
-        let skin = app.descendants(matching: .any).matching(identifier: "match-look-skin-tones").firstMatch
+        let skin = app.popUpButtons["match-look-skin-tones"]
         XCTAssertTrue(skin.waitForExistence(timeout: 10))
         skin.click()
-        let match = app.menuItems["Match Skin Tone"]
+        let match = skin.menuItems["Match Skin Tone"]
         XCTAssertTrue(match.waitForExistence(timeout: 5))
         match.click()
-        let warning = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "No usable face skin in the reference.")).firstMatch
-        XCTAssertTrue(warning.waitForExistence(timeout: 20))
+        let warning = app.descendants(matching: .any).matching(identifier: "match-look-notice").firstMatch
+        XCTAssertTrue(warning.waitForExistence(timeout: 20), app.debugDescription)
+        XCTAssertTrue(warning.label.contains("No usable face skin in the reference."), warning.debugDescription)
         XCTAssertTrue(app.buttons["Apply"].isEnabled)
 
         skin.click()
-        app.menuItems["Off"].click()
+        skin.menuItems["Off"].click()
         XCTAssertTrue(warning.waitForNonExistence(timeout: 10))
         app.buttons["Cancel"].click()
         XCTAssertTrue(gallery.waitForNonExistence(timeout: 10))

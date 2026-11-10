@@ -478,3 +478,5 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 **Scope:** Rosh requested Match Skin Tone as an alternative to Protect Skin Tones. Measure face color on both images and fit editable local color sliders. Author face samples for the four built-in portraits. Other labeled regions are deferred.
 
 **Acceptance:** Verify both skin treatments on real portraits with different skin tones. Exercise missing skin, switching treatments and references, Strength, Show Differences, one-step Apply and per-photo batch behavior. Record Mac and native UI results and leave visual acceptance to Rosh.
+
+**Missing-skin fallback:** Keep other selected adjustments available when either image lacks face skin. A skin-only batch can continue when the lead photo lacks skin and the reference has usable skin. Skip unchanged photos without adding a history step. The native test checks the visible warning and whether Apply remains available.
