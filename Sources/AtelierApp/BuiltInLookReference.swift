@@ -1,4 +1,5 @@
 import CoreGraphics
+import AtelierCore
 
 /// Original color studies. The same sRGB artwork supplies the picker and the ordinary image fit.
 enum BuiltInLookReference: String, CaseIterable, Identifiable {
