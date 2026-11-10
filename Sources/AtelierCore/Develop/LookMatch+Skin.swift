@@ -11,10 +11,15 @@ extension LookMatcher {
     static func fitSkin(_ skin: LookSkin, to reference: LookSkin, in settings: inout DevelopSettings,
                         space: MaskSpace, measure: (DevelopSettings) -> LookSample?,
                         isCancelled: () -> Bool) -> Bool {
+        // Vision's face box is tight: brows to chin, cheek to cheek, no forehead. The ellipse is
+        // larger than the box and moved up over the forehead, with a short feather, so the
+        // whole face gets the full effect (inside 70% of the radius) and it fades out past the
+        // jaw, ears and hairline. A box-sized ellipse with a long feather reached only the
+        // middle of each face.
         let faces = skin.faces.map { face -> DevelopSettings.MaskComponent in
-            let center = CGPoint(x: face.midX * space.rect.width, y: (face.midY + 0.04 * face.height) * space.rect.height)
-            let gradient = space.radial(center: center, width: face.width * space.rect.width * 0.48,
-                                        height: face.height * space.rect.height * 0.48, feather: 45)
+            let center = CGPoint(x: face.midX * space.rect.width, y: (face.midY - 0.08 * face.height) * space.rect.height)
+            let gradient = space.radial(center: center, width: face.width * space.rect.width * 0.62,
+                                        height: face.height * space.rect.height * 0.75, feather: 30)
             return DevelopSettings.MaskComponent(.radial(gradient))
         }
         guard reference.toneColors.count == 3, let start = measure(settings) else {
@@ -77,6 +82,9 @@ extension LookMatcher {
         var best = settings
         if existing == nil {
             best.masks.append(.init(name: name, components: components))
+        } else {
+            // A repeat match keeps the mask (and its id) but takes the faces as found now.
+            best.masks[index].components = components
         }
 
         // Each slider's effect on the color is measured once (three renders) and reused for
