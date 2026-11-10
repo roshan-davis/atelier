@@ -348,10 +348,15 @@ extension LookMatcher {
         func luma(_ settings: DevelopSettings) -> [Float]? {
             guard let image = render(settings), let data = LookSample.pixels(of: image) else { return nil }
             let linear = LookSample.linearTable
-            return (0..<(data.width * data.height)).map { i in
-                Float(0.2126 * linear[Int(data.pixels[i * 4])] + 0.7152 * linear[Int(data.pixels[i * 4 + 1])]
-                      + 0.0722 * linear[Int(data.pixels[i * 4 + 2])])
+            let pixels = data.pixels
+            var out = [Float](repeating: 0, count: data.width * data.height)
+            for i in out.indices {
+                let r: Double = linear[Int(pixels[i * 4])]
+                let g: Double = linear[Int(pixels[i * 4 + 1])]
+                let b: Double = linear[Int(pixels[i * 4 + 2])]
+                out[i] = Float(0.2126 * r + 0.7152 * g + 0.0722 * b)
             }
+            return out
         }
         /// A mask's weight per pixel: the photo rendered with only that mask, at Exposure -4,
         /// against the photo without it. Inside the mask the light drops to 1/16.
@@ -375,7 +380,12 @@ extension LookMatcher {
             }
             guard let after = luma(probe), after.count == before.count else { return nil }
             let drop = Float(1 - 1.0 / 16)
-            return zip(before, after).map { b, a in b < 0.002 ? 0 : min(1, max(0, (1 - a / b) / drop)) }
+            var weights = [Float](repeating: 0, count: before.count)
+            for i in weights.indices where before[i] >= 0.002 {
+                let ratio: Float = after[i] / before[i]
+                weights[i] = min(1, max(0, (1 - ratio) / drop))
+            }
+            return weights
         }
 
         func sample(_ settings: DevelopSettings) -> LookSample? {
