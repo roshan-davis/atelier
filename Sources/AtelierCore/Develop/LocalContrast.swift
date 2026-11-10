@@ -29,7 +29,8 @@ enum LocalContrast {
     static let texture = Kind(radius: 15, edge: 0.003, strength: 1.0, midtones: false)
 
     /// `amount` is -1...1; `scale` the render's size relative to the full photo.
-    static func apply(_ image: CIImage, amount: Double, kind: Kind, scale: Double) -> CIImage {
+    /// `cacheStage` keeps the edge-aware base in Core Image's cache (see `stage`).
+    static func apply(_ image: CIImage, amount: Double, kind: Kind, scale: Double, cacheStage: Bool = false) -> CIImage {
         let extent = image.extent
         guard amount != 0, !extent.isInfinite, let kernels else { return image }
         let radius = max(1, kind.radius * scale)
@@ -44,7 +45,7 @@ enum LocalContrast {
         }
         guard let moments = pixelwise("atelierLocalMoments", [image]),
               let coefficients = pixelwise("atelierLocalCoefficients", [box(moments), kind.edge]) else { return image }
-        return pixelwise("atelierLocalContrast", [image, box(coefficients), kind.strength * amount,
+        return pixelwise("atelierLocalContrast", [image, stage(box(coefficients), cacheStage), kind.strength * amount,
                                                   kind.midtones ? 1.0 : 0.0]) ?? image
     }
 
@@ -54,7 +55,8 @@ enum LocalContrast {
     /// and Highlights on 75% (Adobe's targets: 10 to 30% and 70 to 90%); pure black and white
     /// stay where they are. Each channel moves by the same amount in gamma-encoded values, so
     /// lifted shadows keep their hue without their noise turning into saturated color.
-    static func toneRegions(_ image: CIImage, highlights: Double, shadows: Double, scale: Double) -> CIImage {
+    static func toneRegions(_ image: CIImage, highlights: Double, shadows: Double, scale: Double,
+                            cacheStage: Bool = false) -> CIImage {
         let extent = image.extent
         guard highlights != 0 || shadows != 0, !extent.isInfinite, let kernels else { return image }
         let radius = max(1, regionRadius * scale)
@@ -71,7 +73,16 @@ enum LocalContrast {
         let shadowGain = 0.22 * (shadows < 0 ? 0.7 : 1) * shadows
         guard let moments = pixelwise("atelierLocalMoments", [image]),
               let coefficients = pixelwise("atelierLocalCoefficients", [box(moments), regionEdge]) else { return image }
-        return pixelwise("atelierToneRegions", [image, box(coefficients), 0.22 * highlights, shadowGain]) ?? image
+        return pixelwise("atelierToneRegions", [image, stage(box(coefficients), cacheStage), 0.22 * highlights, shadowGain]) ?? image
+    }
+
+    /// The guided filter's smoothed coefficients depend only on the photo coming in, not on the
+    /// slider's amount. Kept in Core Image's cache, a drag of Highlights, Shadows, Clarity or
+    /// Texture computes them once and then runs only the last, per-pixel step for each frame,
+    /// as LightCraft keeps its stage results between frames (AT-039 D3a). Live sessions only:
+    /// one-off renders (previews, export) would only fill the cache.
+    private static func stage(_ coefficients: CIImage, _ cache: Bool) -> CIImage {
+        cache ? coefficients.insertingIntermediate(cache: true) : coefficients
     }
 
     /// Highlights and Shadows' window radius in full-size pixels, and their edge threshold.

@@ -831,6 +831,7 @@ final class DevelopController: ObservableObject {
         }
         self.scheduleRender()
         if self.compareMode != .off { self.renderBeforeIfNeeded() }
+        warmUp(session: session, assetID: assetID, generation: generation)
         // An unedited RAW's cached preview is the camera's embedded JPEG, which has no
         // lens corrections, so it is framed a little wider than the render and the
         // photo jumped when the render replaced it. Store the render as the preview
@@ -843,6 +844,22 @@ final class DevelopController: ObservableObject {
             self.storePreviews(session: session, settings: self.settings, assetID: assetID, optional: true)
         }
     }
+
+    /// Builds Core Image's programs for the tools this photo doesn't use yet, so the first drag
+    /// of one doesn't hold its first frame while they compile (`DevelopRenderer.warmUp`, AT-039
+    /// D3a). Background priority, on its own queue beside the live renders; stops when another
+    /// photo opens.
+    private func warmUp(session: DevelopSession, assetID: Int64, generation: Int) {
+        let settings = settings, scale = session.renderScale, openGeneration = openGeneration
+        Self.warmUpQueue.async {
+            guard openGeneration.value == generation else { return }
+            let began = DevelopTimingLog.now()
+            let count = DevelopRenderer.shared.warmUp(settings, scale: scale) { openGeneration.value == generation }
+            DevelopTimingLog.shared.log(assetID, "warm-up: \(count) pipelines in \(DevelopTimingLog.ms(since: began)) ms")
+        }
+    }
+
+    private static let warmUpQueue = DispatchQueue(label: "atelier.develop.warm-up", qos: .utility)
 
     func cycleCompareMode() {
         let all = CompareMode.allCases

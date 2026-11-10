@@ -107,7 +107,7 @@ public final class DevelopRenderer: @unchecked Sendable {
     /// replaces the result with a slider's Option-drag view.
     public static func applyAdjustments(_ settings: DevelopSettings, to input: CIImage, scale: Double = 1,
                                         masks: MaskProvider? = nil, overlay: UUID? = nil,
-                                        preview: SliderPreview? = nil) -> CIImage {
+                                        preview: SliderPreview? = nil, cacheStages: Bool = false) -> CIImage {
         var settings = settings
         switch preview {
         case .fullSaturation(let region):
@@ -129,7 +129,7 @@ public final class DevelopRenderer: @unchecked Sendable {
 
         // Highlights and Shadows: local, judged by an edge-aware base (see LocalContrast).
         image = LocalContrast.toneRegions(image, highlights: settings.highlights / 100, shadows: settings.shadows / 100,
-                                          scale: scale)
+                                          scale: scale, cacheStage: cacheStages)
 
         // Tone curve, applied in sRGB-encoded values so contrast behaves perceptually. Basic tone,
         // the region curve and the RGB curve keep each color's hue, as Lightroom does; the
@@ -154,10 +154,12 @@ public final class DevelopRenderer: @unchecked Sendable {
         }
         // Clarity works on wide areas, weighted to the midtones; Texture on medium-sized detail.
         if settings.clarity != 0 {
-            image = LocalContrast.apply(image, amount: settings.clarity / 100, kind: LocalContrast.clarity, scale: scale)
+            image = LocalContrast.apply(image, amount: settings.clarity / 100, kind: LocalContrast.clarity, scale: scale,
+                                        cacheStage: cacheStages)
         }
         if settings.texture != 0 {
-            image = LocalContrast.apply(image, amount: settings.texture / 100, kind: LocalContrast.texture, scale: scale)
+            image = LocalContrast.apply(image, amount: settings.texture / 100, kind: LocalContrast.texture, scale: scale,
+                                        cacheStage: cacheStages)
         }
 
         // In Black & White the B&W Mix decides the grays, so vibrance and saturation do nothing.
@@ -579,7 +581,7 @@ public final class DevelopSession: @unchecked Sendable {
             return DevelopRenderer.applyGeometry(crop, to: mask, cropping: cropping)
         }
         let adjusted = DevelopRenderer.applyAdjustments(settings, to: image, scale: renderScale, masks: provider,
-                                                        overlay: overlay, preview: preview)
+                                                        overlay: overlay, preview: preview, cacheStages: interactive)
         guard !cropping, let crop else { return adjusted }
         // Vignetting and grain would paint the crop tool's empty corners; cut them again.
         return DevelopRenderer.straightenedOutline(crop, size: crop.orientedSize(sourceExtent.size), of: adjusted)
