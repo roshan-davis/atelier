@@ -756,12 +756,22 @@ private enum ToneRegion: CaseIterable {
 struct ParameterSlider: View {
     let parameter: DevelopSettings.Parameter
     let develop: DevelopController
+    /// Read here, when the panel builds the slider, not in `body`: SwiftUI runs `body` only when
+    /// the view's stored values change, and `parameter` and `develop` never do, so a value read
+    /// in `body` froze the knob (Rosh, Nov 10, 2026).
+    private let shown: ParameterSliderState
+
+    init(parameter: DevelopSettings.Parameter, develop: DevelopController) {
+        self.parameter = parameter
+        self.develop = develop
+        shown = ParameterSliderState(parameter, develop)
+    }
 
     /// Panels watch the controller and build their sliders again for every change; each slider
     /// compares what it shows and skips its row when that is unchanged, so a drag redraws the
     /// dragged slider rather than every slider in every open panel (AT-039 D2).
     var body: some View {
-        ParameterSliderRow(parameter: parameter, develop: develop, shown: .init(parameter, develop)).equatable()
+        ParameterSliderRow(parameter: parameter, develop: develop, shown: shown).equatable()
     }
 }
 
