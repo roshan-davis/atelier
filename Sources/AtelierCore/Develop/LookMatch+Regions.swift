@@ -334,25 +334,76 @@ extension LookMatcher {
             }
         }
 
+        // The fast stand-in (see LookEmulator): once White Balance and Exposure are fitted with
+        // real renders, the photo is rendered once more with the later steps neutral, and the
+        // other tries are worked out from that render. Tries it can't follow are rendered.
+        var emulator: LookEmulator?
+        var usesEmulator = true
+        var plainWeighed: (settings: DevelopSettings, luma: [Float])?
+        func photo(_ settings: DevelopSettings, area: CGRect? = nil) -> LookSample? {
+            if usesEmulator, let emulator, emulator.follows(settings) { return emulator.sample(settings, area: area) }
+            return render(settings).flatMap { LookSample(image: $0, area: area) }
+        }
+        /// Linear luma per sample pixel of a real render.
+        func luma(_ settings: DevelopSettings) -> [Float]? {
+            guard let image = render(settings), let data = LookSample.pixels(of: image) else { return nil }
+            let linear = LookSample.linearTable
+            return (0..<(data.width * data.height)).map { i in
+                Float(0.2126 * linear[Int(data.pixels[i * 4])] + 0.7152 * linear[Int(data.pixels[i * 4 + 1])]
+                      + 0.0722 * linear[Int(data.pixels[i * 4 + 2])])
+            }
+        }
+        /// A mask's weight per pixel: the photo rendered with only that mask, at Exposure -4,
+        /// against the photo without it. Inside the mask the light drops to 1/16.
+        func weigh(_ settings: DevelopSettings, _ mask: DevelopSettings.Mask) -> [Float]? {
+            var plain = settings
+            plain.masks.removeAll(where: LookEmulator.isEmulated)
+            plain.grain = 0
+            var dimmed = mask
+            dimmed.resetAdjustments()
+            dimmed.isHidden = false
+            dimmed[.exposure] = -4
+            var probe = plain
+            probe.masks.append(dimmed)
+            let before: [Float]
+            if let known = plainWeighed, known.settings == plain {
+                before = known.luma
+            } else {
+                guard let measured = luma(plain) else { return nil }
+                plainWeighed = (plain, measured)
+                before = measured
+            }
+            guard let after = luma(probe), after.count == before.count else { return nil }
+            let drop = Float(1 - 1.0 / 16)
+            return zip(before, after).map { b, a in b < 0.002 ? 0 : min(1, max(0, (1 - a / b) / drop)) }
+        }
+
         func sample(_ settings: DevelopSettings) -> LookSample? {
-            guard let image = render(settings) else { return nil }
-            if let photoBox { return LookSample(image: image, area: photoBox)?.excluding(skinPixels) }
-            guard var measured = LookSample(image: image) else { return nil }
+            if let photoBox { return photo(settings, area: photoBox)?.excluding(skinPixels) }
+            guard var measured = photo(settings) else { return nil }
             if let subjectFocus {
                 measured.focusWeights(subjectFocus.map { 1 - $0 }, share: LookSample.areaShare)
             }
             return measured.excluding(skinPixels)
         }
 
+        func whole(_ settings: DevelopSettings) -> LookSample? { photo(settings) }
+
         var current = base
         var penalty: ((LookSample) -> Double)?
         if options.skinMode == .protect, let skin { penalty = { measured in skin.penalty(measured) } }
         fitGlobal(&current, asShot: asShot, options: options, reference: reference, measure: sample,
-                  penalty: penalty, isCancelled: isCancelled)
+                  penalty: penalty, afterDecode: { settings in
+                      guard LookEmulator.supports(settings) else { return false }
+                      let stage = LookEmulator.neutralStage(settings)
+                      guard let image = render(stage) else { return false }
+                      emulator = LookEmulator(stage: image, stageSettings: stage, weigh: weigh)
+                      return emulator != nil
+                  }, isCancelled: isCancelled)
 
         if let subjectFocus, let subjectReference = target.subject, !isCancelled() {
             func subjectSample(_ settings: DevelopSettings) -> LookSample? {
-                guard let image = render(settings), var measured = LookSample(image: image) else { return nil }
+                guard var measured = photo(settings) else { return nil }
                 measured.focusWeights(subjectFocus, share: 1)
                 return measured.excluding(skinPixels)
             }
@@ -360,9 +411,6 @@ extension LookMatcher {
         }
 
         if let skin, !isCancelled() {
-            func whole(_ settings: DevelopSettings) -> LookSample? {
-                render(settings).flatMap { LookSample(image: $0) }
-            }
             let size = CGSize(width: baseImage.width, height: baseImage.height)
             let space = MaskSpace(sourceSize: session.sourceSize, crop: base.crop ?? .init(),
                                   rect: CGRect(origin: .zero, size: size), outputSize: size)
@@ -383,13 +431,30 @@ extension LookMatcher {
                 }
             }
         }
+        // The stand-in is close but not exact: check with a real render, and settle Exposure
+        // (the step most of the others lean on) on it.
+        var offBy = 0.0
+        if let emulator, !isCancelled() {
+            let guess = emulator.follows(current) ? emulator.sample(current) : nil
+            usesEmulator = false
+            if let guess, let real = whole(current) { offBy = guess.distance(to: real) }
+            if options.tone { fitExposure(&current, reference: reference, measure: sample) }
+            if options.skinMode == .protect, let skin, let now = whole(current), !skin.isWithin(now) {
+                protect(skin, in: &current, from: base, asShot: asShot, options: options, measure: whole)
+            }
+        }
         guard !isCancelled() else { return nil }
+        lastMatchRenders = renders
+        let seconds = Date().timeIntervalSince(started)
         Logger(subsystem: "Atelier", category: "Match Look").info(
-            "Match: \(renders) renders in \(Date().timeIntervalSince(started), format: .fixed(precision: 2)) s at \(plain.width)×\(plain.height)")
+            "Match: \(renders) renders, \(emulator?.tries ?? 0) stand-in tries in \(seconds, format: .fixed(precision: 2)) s at \(plain.width)×\(plain.height); stand-in off by \(offBy, format: .fixed(precision: 4))")
         var match = LookMatch(base: base, matched: current, asShotTemperature: asShot, notices: notices)
         match.subjectFitParameters = options.subjectFitParameters
         return match
     }
+
+    /// Real renders the last match made, for tests.
+    nonisolated(unsafe) static var lastMatchRenders = 0
 
     // MARK: Subject & Background
 

@@ -500,3 +500,15 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 **Acceptance:** Mac build and tests (new: tone curve, neutral cast, Midtones wheel, study tonal range). Rosh: built-in studies look curved and lit; matches no longer fade blacks; shadows and highlights take the study's colors; Color Grading shows Shadows, Midtones and Highlights moved.
 
 **Validation:** Cloud only, no Swift toolchain: source review plus a Python port of the study drawing and curve rule (studies' darkest 1% luma 0.015–0.033 at 384 px, Oklab L 1–99% span 0.55–0.79, largest single color under 4%).
+
+## AT-035 — Match Look: fast fitter on a stand-in of the renderer
+
+**Status:** Implementation in review. Never compiled; Mac check and manual acceptance pending. **Owner:** Cl. **Chat:** Claude project thread "Match Look quality". **Branch:** `claude/match-look-fast-fitter`, stacked on AT-034 (`claude/match-look-color`, PR #91). **PR:** to be linked. **Dependencies:** AT-034.
+
+**Scope:** Rosh (2026-11-10): Match Look "still terribly slow" with poor results; asked for research into a faster, efficient way with skin protected, skin matched or neither. Rosh chose "new fitter PR". The match renders the photo for real only for White Balance and Exposure, one stage render, two renders per Match Look mask weight and a final check; every other try is computed by `LookEmulator` (`Sources/AtelierCore/Develop/LookMatch+Emulator.swift`) from the stage. Final refinement no longer moves Temp/Tint when the stand-in is on. Log line: renders, stand-in tries, seconds, stand-in error.
+
+**Not in scope:** emulating White Balance and Exposure at decode, Dehaze/Clarity/Texture/Vibrance after the curve, the photo's own masks; a preview on a smaller sample (the stand-in already works at the 384 px sample size).
+
+**Acceptance:** Mac build and tests (`LookEmulatorTests`: stand-in vs renderer within 0.012 mean Oklab difference with curve, saturation, HSL and grading, and with a skin mask; skin match at most 40 renders). Rosh: Match Look feels fast with Protect Skin Tones, Match Skin Tone and Off; results at least as good as before; the Console line shows the render count.
+
+**Validation:** Cloud only, no Swift toolchain: source review.
