@@ -326,7 +326,7 @@ enum LayoutSnapshots {
         skin.skinMode = .match
         skin.useBuiltIn(.matrixPortrait)
         await waitForMatch(skin)
-        guard skin.match?.skinMask != nil else {
+        guard skin.match.map({ !$0.skinMasks.isEmpty }) == true else {
             print("SNAPSHOT: Match Skin Tone did not create a skin mask: \(skin.message ?? "-")")
             return
         }

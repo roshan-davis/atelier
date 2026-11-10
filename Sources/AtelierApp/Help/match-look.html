@@ -37,7 +37,7 @@
 </dl>
 
 <h2 id="built-in">Built-in References</h2>
-<p>Click <b>Built-in References</b> below the reference preview. Each look has a portrait and a wider scene, such as an urban night, a winter landscape or desert action. The original illustrations show their palettes and list major color regions such as <b>Face &amp; Skin</b>, <b>Clothing</b>, <b>Sky</b> and <b>Ground</b>. Use the labels to choose a study with a similar balance of colors. The chosen illustration appears on the left while Atelier fits your photo on the right.</p>
+<p>Click <b>Built-in References</b> below the reference preview. Each look has a portrait and a wider scene, such as an urban night, a winter landscape or desert action. The original illustrations are simple flat drawings lit from one side. Every area, faces included, shows four plain tones: a highlight leaning to the look's light color, a midtone, and shadow and dark tones leaning to its shadow color. So you can see at a glance what the look does to the lights, midtones and shadows of skin, clothes, sky and ground. They show their palettes and list major color regions such as <b>Face &amp; Skin</b>, <b>Clothing</b>, <b>Sky</b> and <b>Ground</b>. Use the labels to choose a study with a similar balance of colors. The chosen illustration appears on the left while Atelier fits your photo on the right.</p>
 <figure>
   <div class="panel" style="max-width:490px">
     <div class="pb"><div class="row">
@@ -48,7 +48,7 @@
   </div>
   <figcaption>The built-in gallery opens from the reference buttons.</figcaption>
 </figure>
-<p>The fit uses <b>Whole Photo</b> for every study, including those with region labels. The four portrait studies have cheek samples for <b>Match Skin Tone</b>. For a face match, pick a portrait study or a photo that shows usable face skin. When you choose a file or catalog photo again, Atelier restores your previous Match Areas choice and any boxes.</p>
+<p>Wide studies use <b>Whole Photo</b>. Portrait studies start on <b>Subject &amp; Background</b>: the study's background is matched to your photo's background and its drawn person to your subject. Choose <b>Whole Photo</b> in <b>Match Areas</b> to match everything at once. Each portrait study has three skin samples, in the face's shadow, midtone and highlight, for <b>Match Skin Tone</b>. For a face match, pick a portrait study or a photo that shows usable face skin. When you choose a file or catalog photo again, Atelier restores your previous Match Areas choice and any boxes.</p>
 <figure>
   <div class="trio">
     <figure><div class="pic"><img src="images/match-built-in-reference.jpg" alt="An illustrated winter landscape in slate blue and pale snow"><span class="tag">Winter Landscape study</span></div></figure>
@@ -67,6 +67,7 @@
   <li>Click <b>Apply</b>. Nothing changes on your photo until then; <b>Cancel</b> leaves it exactly as it was.</li>
 </ol>
 <p>Apply is one history step (Match Look: name). Everything it sets is an ordinary slider, so you can adjust, undo, copy or save it as a preset. No AI touches the pixels.</p>
+<p id="speed">The match is quick because Atelier renders your photo only a few times. It fits White Balance and Exposure on real renders, renders the photo once more, and works out every other slider from that render. It then checks the result with one more real render and settles Exposure on it.</p>
 
 <figure>
   <div class="pins pinned wide" style="max-width:640px">
@@ -87,18 +88,25 @@
   <li><b>Strength</b> scales everything the match sets, including the subject and skin mask sliders.</li>
 </ol>
 
+<h3 id="what-moves">What the match sets</h3>
+<ul>
+  <li><b>White Balance</b> matches the color of the neutral parts of the scene (grays, whites, pale surfaces), not the average of everything, so a big green field or blue wall doesn't turn your photo magenta or orange.</li>
+  <li><b>Tone</b> sets Exposure (at most one stop either way), then a seven-point <b>Tone Curve</b> that follows the reference's contrast without lifting your shadows to gray. Blacks stay black and whites stay white unless the reference itself is faded or matte; then the curve lifts blacks (at most to 15%) or softens whites (at most to 92%) the same way.</li>
+  <li><b>Color</b> sets Saturation and HSL, then the <b>Shadows</b>, <b>Midtones</b> and <b>Highlights</b> wheels in Color Grading, so dark tones take the reference's shadow color and bright tones its light color, such as teal shade with warm light.</li>
+</ul>
+
 <h2 id="skin">Skin Tones</h2>
 <p>Choose <b>Off</b> to let the ordinary match set face color. Your choice stays selected while the dialog is open, even when you switch references.</p>
 <p>Both treatments work on the face skin <a href="masking.html#people">Select People</a> finds (without eyes, brows and lips), in your photo and in the reference. Tick <b>Show Skin</b> next to the Skin Tones menu to see that skin tinted red on both pictures before you apply. If no face is found, Atelier falls back to the middle of each face box.</p>
 
 <h3 id="protect-skin">Protect Skin Tones</h3>
-<p>A strong look, such as teal and orange or a cold film stock, can turn skin orange, green or grey. With <b>Protect Skin Tones</b> on, the skin Atelier finds is left out of the match, and the match may move its color by only a little (at most 5° of hue and 15% of saturation). The match can be weaker if the reference would push skin outside those limits.</p>
+<p>A strong look, such as teal and orange or a cold film stock, can turn skin orange, green or grey. With <b>Protect Skin Tones</b> on, the skin Atelier finds is left out of the match, and the match may move its color by only a little (at most 5° of hue and 15% of saturation). The rest of the photo takes the full look; the skin is held at its own colors in its shadows, midtones and highlights with the <b>Match Look: Skin</b> masks, which you can edit in Masking (⇧W) after <b>Apply</b>. Only when the masks can't hold the skin is the whole match made weaker.</p>
 <p>Atelier does this with ordinary sliders. It first turns back the HSL Hue and Saturation of the colors skin falls in (Orange, usually), when <b>Color</b> is on. If that isn't enough, it pulls White Balance, Saturation and Color Grading back toward where they were, just as far as needed. If that still leaves the skin outside the limits, Atelier backs off the rest of the match too. Show Differences lists the changes once the new match is ready.</p>
 <p>If the photo has no usable face skin, the dialog tells you.</p>
 
 <h3 id="match-skin">Match Skin Tone</h3>
-<p>Choose <b>Match Skin Tone</b> to bring the hue and saturation of skin toward the reference. Atelier fits the skin color with a <b>Match Look: Skin</b> mask, a Select People part with everyone's Face Skin. To carry the change to neck and hands, tick <b>Body Skin</b> on that part in Masking. You can use it by itself by clearing White Balance, Tone and Color. Keep Tone selected if you also want the ordinary brightness match. If either image lacks usable face skin, the dialog names that image and you can still apply the other selected adjustments. With several photos selected and usable skin in the reference, Atelier can still match faces in the rest of the selection.</p>
-<p>Use <b>Show Differences</b> to see the skin sliders at the current <b>Strength</b>. After <b>Apply</b>, open <b>Masking</b> (⇧W) and choose <b>Match Look: Skin</b> to edit Temp, Tint and Saturation, or click its Select People part to choose one person or untick Body Skin.</p>
+<p>Choose <b>Match Skin Tone</b> to bring the color of faces toward the reference, tone by tone: skin in light, in midtone and in shade each takes the reference's color for that tone. Atelier uses three masks on everyone's Face Skin (a Select People part; ellipses over the face boxes when Select People finds no one): <b>Match Look: Skin</b> for the midtones, and <b>Match Look: Skin Shadows</b> and <b>Match Look: Skin Highlights</b>, which add a Luminance Range so they reach only the darker or brighter skin. Each skin slider moves at most 35 from where it was. You can use it by itself by clearing White Balance, Tone and Color. Keep Tone selected if you also want the ordinary brightness match. If either image lacks usable face skin, the dialog names that image and you can still apply the other selected adjustments. With several photos selected and usable skin in the reference, Atelier can still match faces in the rest of the selection.</p>
+<p>Use <b>Show Differences</b> to see the skin sliders at the current <b>Strength</b>. After <b>Apply</b>, open <b>Masking</b> (⇧W) and choose one of the <b>Match Look: Skin</b> masks to edit Temp, Tint and Saturation, refine the Luminance Range, or click its Select People part to choose one person or tick Body Skin to carry the change to neck and hands.</p>
 <figure>
   <div class="trio">
     <figure><div class="pic"><img src="images/match-skin-reference.jpg" alt="The Matrix illustrated portrait with olive face lighting"><span class="tag">Portrait study</span></div></figure>
@@ -120,7 +128,7 @@
 <p>With several photos selected in the filmstrip, choose:</p>
 <dl class="defs">
   <dt>Same settings</dt><dd>One match, on the open photo, applied to all. Like Sync.</dd>
-  <dt>Match each photo</dt><dd>Each photo matched on its own, for mixed light. Runs in the background with progress and Cancel in the status bar. Match Skin Tone selects this option so each face mask is placed for its own photo.</dd>
+  <dt>Match each photo</dt><dd>Each photo matched on its own, for mixed light. Runs in the background with progress and Cancel in the status bar. Match Skin Tone selects this option so the face masks are placed for each photo.</dd>
 </dl>
 
 <div class="see-also">See also: <a href="masking.html">Masking</a> · <a href="presets.html">Presets</a> · <a href="color-grading.html">Color Grading</a></div>

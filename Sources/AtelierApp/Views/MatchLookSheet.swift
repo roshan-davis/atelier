@@ -195,14 +195,14 @@ struct MatchLookSheet: View {
             .toggleStyle(.checkbox)
             HStack(spacing: 10) {
                 Picker("Match Areas:", selection: $match.areaMode) {
-                    ForEach(MatchAreaMode.allCases, id: \.self) { mode in
+                    ForEach(match.areaModes, id: \.self) { mode in
                         Text(mode.label).tag(mode)
                     }
                 }
                 .pickerStyle(.menu)
                 .fixedSize()
-                .disabled(match.builtInReference != nil)
-                .help(match.builtInReference == nil ? match.areaMode.help : areaHint)
+                .disabled(match.areaModes.count < 2)
+                .help(match.areaModes.count < 2 ? areaHint : match.areaMode.help)
                 Text(areaHint)
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -229,9 +229,9 @@ struct MatchLookSheet: View {
                     }
                     .pickerStyle(.segmented)
                     .fixedSize()
-                    .disabled(match.skinMode == .match)
-                    .help(match.skinMode == .match
-                          ? "Match Skin Tone fits the face mask separately on each photo."
+                    .disabled(match.fitsEachPhoto)
+                    .help(match.fitsEachPhoto
+                          ? "Skin masks are fitted separately on each photo."
                           : "Same settings: one match for all, like Sync. Match each photo: a match per photo, for mixed light.")
                 }
             }
@@ -239,9 +239,11 @@ struct MatchLookSheet: View {
     }
 
     private var areaHint: String {
-        if match.builtInReference != nil { return "Built-in References use Whole Photo." }
+        if match.areaModes.count < 2 { return "Wide studies use Whole Photo." }
         switch match.areaMode {
         case .wholePhoto: return "The whole reference sets the look for the whole photo."
+        case .subject where match.builtInReference != nil:
+            return "The study's background matches your background; its drawn person, your subject."
         case .subject: return "Background matches background; a Match Look: Subject mask matches the subject."
         case .boxes: return "Drag each box over the parts that should match. Drag a corner to resize."
         }
@@ -262,8 +264,8 @@ struct MatchLookSheet: View {
             } else if match.referenceImage == nil {
                 Text("Choose a reference image to start.").foregroundStyle(.secondary)
             } else if let result = match.match {
-                Text(result.skinMask != nil
-                     ? "Edit face color after Apply in Masking → Match Look: Skin."
+                Text(!result.skinMasks.isEmpty
+                     ? "Edit face color after Apply in Masking → the Match Look: Skin masks."
                      : result.subjectMask != nil
                          ? "Apply sets editable sliders and a Match Look: Subject mask."
                          : "Apply sets sliders you can keep editing in Develop.")

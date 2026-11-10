@@ -21,7 +21,11 @@ let package = Package(
         .testTarget(name: "AtelierHDRCoreTests", dependencies: ["AtelierHDRCore"]),
         .target(
             name: "AtelierCore",
-            dependencies: [.product(name: "GRDB", package: "GRDB.swift")]
+            dependencies: [.product(name: "GRDB", package: "GRDB.swift")],
+            // Optimized in Debug too, like AtelierHDRCore: Match Look, histograms, color cubes
+            // and camera matching run per-pixel Swift loops that are many times slower unoptimized,
+            // and the app is run from Xcode in Debug.
+            swiftSettings: [.unsafeFlags(["-O"], .when(configuration: .debug))]
         ),
         .executableTarget(
             name: "AtelierApp",

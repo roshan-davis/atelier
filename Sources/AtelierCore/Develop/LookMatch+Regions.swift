@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import os
 import Vision
 
 // Match Look Phase 3: Protect Skin Tones and Subject & Background. See the PRD's "Match Look to a
@@ -45,6 +46,9 @@ public struct LookSkin: Sendable {
     /// Skin's Oklab hue (degrees) and mean chroma before the match.
     let hue: Double
     let chroma: Double
+    /// The mean Oklab a/b of the skin's shadows, midtones and highlights: drawn regions for a
+    /// built-in study, otherwise the darkest, middle and brightest thirds of its pixels.
+    let toneColors: [SIMD2<Double>]
 
     /// Faces Vision finds, 0 to 1 from the top left.
     public static func faces(in image: CGImage) -> [CGRect] {
@@ -91,11 +95,57 @@ public struct LookSkin: Sendable {
         }
         let used = kept.count >= 12 ? kept : picked
         guard let measured = Self.hueAndChroma(sample, used) else { return nil }
-        pixels = Array(Set(used)).sorted()
+        let skin = Array(Set(used)).sorted()
+        pixels = skin
         self.faces = usableFaces
         usesPeople = false
         hue = measured.hue
         chroma = measured.chroma
+        toneColors = Self.toneSplit(sample, skin).groups.compactMap { Self.meanAB(sample, $0) }
+    }
+
+    /// A built-in study's skin, drawn in flat tones: one region per tone (shadows, midtones,
+    /// highlights, 0 to 1 from the top left), every pixel in each taken as skin. The overall hue
+    /// and chroma are the midtone's. Nil unless all three regions hold pixels.
+    init?(sample: LookSample, toneRegions: [CGRect]) {
+        guard toneRegions.count == 3, sample.width > 0, sample.height > 0 else { return nil }
+        let groups = toneRegions.map { Self.pixels(in: $0, of: sample) }
+        guard groups.allSatisfy({ $0.count >= 4 }), let mid = Self.hueAndChroma(sample, groups[1]) else { return nil }
+        pixels = Array(Set(groups.joined())).sorted()
+        faces = toneRegions
+        usesPeople = false
+        hue = mid.hue
+        chroma = mid.chroma
+        toneColors = groups.compactMap { Self.meanAB(sample, $0) }
+    }
+
+    static func pixels(in region: CGRect, of sample: LookSample) -> [Int] {
+        let x0 = max(0, Int((region.minX * CGFloat(sample.width)).rounded()))
+        let x1 = min(sample.width, Int((region.maxX * CGFloat(sample.width)).rounded()))
+        let y0 = max(0, Int((region.minY * CGFloat(sample.height)).rounded()))
+        let y1 = min(sample.height, Int((region.maxY * CGFloat(sample.height)).rounded()))
+        guard x1 > x0, y1 > y0 else { return [] }
+        return (y0..<y1).flatMap { y in (x0..<x1).map { y * sample.width + $0 } }
+    }
+
+    /// The pixels split into their darkest, middle and brightest thirds by brightness (luma),
+    /// with the two brightness levels between them (0 to 1).
+    static func toneSplit(_ sample: LookSample, _ pixels: [Int]) -> (groups: [[Int]], cuts: (Double, Double)) {
+        let sorted = pixels.filter { $0 < sample.count }.sorted { sample.luma[$0] < sample.luma[$1] }
+        guard sorted.count >= 3 else { return ([], (1.0 / 3, 2.0 / 3)) }
+        let first = sorted.count / 3, second = sorted.count * 2 / 3
+        let groups = [Array(sorted[..<first]), Array(sorted[first..<second]), Array(sorted[second...])]
+        return (groups, (Double(sample.luma[sorted[first]]), Double(sample.luma[sorted[second]])))
+    }
+
+    /// Mean Oklab a/b of the pixels.
+    static func meanAB(_ sample: LookSample, _ pixels: [Int]) -> SIMD2<Double>? {
+        var sum = SIMD2<Double>(0, 0), n = 0.0
+        for i in pixels where i < sample.count {
+            sum += SIMD2(Double(sample.a[i]), Double(sample.b[i]))
+            n += 1
+        }
+        return n > 0 ? sum / n : nil
     }
 
     /// The skin Select People finds (face and body skin, 1 is skin) at the sample's size. Nil
@@ -109,6 +159,7 @@ public struct LookSkin: Sendable {
         usesPeople = true
         hue = measured.hue
         chroma = measured.chroma
+        toneColors = Self.toneSplit(sample, picked).groups.compactMap { Self.meanAB(sample, $0) }
     }
 
     /// What the skin treatments measure and Match Skin Tone adjusts: everyone's Face Skin. Body
@@ -191,6 +242,17 @@ public struct LookReferenceFeatures: Sendable {
         faces = people?.faces ?? LookSkin.faces(in: image)
     }
 
+    /// Features that are known rather than found, as for a built-in study: its drawn person as
+    /// the subject mask (white is the subject) and its face boxes (0 to 1 from the top left).
+    public init(image: CGImage, subjectMask: CGImage, faces: [CGRect]) {
+        let size = LookSample.sampleSize(of: image)
+        subject = LookSample.focusValues(subjectMask, width: size.width, height: size.height)
+            .flatMap { LookMatcher.isUsableSubject($0) ? $0 : nil }
+        self.faces = faces
+        // A study's skin is drawn (`authoredSkinTones`), not found.
+        skin = nil
+    }
+
     public var hasSubject: Bool { subject != nil }
     public var hasFaces: Bool { !faces.isEmpty }
 }
@@ -206,14 +268,19 @@ public struct LookTarget: Sendable {
     let notices: Set<LookMatchNotice>
     let skin: LookSkin?
 
+    /// `authoredSkinTones` are a built-in study's drawn skin samples (shadows, midtones,
+    /// highlights); `authoredSkinRegions` drawn samples of a single tone.
     public init?(image: CGImage, features: LookReferenceFeatures? = nil, areas: LookAreas,
-                 skinMode: LookSkinMode = .off, authoredSkinRegions: [CGRect]? = nil) {
+                 skinMode: LookSkinMode = .off, authoredSkinRegions: [CGRect]? = nil,
+                 authoredSkinTones: [CGRect]? = nil) {
         guard var plain = LookSample(image: image) else { return nil }
         self.areas = areas
         var notices: Set<LookMatchNotice> = []
         let features = features ?? (areas == .subject ? LookReferenceFeatures(image: image) : nil)
         if skinMode == .off {
             skin = nil
+        } else if let authoredSkinTones {
+            skin = LookSkin(sample: plain, toneRegions: authoredSkinTones)
         } else if let authoredSkinRegions {
             skin = LookSkin(sample: plain, faces: authoredSkinRegions, authored: true)
         } else if let found = Self.peopleSkin(plain, image: image, features: features) {
@@ -282,7 +349,15 @@ extension LookMatcher {
     public static func match(session: DevelopSession, settings base: DevelopSettings, target: LookTarget,
                              options: LookMatchOptions = LookMatchOptions(), photoFaces: [CGRect]? = nil,
                              isCancelled: () -> Bool = { false }) -> LookMatch? {
-        guard let baseImage = session.renderSRGB(base), let plain = LookSample(image: baseImage) else { return nil }
+        // Every step renders the photo at the fit size; the count and time are logged so slow
+        // matches can be measured (Console, subsystem Atelier, category Match Look).
+        let started = Date()
+        var renders = 0
+        func render(_ settings: DevelopSettings) -> CGImage? {
+            renders += 1
+            return session.renderSRGB(settings)
+        }
+        guard let baseImage = render(base), let plain = LookSample(image: baseImage) else { return nil }
         var notices = target.notices
         let asShot = session.asShotTemperature
         var skin: LookSkin?
@@ -320,25 +395,86 @@ extension LookMatcher {
             }
         }
 
+        // The fast stand-in (see LookEmulator): once White Balance and Exposure are fitted with
+        // real renders, the photo is rendered once more with the later steps neutral, and the
+        // other tries are worked out from that render. Tries it can't follow are rendered.
+        var emulator: LookEmulator?
+        var usesEmulator = true
+        var plainWeighed: (settings: DevelopSettings, luma: [Float])?
+        func photo(_ settings: DevelopSettings, area: CGRect? = nil) -> LookSample? {
+            if usesEmulator, let emulator, emulator.follows(settings) { return emulator.sample(settings, area: area) }
+            return render(settings).flatMap { LookSample(image: $0, area: area) }
+        }
+        /// Linear luma per sample pixel of a real render.
+        func luma(_ settings: DevelopSettings) -> [Float]? {
+            guard let image = render(settings), let data = LookSample.pixels(of: image) else { return nil }
+            let linear = LookSample.linearTable
+            let pixels = data.pixels
+            var out = [Float](repeating: 0, count: data.width * data.height)
+            for i in out.indices {
+                let r: Double = linear[Int(pixels[i * 4])]
+                let g: Double = linear[Int(pixels[i * 4 + 1])]
+                let b: Double = linear[Int(pixels[i * 4 + 2])]
+                out[i] = Float(0.2126 * r + 0.7152 * g + 0.0722 * b)
+            }
+            return out
+        }
+        /// A mask's weight per pixel: the photo rendered with only that mask, at Exposure -4,
+        /// against the photo without it. Inside the mask the light drops to 1/16.
+        func weigh(_ settings: DevelopSettings, _ mask: DevelopSettings.Mask) -> [Float]? {
+            var plain = settings
+            plain.masks.removeAll(where: LookEmulator.isEmulated)
+            plain.grain = 0
+            var dimmed = mask
+            dimmed.resetAdjustments()
+            dimmed.isHidden = false
+            dimmed[.exposure] = -4
+            var probe = plain
+            probe.masks.append(dimmed)
+            let before: [Float]
+            if let known = plainWeighed, known.settings == plain {
+                before = known.luma
+            } else {
+                guard let measured = luma(plain) else { return nil }
+                plainWeighed = (plain, measured)
+                before = measured
+            }
+            guard let after = luma(probe), after.count == before.count else { return nil }
+            let drop = Float(1 - 1.0 / 16)
+            var weights = [Float](repeating: 0, count: before.count)
+            for i in weights.indices where before[i] >= 0.002 {
+                let ratio: Float = after[i] / before[i]
+                weights[i] = min(1, max(0, (1 - ratio) / drop))
+            }
+            return weights
+        }
+
         func sample(_ settings: DevelopSettings) -> LookSample? {
-            guard let image = session.renderSRGB(settings) else { return nil }
-            if let photoBox { return LookSample(image: image, area: photoBox)?.excluding(skinPixels) }
-            guard var measured = LookSample(image: image) else { return nil }
+            if let photoBox { return photo(settings, area: photoBox)?.excluding(skinPixels) }
+            guard var measured = photo(settings) else { return nil }
             if let subjectFocus {
                 measured.focusWeights(subjectFocus.map { 1 - $0 }, share: LookSample.areaShare)
             }
             return measured.excluding(skinPixels)
         }
 
+        func whole(_ settings: DevelopSettings) -> LookSample? { photo(settings) }
+
         var current = base
         var penalty: ((LookSample) -> Double)?
         if options.skinMode == .protect, let skin { penalty = { measured in skin.penalty(measured) } }
         fitGlobal(&current, asShot: asShot, options: options, reference: reference, measure: sample,
-                  penalty: penalty, isCancelled: isCancelled)
+                  penalty: penalty, afterDecode: { settings in
+                      guard LookEmulator.supports(settings) else { return false }
+                      let stage = LookEmulator.neutralStage(settings)
+                      guard let image = render(stage) else { return false }
+                      emulator = LookEmulator(stage: image, stageSettings: stage, weigh: weigh)
+                      return emulator != nil
+                  }, isCancelled: isCancelled)
 
         if let subjectFocus, let subjectReference = target.subject, !isCancelled() {
             func subjectSample(_ settings: DevelopSettings) -> LookSample? {
-                guard let image = session.renderSRGB(settings), var measured = LookSample(image: image) else { return nil }
+                guard var measured = photo(settings) else { return nil }
                 measured.focusWeights(subjectFocus, share: 1)
                 return measured.excluding(skinPixels)
             }
@@ -346,26 +482,50 @@ extension LookMatcher {
         }
 
         if let skin, !isCancelled() {
-            func whole(_ settings: DevelopSettings) -> LookSample? {
-                session.renderSRGB(settings).flatMap { LookSample(image: $0) }
-            }
+            let size = CGSize(width: baseImage.width, height: baseImage.height)
+            let space = MaskSpace(sourceSize: session.sourceSize, crop: base.crop ?? .init(),
+                                  rect: CGRect(origin: .zero, size: size), outputSize: size)
             if options.skinMode == .protect {
-                protect(skin, in: &current, from: base, asShot: asShot, options: options, measure: whole)
+                // Hold the skin at its own colors, tone by tone, with the skin masks, so the rest
+                // of the photo keeps the full look. Only if that can't bring it back inside the
+                // limits are the sliders pulled back (which weakens the whole match).
+                if let now = whole(current), !skin.isWithin(now) {
+                    _ = fitSkin(skin, to: skin, in: &current, space: space, measure: whole, isCancelled: isCancelled)
+                }
+                if !isCancelled(), let now = whole(current), !skin.isWithin(now) {
+                    protect(skin, in: &current, from: base, asShot: asShot, options: options, measure: whole)
+                }
             } else if let referenceSkin = target.skin {
-                let size = CGSize(width: baseImage.width, height: baseImage.height)
-                let space = MaskSpace(sourceSize: session.sourceSize, crop: base.crop ?? .init(),
-                                      rect: CGRect(origin: .zero, size: size), outputSize: size)
                 if !fitSkin(skin, to: referenceSkin, in: &current, space: space,
                             measure: whole, isCancelled: isCancelled) {
                     notices.insert(.skinMatchLimited)
                 }
             }
         }
+        // The stand-in is close but not exact: check with a real render, and settle Exposure
+        // (the step most of the others lean on) on it.
+        var offBy = 0.0
+        if let emulator, !isCancelled() {
+            let guess = emulator.follows(current) ? emulator.sample(current) : nil
+            usesEmulator = false
+            if let guess, let real = whole(current) { offBy = guess.distance(to: real) }
+            if options.tone { fitExposure(&current, reference: reference, measure: sample) }
+            if options.skinMode == .protect, let skin, let now = whole(current), !skin.isWithin(now) {
+                protect(skin, in: &current, from: base, asShot: asShot, options: options, measure: whole)
+            }
+        }
         guard !isCancelled() else { return nil }
+        lastMatchRenders = renders
+        let seconds = Date().timeIntervalSince(started)
+        Logger(subsystem: "Atelier", category: "Match Look").info(
+            "Match: \(renders) renders, \(emulator?.tries ?? 0) stand-in tries in \(seconds, format: .fixed(precision: 2)) s at \(plain.width)×\(plain.height); stand-in off by \(offBy, format: .fixed(precision: 4))")
         var match = LookMatch(base: base, matched: current, asShotTemperature: asShot, notices: notices)
         match.subjectFitParameters = options.subjectFitParameters
         return match
     }
+
+    /// Real renders the last match made, for tests.
+    nonisolated(unsafe) static var lastMatchRenders = 0
 
     // MARK: Subject & Background
 

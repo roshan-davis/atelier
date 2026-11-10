@@ -11,7 +11,7 @@ extension MatchLookModel {
         let session = previewSession
         let settings = base
         let reference = referenceCG
-        let authored = builtInReference?.skinRegions
+        let authored = builtInReference?.skinToneRegions
         let needsPhoto = photoSkinOverlay == nil
         let needsReference = referenceSkinOverlay == nil && reference != nil
         guard needsPhoto || needsReference else { return }

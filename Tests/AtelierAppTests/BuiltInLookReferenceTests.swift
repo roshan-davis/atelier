@@ -58,13 +58,33 @@ final class BuiltInLookReferenceTests: XCTestCase {
         }
     }
 
+    /// Each study has real blacks (so matching it never fades a photo) and a wide tonal range,
+    /// and is built from many flat tones: no single color (after the faint grain) covers a big
+    /// share of the drawing.
+    func testStudiesHaveRealBlacksAndManyFlatTones() throws {
+        for study in BuiltInLookReference.allCases {
+            let image = try XCTUnwrap(study.image())
+            let sample = try XCTUnwrap(LookSample(image: image))
+            let range = sample.lumaPercentiles([0.01, 0.99])
+            XCTAssertLessThan(range[0], 0.05, study.name)
+            XCTAssertGreaterThan(range[1] - range[0], 0.5, study.name)
+            let pixels = try XCTUnwrap(LookSample.pixels(of: image)).pixels
+            var counts: [Int: Int] = [:]
+            for i in stride(from: 0, to: pixels.count, by: 4) {
+                counts[Int(pixels[i]) << 16 | Int(pixels[i + 1]) << 8 | Int(pixels[i + 2]), default: 0] += 1
+            }
+            let largest = Double(counts.values.max() ?? 0) / Double(pixels.count / 4)
+            XCTAssertLessThan(largest, 0.1, study.name)
+        }
+    }
+
     func testPortraitStudiesMatchFaceColorWithEditableMasks() throws {
         let fixtures = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Scripts/presets/fixtures")
         for study in BuiltInLookReference.allCases {
             let image = try XCTUnwrap(study.image())
             let target = try XCTUnwrap(LookTarget(image: image, areas: .wholePhoto, skinMode: .match,
-                                                  authoredSkinRegions: study.skinRegions))
+                                                  authoredSkinTones: study.skinToneRegions))
             guard study.scene == .portrait else {
                 XCTAssertEqual(target.notices, [.noSkinInReference], study.name)
                 continue
@@ -82,12 +102,17 @@ final class BuiltInLookReferenceTests: XCTestCase {
             let options = LookMatchOptions(whiteBalance: false, tone: false, color: false, skinMode: .match)
             let result = try XCTUnwrap(LookMatcher.match(session: fit, settings: .neutral, target: target,
                                                         options: options, photoFaces: faces))
-            let mask = try XCTUnwrap(result.skinMask, study.name)
+            let mask = try XCTUnwrap(result.skinMasks.first, study.name)
+            // Skin is compared tone by tone: the photo's darkest, middle and brightest thirds of
+            // skin against the study's drawn skin shadows, midtones and highlights.
+            XCTAssertEqual(reference.toneColors.count, 3, study.name)
+            let groups = LookSkin.toneSplit(source, skin.pixels).groups
             func error(_ settings: DevelopSettings) throws -> Double {
                 let sample = try XCTUnwrap(fit.renderSRGB(settings).flatMap { LookSample(image: $0) })
-                let face = try XCTUnwrap(LookSkin.hueAndChroma(sample, skin.pixels))
-                let angle = LookSkin.hueDifference(face.hue, reference.hue) * .pi / 180
-                return hypot(face.chroma * cos(angle) - reference.chroma, face.chroma * sin(angle))
+                return try zip(groups, reference.toneColors).reduce(0) { sum, pair in
+                    let d = try XCTUnwrap(LookSkin.meanAB(sample, pair.0)) - pair.1
+                    return sum + (d * d).sum().squareRoot()
+                }
             }
             let start = try error(.neutral), half = try error(result.settings(strength: 0.5))
             let end = try error(result.settings(strength: 1))
@@ -104,7 +129,8 @@ final class BuiltInLookReferenceTests: XCTestCase {
             base.masks[0][.texture] = 8
             let repeatMatch = try XCTUnwrap(LookMatcher.match(session: fit, settings: base, target: target,
                                                              options: options, photoFaces: faces))
-            XCTAssertEqual(repeatMatch.matched.masks.map(\.id), [mask.id])
+            // A second match reuses the same masks (by name) and keeps their other sliders.
+            XCTAssertEqual(repeatMatch.matched.masks.map(\.id), base.masks.map(\.id))
             XCTAssertEqual(repeatMatch.matched.masks.first?[.texture], 8)
 
             if study == .matrixPortrait, let path = ProcessInfo.processInfo.environment["ATELIER_SKIN_LOOK_OUT"] {
@@ -121,4 +147,36 @@ final class BuiltInLookReferenceTests: XCTestCase {
         }
     }
 
+    /// Each portrait's three skin samples sit inside one flat tone each, darkest to brightest,
+    /// and its drawn person makes a usable subject mask; wide studies have neither.
+    func testPortraitStudiesHaveSkinTonesAndADrawnSubject() throws {
+        for study in BuiltInLookReference.allCases {
+            let image = try XCTUnwrap(study.image())
+            guard study.scene == .portrait else {
+                XCTAssertTrue(study.skinToneRegions.isEmpty, study.name)
+                XCTAssertNil(study.features(for: image), study.name)
+                continue
+            }
+            let sample = try XCTUnwrap(LookSample(image: image))
+            let regions = study.skinToneRegions
+            XCTAssertEqual(regions.count, 3, study.name)
+            var previous = -1.0
+            for region in regions {
+                let pixels = LookSkin.pixels(in: region, of: sample)
+                XCTAssertGreaterThanOrEqual(pixels.count, 4, study.name)
+                let lightness = pixels.map { Double(sample.lightness[$0]) }
+                let mean = lightness.reduce(0, +) / Double(lightness.count)
+                // One flat tone (the faint grain moves it by about 1%).
+                XCTAssertLessThan((lightness.max() ?? 0) - (lightness.min() ?? 0), 0.04, study.name)
+                XCTAssertGreaterThan(mean, previous + 0.03, study.name)
+                previous = mean
+            }
+            let features = try XCTUnwrap(study.features(for: image), study.name)
+            let subject = try XCTUnwrap(features.subject, study.name)
+            let share = subject.reduce(0, +) / Double(subject.count)
+            XCTAssertGreaterThan(share, 0.15, study.name)
+            XCTAssertLessThan(share, 0.7, study.name)
+            XCTAssertEqual(features.faces.count, 1, study.name)
+        }
+    }
 }
