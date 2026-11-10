@@ -96,6 +96,10 @@ struct PanelSection<Content: View>: View {
             }
             if isExpanded {
                 content()
+                    // If a panel's controls ever need more width than the column has, they
+                    // overflow to the right (the value end) instead of being centered and
+                    // cutting off the names on the left.
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 10)
                     .opacity(isOn?.wrappedValue == false ? 0.45 : 1)
