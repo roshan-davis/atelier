@@ -20,6 +20,9 @@ public enum LookAreas: Sendable, Equatable {
 public enum LookMatchNotice: Sendable, Hashable {
     /// Protect Skin Tones found no face in the photo, so it had nothing to protect.
     case noFaces
+    case noSkinInPhoto
+    case noSkinInReference
+    case skinMatchLimited
     /// Subject & Background found no subject in the photo; the whole photo was matched.
     case noSubjectInPhoto
     /// Subject & Background found no subject in the reference; the whole photo was matched.
@@ -35,6 +38,7 @@ public struct LookSkin: Sendable {
 
     /// The sample's pixels that are skin.
     let pixels: [Int]
+    let faces: [CGRect]
     /// Skin's Oklab hue (degrees) and mean chroma before the match.
     let hue: Double
     let chroma: Double
@@ -52,25 +56,31 @@ public struct LookSkin: Sendable {
 
     /// Skin-colored pixels inside the middle of each face (leaving out hair, eyes' surroundings
     /// and background at the box edges). Nil when there are too few to measure.
-    init?(sample: LookSample, faces: [CGRect]) {
+    init?(sample: LookSample, faces: [CGRect], authored: Bool = false) {
         guard !faces.isEmpty, sample.width > 0, sample.height > 0 else { return nil }
         var picked: [Int] = []
+        var usableFaces: [CGRect] = []
         for face in faces {
-            let minX = Double(face.minX), maxX = Double(face.maxX), minY = Double(face.minY), maxY = Double(face.maxY)
-            let w = Double(face.width), h = Double(face.height)
-            let x0 = Int(((minX + w * 0.18) * Double(sample.width)).rounded())
-            let x1 = Int(((maxX - w * 0.18) * Double(sample.width)).rounded())
-            let y0 = Int(((minY + h * 0.2) * Double(sample.height)).rounded())
-            let y1 = Int(((maxY - h * 0.08) * Double(sample.height)).rounded())
+            let region = authored ? face : CGRect(x: face.minX + face.width * 0.18,
+                                                  y: face.minY + face.height * 0.2,
+                                                  width: face.width * 0.64, height: face.height * 0.72)
+            let x0 = max(0, Int((region.minX * CGFloat(sample.width)).rounded()))
+            let x1 = min(sample.width, Int((region.maxX * CGFloat(sample.width)).rounded()))
+            let y0 = max(0, Int((region.minY * CGFloat(sample.height)).rounded()))
+            let y1 = min(sample.height, Int((region.maxY * CGFloat(sample.height)).rounded()))
             guard x1 > x0, y1 > y0 else { continue }
-            for y in max(0, y0)..<min(sample.height, y1) {
-                for x in max(0, x0)..<min(sample.width, x1) {
+            var facePixels: [Int] = []
+            for y in y0..<y1 {
+                for x in x0..<x1 {
                     let i = y * sample.width + x
-                    if Self.looksLikeSkin(sample, i) { picked.append(i) }
+                    if authored || Self.looksLikeSkin(sample, i) { facePixels.append(i) }
                 }
             }
+            guard facePixels.count >= 12 else { continue }
+            usableFaces.append(face)
+            picked += facePixels
         }
-        guard picked.count >= 12, let first = Self.hueAndChroma(sample, picked) else { return nil }
+        guard let first = Self.hueAndChroma(sample, picked) else { return nil }
         // Leave out the odd pixel far from the face's own skin color (lips, shadows, glasses).
         let kept = picked.filter { i in
             let h = atan2(Double(sample.b[i]), Double(sample.a[i])) * 180 / .pi
@@ -79,6 +89,7 @@ public struct LookSkin: Sendable {
         let used = kept.count >= 12 ? kept : picked
         guard let measured = Self.hueAndChroma(sample, used) else { return nil }
         pixels = Array(Set(used)).sorted()
+        self.faces = usableFaces
         hue = measured.hue
         chroma = measured.chroma
     }
@@ -131,8 +142,6 @@ public struct LookSkin: Sendable {
 
 /// What Vision finds in a reference, found once per reference and reused for every refit.
 public struct LookReferenceFeatures: Sendable {
-    let width: Int
-    let height: Int
     /// Select Subject's mask at the sample's size, or nil when it finds none (or it covers almost
     /// nothing or almost everything).
     let subject: [Double]?
@@ -140,8 +149,6 @@ public struct LookReferenceFeatures: Sendable {
 
     public init(image: CGImage) {
         let size = LookSample.sampleSize(of: image)
-        width = size.width
-        height = size.height
         let mask: CGImage? = (try? AIImaging.subjectMask(for: image)) ?? nil
         subject = mask
             .flatMap { LookSample.focusValues($0, width: size.width, height: size.height) }
@@ -162,17 +169,25 @@ public struct LookTarget: Sendable {
     let background: LookSample?
     let subject: LookSample?
     let notices: Set<LookMatchNotice>
+    let skin: LookSkin?
 
-    public init?(image: CGImage, features: LookReferenceFeatures? = nil, areas: LookAreas, protectSkin: Bool) {
+    public init?(image: CGImage, features: LookReferenceFeatures? = nil, areas: LookAreas,
+                 skinMode: LookSkinMode = .off, authoredSkinRegions: [CGRect]? = nil) {
         guard var plain = LookSample(image: image) else { return nil }
         self.areas = areas
         var notices: Set<LookMatchNotice> = []
-        let features = features ?? (areas == .subject || protectSkin ? LookReferenceFeatures(image: image) : nil)
-        // The reference's own skin is left out too, so faces in it don't pull the photo's colors.
-        var skin: [Int] = []
-        if protectSkin, let features, features.width == plain.width, features.height == plain.height {
-            skin = LookSkin(sample: plain, faces: features.faces)?.pixels ?? []
+        let features = features ?? (areas == .subject ? LookReferenceFeatures(image: image) : nil)
+        if skinMode == .off {
+            skin = nil
+        } else if let authoredSkinRegions {
+            skin = LookSkin(sample: plain, faces: authoredSkinRegions, authored: true)
+        } else {
+            skin = LookSkin(sample: plain, faces: features?.faces ?? LookSkin.faces(in: image))
         }
+        // Protect leaves face skin out of the global fit. Match uses the ordinary area fit
+        // first, then corrects faces locally against the reference measurement.
+        let excluded = skinMode == .protect ? skin?.pixels ?? [] : []
+        if skinMode == .match, skin == nil { notices.insert(.noSkinInReference) }
         var background: LookSample?, subject: LookSample?
         switch areas {
         case .wholePhoto:
@@ -184,13 +199,13 @@ public struct LookTarget: Sendable {
                 var back = plain, front = plain
                 back.focusWeights(mask.map { 1 - $0 }, share: LookSample.areaShare)
                 front.focusWeights(mask, share: 1)
-                background = back.excluding(skin)
-                subject = front.excluding(skin)
+                background = back.excluding(excluded)
+                subject = front.excluding(excluded)
             } else {
                 notices.insert(.noSubjectInReference)
             }
         }
-        whole = plain.excluding(skin)
+        whole = plain.excluding(excluded)
         self.background = background
         self.subject = subject
         self.notices = notices
@@ -220,11 +235,11 @@ extension LookMatcher {
         var notices = target.notices
         let asShot = session.asShotTemperature
         var skin: LookSkin?
-        if options.protectSkin {
+        if options.skinMode != .off {
             skin = LookSkin(sample: plain, faces: photoFaces ?? LookSkin.faces(in: baseImage))
-            if skin == nil { notices.insert(.noFaces) }
+            if skin == nil { notices.insert(options.skinMode == .protect ? .noFaces : .noSkinInPhoto) }
         }
-        let skinPixels = skin?.pixels ?? []
+        let skinPixels = options.skinMode == .protect ? skin?.pixels ?? [] : []
 
         // Where the photo is measured.
         var reference = target.whole
@@ -260,7 +275,7 @@ extension LookMatcher {
 
         var current = base
         var penalty: ((LookSample) -> Double)?
-        if let skin { penalty = { measured in skin.penalty(measured) } }
+        if options.skinMode == .protect, let skin { penalty = { measured in skin.penalty(measured) } }
         fitGlobal(&current, asShot: asShot, options: options, reference: reference, measure: sample,
                   penalty: penalty, isCancelled: isCancelled)
 
@@ -277,7 +292,17 @@ extension LookMatcher {
             func whole(_ settings: DevelopSettings) -> LookSample? {
                 session.renderSRGB(settings).flatMap { LookSample(image: $0) }
             }
-            protect(skin, in: &current, from: base, asShot: asShot, options: options, measure: whole)
+            if options.skinMode == .protect {
+                protect(skin, in: &current, from: base, asShot: asShot, options: options, measure: whole)
+            } else if let referenceSkin = target.skin {
+                let size = CGSize(width: baseImage.width, height: baseImage.height)
+                let space = MaskSpace(sourceSize: session.sourceSize, crop: base.crop ?? .init(),
+                                      rect: CGRect(origin: .zero, size: size), outputSize: size)
+                if !fitSkin(skin, to: referenceSkin, in: &current, space: space,
+                            measure: whole, isCancelled: isCancelled) {
+                    notices.insert(.skinMatchLimited)
+                }
+            }
         }
         guard !isCancelled() else { return nil }
         var match = LookMatch(base: base, matched: current, asShotTemperature: asShot, notices: notices)

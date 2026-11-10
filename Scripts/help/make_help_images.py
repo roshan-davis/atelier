@@ -12,6 +12,8 @@ real renders from DevelopRenderer; keep the file names so the pages don't change
 For preset examples, use --presets-from RENDER_DIR (see Scripts/presets/README.md).
 For the built-in Match Look example, run the native qualification test with
 ATELIER_BUILT_IN_LOOK_OUT=RENDER_DIR, then use --built-in-look-from RENDER_DIR.
+For Match Skin Tone, run the portrait study test with ATELIER_SKIN_LOOK_OUT=RENDER_DIR,
+then use --skin-look-from RENDER_DIR.
 """
 
 import json
@@ -520,6 +522,14 @@ def make_built_in_look_images(folder):
             save(image, f"match-built-in-{kind}.jpg")
 
 
+def make_skin_look_images(folder):
+    """Use the actual local face fit from BuiltInLookReferenceTests."""
+    for kind in ("reference", "before", "after"):
+        with Image.open(os.path.join(folder, f"skin-{kind}.png")) as source:
+            image = np.asarray(source.convert("RGB")).astype(np.float32) / 255
+            save(image, f"match-skin-{kind}.jpg")
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     if len(sys.argv) == 3 and sys.argv[1] in ("--presets-from", "--check-presets-from"):
@@ -528,6 +538,9 @@ def main():
         return 0
     if len(sys.argv) == 3 and sys.argv[1] == "--built-in-look-from":
         make_built_in_look_images(sys.argv[2])
+        return 0
+    if len(sys.argv) == 3 and sys.argv[1] == "--skin-look-from":
+        make_skin_look_images(sys.argv[2])
         return 0
     if "--hdr-only" in sys.argv:
         make_hdr_images(flat(load("splash-redwoods.jpg")))

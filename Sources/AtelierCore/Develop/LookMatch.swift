@@ -34,7 +34,20 @@ public struct LookMatch: Sendable, Equatable {
 
     /// The settings at `strength` (0 to 1) between `base` and `matched`.
     public func settings(strength: Double) -> DevelopSettings {
-        applied(to: base, strength: strength)
+        var settings = applied(to: base, strength: strength)
+        let s = min(1, max(0, strength))
+        guard s > 0, var mask = skinMask else { return settings }
+        let index = settings.masks.firstIndex { $0.id == mask.id }
+        for parameter in Self.skinParameters {
+            let from = index.map { settings.masks[$0][parameter] } ?? 0
+            if s < 1 { mask[parameter] = (from + (mask[parameter] - from) * s).rounded() }
+        }
+        if let index {
+            settings.masks[index] = mask
+        } else if mask.hasAdjustments {
+            settings.masks.append(mask)
+        }
+        return settings
     }
 
     /// `other` with the matched values copied over it at `strength`, as when syncing the match to
@@ -102,13 +115,25 @@ public struct LookMatch: Sendable, Equatable {
     /// The mask sliders Subject & Background fits.
     public static let subjectParameters: [DevelopSettings.LocalParameter] = [.temperature, .tint, .exposure, .saturation]
 
+    public static let skinMaskName = "Match Look: Skin"
+    public static let skinParameters: [DevelopSettings.LocalParameter] = [.temperature, .tint, .saturation]
+
+    public var skinMask: DevelopSettings.Mask? {
+        matched.masks.first { $0.name == Self.skinMaskName && !base.masks.contains($0) }
+    }
+
     /// The "Match Look: Subject" mask the match adds, if it adds one.
     public var subjectMask: DevelopSettings.Mask? {
         matched.masks.first { $0.name == Self.subjectMaskName && !base.masks.contains($0) }
     }
 }
 
-/// What the match changes, from the dialog's checkboxes.
+/// How face skin participates in the match.
+public enum LookSkinMode: Sendable, Equatable, CaseIterable {
+    case off, protect, match
+}
+
+/// What the match changes, from the dialog's controls.
 public struct LookMatchOptions: Sendable, Equatable {
     /// Temp and Tint.
     public var whiteBalance = true
@@ -116,18 +141,16 @@ public struct LookMatchOptions: Sendable, Equatable {
     public var tone = true
     /// Saturation, the HSL bands and the Shadows and Highlights grading wheels.
     public var color = true
-    /// Protect Skin Tones: faces' skin is left out of the fit, and the match may move its hue by
-    /// at most `LookSkin.maxHueShift` and its saturation by at most `LookSkin.maxChromaChange`.
-    public var protectSkin = false
+    public var skinMode: LookSkinMode
 
-    public init(whiteBalance: Bool = true, tone: Bool = true, color: Bool = true, protectSkin: Bool = false) {
+    public init(whiteBalance: Bool = true, tone: Bool = true, color: Bool = true, skinMode: LookSkinMode = .off) {
         self.whiteBalance = whiteBalance
         self.tone = tone
         self.color = color
-        self.protectSkin = protectSkin
+        self.skinMode = skinMode
     }
 
-    public var isEmpty: Bool { !whiteBalance && !tone && !color }
+    public var isEmpty: Bool { !whiteBalance && !tone && !color && skinMode != .match }
 
     var subjectFitParameters: [DevelopSettings.LocalParameter] {
         var parameters: [DevelopSettings.LocalParameter] = []
