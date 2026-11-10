@@ -589,7 +589,7 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 ## AT-040 — Develop: smooth edits in Before/After compare views; histogram drawn in one pass
 
-**Status:** Implementation in review. Never compiled (cloud, no Swift toolchain); Mac build, tests and Rosh's manual acceptance pending. **Owner:** Claude. **Chat:** Claude project thread "Fix Before/After and improve histogram". **Branch:** `claude/project-thread-ubr8f6`. **PR:** to be opened. **Baseline:** `301015d` (AT-039 merged). **Dependencies:** AT-039.
+**Status:** Implementation in review. Never compiled (cloud, no Swift toolchain); Mac build, tests and Rosh's manual acceptance pending. **Owner:** Claude. **Chat:** Claude project thread "Fix Before/After and improve histogram". **Branch:** `claude/project-thread-ubr8f6`. **PR:** [#98](https://github.com/roshan-davis/atelier/pull/98). **Baseline:** `301015d` (AT-039 merged). **Dependencies:** AT-039.
 
 **Evidence:** Rosh (2026-11-10, after #97): with the photo in a Before/After compare view (side by side or the split slider), changing values freezes the photo; the histogram also seems to freeze, with its colors drawing one after another. Source review at `301015d`: `PhotoFeed` attached only to the single-photo and Masking views, so in a compare view every frame took the old path (CPU readback, `image` published on main, a SwiftUI update of the whole window and both photo panes), and each frame's finish also started full-size renders when zoomed (AT-039 D4 applied to live frames only). The histogram was three translucent `plusLighter` fills redrawn by a SwiftUI `Canvas` on the main thread at every render.
 
