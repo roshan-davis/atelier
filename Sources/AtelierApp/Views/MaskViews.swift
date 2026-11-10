@@ -20,7 +20,8 @@ struct MaskEditorView: View {
         ZoomableImageView(image: display, pixelSize: pixelSize, zoom: zoom, onReport: onReport, menu: { nil },
                           overlay: { [develop, image] frame in
                               AnyView(MaskOverlay(develop: develop, image: image, frame: frame))
-                          })
+                          },
+                          feed: develop.photoFeed)
     }
 }
 

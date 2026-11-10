@@ -522,3 +522,19 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 **Acceptance:** Mac build and tests (`LookEmulatorTests`: stand-in vs renderer within 0.012 mean Oklab difference with curve, saturation, HSL and grading, and with a skin mask; skin match at most 40 renders). Rosh: Match Look feels fast with Protect Skin Tones, Match Skin Tone and Off; results at least as good as before; the Console line shows the render count.
 
 **Validation:** Cloud only, no Swift toolchain: source review.
+
+## AT-036 — Develop: live slider frames straight from the GPU to the photo view
+
+**Status:** Implementation in review. Never compiled (cloud, no Swift toolchain); Mac build, tests, timings and Rosh's manual acceptance pending. **Owner:** Cl. **Chat:** Claude project thread "Make Develop sliders smooth like LightCraft". **Branch:** `claude/project-thread-f7xbz1`. **PR:** [#93](https://github.com/roshan-davis/atelier/pull/93). **Baseline:** `4f6f6b8`. Part of AT-011 (drag responsiveness); follows AT-011a (PR #81).
+
+**Evidence:** `reports/develop-preview-vs-lightcraft-2026-11-10.md` (project files and `~/RoshProjects/Atelier/reports/`), findings F1–F3. A warm proxy render takes ~11 ms (Codex, Release, PR #81), but settings→photo took 37.5 ms median because every frame was read back to the CPU (`createCGImage`), published through SwiftUI, uploaded again by Core Animation, and the next render could only start after the main thread handled the last one. LightCraft draws its renders' GPU textures directly.
+
+**Scope:** Rosh (2026-11-10): "smooth as butter"; one focused change that renders directly with no round trips and no regression. (1) The render queue starts the next proxy render itself, latest-wins (`LatestJob`), one render per queue block so Before and stored previews still interleave. (2) Once the photo is up, a live frame is rendered by Core Image into an IOSurface (`DisplaySurfaces`, tagged Display P3) that the photo view's layer shows directly (`PhotoFeed`, `ZoomCanvasView.showFrame`); no CPU readback, no SwiftUI update per frame. The histogram is counted from a 256 px copy of the surface. (3) 0.12 s after the last edit the ordinary image is rendered and published as before, so the photo at rest, Navigator, crop, compare, AI and everything else that reads `image` are unchanged. Applies to the single-photo view and Masking; compare views, crop, Guided Upright and the AI brush keep the ordinary path. A frame whose shape differs from the photo on screen (Aspect, crop) falls back to the ordinary path until the pointer edit ends.
+
+**Not in scope:** Exposure/Temp/Tint re-decoding the RAW each tick (F4, changes the look), zoomed whole-photo full-size renders mid-drag (F5), stored previews on the live render queue (F6), canvas-sized drafts (F7), moving `settings` observation off the big controller.
+
+**Known difference:** the Navigator thumbnail updates when a drag pauses (0.12 s), not on every frame.
+
+**Acceptance:** Mac build and tests (`DisplaySurfacesTests`: surface frame equals `renderForDisplay` within one level, right way up, with and without the clipping overlay; pool limit). Timings before/after in a Release build: settings→pixels on screen for Basic > Contrast and Tone Curve drags at Fit (target AT-011a: photo < 50 ms median, ≤ 100 ms p95). Rosh: no color shift or flip between a drag and its release; Before (\), J overlay, Masking brush and sliders, zoomed drags, Aspect drag, photo changes during and right after a drag all show the right image.
+
+**Validation:** Cloud only, no Swift toolchain: source review.
