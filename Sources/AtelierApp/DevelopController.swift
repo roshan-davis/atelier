@@ -43,6 +43,24 @@ private struct DevelopMeasureRequest {
     var rank: Int { count * 2 + (fromPreview ? 0 : 1) }
 }
 
+/// The open photo's histogram and color scope. They change with every render, so they are
+/// published here rather than on `DevelopController`, whose every change updates the whole
+/// Develop window (reports/develop-slider-smoothness-design-2026-11-10.md, S2 and D2).
+@MainActor
+final class DevelopMeasures: ObservableObject {
+    @Published fileprivate(set) var histogram: Histogram?
+    @Published fileprivate(set) var colorScope: ColorScope?
+}
+
+/// What a live frame shows: frames requested for another key are dropped (`LiveFrameSink`).
+private struct LiveFrameKey: Equatable {
+    let assetID: Int64?
+    let generation: Int
+    let cropping: Bool
+    let preview: SliderPreview?
+    let renderBefore: Bool
+}
+
 /// A proxy render handed to the render queue (`DevelopController.submitRender`).
 private struct ProxyRenderRequest {
     let session: DevelopSession
@@ -60,6 +78,9 @@ private struct ProxyRenderRequest {
     /// Set when the frame goes straight to the photo view (`PhotoFeed`); nil renders a CGImage.
     var surfaces: DisplaySurfaces?
     var fallback: PhotoFeed.Fallback? = nil
+    /// Puts the frame on screen from the render queue, if it still matches (`liveEpoch`).
+    var sink: LiveFrameSink? = nil
+    var liveEpoch = 0
     let measureJob: LatestJob<DevelopMeasureRequest>
     let measureQueue: DispatchQueue
     let openGeneration: LockedValue<Int>
@@ -240,9 +261,12 @@ final class DevelopController: ObservableObject {
     /// Where the slider divides before (left) and after (right), 0...1.
     @Published var sliderPosition = 0.5
 
-    @Published private(set) var histogram: Histogram?
+    /// The histogram and color scope, on an object of their own (D2): each new count updates
+    /// only the views that draw them, not every view watching the controller.
+    let measures = DevelopMeasures()
+    var histogram: Histogram? { measures.histogram }
     /// Where the render's colors sit on the Color Grading wheels.
-    @Published private(set) var colorScope: ColorScope?
+    var colorScope: ColorScope? { measures.colorScope }
 
     /// Lightroom's Option-drag view, while Option is held on a slider that has one.
     @Published var sliderPreview: SliderPreview? = nil {
@@ -520,6 +544,8 @@ final class DevelopController: ObservableObject {
     let frameHUD = DevelopFrameHUD()
     lazy var photoFeed = PhotoFeed { [weak frameHUD] timing in frameHUD?.submit(timing) }
     private let displaySurfaces = DisplaySurfaces()
+    /// What live frames were last requested for; a change drops frames still rendering.
+    private var lastLiveKey: LiveFrameKey?
     /// A live frame didn't fit the photo on screen; frames take the ordinary path until the
     /// pointer edit ends or another photo opens.
     private var liveFramesOff = false
@@ -643,9 +669,9 @@ final class DevelopController: ObservableObject {
         beforeImage = nil
         // Ranks only compare within one open (requests carry the open's generation).
         measuredRank = 0
-        histogram = nil
+        measures.histogram = nil
         shootingInfo = nil
-        colorScope = nil
+        measures.colorScope = nil
         fullImage = nil
         fullImageSettings = nil
         fullBeforeImage = nil
@@ -805,6 +831,7 @@ final class DevelopController: ObservableObject {
         }
         self.scheduleRender()
         if self.compareMode != .off { self.renderBeforeIfNeeded() }
+        warmUp(session: session, assetID: assetID, generation: generation)
         // An unedited RAW's cached preview is the camera's embedded JPEG, which has no
         // lens corrections, so it is framed a little wider than the render and the
         // photo jumped when the render replaced it. Store the render as the preview
@@ -817,6 +844,22 @@ final class DevelopController: ObservableObject {
             self.storePreviews(session: session, settings: self.settings, assetID: assetID, optional: true)
         }
     }
+
+    /// Builds Core Image's programs for the tools this photo doesn't use yet, so the first drag
+    /// of one doesn't hold its first frame while they compile (`DevelopRenderer.warmUp`, AT-039
+    /// D3a). Background priority, on its own queue beside the live renders; stops when another
+    /// photo opens.
+    private func warmUp(session: DevelopSession, assetID: Int64, generation: Int) {
+        let settings = settings, scale = session.renderScale, openGeneration = openGeneration
+        Self.warmUpQueue.async {
+            guard openGeneration.value == generation else { return }
+            let began = DevelopTimingLog.now()
+            let count = DevelopRenderer.shared.warmUp(settings, scale: scale) { openGeneration.value == generation }
+            DevelopTimingLog.shared.log(assetID, "warm-up: \(count) pipelines in \(DevelopTimingLog.ms(since: began)) ms")
+        }
+    }
+
+    private static let warmUpQueue = DispatchQueue(label: "atelier.develop.warm-up", qos: .utility)
 
     func cycleCompareMode() {
         let all = CompareMode.allCases
@@ -976,7 +1019,7 @@ final class DevelopController: ObservableObject {
     func set(_ parameter: DevelopSettings.Parameter, to value: Double) {
         guard assetID != nil else { return }
         settings[parameter] = value
-        if (parameter.panel == .lensCorrections && !parameter.isDefringe) || parameter.panel == .transform { beforeImage = nil }
+        if (parameter.panel == .lensCorrections && !parameter.isDefringe) || parameter.panel == .transform, beforeImage != nil { beforeImage = nil }
         let shown = parameter == .tint ? asShotTint + settings[parameter] : settings[parameter]
         changed(step: Self.stepName(parameter, value: shown))
     }
@@ -1521,7 +1564,8 @@ final class DevelopController: ObservableObject {
     /// place (a preset, a snapshot, Paste), whose panel switches stand as they come.
     private func changed(step: String?, replacing: Bool = false) {
         if step != nil, !replacing { turnOnEditedPanels() }
-        if !settingPresetAmount { presetAmount = nil }
+        // Only when it changes: assigning a published property updates every watching view.
+        if !settingPresetAmount, presetAmount != nil { presetAmount = nil }
         constrainCropIfNeeded()
         dirty = true
         if let step { pendingStep = step }
@@ -1877,12 +1921,21 @@ final class DevelopController: ObservableObject {
         // Once the photo is up, live frames go straight from the GPU to the photo view (see
         // `PhotoFeed`); the first render is published the ordinary way, as it ends the stand-in.
         let direct = photoFeed.isAttached && firstRenderDone && cropping && !liveFramesOff
+        // A frame still rendering for another photo, the Before view, the crop tool or an
+        // Option view must not reach the screen once this one is asked for.
+        let liveKey = LiveFrameKey(assetID: assetID, generation: openGeneration.value, cropping: cropping,
+                                   preview: preview, renderBefore: renderBefore)
+        if liveKey != lastLiveKey {
+            lastLiveKey = liveKey
+            photoFeed.sink.invalidate()
+        }
         submitRender(ProxyRenderRequest(
             session: session, settings: settings, preview: preview, renderBefore: renderBefore, cropping: cropping,
             overlay: overlay, clipping: clipping, assetID: assetID, count: renderCount,
             measures: overlay == nil && preview == nil, generation: openGeneration.value,
             queuedAt: DevelopTimingLog.now(), surfaces: direct ? displaySurfaces : nil,
             fallback: liveFramesOff && photoFeed.isAttached && firstRenderDone && cropping ? .liveFramesOff : nil,
+            sink: direct ? photoFeed.sink : nil, liveEpoch: photoFeed.sink.currentEpoch,
             measureJob: measureJob, measureQueue: measureQueue, openGeneration: openGeneration,
             renderBeganAt: renderBeganAt))
     }
@@ -1912,13 +1965,24 @@ final class DevelopController: ObservableObject {
         var cgImage: CGImage?
         var plain: CGImage?
         var fallback = request.fallback
+        var outcome: LiveFrameSink.Outcome?
+        var renderedAt: CFTimeInterval?
+        var shownAt: CFTimeInterval?
         RenderSignposts.measure("Proxy render") {
-            if let surfaces = request.surfaces,
+            if let surfaces = request.surfaces, let sink = request.sink,
                let frame = request.session.renderToSurface(request.settings, cropping: request.cropping,
                                                            overlay: request.overlay, preview: request.preview,
                                                            shadowClipping: request.clipping.shadows,
                                                            highlightClipping: request.clipping.highlights,
-                                                           surfaces: surfaces, onPoolFull: { fallback = .poolFull }) {
+                                                           surfaces: surfaces, onPoolFull: { fallback = .poolFull },
+                                                           onRendered: { rendered in
+                    // On screen now, from this thread: the main thread may be busy (D1). The
+                    // histogram's small copy is made after this, never before.
+                    renderedAt = CACurrentMediaTime()
+                    let result = sink.present(rendered, count: request.count, epoch: request.liveEpoch, pool: surfaces)
+                    outcome = result
+                    if result == .shown { shownAt = CACurrentMediaTime() }
+                }) {
                 surface = frame.surface
                 plain = frame.plain
             } else if let rendered = request.session.renderForDisplay(request.settings, cropping: request.cropping,
@@ -1929,7 +1993,7 @@ final class DevelopController: ObservableObject {
                 plain = rendered.plain
             }
         }
-        let readyAt = CACurrentMediaTime()
+        let readyAt = renderedAt ?? CACurrentMediaTime()
         let renderTook = DevelopTimingLog.ms(since: renderBegan)
         if renderTook > 300 || (surface == nil && cgImage == nil) {
             DevelopTimingLog.shared.log(request.assetID, surface == nil && cgImage == nil ? "render FAILED after \(renderTook) ms"
@@ -1946,17 +2010,20 @@ final class DevelopController: ObservableObject {
             }
         }
         let timing = PhotoFeed.RenderTiming(count: request.count, readyAt: readyAt, duration: readyAt - renderClock,
-                                           queueWait: max(0, renderBegan - request.queuedAt))
+                                           queueWait: max(0, renderBegan - request.queuedAt), shownAt: shownAt)
+        // A live frame is already on screen (or was dropped and its surface returned); the main
+        // thread only does the bookkeeping.
+        let live = surface == nil ? nil : outcome
         DispatchQueue.main.async { [fallback] in
             MainActor.assumeIsolated {
-                controller.finishRender(request, surface: surface, cgImage: cgImage, fallback: fallback,
+                controller.finishRender(request, live: live, cgImage: cgImage, fallback: fallback,
                                         renderBegan: renderBegan, timing: timing)
             }
         }
         queue.async { Self.renderNext(job: job, on: queue, controller: controller) }
     }
 
-    private func finishRender(_ request: ProxyRenderRequest, surface: IOSurface?, cgImage: CGImage?,
+    private func finishRender(_ request: ProxyRenderRequest, live: LiveFrameSink.Outcome?, cgImage: CGImage?,
                               fallback: PhotoFeed.Fallback?,
                               renderBegan: CFAbsoluteTime, timing: PhotoFeed.RenderTiming) {
         // Nothing newer has been asked for.
@@ -1970,25 +2037,39 @@ final class DevelopController: ObservableObject {
         let fits = current && request.cropping != isCropping && request.preview == sliderPreview
             && request.renderBefore == (showingBefore && sliderPreview == nil)
         var shownLive = false
-        if let surface, let surfaces = request.surfaces {
-            if fits {
-                shownLive = photoFeed.show(surface, count: request.count, from: surfaces, timing: timing)
-                if !shownLive {
-                    // Another shape than the photo on screen (an Aspect or crop change): frames
-                    // take the ordinary path until the edit ends, and this one is redone that way.
-                    liveFramesOff = true
-                    if latest {
-                        var ordinary = request
-                        ordinary.surfaces = nil
-                        ordinary.fallback = .liveFramesOff
-                        rendering = true
-                        submitRender(ordinary)
-                        return
-                    }
-                }
-            } else {
-                surfaces.checkIn(surface)
+        switch live {
+        case .shown:
+            shownLive = true
+            photoFeed.frameShown(timing)
+        case .wrongShape, .noView:
+            guard fits else { break }
+            // Another shape than the photo on screen (an Aspect or crop change), or the view is
+            // gone: frames take the ordinary path until the edit ends, and this one is redone
+            // that way.
+            liveFramesOff = true
+            if latest {
+                var ordinary = request
+                ordinary.surfaces = nil
+                ordinary.sink = nil
+                ordinary.fallback = .liveFramesOff
+                rendering = true
+                submitRender(ordinary)
+                return
             }
+        case .stale:
+            // Dropped because the photo view changed under it (attached again, another mode). If
+            // nothing newer is coming, show this edit the ordinary way so the photo isn't left on
+            // an older frame.
+            if latest, fits {
+                var ordinary = request
+                ordinary.surfaces = nil
+                ordinary.sink = nil
+                rendering = true
+                submitRender(ordinary)
+                return
+            }
+        case nil:
+            break
         }
         if fits, let cgImage {
             if let fallback { frameHUD.fallback(fallback, count: request.count) }
@@ -2008,7 +2089,14 @@ final class DevelopController: ObservableObject {
             prefetchNeighboursWhenIdle()
         }
         guard latest else { return }
-        if shownLive { publishWhenSettled(request) }
+        // A live frame is a drag in progress: the full-size render waits for the settled render
+        // (`publishWhenSettled`), whose finish lands here again. Started after every live frame,
+        // it ran 24 MP renders beside the drag's on the GPU for settings never shown, since the
+        // zoomed photo shows the full-size image only once it matches (AT-039 D4).
+        if shownLive {
+            publishWhenSettled(request)
+            return
+        }
         scheduleFullRender()
         if compareMode != .off { scheduleFullBeforeRender() }
     }
@@ -2023,6 +2111,7 @@ final class DevelopController: ObservableObject {
             MainActor.assumeIsolated {
                 guard let self, self.renderCount == count, var settled = self.lastRender, settled.count == count else { return }
                 settled.surfaces = nil
+                settled.sink = nil
                 settled.fallback = nil
                 self.rendering = true
                 self.submitRender(settled)
@@ -2131,8 +2220,8 @@ final class DevelopController: ObservableObject {
         }
         measuredRank = request.rank
         if histogram != nil || scope != nil { frameHUD.histogramPublished() }
-        if let histogram { self.histogram = histogram }
-        if let scope { colorScope = scope }
+        if let histogram { measures.histogram = histogram }
+        if let scope { measures.colorScope = scope }
     }
 
     /// Until the photo's first render is counted, the histogram comes from the cached preview
@@ -2343,7 +2432,12 @@ final class DevelopController: ObservableObject {
         dirty = false
         let settings = self.settings
         do {
+            let began = DevelopTimingLog.now()
             try catalog.saveDevelop(settings, history: history, for: assetID)
+            // On main, so reads that follow see it; timed so AT-039 D5 can tell whether moving it
+            // off main is worth a pending-save layer.
+            DevelopTimingLog.shared.log(assetID, "saved: \(DevelopTimingLog.ms(since: began)) ms on main, "
+                + "\(history.steps.count) history steps")
             onSettingsSaved?(assetID)
         } catch {
             dirty = true
@@ -2371,7 +2465,9 @@ final class DevelopController: ObservableObject {
         // Optional work never claims a revision: if it's skipped, it mustn't make a saved edit's
         // (required) write look obsolete. It writes only while no newer saved write was asked for.
         let revision = optional ? (previewRevisions.value[assetID] ?? 0) : nextPreviewRevision(for: assetID)
-        queue.async {
+        // Not on the live render queue: a 28–35 ms preview render there held the next drag's
+        // first frames (AT-039 D5).
+        Self.previewQueue.async {
             // Moving on quickly through photos: the optional first-open preview can wait.
             if optional, openAsset.value != assetID {
                 DispatchQueue.main.async {
@@ -2381,7 +2477,7 @@ final class DevelopController: ObservableObject {
                 return
             }
             let began = DevelopTimingLog.now()
-            defer { DevelopTimingLog.shared.log(assetID, "preview stored\(optional ? " (lens-corrected, first open)" : " (saved edit)"): \(DevelopTimingLog.ms(since: began)) ms on the render queue") }
+            defer { DevelopTimingLog.shared.log(assetID, "preview stored\(optional ? " (lens-corrected, first open)" : " (saved edit)"): \(DevelopTimingLog.ms(since: began)) ms on the preview queue") }
             if let cgImage = session.render(settings) {
                 Self.writePreviews(cgImage, for: assetID, revision: revision, previews: previews, revisions: revisions)
             }
@@ -2390,6 +2486,10 @@ final class DevelopController: ObservableObject {
             }
         }
     }
+
+    /// Grid and Loupe previews of the open photo, rendered beside the live renders instead of
+    /// between them.
+    private static let previewQueue = DispatchQueue(label: "atelier.develop.previews", qos: .utility)
 
     /// Each photo's latest preview write asked for (`nextPreviewRevision`). Writes come from the
     /// render queue and from independent decodes (`refreshPreviews`), so an older one can finish

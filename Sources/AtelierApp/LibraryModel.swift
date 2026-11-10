@@ -138,8 +138,13 @@ final class LibraryModel: ObservableObject {
     private var exportTask: Task<Void, Never>?
     private var importTask: Task<Void, Never>?
     private var importWasCancelled = false
-    /// Bumped when previews are generated so visible cells reload their images.
-    @Published var previewRevision = 0
+    /// Bumped when previews are generated so visible cells reload their images. Kept on
+    /// `PreviewRevision.shared`, which only the thumbnail and preview views watch: published here,
+    /// each bump (after every saved edit) updated every view of the window (AT-039 D5).
+    var previewRevision: Int {
+        get { PreviewRevision.shared.value }
+        set { PreviewRevision.shared.value = newValue }
+    }
     /// Zoom shared by loupe and develop; what happens on moving to another photo is a setting
     /// (see `ZoomOnPhotoChange`).
     /// Not published here: only the photo and the zoom bar watch it.

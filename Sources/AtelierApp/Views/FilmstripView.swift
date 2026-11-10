@@ -8,6 +8,8 @@ import SwiftUI
 /// collapses and opens it; the top edge drags to resize. Both are remembered.
 struct FilmstripView: View {
     @EnvironmentObject private var model: LibraryModel
+    /// Redraws on new previews (`PreviewRevision`).
+    @ObservedObject private var previewRevision = PreviewRevision.shared
     @Environment(\.theme) private var theme
     @AppStorage(Filmstrip.visibleKey) private var isVisible = true
     @AppStorage(Filmstrip.heightKey) private var height = Filmstrip.defaultHeight
@@ -60,7 +62,7 @@ struct FilmstripView: View {
                                           size: CGSize(width: (cellHeight * Filmstrip.cellAspect).rounded(), height: cellHeight),
                                           state: ThumbnailState(isFocused: model.focusedID == row.id,
                                                                 isSelected: model.selection.contains(row.id)),
-                                          revision: model.previewRevision)
+                                          revision: previewRevision.value)
                                 .id(row.id)
                                 .onTapGesture(count: 2) {
                                     model.selection = [row.id]

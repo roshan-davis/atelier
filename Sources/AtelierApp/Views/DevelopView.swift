@@ -533,6 +533,10 @@ private struct HistogramView: View {
     private var active: ToneRegion? { drag?.region ?? hovered }
 
     var body: some View {
+        MeasuresReader(develop.measures) { _ in content }
+    }
+
+    private var content: some View {
         VStack(alignment: .leading, spacing: 4) {
             GeometryReader { geometry in
                 graph(width: geometry.size.width)
@@ -751,7 +755,53 @@ private enum ToneRegion: CaseIterable {
 
 struct ParameterSlider: View {
     let parameter: DevelopSettings.Parameter
-    @ObservedObject var develop: DevelopController
+    let develop: DevelopController
+    /// Read here, when the panel builds the slider, not in `body`: SwiftUI runs `body` only when
+    /// the view's stored values change, and `parameter` and `develop` never do, so a value read
+    /// in `body` froze the knob (Rosh, Nov 10, 2026).
+    private let shown: ParameterSliderState
+
+    init(parameter: DevelopSettings.Parameter, develop: DevelopController) {
+        self.parameter = parameter
+        self.develop = develop
+        shown = ParameterSliderState(parameter, develop)
+    }
+
+    /// Panels watch the controller and build their sliders again for every change; each slider
+    /// compares what it shows and skips its row when that is unchanged, so a drag redraws the
+    /// dragged slider rather than every slider in every open panel (AT-039 D2).
+    var body: some View {
+        ParameterSliderRow(parameter: parameter, develop: develop, shown: shown).equatable()
+    }
+}
+
+/// What a `ParameterSlider` row shows; the row is drawn again only when this changes.
+private struct ParameterSliderState: Equatable {
+    let value: Double
+    let range: ClosedRange<Double>
+    let origin: Double
+    let isRAW: Bool
+    /// The hue a Color Grading Saturation track is tinted with.
+    let tintHue: Double?
+
+    @MainActor
+    init(_ parameter: DevelopSettings.Parameter, _ develop: DevelopController) {
+        value = develop.sliderValue(parameter)
+        range = develop.sliderRange(parameter)
+        origin = develop.sliderDefault(parameter)
+        isRAW = develop.isRAW
+        tintHue = DevelopSettings.GradeRegion.allCases.first(where: { $0.saturation == parameter }).map { develop.value($0.hue) }
+    }
+}
+
+private struct ParameterSliderRow: View, Equatable {
+    let parameter: DevelopSettings.Parameter
+    let develop: DevelopController
+    let shown: ParameterSliderState
+
+    nonisolated static func == (a: Self, b: Self) -> Bool {
+        a.parameter == b.parameter && a.develop === b.develop && a.shown == b.shown
+    }
 
     private var binding: Binding<Double> {
         Binding(get: { develop.sliderValue(parameter) }, set: { develop.setSlider(parameter, to: $0) })
@@ -759,7 +809,7 @@ struct ParameterSlider: View {
 
     private func formatted(_ value: Double) -> String {
         switch parameter {
-        case .temperature where !develop.isRAW: return value == 0 ? "0" : String(format: "%+.0f", value)
+        case .temperature where !shown.isRAW: return value == 0 ? "0" : String(format: "%+.0f", value)
         case .temperature: return "\(Int(value.rounded())) K"
         case .exposure: return String(format: "%+.2f", value)
         case .sharpenRadius: return String(format: "%.1f", value)
@@ -772,9 +822,9 @@ struct ParameterSlider: View {
 
     var body: some View {
         let preview = SliderPreview(parameter: parameter)
-        SliderRow(label: parameter.label, value: binding, range: develop.sliderRange(parameter), step: step,
-                  origin: develop.sliderDefault(parameter), gradient: trackGradient,
-                  logarithmic: parameter == .temperature && develop.isRAW,
+        SliderRow(label: parameter.label, value: binding, range: shown.range, step: step,
+                  origin: shown.origin, gradient: trackGradient,
+                  logarithmic: parameter == .temperature && shown.isRAW,
                   format: formatted, valueWidth: parameter == .temperature ? 58 : 44,
                   reset: { develop.reset(parameter) },
                   auto: develop.canAuto(parameter) ? { develop.autoTone(only: parameter) } : nil,
@@ -802,8 +852,8 @@ struct ParameterSlider: View {
         if DevelopSettings.GradeRegion.allCases.contains(where: { $0.hue == parameter }) {
             return (0...6).map { Color(hue: Double($0) / 6, saturation: 0.8, brightness: 0.9) }
         }
-        if let region = DevelopSettings.GradeRegion.allCases.first(where: { $0.saturation == parameter }) {
-            return [Color.gray, Color(hue: develop.value(region.hue) / 360, saturation: 0.8, brightness: 0.9)]
+        if let hue = shown.tintHue {
+            return [Color.gray, Color(hue: hue / 360, saturation: 0.8, brightness: 0.9)]
         }
         switch parameter {
         case .temperature: return [Color(red: 0.3, green: 0.5, blue: 1), Color(red: 1, green: 0.85, blue: 0.3)]
@@ -815,7 +865,7 @@ struct ParameterSlider: View {
 
     private var step: Double {
         switch parameter {
-        case .temperature: return develop.isRAW ? 50 : 1
+        case .temperature: return shown.isRAW ? 50 : 1
         case .exposure: return 0.05
         case .sharpenRadius, .transformRotate: return 0.1
         default: return 1

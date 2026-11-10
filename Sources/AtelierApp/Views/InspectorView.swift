@@ -20,6 +20,8 @@ struct InspectorView: View {
 
 private struct DetailForm: View {
     @EnvironmentObject private var model: LibraryModel
+    /// Redraws on new previews (`PreviewRevision`).
+    @ObservedObject private var previewRevision = PreviewRevision.shared
     let detail: AssetDetail
 
     @State private var keywords = ""
@@ -210,7 +212,7 @@ private struct DetailForm: View {
         }
         .onAppear(perform: syncFields)
         .onChange(of: detail) { syncFields() }
-        .task(id: InfoKey(id: detail.asset.id, revision: model.previewRevision, url: detail.fileURL)) {
+        .task(id: InfoKey(id: detail.asset.id, revision: previewRevision.value, url: detail.fileURL)) {
             await loadInfo()
         }
     }

@@ -353,8 +353,10 @@ final class ZoomScrollView: NSScrollView {
     /// Hands this view live frames; see `PhotoFeed`.
     weak var feed: PhotoFeed?
 
-    /// Shows a live frame in place of the image; see `ZoomCanvasView.showFrame`.
-    func showFrame(_ surface: IOSurface) -> Bool { canvas.showFrame(surface) }
+    /// The layer live frames go on (`PhotoFeed`, `LiveFrameSink`), over the image.
+    var liveFrameLayer: CALayer { canvas.frameLayer }
+    /// The size of the image on screen, whose shape live frames must have.
+    var liveImageSize: CGSize? { canvas.currentImageSize }
 
     func setImage(_ image: NSImage?, pixelSize: CGSize?) {
         shownImage = image
@@ -651,10 +653,11 @@ final class ZoomCanvasView: NSView {
     /// Where a Targeted Adjustment drag began, in window coordinates.
     private var pressStart: NSPoint?
     private var currentImage: NSImage?
-    /// Shows live frames (`showFrame`) over the image. Core Animation draws an IOSurface in this
+    /// Shows live frames (`LiveFrameSink`) over the image. Core Animation draws an IOSurface in this
     /// flipped view's layer upside down, where it draws a CGImage the right way up (Rosh saw the
     /// photo flip during drags, Nov 10, 2026), so this layer turns its contents back over.
-    private let frameLayer = CALayer()
+    /// The render queue sets its contents (`LiveFrameSink`); the main thread only places it.
+    let frameLayer = CALayer()
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -696,31 +699,20 @@ final class ZoomCanvasView: NSView {
         if let image, let feed = scrollView?.feed, feed.isOlderThanShown(image) { return }
         currentImage = image
         layer?.contents = image?.cgImage(forProposedRect: nil, context: nil, hints: nil)
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        frameLayer.contents = nil
-        frameLayer.isHidden = true
-        CATransaction.commit()
-        if let scrollView { scrollView.feed?.imageShown(image, in: scrollView) }
+        if let scrollView, let feed = scrollView.feed {
+            // The feed clears the frame layer, unless it holds a newer frame than this image.
+            feed.imageShown(image, in: scrollView)
+        } else {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            frameLayer.contents = nil
+            frameLayer.isHidden = true
+            CATransaction.commit()
+        }
     }
 
-    /// Shows a live frame, a GPU surface Core Image rendered into, as the layer's contents,
-    /// scaled like the image. Only a frame of the shown image's shape: one of another shape
-    /// needs the view's size worked out again, which the image path does.
-    func showFrame(_ surface: IOSurface) -> Bool {
-        guard let currentImage, currentImage.size.width > 0, currentImage.size.height > 0,
-              surface.width > 0, surface.height > 0 else { return false }
-        // The shown image's height at the frame's width: within rounding of a pixel when they
-        // are the same photo at two sizes (the proxy and the full-size render).
-        let expectedHeight = currentImage.size.height * CGFloat(surface.width) / currentImage.size.width
-        guard abs(CGFloat(surface.height) - expectedHeight) <= 1.5 else { return false }
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        frameLayer.contents = surface
-        frameLayer.isHidden = false
-        CATransaction.commit()
-        return true
-    }
+    /// The size of the image on screen; nil before the first.
+    var currentImageSize: CGSize? { currentImage?.size }
 
     // MARK: Cursor
 

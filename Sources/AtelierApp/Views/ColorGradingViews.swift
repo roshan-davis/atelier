@@ -291,10 +291,10 @@ struct ColorWheel: View {
 
     /// The photo's colors that fall in this wheel's range.
     private func scope(radius: CGFloat, center: CGPoint) -> some View {
-        let samples = develop.colorScope?.samples ?? []
         let blending = develop.value(.gradeBlending) / 100, balance = develop.value(.gradeBalance) / 100
         let index = ColorGrade.index(of: region)
-        return Canvas { context, _ in
+        return MeasuresReader(develop.measures) { measures in Canvas { context, _ in
+            let samples = measures.colorScope?.samples ?? []
             for sample in samples {
                 let weight = ColorGrade.weights(luma: sample.luma, blending: blending, balance: balance)[index]
                 guard weight > 0.2 else { continue }
@@ -302,7 +302,7 @@ struct ColorWheel: View {
                 context.fill(Path(ellipseIn: CGRect(x: p.x - 1, y: p.y - 1, width: 2, height: 2)),
                              with: .color(Color.black.opacity(0.18 + 0.3 * weight)))
             }
-        }
+        } }
         .allowsHitTesting(false)
     }
 
