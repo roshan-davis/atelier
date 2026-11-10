@@ -11,6 +11,7 @@ struct MatchLookSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showingBefore = false
     @State private var choosingCatalogPhoto = false
+    @State private var choosingBuiltIn = false
     @State private var dropTargeted = false
     @State private var showingDifferences = false
 
@@ -31,6 +32,7 @@ struct MatchLookSheet: View {
                     referenceButtons
                     recentRow
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 VStack(alignment: .leading, spacing: 8) {
                     paneTitle(showingBefore ? "Before" : "Your Photo", detail: nil)
                     photoImage
@@ -45,6 +47,7 @@ struct MatchLookSheet: View {
                         Spacer()
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
 
             controls
@@ -105,8 +108,9 @@ struct MatchLookSheet: View {
 
     private var referenceButtons: some View {
         HStack {
-            Button(match.referenceImage == nil ? "Choose File…" : "Choose Another File…") { match.chooseFile() }
-            Button("Use a Photo from the Catalog…") { choosingCatalogPhoto = true }
+            Button("Choose File…") { match.chooseFile() }
+            Button("Catalog Photo…") { choosingCatalogPhoto = true }
+                .help("Use a photo from the catalog with its current edits")
                 .popover(isPresented: $choosingCatalogPhoto, arrowEdge: .bottom) {
                     CatalogPhotoPicker { id in
                         choosingCatalogPhoto = false
@@ -114,7 +118,15 @@ struct MatchLookSheet: View {
                     }
                     .environmentObject(model)
                 }
+            Button("Built-in References") { choosingBuiltIn = true }
+                .popover(isPresented: $choosingBuiltIn, arrowEdge: .bottom) {
+                    BuiltInReferencePicker(selection: match.builtInReference) { reference in
+                        choosingBuiltIn = false
+                        match.useBuiltIn(reference)
+                    }
+                }
         }
+        .fixedSize()
     }
 
     @ViewBuilder private var recentRow: some View {
@@ -142,7 +154,7 @@ struct MatchLookSheet: View {
         ZStack {
             AreaImage(image: showingBefore ? match.before : match.preview, area: $match.photoArea,
                       showsArea: match.usesAreas && !showingBefore)
-            if match.isMatching {
+            if match.isLoadingReference || match.isMatching {
                 ProgressView()
                     .controlSize(.small)
                     .padding(8)
@@ -179,7 +191,8 @@ struct MatchLookSheet: View {
                 }
                 .pickerStyle(.menu)
                 .fixedSize()
-                .help(match.areaMode.help)
+                .disabled(match.builtInReference != nil)
+                .help(match.builtInReference == nil ? match.areaMode.help : areaHint)
                 Text(areaHint)
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -213,6 +226,7 @@ struct MatchLookSheet: View {
     }
 
     private var areaHint: String {
+        if match.builtInReference != nil { return "Built-in References use Whole Photo." }
         switch match.areaMode {
         case .wholePhoto: return "The whole reference sets the look for the whole photo."
         case .subject: return "Background matches background; a Match Look: Subject mask matches the subject."
@@ -222,7 +236,9 @@ struct MatchLookSheet: View {
 
     private var footer: some View {
         HStack {
-            if let message = match.message {
+            if match.isLoadingReference {
+                Text("Opening reference…").foregroundStyle(.secondary)
+            } else if let message = match.message {
                 Label(message, systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.secondary)
             } else if match.isMatching {

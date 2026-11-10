@@ -458,3 +458,15 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 **Local packaging fix:** The visual run at `a6aa648` from the App checkout stopped before launch because its existing SwiftPM output contained a stale HDR Help symlink. The UI runner now packages the current revision from a fresh SwiftPM build directory.
 
 **Edit In fixture cleanup:** The App visual run at `555faf8` compared 98 screens but left two documents open in Preview. The snapshot scenario now checks the generated stack without launching Preview, and the runner adapts older baselines so their Edit In TIFF is also cleaned with the run.
+
+## AT-031 — Built-in References for Match Look
+
+**Status:** Implementation in review. Manual acceptance pending. **Owner:** Codex. **Chat:** [Match Look Built-in References](codex://threads/01a1c197-aa52-7d60-be48-b20e2b243b9f). **Branch:** `codex/match-look-built-in-references`. **PR:** [#87](https://github.com/roshan-davis/atelier/pull/87). **Baseline:** freshly fetched `5b8bf1919e3047a125d86a37fbbd3e133ecccd92`. **Dependencies:** AT-029 / PR #84, merged.
+
+**Scope:** Rosh chose four pairs of original, editable vector studies inspired by The Matrix, Game of Thrones, Mad Max: Fury Road and The Dark Knight. Each pairs a portrait with a wider scene. Cards show scene tags, palette descriptions and the main color regions, such as Face & Skin, Clothing, Sky and Ground. The studies use the existing editable Whole Photo fit. Using the labeled regions in a fit is deferred.
+
+**Acceptance:** Qualify all eight through the production fit on real photo fixtures. Verify reference switching, Match Areas, Strength, Protect Skin Tones and normal Apply behavior. Inspect the dialog, picker and Help. Record Mac and GitHub checks for the PR and leave manual acceptance to Rosh.
+
+**Validation:** Implementation commit `dd4a57a15343fcf284f85065f7b2ff27daa3905a` passed the Mac pre-PR checks with Nikon Z6 and Zf RAW fixtures, 297 Swift tests, zero failures or skips, and passing script, Help and whitespace checks. All eight studies improved palette distance on the real fixtures by 48–90%. Maximum measured portrait skin drift was 4.60° hue and 12.8% chroma. Reviewed the eight fits, the updated Help in Chrome and local Match Look snapshots from the implementation commit. Logs: `/private/tmp/atelier-match-look-references/.build/local-checks/20261109-120312-379418`. The PR records final-head checks and CI. Rosh's manual interaction and visual acceptance remain open.
+
+**Conflict resolution:** Merged PR #88's main revision `67931d7` into the PR branch. PR #88 retains AT-030. This item was previously AT-030 on the PR branch.
