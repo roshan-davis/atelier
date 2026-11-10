@@ -2724,6 +2724,7 @@ extension DevelopController {
         let settings = self.settings
         let assetID = self.assetID
         queue.async {
+            _ = PeopleParts.isAvailable  // loads the built-in model once, so the panel can say whether it runs
             let faces = session.peopleFaces(settings: settings)
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
@@ -2735,7 +2736,7 @@ extension DevelopController {
         }
     }
 
-    static let noPeopleMessage = "No faces found. Select People finds people whose face is visible; try Select Subject or a Brush."
+    static let noPeopleMessage = "No people found. Try Select Subject or a Brush."
 
     /// Adds a brush stroke to the selected brush part.
     func addStroke(_ stroke: DevelopSettings.MaskStroke) {

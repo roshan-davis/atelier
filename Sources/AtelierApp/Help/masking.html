@@ -143,18 +143,20 @@
 <p>Both have the <a href="#edges">edge controls</a>: <b>Grow</b>, <b>Refine Edge</b> and <b>Feather</b> (default 20). To change the background instead of the subject, tick <b>Invert</b>. If Vision finds nothing, the panel says so.</p>
 
 <h2 id="people">Select People</h2>
-<p><b>Select People</b> selects parts of people, like Lightroom's People masks. Apple's Vision finds each person whose face is visible, traces the face (jaw line, eyes, pupils, brows and lips) and outlines the person. Atelier learns each face's own skin color from the face, so it works for any skin tone and light, then looks for that color on the rest of the same person. Eyes, brows, lips and teeth come from the face's outline.</p>
+<p><b>Select People</b> selects parts of people, like Lightroom's People masks. Apple's Vision finds each person, even one whose face is hidden by sunglasses or turned away, traces the face (jaw line, eyes, pupils, brows and lips) and outlines the person. A small model built into Atelier (Google's MediaPipe, about 8 MB) then tells each person's face skin, body skin, hair and clothes apart, so a beige sweater or a skin-colored scarf is clothes, not skin. Eyes, brows, lips and teeth come from the face's outline. Everything runs on your Mac; nothing is downloaded or sent anywhere. The line under the checkboxes says whether the built-in model ran; if it shows an orange warning, Hair, Clothes and Entire Person can't select anything and skin is guessed from color.</p>
 <figure>
   <div class="pins pinned">
   <div class="panel">
     <div class="pb">
       <div class="gh">Select People</div>
       <div class="row" data-pin="1"><span class="name" style="width:auto">Person</span><span class="popup" style="flex:none;width:130px">All People</span></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr" data-pin="2">
+      <div class="check" data-pin="2"><i></i>Entire Person</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr">
         <div class="check"><i class="on"></i>Face Skin</div><div class="check"><i class="on"></i>Body Skin</div>
         <div class="check"><i></i>Eyebrows</div><div class="check"><i></i>Eye Sclera</div>
         <div class="check"><i></i>Iris and Pupil</div><div class="check"><i class="on"></i>Lips</div>
-        <div class="check"><i></i>Teeth</div>
+        <div class="check"><i></i>Teeth</div><div class="check"><i></i>Hair</div>
+        <div class="check"><i></i>Clothes</div>
       </div>
       <div class="sl" data-name="Grow" data-value="0" data-at="0.5" data-def="0.5" data-pin="3"></div>
       <div class="sl" data-name="Refine Edge" data-value="0" data-at="0" data-def="0"></div>
@@ -166,10 +168,10 @@
 </figure>
 <ol class="legend">
   <li><b>Person</b>: everyone, or one person. People are numbered left to right by face.</li>
-  <li>Tick any parts, in any combination. <b>Face Skin</b> is the face without the eyes, brows and lips; tick <b>Lips</b> too to include the mouth (they meet with no gap). <b>Eyebrows</b>, <b>Eye Sclera</b> (the whites of the eyes), <b>Iris and Pupil</b>, <b>Lips</b> and <b>Teeth</b> (only when the mouth is open) come from Vision's outline of the face, so a whitening or iris boost touches only that feature. New parts start with Face Skin and Body Skin. <b>Body Skin</b> is the neck, arms and hands of the same person. Atelier starts it under the jaw and at the wrists and hands it finds, and spreads it only over smooth skin of the face's color, so it usually stops at the edge of a scarf, collar or sleeve. The two meet under the jaw with no gap. Hair above the forehead, clothes and skin-colored background are left out.</li>
+  <li>Tick any parts, in any combination. <b>Face Skin</b> is the face without the eyes, brows and lips; tick <b>Lips</b> too to include the mouth (they meet with no gap). <b>Eyebrows</b>, <b>Eye Sclera</b> (the whites of the eyes), <b>Iris and Pupil</b>, <b>Lips</b> and <b>Teeth</b> (only when the mouth is open) come from Vision's outline of the face, so a whitening or iris boost touches only that feature. <b>Body Skin</b> is the neck, arms and hands of the same person; <b>Hair</b> and <b>Clothes</b> (hats and scarves too) are their own parts, and <b>Entire Person</b> is the whole person. New parts start with Face Skin and Body Skin.</li>
   <li>The <a href="#edges">edge controls</a>: Grow, Refine Edge and Feather (default 10).</li>
 </ol>
-<p>Body Skin is found by color: a sleeve or scarf the same color as the skin and touching it can still be included. Subtract a Brush from the mask to take it out.</p>
+<p>A missed or extra patch is easiest to fix by subtracting or adding a Brush to the mask.</p>
 <p>Press <kbd>O</kbd> to see the selection in red. If Vision finds no face, the panel says so; try Select Subject or a Brush instead. Match Look's <a href="match-look.html#skin">Skin Tones</a> use the same selection.</p>
 
 <h3 id="edges">Edge controls</h3>

@@ -814,10 +814,14 @@ struct MasksPanel: View {
                 }
             }
             .help("People are numbered left to right by face")
-            // Lightroom's layout: two columns of parts, ticked in any combination.
+            // Lightroom's layout: Entire Person, then two columns of parts, ticked in any combination.
+            Toggle(DevelopSettings.PeopleSelection.Part.entirePerson.title, isOn: Binding(
+                get: { selection.includes(.entirePerson) },
+                set: { update(component, .people(selection.setting(.entirePerson, $0))) }))
+                .help(DevelopSettings.PeopleSelection.Part.entirePerson.help)
             LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)],
                       alignment: .leading, spacing: 4) {
-                ForEach(DevelopSettings.PeopleSelection.Part.allCases, id: \.self) { part in
+                ForEach(DevelopSettings.PeopleSelection.Part.allCases.filter { $0 != .entirePerson }, id: \.self) { part in
                     Toggle(part.title, isOn: Binding(get: { selection.includes(part) }, set: { on in
                         update(component, .people(selection.setting(part, on)))
                     }))
@@ -837,11 +841,27 @@ struct MasksPanel: View {
                 })
             }
             edgeControls(grow: value(\.grow), refine: value(\.refine), feather: value(\.feather), featherOrigin: 10)
-            Text("Found on this Mac with Apple's Vision: skin by each face's own color, the eyes, brows, lips and teeth from the face's outline.")
-                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            peoplePartsStatus
             invertToggle(component)
         }
         .onAppear { develop.findPeople() }
+    }
+
+    /// Which way Select People found the parts, so it's clear whether the built-in model ran.
+    @ViewBuilder private var peoplePartsStatus: some View {
+        switch PeopleParts.loadedState {
+        case true?:
+            Label("Skin, hair and clothes from the built-in people model (MediaPipe); eyes, brows, lips and teeth from Apple's Vision.",
+                  systemImage: "checkmark.circle")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        case false?:
+            Label("The built-in people model didn't load, so skin is guessed from color and Hair, Clothes and Entire Person select nothing.",
+                  systemImage: "exclamationmark.triangle")
+                .font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+                .help(PeopleParts.failure ?? "")
+        case nil:
+            Text("Finding people…").font(.caption).foregroundStyle(.secondary)
+        }
     }
 
     /// Grow, Refine Edge and Feather: the edge controls every AI selection part shares (Select

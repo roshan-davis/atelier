@@ -30,7 +30,9 @@ public final class PreviewCache: Sendable {
     ///    and white, unclipped Red/Green/Blue curves, and the crop-shaped post-crop vignette.
     /// 9: Select People's Face Skin cuts out the lips closer to their edge (10% larger than
     ///    the lips instead of 35%), so photos with a Select People mask render slightly differently.
-    public static let version = 9
+    /// 10: Select People's Face Skin and Body Skin come from the built-in MediaPipe parts model
+    ///    (`PeopleParts`) instead of skin color, so photos with a Select People mask look different.
+    public static let version = 10
 
     /// Clears previews written by an older version. The old folder is moved aside at once and
     /// deleted in the background, so a large cache doesn't hold up launch.

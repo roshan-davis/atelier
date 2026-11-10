@@ -165,6 +165,58 @@ final class PeopleSkinTests: XCTestCase {
         XCTAssertNil(PeopleSkin.build(pixels: drawn.pixels, width: width, height: height, faces: [], mattes: []))
     }
 
+    /// With the parts model, skin comes from its classes, not from color: a skin-colored shirt the
+    /// model calls clothes stays out of Body Skin, and Hair, Clothes and Entire Person are parts.
+    func testModelPartsKeepClothesOutOfBodySkin() throws {
+        var drawn = portrait()
+        // A beige shirt, the color of the skin, touching the neck.
+        for y in 85..<150 {
+            for x in 50..<110 {
+                let i = (y * width + x) * 4
+                drawn.pixels[i] = 222; drawn.pixels[i + 1] = 170; drawn.pixels[i + 2] = 138
+            }
+        }
+        var regions: [CGRect] = []
+        let segment: (CGRect) -> [[Float]]? = { region in
+            regions.append(region)
+            var maps = [[Float]](repeating: [Float](repeating: 0, count: self.width * self.height),
+                                 count: PeopleParts.Class.allCases.count)
+            for y in 0..<self.height {
+                for x in 0..<self.width {
+                    let i = y * self.width + x
+                    let c: PeopleParts.Class
+                    if pow(Double(x - 80) / 22, 2) + pow(Double(y - 45) / 28, 2) <= 1 {
+                        c = y < 24 ? .hair : .faceSkin
+                    } else if (x >= 72 && x < 88 && y >= 68 && y < 85) || (x >= 110 && x < 125 && y >= 90 && y < 140) {
+                        c = .bodySkin
+                    } else if x >= 50 && x < 110 && y >= 85 {
+                        c = .clothes
+                    } else {
+                        c = .background
+                    }
+                    maps[c.rawValue][i] = 1
+                }
+            }
+            return maps
+        }
+        let found = try XCTUnwrap(PeopleSkin.build(pixels: drawn.pixels, width: width, height: height,
+                                                   faces: [drawn.face], mattes: [drawn.matte], segment: segment))
+        XCTAssertEqual(regions.count, 1)
+        XCTAssertTrue(regions[0].contains(CGPoint(x: 117, y: 130)), "the region covers the whole person")
+        let body = found.values(.init(parts: [.bodySkin]))
+        XCTAssertGreaterThan(mean(body, 75..<85, 74..<82), 0.7, "neck")
+        XCTAssertGreaterThan(mean(body, 113..<122, 100..<130), 0.7, "arm")
+        XCTAssertLessThan(mean(body, 60..<100, 95..<140), 0.1, "skin-colored shirt")
+        XCTAssertGreaterThan(mean(found.values(.init(parts: [.clothes])), 60..<100, 95..<140), 0.8, "shirt is clothes")
+        XCTAssertGreaterThan(mean(found.values(.init(parts: [.hair])), 74..<86, 19..<23), 0.5, "hair")
+        let face = found.values(.init(parts: [.faceSkin]))
+        XCTAssertGreaterThan(mean(face, 64..<70, 46..<54), 0.8, "cheek")
+        XCTAssertLessThan(mean(face, 70..<75, 39..<41), 0.3, "eye still cut out")
+        let whole = found.values(.init(parts: [.entirePerson]))
+        XCTAssertGreaterThan(mean(whole, 60..<100, 95..<140), 0.8, "entire person")
+        XCTAssertLessThan(mean(whole, 172..<183, 12..<20), 0.05, "not the background")
+    }
+
     func testFaceMostlyCoveredIsStillFound() throws {
         // Big sunglasses and a scarf leave almost no clean skin inside the outline.
         let drawn = portrait()
@@ -224,5 +276,30 @@ final class PeopleSkinTests: XCTestCase {
         let old = try JSONDecoder().decode(DevelopSettings.MaskComponent.self,
                                            from: Data(#"{"kind":"subject","selection":{"feather":20}}"#.utf8))
         XCTAssertEqual(old.shape, .subject(.init(feather: 20, refine: 0, grow: 0)))
+    }
+
+    func testPersonWithoutAFoundFaceGetsAHeadFromTheirOutline() {
+        let width = 100, height = 100
+        // Two people: one whose face was found, one (right) whose face wasn't.
+        var found = [Float](repeating: 0, count: width * height)
+        var missed = [Float](repeating: 0, count: width * height)
+        for y in 20..<90 {
+            for x in 10..<30 { found[y * width + x] = 1 }
+            for x in 60..<80 { missed[y * width + x] = 1 }
+        }
+        let face = FaceShape(box: CGRect(x: 14, y: 20, width: 12, height: 14), outline: [])
+        let people = PeopleSkin.facelessPeople(mattes: [found, missed], faces: [face], width: width, height: height)
+        XCTAssertEqual(people.count, 1)
+        guard let person = people.first else { return }
+        XCTAssertEqual(person.extent, CGRect(x: 60, y: 20, width: 20, height: 70))
+        XCTAssertEqual(person.head.midX, 69.5, accuracy: 0.5)
+        XCTAssertEqual(person.head.minY, 20)
+        XCTAssertTrue(person.extent.contains(CGPoint(x: person.head.midX, y: person.head.midY)))
+    }
+
+    func testTinyOutlinesAreNotPeople() {
+        var speck = [Float](repeating: 0, count: 100 * 100)
+        for y in 0..<5 { for x in 0..<5 { speck[y * 100 + x] = 1 } }
+        XCTAssertTrue(PeopleSkin.facelessPeople(mattes: [speck], faces: [], width: 100, height: 100).isEmpty)
     }
 }
