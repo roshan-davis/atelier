@@ -65,6 +65,20 @@ enum BuiltInLookReference: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Cheek and lower face swatches on the 120 × 80 drawing. Wide studies have no skin sample.
+    var skinRegions: [CGRect] {
+        let swatch: CGRect
+        switch self {
+        case .matrixPortrait: swatch = CGRect(x: 67, y: 38, width: 9, height: 6)
+        case .thronesPortrait: swatch = CGRect(x: 52, y: 39, width: 9, height: 8)
+        case .furyRoadPortrait: swatch = CGRect(x: 65, y: 38, width: 10, height: 9)
+        case .darkKnightPortrait: swatch = CGRect(x: 63, y: 38, width: 9, height: 9)
+        default: return []
+        }
+        return [CGRect(x: swatch.minX / 120, y: swatch.minY / 80,
+                       width: swatch.width / 120, height: swatch.height / 80)]
+    }
+
     func image(width: Int = 960) -> CGImage? {
         let height = width * 2 / 3
         let space = CGColorSpace(name: CGColorSpace.sRGB)!

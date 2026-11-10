@@ -287,12 +287,12 @@ enum LayoutSnapshots {
         }
         try? await Task.sleep(for: .seconds(1))
         match.useFile(url)
-        func waitForMatch() async {
+        func waitForMatch(_ match: MatchLookModel) async {
             try? await Task.sleep(for: .milliseconds(500))
             for _ in 0..<60 where !match.canApply { try? await Task.sleep(for: .milliseconds(250)) }
             try? await Task.sleep(for: .seconds(1))
         }
-        await waitForMatch()
+        await waitForMatch(match)
         print("SNAPSHOT: match look \(match.match.flatMap { try? $0.matched.encoded() } ?? "none"), message \(match.message ?? "-")")
         await capture(AnyView(MatchLookSheet(match: match).environmentObject(model)), size: CGSize(width: 900, height: 660),
                       to: folder.appendingPathComponent("match-look.png"))
@@ -300,20 +300,40 @@ enum LayoutSnapshots {
                       to: folder.appendingPathComponent("match-look-differences.png"))
         match.areaMode = .boxes
         match.photoArea = CGRect(x: 0.1, y: 0.15, width: 0.35, height: 0.3)
-        await waitForMatch()
+        await waitForMatch(match)
         await capture(AnyView(MatchLookSheet(match: match).environmentObject(model)), size: CGSize(width: 900, height: 660),
                       to: folder.appendingPathComponent("match-look-areas.png"))
         match.areaMode = .subject
-        match.protectSkin = true
-        await waitForMatch()
+        match.skinMode = .protect
+        await waitForMatch(match)
         print("SNAPSHOT: match look subject \(match.match.flatMap { try? $0.matched.encoded() } ?? "none"), message \(match.message ?? "-")")
         await capture(AnyView(MatchLookSheet(match: match).environmentObject(model)), size: CGSize(width: 900, height: 660),
                       to: folder.appendingPathComponent("match-look-subject.png"))
         match.useBuiltIn(.furyRoadScene)
-        await waitForMatch()
+        await waitForMatch(match)
         await capture(AnyView(MatchLookSheet(match: match).environmentObject(model)), size: CGSize(width: 900, height: 660),
                       to: folder.appendingPathComponent("match-look-built-in.png"))
+        match.skinMode = .match
+        await waitForMatch(match)
+        await capture(AnyView(MatchLookSheet(match: match).environmentObject(model)), size: CGSize(width: 900, height: 660),
+                      to: folder.appendingPathComponent("match-look-skin-missing.png"))
         model.matchLook = nil
+        // The Help comparison uses a real portrait and the same skin-only fit.
+        guard let portrait = HelpWindow.folder?.appendingPathComponent("images/match-skin-before.jpg") else { return }
+        let skin = MatchLookModel(library: model, assetID: match.assetID, targets: [match.assetID],
+                                  url: portrait, settings: .neutral)
+        skin.options = .init(whiteBalance: false, tone: false, color: false)
+        skin.skinMode = .match
+        skin.useBuiltIn(.matrixPortrait)
+        await waitForMatch(skin)
+        guard skin.match?.skinMask != nil else {
+            print("SNAPSHOT: Match Skin Tone did not create a skin mask: \(skin.message ?? "-")")
+            return
+        }
+        await capture(AnyView(MatchLookSheet(match: skin).environmentObject(model)), size: CGSize(width: 900, height: 660),
+                      to: folder.appendingPathComponent("match-look-skin.png"))
+        await capture(AnyView(MatchDifferencesView(lines: skin.differences)), size: CGSize(width: 300, height: 240),
+                      to: folder.appendingPathComponent("match-look-skin-differences.png"))
     }
 
     /// Masking: a darker sky from a linear gradient, a brighter radial spot, and the overlay.

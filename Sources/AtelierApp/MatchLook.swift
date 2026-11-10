@@ -53,16 +53,19 @@ struct MatchDifference: Identifiable, Hashable {
         for parameter in changed where parameter.panel != .basic {
             lines.append(line(parameter, old[parameter], new[parameter]))
         }
-        // Subject & Background's mask, after the global sliders, as the Masks panel lists them.
-        let name = LookMatch.subjectMaskName
-        if let mask = new.masks.first(where: { $0.name == name }) {
-            let before = old.masks.first { $0.name == name }
-            for parameter in LookMatch.subjectParameters {
+        // Local adjustments follow the global sliders, as in Develop.
+        for (name, label, parameters) in [
+            (LookMatch.subjectMaskName, "Subject", LookMatch.subjectParameters),
+            (LookMatch.skinMaskName, "Skin", LookMatch.skinParameters)
+        ] {
+            guard let mask = new.masks.first(where: { $0.name == name }) else { continue }
+            let before = old.masks.first { $0.id == mask.id }
+            for parameter in parameters {
                 let from = before?[parameter] ?? 0, to = mask[parameter]
                 guard abs(from - to) > 1e-6 else { continue }
                 let change = parameter == .exposure ? String(format: "%+.2f → %+.2f", from, to)
                     : String(format: "%+.0f → %+.0f", from, to)
-                lines.append(MatchDifference(name: "Subject \(parameter.label)", change: change))
+                lines.append(MatchDifference(name: "\(label) \(parameter.label)", change: change))
             }
         }
         return lines
@@ -147,16 +150,14 @@ final class MatchLookModel: ObservableObject, Identifiable {
             scheduleMatch()
         }
     }
-    /// Protect Skin Tones starts on when the photo has a face, until the user sets it.
-    @Published private(set) var photoHasFaces = false
     /// The open photo's faces, 0 to 1 from the top left; nil until they've been looked for.
     private var photoFaces: [CGRect]?
     private var userSetSkin = false
-    var protectSkin: Bool {
-        get { options.protectSkin }
+    var skinMode: LookSkinMode {
+        get { options.skinMode }
         set {
             userSetSkin = true
-            options.protectSkin = newValue
+            options.skinMode = newValue
         }
     }
     /// Keep the external image's area choice while a study uses Whole Photo.
@@ -183,7 +184,11 @@ final class MatchLookModel: ObservableObject, Identifiable {
     @Published var strength = 100.0 {
         didSet { renderPreview() }
     }
-    @Published var applyMode: MatchApplyMode = .same
+    @Published private var preferredApplyMode: MatchApplyMode = .same
+    var applyMode: MatchApplyMode {
+        get { skinMode == .match ? .each : preferredApplyMode }
+        set { if skinMode != .match { preferredApplyMode = newValue } }
+    }
 
     @Published private(set) var preview: NSImage?
     @Published private(set) var before: NSImage?
@@ -192,6 +197,7 @@ final class MatchLookModel: ObservableObject, Identifiable {
     @Published private var fitMessage: String?
     var message: String? { referenceError ?? fitMessage }
     @Published private(set) var match: LookMatch?
+    private var fittedTarget: LookTarget?
 
     private var fitSession: DevelopSession?
     private var previewSession: DevelopSession?
@@ -203,7 +209,7 @@ final class MatchLookModel: ObservableObject, Identifiable {
     private var previewPending = false
 
     /// Long edge of the dialog's preview.
-    static let previewSize = 1400
+    nonisolated static let previewSize = 1400
 
     private static var savedOptions: LookMatchOptions {
         let saved = UserDefaults.standard.array(forKey: "matchLook.options") as? [Bool] ?? []
@@ -228,10 +234,8 @@ final class MatchLookModel: ObservableObject, Identifiable {
                 MainActor.assumeIsolated {
                     self.fitSession = fit
                     self.previewSession = preview
-                    let hasFaces = !faces.isEmpty
                     self.photoFaces = faces
-                    self.photoHasFaces = hasFaces
-                    if !self.userSetSkin, self.options.protectSkin != hasFaces { self.options.protectSkin = hasFaces }
+                    if !self.userSetSkin { self.options.skinMode = faces.isEmpty ? .off : .protect }
                     if let beforeImage {
                         let image = NSImage(cgImage: beforeImage, size: NSSize(width: beforeImage.width, height: beforeImage.height))
                         self.before = image
@@ -252,7 +256,15 @@ final class MatchLookModel: ObservableObject, Identifiable {
         return MatchDifference.list(from: base, to: match.settings(strength: strength / 100),
                                     asShot: match.asShotTemperature)
     }
-    var canApply: Bool { match != nil && !isMatching && !isLoadingReference }
+    var canApply: Bool {
+        guard let match, !isMatching, !isLoadingReference else { return false }
+        guard skinMode == .match else { return true }
+        guard strength > 0 else { return false }
+        if match.settings(strength: strength / 100) != base { return true }
+        // A fit with no changes on the open photo can still adjust the other selected photos.
+        return otherCount > 0 && (options.whiteBalance || options.tone || options.color
+            || !match.notices.contains(.noSkinInReference))
+    }
 
     // MARK: Reference
 
@@ -381,18 +393,20 @@ final class MatchLookModel: ObservableObject, Identifiable {
         guard !options.isEmpty else {
             match = nil
             isMatching = false
-            fitMessage = "Turn on White Balance, Tone or Color to match."
+            fitMessage = "Turn on White Balance, Tone, Color or Match Skin Tone to match."
             renderPreview()
             return
         }
         let areas = lookAreas
         let options = self.options, base = self.base, latest = self.latest, features = self.features
         let photoFaces = self.photoFaces
+        let authoredSkinRegions = options.skinMode == .match ? builtInReference?.skinRegions : nil
         fitQueue.async {
             guard latest.current == generation else { return }
-            let needsFeatures = areas == .subject || options.protectSkin
-            let result = LookTarget(image: referenceCG, features: needsFeatures ? features.features(for: referenceCG) : nil,
-                                    areas: areas, protectSkin: options.protectSkin).flatMap { target in
+            let needsFeatures = areas == .subject || (options.skinMode != .off && authoredSkinRegions == nil)
+            let target = LookTarget(image: referenceCG, features: needsFeatures ? features.features(for: referenceCG) : nil,
+                                    areas: areas, skinMode: options.skinMode, authoredSkinRegions: authoredSkinRegions)
+            let result = target.flatMap { target in
                 LookMatcher.match(session: fitSession, settings: base, target: target, options: options,
                                   photoFaces: photoFaces, isCancelled: { latest.current != generation })
             }
@@ -401,6 +415,7 @@ final class MatchLookModel: ObservableObject, Identifiable {
                     guard self.latest.current == generation else { return }
                     self.isMatching = false
                     self.match = result
+                    self.fittedTarget = target
                     self.fitMessage = result.map { Self.message(for: $0.notices) } ?? "This photo can't be matched."
                     self.renderPreview()
                 }
@@ -424,7 +439,10 @@ final class MatchLookModel: ObservableObject, Identifiable {
         } else if notices.contains(.noSubjectInPhoto) {
             parts.append("No subject found in your photo, so the whole photo was matched.")
         }
-        if notices.contains(.noFaces) { parts.append("No faces found, so there was no skin to protect.") }
+        if notices.contains(.noFaces) { parts.append("No usable face skin found in your photo to protect.") }
+        if notices.contains(.noSkinInPhoto) { parts.append("No usable face skin in your photo.") }
+        if notices.contains(.noSkinInReference) { parts.append("No usable face skin in the reference.") }
+        if notices.contains(.skinMatchLimited) { parts.append("The skin sliders could not bring the face color closer.") }
         return parts.isEmpty ? nil : parts.joined(separator: " ")
     }
 
@@ -458,10 +476,15 @@ final class MatchLookModel: ObservableObject, Identifiable {
     // MARK: Apply
 
     func apply() {
-        guard canApply, let match, let library, let referenceCG else { return }
+        guard canApply, let match, let library, let fittedTarget else { return }
         let strength = self.strength / 100
         let step = "Match Look: \(referenceName ?? "Reference")"
-        library.develop.apply(match.settings(strength: strength), onto: [assetID], step: step)
+        guard strength > 0 else { return }
+        let settings = match.settings(strength: strength)
+        let firstPhotoChanged = settings != base
+        if firstPhotoChanged {
+            library.develop.apply(settings, onto: [assetID], step: step)
+        }
         let others = Array(targets.dropFirst())
         guard !others.isEmpty else { return }
         switch applyMode {
@@ -474,11 +497,8 @@ final class MatchLookModel: ObservableObject, Identifiable {
             }
             library.status = "Matched \(targets.count) photos to \(referenceName ?? "the reference")"
         case .each:
-            let needsFeatures = areaMode == .subject || options.protectSkin
-            guard let target = LookTarget(image: referenceCG,
-                                          features: needsFeatures ? features.features(for: referenceCG) : nil,
-                                          areas: lookAreas, protectSkin: options.protectSkin) else { return }
-            library.matchEach(others, target: target, options: options, strength: strength, step: step)
+            library.matchEach(others, target: fittedTarget, options: options, strength: strength, step: step,
+                              firstPhotoChanged: firstPhotoChanged)
         }
     }
 }
@@ -560,43 +580,79 @@ extension LibraryModel {
     }
 
     /// Match each photo: fits every photo to the reference on its own, in the background.
-    func matchEach(_ ids: [Int64], target: LookTarget, options: LookMatchOptions, strength: Double, step: String) {
+    func matchEach(_ ids: [Int64], target: LookTarget, options: LookMatchOptions, strength: Double,
+                   step: String, firstPhotoChanged: Bool) {
         let total = ids.count
         matchProgress = ImportStatus(phase: "Matching 1 of \(total)", fraction: 0)
         matchTask = Task.detached(priority: .userInitiated) { [weak self] in
-            var matched = 0, failed = 0
+            var matched = firstPhotoChanged ? 1 : 0, unchanged = firstPhotoChanged ? 0 : 1
+            var failed = 0, skinFallbacks = 0
             for (index, id) in ids.enumerated() {
                 if Task.isCancelled { break }
-                let found: (URL, DevelopSettings)? = await MainActor.run {
+                let found: (URL, DevelopSettings)? = await MainActor.run { [weak self] in
                     guard let self else { return nil }
                     self.matchProgress = ImportStatus(phase: "Matching \(index + 1) of \(total)",
                                                       fraction: Double(index) / Double(total))
-                    guard let url = try? self.catalog.fileURL(for: id) else { return nil }
-                    return (url, (try? self.catalog.developSettings(for: id)) ?? .neutral)
+                    guard let url = try? self.catalog.fileURL(for: id),
+                          let settings = try? self.catalog.developSettings(for: id) else { return nil }
+                    return (url, settings)
                 }
                 guard let found,
-                      let session = DevelopRenderer.shared.session(for: found.0, maxPixelSize: LookSample.size),
-                      let match = LookMatcher.match(session: session, settings: found.1, target: target,
-                                                    options: options, isCancelled: { Task.isCancelled })
+                      let session = DevelopRenderer.shared.session(for: found.0, maxPixelSize: LookSample.size)
                 else {
                     failed += 1
                     continue
                 }
-                let settings = match.settings(strength: strength)
-                await MainActor.run {
-                    guard let self else { return }
-                    try? self.catalog.saveDevelopSettings(settings, for: id, step: step)
-                    self.develop.refreshPreviews(for: id, settings: settings)
+                let faces: [CGRect]? = options.skinMode == .off ? nil :
+                    DevelopRenderer.shared.session(for: found.0, maxPixelSize: MatchLookModel.previewSize)?
+                    .renderSRGB(found.1).map { LookSkin.faces(in: $0) }
+                guard let match = LookMatcher.match(session: session, settings: found.1, target: target,
+                                                    options: options, photoFaces: faces,
+                                                    isCancelled: { Task.isCancelled }) else {
+                    if Task.isCancelled { break }
+                    failed += 1
+                    continue
                 }
-                matched += 1
+                let settings = match.settings(strength: strength)
+                let saved = await MainActor.run { [weak self] in
+                    guard let self, !Task.isCancelled else { return false }
+                    // The photo may have been edited while its match was running.
+                    if self.develop.assetID == id {
+                        self.develop.flushSave()
+                        guard self.develop.settings == found.1 else { return false }
+                    }
+                    guard (try? self.catalog.developSettings(for: id)) == found.1 else { return false }
+                    guard settings != found.1 else { return true }
+                    do {
+                        try self.catalog.saveDevelopSettings(settings, for: id, step: step)
+                    } catch {
+                        return false
+                    }
+                    if self.develop.assetID == id { self.develop.reopen() }
+                    self.develop.refreshPreviews(for: id, settings: settings)
+                    return true
+                }
+                if Task.isCancelled && !saved { break }
+                if saved {
+                    if settings != found.1 { matched += 1 } else { unchanged += 1 }
+                    if !match.notices.isDisjoint(with: [.noSkinInPhoto, .noSkinInReference, .skinMatchLimited]) {
+                        skinFallbacks += 1
+                    }
+                } else {
+                    failed += 1
+                }
             }
-            let cancelled = Task.isCancelled
-            await MainActor.run {
+            var parts = ["Matched \(matched) photo\(matched == 1 ? "" : "s")"]
+            if unchanged > 0 { parts.append("\(unchanged) unchanged") }
+            if skinFallbacks > 0 {
+                parts.append("Skipped face color on \(skinFallbacks) additional photo\(skinFallbacks == 1 ? "" : "s")")
+            }
+            if failed > 0 { parts.append("\(failed) unavailable, changed during the match, or could not be saved") }
+            if Task.isCancelled { parts.insert("Match cancelled", at: 0) }
+            let status = parts.joined(separator: ", ")
+            await MainActor.run { [weak self] in
                 guard let self else { return }
-                var parts = ["Matched \(matched + 1) photo\(matched == 0 ? "" : "s")"]
-                if failed > 0 { parts.append("\(failed) could not be matched (offline or unreadable)") }
-                if cancelled { parts.insert("Match cancelled", at: 0) }
-                self.status = parts.joined(separator: ", ")
+                self.status = status
                 self.matchProgress = nil
                 self.matchTask = nil
             }

@@ -177,10 +177,15 @@ struct MatchLookSheet: View {
                 Toggle("Color", isOn: $match.options.color)
                     .help("Saturation, HSL and Color Grading (shadows and highlights)")
                 Divider().frame(height: 16)
-                Toggle("Protect Skin Tones", isOn: $match.protectSkin)
-                    .help(match.photoHasFaces
-                          ? "Keep faces' skin close to its color now while the rest of the photo takes the look"
-                          : "No faces found in this photo. Turn on to protect skin if Atelier missed a face")
+                Picker("Skin Tones:", selection: $match.skinMode) {
+                    Text("Off").tag(LookSkinMode.off)
+                    Text("Protect Skin Tones").tag(LookSkinMode.protect)
+                    Text("Match Skin Tone").tag(LookSkinMode.match)
+                }
+                .pickerStyle(.menu)
+                .fixedSize()
+                .accessibilityIdentifier("match-look-skin-tones")
+                .help("Keep face skin close to its current color or match its hue and saturation to the reference")
             }
             .toggleStyle(.checkbox)
             HStack(spacing: 10) {
@@ -219,7 +224,10 @@ struct MatchLookSheet: View {
                     }
                     .pickerStyle(.segmented)
                     .fixedSize()
-                    .help("Same settings: one match for all, like Sync. Match each photo: a match per photo, for mixed light.")
+                    .disabled(match.skinMode == .match)
+                    .help(match.skinMode == .match
+                          ? "Match Skin Tone fits the face mask separately on each photo."
+                          : "Same settings: one match for all, like Sync. Match each photo: a match per photo, for mixed light.")
                 }
             }
         }
@@ -241,14 +249,19 @@ struct MatchLookSheet: View {
             } else if let message = match.message {
                 Label(message, systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.secondary)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(Text(message))
+                    .accessibilityIdentifier("match-look-notice")
             } else if match.isMatching {
                 Text("Matching…").foregroundStyle(.secondary)
             } else if match.referenceImage == nil {
                 Text("Choose a reference image to start.").foregroundStyle(.secondary)
             } else if let result = match.match {
-                Text(result.subjectMask != nil
-                     ? "Apply sets sliders you can keep editing, plus a Match Look: Subject mask."
-                     : "Apply sets White Balance, Tone and Color sliders you can keep editing.")
+                Text(result.skinMask != nil
+                     ? "Edit face color after Apply in Masking → Match Look: Skin."
+                     : result.subjectMask != nil
+                         ? "Apply sets editable sliders and a Match Look: Subject mask."
+                         : "Apply sets sliders you can keep editing in Develop.")
                     .foregroundStyle(.secondary)
             }
             Spacer()
