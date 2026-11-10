@@ -64,3 +64,31 @@ final class FineEdgesTests: XCTestCase {
         XCTAssertEqual(value(920, 920), 0, "foreground far from the selection isn't added")
     }
 }
+
+final class MaskGuidedFilterTests: XCTestCase {
+    /// A mask whose edge sits 6 px left of the photo's edge: refined, it moves onto the photo's
+    /// edge, and it is never emptied (Refine Edge above 0 used to remove the selection).
+    func testRefineEdgeMovesTheEdgeOntoThePhotosEdge() throws {
+        try XCTSkipUnless(MaskGuidedFilter.kernelsAvailable, "Metal kernels unavailable")
+        let extent = CGRect(x: 0, y: 0, width: 400, height: 200)
+        func halves(_ x: CGFloat, _ left: CIColor, _ right: CIColor) -> CIImage {
+            CIImage(color: left).cropped(to: CGRect(x: 0, y: 0, width: x, height: 200))
+                .composited(over: CIImage(color: right).cropped(to: extent))
+        }
+        let photo = halves(200, CIColor(red: 0.8, green: 0.8, blue: 0.8), CIColor(red: 0.02, green: 0.02, blue: 0.02))
+        let mask = halves(194, .white, .black)
+        let refined = try XCTUnwrap(MaskGuidedFilter.apply(mask: mask, guide: photo, radius: 12, epsilon: 0.0001,
+                                                           extent: extent))
+        let context = CIContext(options: [.workingColorSpace: NSNull()])
+        func value(_ x: Int) -> Float {
+            var pixel = [Float](repeating: 0, count: 4)
+            context.render(refined, toBitmap: &pixel, rowBytes: 16, bounds: CGRect(x: x, y: 100, width: 1, height: 1),
+                           format: .RGBAf, colorSpace: nil)
+            return pixel[0]
+        }
+        XCTAssertGreaterThan(value(100), 0.95, "the selection stays")
+        XCTAssertGreaterThan(value(197), 0.7, "the edge moved out to the photo's edge")
+        XCTAssertLessThan(value(205), 0.3, "and stops there")
+        XCTAssertLessThan(value(300), 0.05)
+    }
+}

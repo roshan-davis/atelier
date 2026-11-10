@@ -183,15 +183,11 @@ extension DevelopRenderer {
                                 parameters: [kCIInputRadiusKey: growRadius])
                 .cropped(to: extent)
         }
-        if refine > 0, let guide, let filter = CIFilter(name: "CIGuidedFilter") {
-            filter.setValue(result.clampedToExtent(), forKey: kCIInputImageKey)
-            filter.setValue(guide.clampedToExtent(), forKey: "inputGuideImage")
-            filter.setValue(max(1, refine / 100 * 0.008 * longEdge), forKey: kCIInputRadiusKey)
-            // Smaller is stricter about following the photo's edges.
-            filter.setValue(0.0001 + (1 - refine / 100) * 0.001, forKey: "inputEpsilon")
-            if let output = filter.outputImage {
-                result = output.applyingFilter("CIColorClamp").cropped(to: extent)
-            }
+        if refine > 0, let guide,
+           // Smaller epsilon follows weaker edges in the photo.
+           let refined = MaskGuidedFilter.apply(mask: result, guide: guide, radius: max(1, refine / 100 * 0.008 * longEdge),
+                                                epsilon: 0.0001 + (1 - refine / 100) * 0.001, extent: extent) {
+            result = refined.cropped(to: extent)
         }
         if feather > 0 {
             let sigma = feather / 100 * 0.012 * longEdge

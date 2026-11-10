@@ -111,12 +111,23 @@ public enum FineEdges {
     nonisolated(unsafe) private static var session: ORTSession?
     /// Why the model last failed to load or run, for the mask panel; nil when it worked.
     nonisolated(unsafe) public private(set) static var failure: String?
+    /// What the last run found, for the mask panel: its time and how much of the photo it saw as
+    /// foreground, or nil before a run.
+    nonisolated(unsafe) public private(set) static var lastRun: String?
+    /// Posted on the main queue whenever `failure` or `lastRun` changes.
+    public static let statusChanged = Notification.Name("AtelierFineEdgesStatusChanged")
+
+    private static func announce() {
+        DispatchQueue.main.async { NotificationCenter.default.post(name: statusChanged, object: nil) }
+    }
 
     private static func forgetSession() {
         lock.lock()
         session = nil
         failure = nil
+        lastRun = nil
         lock.unlock()
+        announce()
     }
 
     /// The loaded model; Core ML runs what it can (ML Program, Neural Engine and GPU), ONNX
@@ -144,7 +155,8 @@ public enum FineEdges {
     public static func matte(of image: CGImage) -> [Float]? {
         guard let pixels = rgba(image) else { return nil }
         lock.lock()
-        defer { lock.unlock() }
+        defer { lock.unlock(); announce() }
+        let started = Date()
         do {
             let session = try loadedSession()
             let input = NSMutableData(data: inputTensor(pixels).withUnsafeBufferPointer { Data(buffer: $0) })
@@ -155,10 +167,22 @@ public enum FineEdges {
             let outputs = try session.run(withInputs: [inputName: value], outputNames: [outputName], runOptions: nil)
             guard let output = outputs[outputName] else { throw Failure.run("no output") }
             let data = try output.tensorData() as Data
-            guard data.count == size * size * 4 else { throw Failure.run("unexpected output size \(data.count)") }
-            let raw = data.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
+            let raw: [Float]
+            if data.count == size * size * 4 {
+                raw = data.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
+            } else if data.count == size * size * 2 {
+                raw = data.withUnsafeBytes { $0.bindMemory(to: UInt16.self).map(floatFromHalf) }
+            } else {
+                throw Failure.run("unexpected output size \(data.count) bytes")
+            }
+            let chances = probabilities(raw)
+            let foreground = Double(chances.lazy.filter { $0 > 0.5 }.count) / Double(max(1, chances.count))
+            let seconds = Date().timeIntervalSince(started)
             failure = nil
-            return probabilities(raw)
+            lastRun = String(format: "Fine Edges ran in %.1f s; %.0f%% of the photo is foreground", seconds, foreground * 100)
+            NSLog("Atelier: %@ (outputs %@, input %@)", lastRun ?? "", try session.outputNames().joined(separator: ", "),
+                  inputName)
+            return chances
         } catch {
             failure = error.localizedDescription
             NSLog("Atelier: Fine Edges failed: %@", "\(error)")
@@ -192,6 +216,18 @@ public enum FineEdges {
             }
         }
         return out
+    }
+
+    /// An IEEE half-precision float's bits as a Float (works on Intel too).
+    static func floatFromHalf(_ bits: UInt16) -> Float {
+        let sign: UInt32 = UInt32(bits & 0x8000) << 16
+        let exponent = Int((bits >> 10) & 0x1f), fraction = UInt32(bits & 0x3ff)
+        if exponent == 0 {
+            let value = Float(fraction) * Float(pow(2.0, -24.0))
+            return sign == 0 ? value : -value
+        }
+        if exponent == 31 { return Float(bitPattern: sign | 0x7f80_0000 | (fraction << 13)) }
+        return Float(bitPattern: sign | (UInt32(exponent - 15 + 127) << 23) | (fraction << 13))
     }
 
     /// The model gives logits; 0...1 output is passed through as is.

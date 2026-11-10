@@ -651,6 +651,8 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 **Acceptance:** Mac build (the package resolves and links on arm64 and x86_64); `FineEdgesTests` pass; the downloaded model loads and runs (no orange error under the checkbox); time the first matte on a Z6 RAW and with/without Core ML; app size before/after. Rosh: hair against sky and a busy background with Select Subject and Select People Hair/Entire Person, Fine Edges on vs off; Face Skin doesn't creep into Hair; Remove in Settings deletes it.
 
+**Fixes in this PR (Rosh, 2026-11-10, testing 2984f9d):** Refine Edge above 0 emptied every AI selection: `CIGuidedFilter` replaced by `MaskGuidedFilter` (own Metal kernels, fast guided filter at ≤2048 px). Fine Edges showed no change: the panel now shows each run's time and foreground share, or its error (it didn't refresh before), and the log has the model's input/output names; fp16 outputs are read too.
+
 **Known risks:** the fp16 model's inputs are assumed float32 (onnx-community's usual keep-IO-types export); if not, the error shows under the checkbox. BiRefNet may contain ops Core ML can't run; those run on the CPU (slower).
 
 **Not in scope:** SAM 2.1 clicks (step 3), Brush Auto Mask (step 4), the full (non-lite) BiRefNet.
