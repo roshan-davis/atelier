@@ -165,6 +165,17 @@ final class PeopleSkinTests: XCTestCase {
         XCTAssertNil(PeopleSkin.build(pixels: drawn.pixels, width: width, height: height, faces: [], mattes: []))
     }
 
+    func testFaceMostlyCoveredIsStillFound() throws {
+        // Big sunglasses and a scarf leave almost no clean skin inside the outline.
+        let drawn = portrait()
+        var face = drawn.face
+        face.features = [[CGPoint(x: 56, y: 15), CGPoint(x: 104, y: 15), CGPoint(x: 104, y: 75), CGPoint(x: 56, y: 75)]]
+        let found = try XCTUnwrap(PeopleSkin.build(pixels: drawn.pixels, width: width, height: height,
+                                                   faces: [face], mattes: [drawn.matte]),
+                                  "a face with too little clean skin is still a person")
+        XCTAssertEqual(found.people.count, 1)
+    }
+
     func testOtherPersonIsLeftOut() throws {
         let drawn = portrait()
         let found = try XCTUnwrap(PeopleSkin.build(pixels: drawn.pixels, width: width, height: height,

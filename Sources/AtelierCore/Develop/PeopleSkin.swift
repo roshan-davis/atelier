@@ -347,8 +347,18 @@ public struct PeopleSkin: Sendable {
             for i in 0..<count where outline[i] > 0.5 && holes[i] < 0.5 && looksLikeSkin(lab[i]) {
                 samples.append(lab[i])
             }
-            guard let model = SkinModel(samples: samples) else { continue }
-            let likelihood = lab.map { model.likelihood($0) }
+            // Sunglasses, a scarf or a small face can leave too few clean skin pixels to learn the
+            // face's color from. Then learn it from the whole outline (holes included), and failing
+            // that use the loose skin test, so the person is still found and their features
+            // (lips, teeth, brows) still work.
+            var model = SkinModel(samples: samples)
+            if model == nil {
+                var loose: [SIMD3<Float>] = []
+                for i in 0..<count where outline[i] > 0.5 && looksLikeSkin(lab[i]) { loose.append(lab[i]) }
+                model = SkinModel(samples: loose)
+            }
+            let likelihood: [Float] = model.map { m in lab.map { m.likelihood($0) } }
+                ?? lab.map { looksLikeSkin($0) ? 0.6 : 0 }
 
             var faceSkin = [Float](repeating: 0, count: count)
             for i in 0..<count { faceSkin[i] = outline[i] * (1 - holes[i]) * likelihood[i] }
