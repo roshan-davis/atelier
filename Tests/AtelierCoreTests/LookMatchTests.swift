@@ -88,6 +88,66 @@ final class LookMatchTests: XCTestCase {
         XCTAssertLessThan(gap(match.matched[.gradeHighlightsHue], 40), 45)
     }
 
+    func testMidtoneTintGoesToTheMidtonesWheel() throws {
+        let session = try XCTUnwrap(DevelopRenderer.shared.session(for: try samplePhoto(), maxPixelSize: LookSample.size))
+        var look = DevelopSettings()
+        look[.gradeShadowsHue] = 200
+        look[.gradeShadowsSat] = 30
+        look[.gradeMidtonesHue] = 45
+        look[.gradeMidtonesSat] = 30
+        let reference = try sample(session, look)
+        let match = try XCTUnwrap(LookMatcher.match(session: session, settings: .neutral, reference: reference,
+                                                    options: LookMatchOptions(whiteBalance: false, tone: false)))
+        print("LOOK MATCH three-way: \(try match.matched.encoded())")
+        XCTAssertGreaterThan(match.matched[.gradeMidtonesSat], 8)
+        XCTAssertGreaterThan(match.matched[.gradeShadowsSat], 8)
+        func gap(_ a: Double, _ b: Double) -> Double { let d = abs(a - b).truncatingRemainder(dividingBy: 360); return min(d, 360 - d) }
+        XCTAssertLessThan(gap(match.matched[.gradeMidtonesHue], 45), 60)
+        XCTAssertLessThan(gap(match.matched[.gradeShadowsHue], 200), 60)
+    }
+
+    /// A gray ramp from `low` to `high` (0 to 255), 256 steps wide.
+    private func ramp(_ low: Double, _ high: Double) -> LookSample {
+        var pixels: [UInt8] = []
+        for _ in 0..<4 {
+            for x in 0..<256 {
+                let v = UInt8((low + (high - low) * Double(x) / 255).rounded())
+                pixels += [v, v, v, 255]
+            }
+        }
+        return LookSample(pixels: pixels, width: 256, height: 4)
+    }
+
+    func testToneCurveKeepsBlackAndWhiteUnlessTheReferenceIsFaded() throws {
+        let photo = ramp(0, 255)
+        let same = try XCTUnwrap(LookMatcher.toneCurve(photo: photo, reference: photo))
+        for (i, y) in same.enumerated() { XCTAssertEqual(Double(y), Double(i) / 255, accuracy: 0.02) }
+
+        // A bright reference with no dark tones is content, not a fade: black stays black.
+        let bright = try XCTUnwrap(LookMatcher.toneCurve(photo: photo, reference: ramp(100, 255)))
+        XCTAssertEqual(bright[0], 0)
+        XCTAssertEqual(bright[255], 1)
+
+        // A matte reference (lifted blacks, dimmed whites, dark tones present) is copied, within limits.
+        let matte = try XCTUnwrap(LookMatcher.toneCurve(photo: photo, reference: ramp(30, 228)))
+        XCTAssertGreaterThan(matte[0], 0.08)
+        XCTAssertLessThanOrEqual(matte[0], 0.15)
+        XCTAssertGreaterThanOrEqual(Double(matte[255]), 0.92 - 1e-6)
+        XCTAssertLessThan(matte[255], 1)
+        XCTAssertEqual(LookMatcher.curveXs.count, 7)
+    }
+
+    func testNeutralCastIgnoresColorfulAreas() {
+        // 60% green foliage, 40% a slightly warm gray wall.
+        var pixels: [UInt8] = []
+        for i in 0..<100 { pixels += i < 60 ? [60, 160, 60, 255] : [140, 128, 116, 255] }
+        let scene = LookSample(pixels: pixels, width: 10, height: 10)
+        let wall = LookSample(pixels: [140, 128, 116, 255], width: 1, height: 1)
+        XCTAssertEqual(scene.neutralAB.x, wall.midtoneAB.x, accuracy: 0.002)
+        XCTAssertEqual(scene.neutralAB.y, wall.midtoneAB.y, accuracy: 0.002)
+        XCTAssertLessThan(scene.midtoneAB.x, scene.neutralAB.x - 0.02)
+    }
+
     func testHSLBandsFollowTheReference() throws {
         let session = try XCTUnwrap(DevelopRenderer.shared.session(for: try samplePhoto(), maxPixelSize: LookSample.size))
         var look = DevelopSettings()

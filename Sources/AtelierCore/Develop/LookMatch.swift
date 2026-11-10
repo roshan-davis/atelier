@@ -30,7 +30,7 @@ public struct LookMatch: Sendable, Equatable {
     /// blended separately.
     static let linearParameters: [DevelopSettings.Parameter] = [.tint, .exposure, .saturation]
         + DevelopSettings.Parameter.allCases.filter { $0.hslBand != nil }
-    static let gradeRegions: [DevelopSettings.GradeRegion] = [.shadows, .highlights]
+    static let gradeRegions: [DevelopSettings.GradeRegion] = [.shadows, .midtones, .highlights]
 
     /// The settings at `strength` (0 to 1) between `base` and `matched`.
     public func settings(strength: Double) -> DevelopSettings {
@@ -296,18 +296,6 @@ public struct LookSample: Sendable {
         meanAB { i in self.lightness[i] > 0.3 && self.lightness[i] < 0.88 ? 1 : 0 } ?? meanAB { _ in 1 } ?? .zero
     }
 
-    /// The average color of the shadows or highlights, weighted the way the grading wheels are.
-    func regionAB(_ region: DevelopSettings.GradeRegion) -> SIMD2<Double> {
-        meanAB { i in
-            let y = Double(self.luma[i])
-            switch region {
-            case .shadows: return pow(max(0, 1 - y / 0.5), 2)
-            case .highlights: return pow(max(0, (y - 0.5) / 0.5), 2)
-            default: return 1
-            }
-        } ?? .zero
-    }
-
     /// Weighted median of Oklab lightness.
     var medianLightness: Double {
         let order = (0..<count).sorted { lightness[$0] < lightness[$1] }
@@ -526,11 +514,11 @@ public enum LookMatcher {
         }
     }
 
-    /// Temp and Tint: Newton steps on the midtones' average color, with the slopes measured by
-    /// rendering a small nudge of each slider.
+    /// Temp and Tint: Newton steps on the color of the neutral midtones (`neutralAB`), with the
+    /// slopes measured by rendering a small nudge of each slider.
     static func fitWhiteBalance(_ settings: inout DevelopSettings, asShot: Double, reference: LookSample,
                                 measure: (DevelopSettings) -> LookSample?) {
-        let target = reference.midtoneAB
+        let target = reference.neutralAB
         let startMired = 1e6 / (settings.temperature ?? asShot), startTint = settings.tint
         var mired = startMired, tint = startTint
         func with(_ m: Double, _ t: Double) -> DevelopSettings {
@@ -541,10 +529,10 @@ public enum LookMatcher {
         }
         for _ in 0..<3 {
             guard let photo = measure(with(mired, tint)) else { return }
-            let error = target - photo.midtoneAB
+            let error = target - photo.neutralAB
             if (error * error).sum() < 0.0015 * 0.0015 { break }
             guard let warmer = measure(with(mired + 15, tint)), let greener = measure(with(mired, tint + 8)) else { return }
-            let j1 = (warmer.midtoneAB - photo.midtoneAB) / 15, j2 = (greener.midtoneAB - photo.midtoneAB) / 8
+            let j1 = (warmer.neutralAB - photo.neutralAB) / 15, j2 = (greener.neutralAB - photo.neutralAB) / 8
             let det = j1.x * j2.y - j2.x * j1.y
             guard abs(det) > 1e-12 else { break }
             let dm = (error.x * j2.y - j2.x * error.y) / det
@@ -572,27 +560,6 @@ public enum LookMatcher {
             settings.exposure = min(start + maxExposureShift, max(start - maxExposureShift, settings.exposure + stops))
         }
         settings.exposure = (settings.exposure * 100).rounded() / 100
-    }
-
-    /// The x positions of a fitted curve's points; few, so the curve stays easy to edit.
-    static let curveXs = [0, 0.25, 0.5, 0.75, 1.0]
-
-    /// The RGB Tone Curve: histogram matching on brightness, put on top of the photo's own curve.
-    static func fitCurve(_ settings: inout DevelopSettings, reference: LookSample,
-                         measure: (DevelopSettings) -> LookSample?) {
-        guard let photo = measure(settings),
-              let curve = CameraMatch.matchingCurve(source: photo.lumaHistogram(), target: reference.lumaHistogram(),
-                                                    maxShift: CameraMatch.maxShift, blackCeiling: 0.15,
-                                                    whiteFloor: 0.85) else { return }
-        let fitted = CameraMatch(curve: curve, saturation: 1)
-        let master = settings.points(for: .rgb)
-        var xs = curveXs
-        for point in master where !xs.contains(where: { abs($0 - point.x) < 0.06 }) { xs.append(point.x) }
-        let points = xs.sorted().map { x in
-            let y = fitted.value(at: DevelopRenderer.pointCurveValue(master, at: x))
-            return DevelopSettings.CurvePoint(x: x, y: (y * 1000).rounded() / 1000)
-        }
-        settings.setPoints(points, for: .rgb)
     }
 
     /// Saturation: the reference's mean chroma against the photo's. The slider scales chroma.
@@ -708,40 +675,6 @@ public enum LookMatcher {
     static let maxHSLHue = 50.0
     static let maxHSLSaturation = 60.0
     static let maxHSLLuminance = 50.0
-
-    /// Color Grading's Shadows and Highlights wheels take the color difference left between dark
-    /// and bright tones once the midtones match (split toning).
-    static func fitGrade(_ settings: inout DevelopSettings, reference: LookSample,
-                         measure: (DevelopSettings) -> LookSample?) {
-        // Color Grading switched off stays off.
-        guard settings.isOn(.colorGrading), let photo = measure(settings) else { return }
-        let midShift = reference.midtoneAB - photo.midtoneAB
-        let probe = 20.0
-        var needs: [(DevelopSettings.GradeRegion, SIMD2<Double>, Double)] = []
-        var probed = settings
-        for region in LookMatch.gradeRegions {
-            let need = reference.regionAB(region) - photo.regionAB(region) - midShift
-            guard (need * need).sum() > 0.003 * 0.003 else { continue }
-            let hue = gradeHue(towards: need)
-            let old = GradeVector(hue: settings[region.hue], saturation: settings[region.saturation])
-            let tried = old + GradeVector(hue: hue, saturation: probe)
-            probed[region.hue] = tried.hue
-            probed[region.saturation] = tried.saturation
-            needs.append((region, need, hue))
-        }
-        guard !needs.isEmpty, let after = measure(probed) else { return }
-        for (region, need, hue) in needs {
-            let length = (need * need).sum().squareRoot()
-            let moved = after.regionAB(region) - photo.regionAB(region) - (after.midtoneAB - photo.midtoneAB)
-            let achieved = (moved * need).sum() / length
-            guard achieved > 1e-4 else { continue }
-            let amount = min(maxGradeSaturation, probe * length / achieved)
-            let old = GradeVector(hue: settings[region.hue], saturation: settings[region.saturation])
-            let result = old + GradeVector(hue: hue, saturation: amount)
-            settings[region.hue] = result.hue.rounded()
-            settings[region.saturation] = min(100, result.saturation).rounded()
-        }
-    }
 
     /// Oklab a/b direction of each grading wheel hue (whole degrees), as Color Grading tints.
     static let gradeDirections: [Double] = ColorGrade.directions.map { atan2($0.y, $0.x) }

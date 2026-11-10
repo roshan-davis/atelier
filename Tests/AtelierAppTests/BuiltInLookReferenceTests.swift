@@ -58,6 +58,25 @@ final class BuiltInLookReferenceTests: XCTestCase {
         }
     }
 
+    /// Each study has real blacks (so matching it never fades a photo), a wide tonal range, and
+    /// smooth shading rather than a few flat colors.
+    func testStudiesHaveRealBlacksAndSmoothShading() throws {
+        for study in BuiltInLookReference.allCases {
+            let image = try XCTUnwrap(study.image())
+            let sample = try XCTUnwrap(LookSample(image: image))
+            let range = sample.lumaPercentiles([0.01, 0.99])
+            XCTAssertLessThan(range[0], 0.05, study.name)
+            XCTAssertGreaterThan(range[1] - range[0], 0.5, study.name)
+            let pixels = try XCTUnwrap(LookSample.pixels(of: image)).pixels
+            var counts: [Int: Int] = [:]
+            for i in stride(from: 0, to: pixels.count, by: 4) {
+                counts[Int(pixels[i]) << 16 | Int(pixels[i + 1]) << 8 | Int(pixels[i + 2]), default: 0] += 1
+            }
+            let largest = Double(counts.values.max() ?? 0) / Double(pixels.count / 4)
+            XCTAssertLessThan(largest, 0.05, study.name)
+        }
+    }
+
     func testPortraitStudiesMatchFaceColorWithEditableMasks() throws {
         let fixtures = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Scripts/presets/fixtures")

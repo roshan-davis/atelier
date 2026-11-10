@@ -482,3 +482,19 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 **Missing-skin fallback:** Keep other selected adjustments available when either image lacks face skin. A skin-only batch can continue when the lead photo lacks skin and the reference has usable skin. Skip unchanged photos without adding a history step. The native test checks the visible warning and whether Apply remains available.
 
 **Validation:** Implementation revision `54365dfd5547bef0b10a63449fc3dab9556011c0` passed the Mac build and all 300 Swift tests with Nikon Z6 and Zf RAW fixtures and zero skips. Both native smoke tests passed, including missing skin, Apply and switching back to Off. The model regression covers the face-free lead photo in a skin-only batch. Reviewed the updated Help and face color example in Chrome. Mac logs: `/private/tmp/atelier-match-skin-tone/.build/local-checks/20261109-170936-868837`. UI and CI details are recorded in the PR.
+
+## AT-034 — Match Look: lit built-in references, no fading, neutral white balance, light/shadow color
+
+**Status:** Implementation in review. Never compiled; Mac check and manual acceptance pending. **Owner:** Cl. **Chat:** Claude project thread "Match Look quality". **Branch:** `claude/match-look-color`. **PR:** opened from this branch (number recorded in the PR). **Baseline:** `20b58c5`. **Dependencies:** AT-031, AT-032 merged. PR #90 (AT-033, Select People) touches other Match Look files; no overlap expected.
+
+**Scope:** Rosh (2026-11-10): built-in references "more vectorized and curvy", "colors of light and shadow rightly depicted", and the match must "do a better job". Rosh chose this color PR before the body-skin follow-up in PR #90. Items LM-1 to LM-4 of the Match Look quality audit (`reports/match-look-quality-2026-11-10.md` in project files):
+- LM-1: the eight studies redrawn with smooth Catmull-Rom paths (facets kept for buildings, roads, trees), each surface shaded from a key light, lit side leaning to the look's light color and shaded side to its shadow color; near-black accents, soft glints, ±2-level grain. Compositions and skin swatches unchanged.
+- LM-4: Tone Curve from 7 brightness percentiles instead of full histogram matching; 7 curve points; blacks lift only for a really faded reference (darkest 1% > 6% with dark tones present), whites come down at most to 92%.
+- LM-3: White Balance matches the least colorful 30% of midtones (`neutralAB`), falling back to all midtones.
+- LM-2: Shadows, Midtones and Highlights wheels fitted together from the neutrals' color in each tonal range, using the renderer's `ColorGrade.weights`, 3 probes + joint solve, 2 rounds, a step kept only if it helps.
+
+**Not in scope:** LM-5 (R/G/B curves), LM-6 (joint refine), LM-7 (content-aware correspondence), LM-8. Subject & Background local white balance still uses mean midtone color. Help before/after pictures (`match-built-in-*.jpg`) still show the old studies and need regenerating on a Mac (`ATELIER_BUILT_IN_LOOK_OUT`, then `Scripts/help/make_help_images.py --built-in-look-from`).
+
+**Acceptance:** Mac build and tests (new: tone curve, neutral cast, Midtones wheel, study tonal range). Rosh: built-in studies look curved and lit; matches no longer fade blacks; shadows and highlights take the study's colors; Color Grading shows Shadows, Midtones and Highlights moved.
+
+**Validation:** Cloud only, no Swift toolchain: source review plus a Python port of the study drawing and curve rule (studies' darkest 1% luma 0.015–0.033 at 384 px, Oklab L 1–99% span 0.55–0.79, largest single color under 4%).
