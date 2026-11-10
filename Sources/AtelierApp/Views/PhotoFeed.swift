@@ -11,8 +11,11 @@ import QuartzCore
 /// `DevelopController` publishes the ordinary image as before, so what is shown at rest (and
 /// every other view of the photo) is unchanged.
 ///
-/// Only the single-photo view (and the Masking view, which shows the same render) attaches;
-/// compare views, crop and the other tools keep the ordinary path.
+/// The single-photo view, the Masking view (which shows the same render) and the After photo of
+/// the Before/After compare views (side by side and the split slider) attach; crop and the other
+/// tools keep the ordinary path. Compare views used to take the ordinary path too, so every frame
+/// of a drag there was read back to the CPU and sent through a SwiftUI update of the whole window,
+/// which Rosh saw as the photo freezing while editing in a compare view (Nov 10, 2026).
 @MainActor
 final class PhotoFeed {
     enum Fallback { case liveFramesOff, poolFull }

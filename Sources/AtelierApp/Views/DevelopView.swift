@@ -46,16 +46,18 @@ struct DevelopImageView: View {
                             ComparePane(image: develop.displayBeforeImage, label: "Before", pixelSize: pixelSize,
                                         zoom: model.zoomState, onReport: onZoomReport,
                                         menu: { model.photoMenu(includeZoom: true) })
+                            // Live slider frames go straight onto the After pane, as on the
+                            // single photo view (`PhotoFeed`).
                             ComparePane(image: develop.displayImage ?? image, label: "After", pixelSize: pixelSize,
                                         zoom: model.zoomState, onReport: onZoomReport,
-                                        menu: { model.photoMenu(includeZoom: true) })
+                                        menu: { model.photoMenu(includeZoom: true) }, feed: develop.photoFeed)
                         }
                         .padding(.horizontal, 8)
                     } else {
                         SliderCompareView(before: develop.displayBeforeImage, after: develop.displayImage ?? image,
                                           pixelSize: pixelSize, zoom: model.zoomState, onReport: onZoomReport,
                                           menu: { model.photoMenu(includeZoom: true) },
-                                          position: $develop.sliderPosition)
+                                          position: $develop.sliderPosition, feed: develop.photoFeed)
                     }
                 }
                 // Only while what's on screen isn't the photo yet: nothing, or a thumbnail or the
@@ -77,7 +79,7 @@ struct DevelopImageView: View {
                 }
             }
             .overlay(alignment: .topTrailing) {
-                if showFrameHUD, develop.compareMode == .off, !develop.isCropping, !develop.isAIOpen,
+                if showFrameHUD, !develop.isCropping, !develop.isAIOpen,
                    !develop.isGuiding, develop.image != nil {
                     DevelopFrameHUDOverlay(hud: develop.frameHUD, assetID: develop.assetID)
                         .frame(width: 264, height: 116)
@@ -279,11 +281,14 @@ private struct ComparePane: View {
     @ObservedObject var zoom: ZoomState
     var onReport: (ZoomReport) -> Void
     var menu: () -> NSMenu?
+    /// Set on the After pane: live slider frames are drawn into it (`PhotoFeed`).
+    var feed: PhotoFeed? = nil
 
     var body: some View {
         ZStack(alignment: .topLeading) {
             if let image {
-                ZoomableImageView(image: image, pixelSize: pixelSize, zoom: zoom, onReport: onReport, menu: menu)
+                ZoomableImageView(image: image, pixelSize: pixelSize, zoom: zoom, onReport: onReport, menu: menu,
+                                  feed: feed)
             } else {
                 BeforeLoadingView()
             }
@@ -311,13 +316,16 @@ struct SliderCompareView: View {
     var onReport: (ZoomReport) -> Void
     var menu: () -> NSMenu?
     @Binding var position: Double
+    /// Live slider frames are drawn into the After photo, under the Before one (`PhotoFeed`).
+    var feed: PhotoFeed? = nil
 
     var body: some View {
         GeometryReader { geometry in
             let size = geometry.size
             let dividerX = size.width * position
             ZStack(alignment: .topLeading) {
-                ZoomableImageView(image: after, pixelSize: pixelSize, zoom: zoom, onReport: onReport, menu: menu)
+                ZoomableImageView(image: after, pixelSize: pixelSize, zoom: zoom, onReport: onReport, menu: menu,
+                                  feed: feed)
                 if let before {
                     ZoomableImageView(image: before, pixelSize: pixelSize, zoom: zoom, visibleWidth: CGFloat(position),
                                       onReport: onReport, menu: menu)
@@ -560,7 +568,8 @@ private struct HistogramView: View {
     }
 
     private func graph(width: CGFloat) -> some View {
-        HistogramGraph(histogram: histogram, highlight: active?.span)
+        HistogramGraph(histogram: nil, sink: develop.histogramSink, highlight: active?.span)
+        .equatable()
         .contentShape(Rectangle())
         .onContinuousHover { phase in
             switch phase {
@@ -644,36 +653,53 @@ private struct HistogramView: View {
 
 /// The RGB graph itself, shared by Develop and the Library's right panel. `highlight` lights a
 /// band of it (a tone region under the pointer), as a fraction of its width.
-struct HistogramGraph: View {
+///
+/// It shows one finished picture of the three channels (`HistogramPicture`). In Develop the
+/// measure queue puts it on screen itself (`sink`, `HistogramSink`), so the graph keeps up with
+/// the photo whatever the main thread is doing; elsewhere it is made here, once per histogram.
+/// Equatable, so a redraw of the panel around it leaves the graph alone.
+struct HistogramGraph: View, Equatable {
     let histogram: Histogram?
+    var sink: HistogramSink? = nil
     var highlight: ClosedRange<CGFloat>?
 
     var body: some View {
-        Canvas { context, size in
-            if let highlight {
-                let band = CGRect(x: size.width * highlight.lowerBound, y: 0,
-                                  width: size.width * (highlight.upperBound - highlight.lowerBound), height: size.height)
-                context.fill(Path(band), with: .color(.white.opacity(0.12)))
-            }
-            guard let histogram else { return }
-            context.blendMode = .plusLighter
-            let channels: [([Double], Color)] = [
-                (histogram.red, Color(red: 0.9, green: 0.2, blue: 0.2)),
-                (histogram.green, Color(red: 0.2, green: 0.8, blue: 0.3)),
-                (histogram.blue, Color(red: 0.25, green: 0.4, blue: 1.0)),
-            ]
-            for (bins, color) in channels {
-                var path = Path()
-                path.move(to: CGPoint(x: 0, y: size.height))
-                for (index, value) in bins.enumerated() {
-                    let x = size.width * CGFloat(index) / CGFloat(bins.count - 1)
-                    path.addLine(to: CGPoint(x: x, y: size.height * (1 - CGFloat(value))))
+        GeometryReader { geometry in
+            ZStack(alignment: .topLeading) {
+                if let highlight {
+                    Rectangle()
+                        .fill(Color.white.opacity(0.12))
+                        .frame(width: geometry.size.width * (highlight.upperBound - highlight.lowerBound))
+                        .offset(x: geometry.size.width * highlight.lowerBound)
                 }
-                path.addLine(to: CGPoint(x: size.width, y: size.height))
-                path.closeSubpath()
-                context.fill(path, with: .color(color.opacity(0.7)))
+                if let sink {
+                    HistogramLayerView(sink: sink)
+                        .frame(width: geometry.size.width, height: geometry.size.height)
+                        .allowsHitTesting(false)
+                } else if let image = histogram.flatMap(Self.picture(for:)) {
+                    Image(decorative: image, scale: 1)
+                        .resizable()
+                        .interpolation(.medium)
+                        .frame(width: geometry.size.width, height: geometry.size.height)
+                }
             }
         }
+        .accessibilityHidden(true)
+    }
+
+    static func == (lhs: HistogramGraph, rhs: HistogramGraph) -> Bool {
+        lhs.highlight == rhs.highlight && lhs.sink === rhs.sink
+            && (lhs.sink != nil || lhs.histogram == rhs.histogram)
+    }
+
+    /// The last picture made here, for the histogram it shows.
+    @MainActor private static var made: (histogram: Histogram, image: CGImage)?
+
+    @MainActor private static func picture(for histogram: Histogram) -> CGImage? {
+        if let made, made.histogram == histogram { return made.image }
+        guard let image = HistogramPicture.make(histogram) else { return nil }
+        made = (histogram, image)
+        return image
     }
 
     /// Lightroom's clipping triangle color: dim when nothing clips, else the clipped channels'
