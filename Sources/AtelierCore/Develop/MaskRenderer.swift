@@ -73,9 +73,11 @@ extension DevelopRenderer {
     /// drawn once and kept in `brushCache` when given; `subject` finds Select Subject's mask
     /// (no box) or Select Object's (inside the box) on the photo's frame; `people` finds Select
     /// People's skin there.
+    /// `guide` is the photo on the same frame, which Refine Edge snaps AI selections to.
     static func sourceMask(_ component: DevelopSettings.MaskComponent, extent: CGRect,
                            subject: ((DevelopSettings.MaskRect?) -> CIImage?)?,
                            people: ((DevelopSettings.PeopleSelection) -> CIImage?)? = nil,
+                           guide: CIImage? = nil,
                            brushCache: BrushCache?) -> CIImage? {
         let width = extent.width, height = extent.height
         let longEdge = max(width, height)
@@ -116,17 +118,49 @@ extension DevelopRenderer {
             return image.transformed(by: CGAffineTransform(translationX: extent.minX, y: extent.minY))
         case .subject(let selection):
             guard let mask = subject?(selection.box) else { return nil }
-            guard selection.feather > 0 else { return mask.cropped(to: extent) }
-            let sigma = selection.feather / 100 * 0.012 * Double(longEdge)
-            return mask.clampedToExtent().applyingGaussianBlur(sigma: sigma).cropped(to: extent)
+            return refinedSelection(mask, grow: selection.grow, refine: selection.refine, feather: selection.feather,
+                                    guide: guide, extent: extent)
         case .people(let selection):
             guard let mask = people?(selection) else { return nil }
-            guard selection.feather > 0 else { return mask.cropped(to: extent) }
-            let sigma = selection.feather / 100 * 0.012 * Double(longEdge)
-            return mask.clampedToExtent().applyingGaussianBlur(sigma: sigma).cropped(to: extent)
+            return refinedSelection(mask, grow: selection.grow, refine: selection.refine, feather: selection.feather,
+                                    guide: guide, extent: extent)
         case .luminance:
             return nil
         }
+    }
+
+    /// The edge controls every AI selection shares (Select Subject, Select Object, Select People),
+    /// in this order: Grow (-100...100: shrinks or grows the selection by up to 1% of the photo's
+    /// long edge), Refine Edge (0...100: a guided filter with the photo as guide, radius up to
+    /// 0.8% of the long edge, so the edge moves onto the photo's own edges: hair, a jaw line, an
+    /// object's outline) and Feather (0...100: a blur up to 1.2% of the long edge). All three at 0
+    /// leave the selection as found. Sizes scale with the photo, so a preview and an export match.
+    static func refinedSelection(_ mask: CIImage, grow: Double, refine: Double, feather: Double,
+                                 guide: CIImage?, extent: CGRect) -> CIImage {
+        let longEdge = Double(max(extent.width, extent.height))
+        var result = mask.cropped(to: extent)
+        let growRadius = abs(grow) / 100 * 0.01 * longEdge
+        if growRadius >= 0.5 {
+            result = result.clampedToExtent()
+                .applyingFilter(grow > 0 ? "CIMorphologyMaximum" : "CIMorphologyMinimum",
+                                parameters: [kCIInputRadiusKey: growRadius])
+                .cropped(to: extent)
+        }
+        if refine > 0, let guide, let filter = CIFilter(name: "CIGuidedFilter") {
+            filter.setValue(result.clampedToExtent(), forKey: kCIInputImageKey)
+            filter.setValue(guide.clampedToExtent(), forKey: "inputGuideImage")
+            filter.setValue(max(1, refine / 100 * 0.008 * longEdge), forKey: kCIInputRadiusKey)
+            // Smaller is stricter about following the photo's edges.
+            filter.setValue(0.0001 + (1 - refine / 100) * 0.001, forKey: "inputEpsilon")
+            if let output = filter.outputImage {
+                result = output.applyingFilter("CIColorClamp").cropped(to: extent)
+            }
+        }
+        if feather > 0 {
+            let sigma = feather / 100 * 0.012 * longEdge
+            result = result.clampedToExtent().applyingGaussianBlur(sigma: sigma).cropped(to: extent)
+        }
+        return result
     }
 
     /// Paints the strokes as soft round dabs, white on black; erasing strokes paint black.

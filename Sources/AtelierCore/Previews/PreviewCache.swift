@@ -28,7 +28,9 @@ public final class PreviewCache: Sendable {
     ///    cooled, higher Tint went green); they now match Lightroom.
     /// 8: HSL in Oklab and a Display P3 color cube (`ColorLUT`), region curve that keeps black
     ///    and white, unclipped Red/Green/Blue curves, and the crop-shaped post-crop vignette.
-    public static let version = 8
+    /// 9: Select People's Face Skin cuts out the lips closer to their edge (10% larger than
+    ///    the lips instead of 35%), so photos with a Select People mask render slightly differently.
+    public static let version = 9
 
     /// Clears previews written by an older version. The old folder is moved aside at once and
     /// deleted in the background, so a large cache doesn't hold up launch.

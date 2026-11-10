@@ -140,19 +140,25 @@
   <figure><div class="pic"><img src="images/mask-subject-overlay.jpg" alt=""><span class="tag">Select Subject</span></div></figure>
   <figure><div class="frame compare" data-before="mask-subject-before.jpg" data-after="mask-subject-after.jpg" data-labels="Before|Background muted"></div></figure>
 </div>
-<p>Both have a <b>Feather</b> slider (default 20) to soften Vision's hard edge. To change the background instead of the subject, tick <b>Invert</b>. If Vision finds nothing, the panel says so.</p>
+<p>Both have the <a href="#edges">edge controls</a>: <b>Grow</b>, <b>Refine Edge</b> and <b>Feather</b> (default 20). To change the background instead of the subject, tick <b>Invert</b>. If Vision finds nothing, the panel says so.</p>
 
 <h2 id="people">Select People</h2>
-<p><b>Select People</b> selects skin, like Lightroom's People masks. Apple's Vision finds each person whose face is visible, traces the face (jaw line, eyes, brows and lips) and outlines the person. Atelier learns each face's own skin color from the face, so it works for any skin tone and light, then looks for that color on the rest of the same person.</p>
+<p><b>Select People</b> selects parts of people, like Lightroom's People masks. Apple's Vision finds each person whose face is visible, traces the face (jaw line, eyes, pupils, brows and lips) and outlines the person. Atelier learns each face's own skin color from the face, so it works for any skin tone and light, then looks for that color on the rest of the same person. Eyes, brows, lips and teeth come from the face's outline.</p>
 <figure>
   <div class="pins pinned">
   <div class="panel">
     <div class="pb">
       <div class="gh">Select People</div>
       <div class="row" data-pin="1"><span class="name" style="width:auto">Person</span><span class="popup" style="flex:none;width:130px">All People</span></div>
-      <div class="check" data-pin="2"><i class="on"></i>Face Skin</div>
-      <div class="check"><i class="on"></i>Body Skin</div>
-      <div class="sl" data-name="Feather" data-value="10" data-at="0.1" data-def="0.1" data-pin="3"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr" data-pin="2">
+        <div class="check"><i class="on"></i>Face Skin</div><div class="check"><i class="on"></i>Body Skin</div>
+        <div class="check"><i></i>Eyebrows</div><div class="check"><i></i>Eye Sclera</div>
+        <div class="check"><i></i>Iris and Pupil</div><div class="check"><i class="on"></i>Lips</div>
+        <div class="check"><i></i>Teeth</div>
+      </div>
+      <div class="sl" data-name="Grow" data-value="0" data-at="0.5" data-def="0.5" data-pin="3"></div>
+      <div class="sl" data-name="Refine Edge" data-value="0" data-at="0" data-def="0"></div>
+      <div class="sl" data-name="Feather" data-value="10" data-at="0.1" data-def="0.1"></div>
       <div class="check"><i></i>Invert</div>
     </div>
   </div>
@@ -160,10 +166,20 @@
 </figure>
 <ol class="legend">
   <li><b>Person</b>: everyone, or one person. People are numbered left to right by face.</li>
-  <li><b>Face Skin</b> is the face without the eyes, brows and lips. <b>Body Skin</b> is the neck, arms and hands of the same person. Atelier starts it under the jaw and at the wrists and hands it finds, and spreads it only over smooth skin of the face's color, so it stops at the edge of a scarf, collar or sleeve, even a skin-colored one. The two meet under the jaw with no gap. Hair above the forehead, clothes and skin-colored background are left out.</li>
-  <li><b>Feather</b> (default 10) softens the edge, which already follows the photo's edges.</li>
+  <li>Tick any parts, in any combination. <b>Face Skin</b> is the face without the eyes, brows and lips; tick <b>Lips</b> too to include the mouth (they meet with no gap). <b>Eyebrows</b>, <b>Eye Sclera</b> (the whites of the eyes), <b>Iris and Pupil</b>, <b>Lips</b> and <b>Teeth</b> (only when the mouth is open) come from Vision's outline of the face, so a whitening or iris boost touches only that feature. New parts start with Face Skin and Body Skin. <b>Body Skin</b> is the neck, arms and hands of the same person. Atelier starts it under the jaw and at the wrists and hands it finds, and spreads it only over smooth skin of the face's color, so it usually stops at the edge of a scarf, collar or sleeve. The two meet under the jaw with no gap. Hair above the forehead, clothes and skin-colored background are left out.</li>
+  <li>The <a href="#edges">edge controls</a>: Grow, Refine Edge and Feather (default 10).</li>
 </ol>
+<p>Body Skin is found by color: a sleeve or scarf the same color as the skin and touching it can still be included. Subtract a Brush from the mask to take it out.</p>
 <p>Press <kbd>O</kbd> to see the selection in red. If Vision finds no face, the panel says so; try Select Subject or a Brush instead. Match Look's <a href="match-look.html#skin">Skin Tones</a> use the same selection.</p>
+
+<h3 id="edges">Edge controls</h3>
+<p>Select Subject, Select Object and Select People share three sliders for the selection's edge, applied in this order:</p>
+<dl class="defs">
+  <dt>Grow</dt><dd>Left shrinks the selection, right grows it, by up to 1% of the photo's long edge. Shrink to pull a halo off the background; grow to take in a missed rim.</dd>
+  <dt>Refine Edge</dt><dd>Moves the edge onto the photo's own edges: hair against the sky, a jaw line, an object's outline. 0 is off; higher follows the photo more closely over a wider band.</dd>
+  <dt>Feather</dt><dd>Softens the edge.</dd>
+</dl>
+<p>All three scale with the photo, so the preview and an export match. Each slider drag is one step in History.</p>
 
 <h2 id="combine">Add, Subtract and Intersect</h2>
 <p>A mask can have several parts:</p>

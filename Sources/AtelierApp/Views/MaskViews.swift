@@ -773,11 +773,14 @@ struct MasksPanel: View {
         case .subject(let selection):
             VStack(alignment: .leading, spacing: 6) {
                 GroupHeading(title: selection.box == nil ? "Select Subject" : "Select Object")
-                SliderRow(label: "Feather", value: Binding(get: { selection.feather }, set: { value in
-                    var changed = selection
-                    changed.feather = value
-                    update(component, .subject(changed))
-                }), range: 0...100, step: 1, origin: 20)
+                let value = { (path: WritableKeyPath<DevelopSettings.Selection, Double>) in
+                    Binding(get: { selection[keyPath: path] }, set: { newValue in
+                        var changed = selection
+                        changed[keyPath: path] = newValue
+                        update(component, .subject(changed))
+                    })
+                }
+                edgeControls(grow: value(\.grow), refine: value(\.refine), feather: value(\.feather), featherOrigin: 20)
                 Text(selection.box == nil
                      ? "Found on this Mac with Apple's Vision. Invert it to adjust the background."
                      : "Found by Vision inside the box. Drag the pin to move the box, or draw a new one.")
@@ -811,27 +814,47 @@ struct MasksPanel: View {
                 }
             }
             .help("People are numbered left to right by face")
-            ForEach(DevelopSettings.PeopleSelection.Part.allCases, id: \.self) { part in
-                Toggle(part.title, isOn: Binding(get: { selection.includes(part) }, set: { on in
-                    var parts = selection.parts.filter { $0 != part }
-                    if on { parts.append(part) }
-                    guard !parts.isEmpty else { return }
-                    update(component, .people(DevelopSettings.PeopleSelection(person: selection.person, parts: parts,
-                                                                                feather: selection.feather)))
-                }))
-                .help(part == .faceSkin ? "The face's skin, leaving out eyes, brows and lips"
-                                        : "Neck, arms, hands and other skin on the same person")
+            // Lightroom's layout: two columns of parts, ticked in any combination.
+            LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)],
+                      alignment: .leading, spacing: 4) {
+                ForEach(DevelopSettings.PeopleSelection.Part.allCases, id: \.self) { part in
+                    Toggle(part.title, isOn: Binding(get: { selection.includes(part) }, set: { on in
+                        update(component, .people(selection.setting(part, on)))
+                    }))
+                    .lineLimit(1)
+                    .help(part.help)
+                }
             }
-            SliderRow(label: "Feather", value: Binding(get: { selection.feather }, set: { value in
-                var changed = selection
-                changed.feather = value
-                update(component, .people(changed))
-            }), range: 0...100, step: 1, origin: 10)
-            Text("Found on this Mac with Apple's Vision: each face's own skin color is found on the face, then on the rest of that person.")
+            if selection.parts.isEmpty {
+                Text("Tick at least one part to select something.")
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            let value = { (path: WritableKeyPath<DevelopSettings.PeopleSelection, Double>) in
+                Binding(get: { selection[keyPath: path] }, set: { newValue in
+                    var changed = selection
+                    changed[keyPath: path] = newValue
+                    update(component, .people(changed))
+                })
+            }
+            edgeControls(grow: value(\.grow), refine: value(\.refine), feather: value(\.feather), featherOrigin: 10)
+            Text("Found on this Mac with Apple's Vision: skin by each face's own color, the eyes, brows, lips and teeth from the face's outline.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             invertToggle(component)
         }
         .onAppear { develop.findPeople() }
+    }
+
+    /// Grow, Refine Edge and Feather: the edge controls every AI selection part shares (Select
+    /// Subject, Select Object, Select People).
+    private func edgeControls(grow: Binding<Double>, refine: Binding<Double>, feather: Binding<Double>,
+                              featherOrigin: Double) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            SliderRow(label: "Grow", value: grow, range: -100...100, step: 1, origin: 0,
+                      trackHelp: "Left shrinks the selection, right grows it")
+            SliderRow(label: "Refine Edge", value: refine, range: 0...100, step: 1, origin: 0,
+                      trackHelp: "Moves the edge onto the photo's own edges, such as hair or an outline")
+            SliderRow(label: "Feather", value: feather, range: 0...100, step: 1, origin: featherOrigin)
+        }
     }
 
     private func invertToggle(_ component: DevelopSettings.MaskComponent) -> some View {

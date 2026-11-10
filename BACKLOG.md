@@ -614,3 +614,17 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 **Not in scope:** the other Swift 6 concurrency warnings (`EditIn.swift`, `ImportFlow.swift`, `NSEvent` monitors, `SettingsView` enumerator).
 
 **Acceptance:** `python3 Scripts/build_macos_app.py` builds with Xcode selected and with only the Command Line Tools selected; Develop > Frame Diagnostics still shows its overlay and slider timings.
+
+## AT-042 — Masking: Select People parts in any combination, facial features, shared Grow / Refine Edge
+
+**Status:** Merged at Rosh's ask (2026-11-10). Rosh built and ran `428bdf0` in Xcode (new parts and sliders show); the follow-up `cc2d78e` (keep faces whose skin color can't be learned) was not built. Tests not run; Rosh's acceptance open. **Owner:** Claude. **Chat:** Claude project thread "Improve people and object selection masks". **PR:** [#100](https://github.com/roshan-davis/atelier/pull/100). **Branch:** `claude/project-thread-m96qwc`. **Baseline:** `89edcd1`. **Dependencies:** AT-033 (merged).
+
+**Evidence:** Rosh (2026-11-10): Select People's Face/Body checkboxes force one or two parts, lips are left out, clothes are taken for body skin, and Feather is the only detail control; Select Object is weak. Analysis and model licenses: `reports/people-object-selection-2026-11-10.md` (project files).
+
+**Scope (step 1 of 5, Vision only, no model):** part checkboxes in any combination (two columns); new parts Eyebrows, Eye Sclera, Iris and Pupil, Lips, Teeth from Vision face landmarks; Face Skin's lip cut-out tightened (1.35× to 1.1×) so Face Skin + Lips leave no gap (`PreviewCache.version` 9); Grow and Refine Edge (CIGuidedFilter with the photo as guide) beside Feather on Select Subject, Select Object and Select People, as one shared piece. Old parts decode with the new sliders at 0. A face whose skin color can't be learned (sunglasses, scarf, small face) is no longer dropped: the skin color is learned from the whole outline, or the loose skin test is used (Rosh's first test missed a woman in sunglasses).
+
+**Next steps Rosh chose (not in this PR):** 2) Select People Hair, Clothes, Face/Body Skin from MediaPipe Multiclass Selfie Segmentation (Apache 2.0), built into the app (TFLite to Core ML conversion spike first); 3) Select Object click to add / ⌥-click to remove with SAM 2.1 Small (Apple's Core ML, Apache 2.0, 93.6 MB) as an optional download offered in the mask panel and Settings > AI; 4) Brush Auto Mask; 5) BiRefNet (MIT) Fine Edges as an optional download (no Core ML build exists; hosting for a converted file unresolved).
+
+**Acceptance:** Mac build and `PeopleSkinTests` pass. Rosh, on real portraits: untick both skin parts without the panel refusing; Lips and Teeth (open mouth) select only the mouth; Iris and Pupil and Eye Sclera on a close portrait; Face Skin + Lips has no ring around the mouth; Grow shrinks/grows, Refine Edge pulls Select Subject's edge onto hair; an old catalog's masks look the same (apart from the small lip edge change).
+
+**Validation:** source review only. If `CIGuidedFilter` is missing at run time, Refine Edge does nothing (no crash).
