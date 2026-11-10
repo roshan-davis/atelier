@@ -115,31 +115,40 @@ final class LookEmulator {
         let channels = DevelopRenderer.channelCurvesLUT(settings)
         let saturation = settings.saturation / 100
         let color = colorCube(settings)
-        var masks: [(weights: [Float], local: LocalSteps)] = []
+        var found: [(weights: [Float], local: LocalSteps)] = []
         for mask in settings.masks where Self.isEmulated(mask) && !mask.isHidden && mask.hasAdjustments {
             guard let weights = weights(of: mask, in: settings) else { continue }
-            masks.append((weights, localSteps(mask)))
+            found.append((weights, localSteps(mask)))
         }
+        let masks = found
 
         var out = [UInt8](repeating: 255, count: count * 4)
-        for i in 0..<count {
-            var c = SIMD3<Float>(stage[i * 3], stage[i * 3 + 1], stage[i * 3 + 2])
-            if gain != 1 { c = Self.encode(Self.decode(c) * gain) }
-            if let curve { c = Self.hueCurve(c, curve) }
-            if let pointCurve { c = Self.hueCurve(c, pointCurve, refine: refine) }
-            if let channels { c = Self.channelCurves(c, channels) }
-            if saturation != 0 { c = Self.encode(Self.saturate(Self.decode(c), 1 + Float(saturation))) }
-            if let color { c = Self.lookUp(c, color) }
-            // Masks blend in linear light, as Core Image's blend with mask does in the working space.
-            var linear: SIMD3<Float>?
-            for mask in masks where mask.weights[i] > 0 {
-                let before = linear ?? Self.decode(c)
-                linear = before + (mask.local.apply(before) - before) * mask.weights[i]
+        let stage = self.stage
+        // Every pixel is independent, so the rows are shared out over the cores.
+        let chunks = 16
+        out.withUnsafeMutableBufferPointer { buffer in
+            let pixels = buffer
+            DispatchQueue.concurrentPerform(iterations: chunks) { chunk in
+                for i in (count * chunk / chunks)..<(count * (chunk + 1) / chunks) {
+                    var c = SIMD3<Float>(stage[i * 3], stage[i * 3 + 1], stage[i * 3 + 2])
+                    if gain != 1 { c = Self.encode(Self.decode(c) * gain) }
+                    if let curve { c = Self.hueCurve(c, curve) }
+                    if let pointCurve { c = Self.hueCurve(c, pointCurve, refine: refine) }
+                    if let channels { c = Self.channelCurves(c, channels) }
+                    if saturation != 0 { c = Self.encode(Self.saturate(Self.decode(c), 1 + Float(saturation))) }
+                    if let color { c = Self.lookUp(c, color) }
+                    // Masks blend in linear light, as Core Image's blend with mask does in the working space.
+                    var linear: SIMD3<Float>?
+                    for mask in masks where mask.weights[i] > 0 {
+                        let before = linear ?? Self.decode(c)
+                        linear = before + (mask.local.apply(before) - before) * mask.weights[i]
+                    }
+                    if let linear { c = Self.encode(linear) }
+                    pixels[i * 4] = UInt8(max(0, min(255, (c.x * 255).rounded())))
+                    pixels[i * 4 + 1] = UInt8(max(0, min(255, (c.y * 255).rounded())))
+                    pixels[i * 4 + 2] = UInt8(max(0, min(255, (c.z * 255).rounded())))
+                }
             }
-            if let linear { c = Self.encode(linear) }
-            out[i * 4] = UInt8(max(0, min(255, (c.x * 255).rounded())))
-            out[i * 4 + 1] = UInt8(max(0, min(255, (c.y * 255).rounded())))
-            out[i * 4 + 2] = UInt8(max(0, min(255, (c.z * 255).rounded())))
         }
         return LookSample(pixels: out, width: width, height: height, area: area)
     }
