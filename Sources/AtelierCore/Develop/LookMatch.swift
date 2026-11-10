@@ -4,8 +4,10 @@ import ImageIO
 
 /// Match Look to a Reference: works out ordinary Develop settings (White Balance, Exposure, the
 /// RGB Tone Curve, Saturation and Color Grading) that give a photo the look of a reference image.
-/// Each step renders the photo through the real pipeline and corrects itself against that render,
-/// so the result reflects what the sliders actually do. See the PRD's "Match Look to a Reference".
+/// Each step measures the photo as the sliders would render it and corrects itself against that:
+/// with real renders, or in `match(session:settings:target:…)` mostly with a fast stand-in of the
+/// renderer (`LookEmulator`) checked by a real render at the end. See the PRD's "Match Look to a
+/// Reference".
 public struct LookMatch: Sendable, Equatable {
     /// The photo's settings before the match.
     public var base: DevelopSettings
@@ -504,15 +506,24 @@ public enum LookMatcher {
     }
 
     /// The whole-photo fit, step by step. `penalty` adds to the refinement's score (Protect Skin
-    /// Tones counts skin moved past its limits).
+    /// Tones counts skin moved past its limits). `afterDecode` runs once White Balance and
+    /// Exposure (the steps at RAW decode) are fitted; Match Look makes its fast stand-in there.
+    /// `refinesWhiteBalance` false keeps Temp and Tint out of the last refinement, so the
+    /// stand-in can follow every try.
     static func fitGlobal(_ current: inout DevelopSettings, asShot: Double, options: LookMatchOptions,
                           reference: LookSample, measure: (DevelopSettings) -> LookSample?,
-                          penalty: ((LookSample) -> Double)? = nil, isCancelled: () -> Bool) {
+                          penalty: ((LookSample) -> Double)? = nil,
+                          afterDecode: (DevelopSettings) -> Bool = { _ in false },
+                          isCancelled: () -> Bool) {
         if options.whiteBalance, !isCancelled() {
             fitWhiteBalance(&current, asShot: asShot, reference: reference, measure: measure)
         }
         if options.tone, !isCancelled() {
             fitExposure(&current, reference: reference, measure: measure)
+        }
+        var refineOptions = options
+        if !isCancelled(), afterDecode(current) { refineOptions.whiteBalance = false }
+        if options.tone, !isCancelled() {
             fitCurve(&current, reference: reference, measure: measure)
         }
         if options.color, !isCancelled() {
@@ -521,7 +532,7 @@ public enum LookMatcher {
             fitGrade(&current, reference: reference, measure: measure)
         }
         if !isCancelled() {
-            refine(&current, asShot: asShot, options: options, reference: reference, measure: measure,
+            refine(&current, asShot: asShot, options: refineOptions, reference: reference, measure: measure,
                    penalty: penalty, isCancelled: isCancelled)
         }
     }
