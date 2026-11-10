@@ -56,7 +56,9 @@ struct MatchDifference: Identifiable, Hashable {
         // Local adjustments follow the global sliders, as in Develop.
         for (name, label, parameters) in [
             (LookMatch.subjectMaskName, "Subject", LookMatch.subjectParameters),
-            (LookMatch.skinMaskName, "Skin", LookMatch.skinParameters)
+            (LookMatch.skinMaskName, "Skin", LookMatch.skinParameters),
+            (LookMatch.skinShadowsMaskName, "Skin Shadows", LookMatch.skinParameters),
+            (LookMatch.skinHighlightsMaskName, "Skin Highlights", LookMatch.skinParameters)
         ] {
             guard let mask = new.masks.first(where: { $0.name == name }) else { continue }
             let before = old.masks.first { $0.id == mask.id }
@@ -160,13 +162,30 @@ final class MatchLookModel: ObservableObject, Identifiable {
             options.skinMode = newValue
         }
     }
-    /// Keep the external image's area choice while a study uses Whole Photo.
+    /// Keep the external image's area choice while a study is chosen, and the studies' own.
     @Published private var externalAreaMode: MatchAreaMode = .wholePhoto
+    /// Portrait studies start on Subject & Background: their person and background are drawn,
+    /// so each is matched to its own part of the photo.
+    @Published private var studyAreaMode: MatchAreaMode = .subject
+    /// The Match Areas choices for the current reference: all three for an image, Whole Photo and
+    /// Subject & Background for a portrait study, Whole Photo alone for a wide study.
+    var areaModes: [MatchAreaMode] {
+        guard let builtInReference else { return MatchAreaMode.allCases }
+        return builtInReference.head == nil ? [.wholePhoto] : [.wholePhoto, .subject]
+    }
     var areaMode: MatchAreaMode {
-        get { builtInReference == nil ? externalAreaMode : .wholePhoto }
+        get {
+            guard builtInReference != nil else { return externalAreaMode }
+            return areaModes.contains(studyAreaMode) ? studyAreaMode : .wholePhoto
+        }
         set {
-            guard builtInReference == nil, newValue != externalAreaMode else { return }
-            externalAreaMode = newValue
+            if builtInReference != nil {
+                guard areaModes.count > 1, areaModes.contains(newValue), newValue != studyAreaMode else { return }
+                studyAreaMode = newValue
+            } else {
+                guard newValue != externalAreaMode else { return }
+                externalAreaMode = newValue
+            }
             scheduleMatch()
         }
     }
@@ -400,12 +419,15 @@ final class MatchLookModel: ObservableObject, Identifiable {
         let areas = lookAreas
         let options = self.options, base = self.base, latest = self.latest, features = self.features
         let photoFaces = self.photoFaces
-        let authoredSkinRegions = options.skinMode == .match ? builtInReference?.skinRegions : nil
+        let study = builtInReference
+        let authoredSkinTones = options.skinMode == .match ? study?.skinToneRegions : nil
         fitQueue.async {
             guard latest.current == generation else { return }
-            let needsFeatures = areas == .subject || (options.skinMode != .off && authoredSkinRegions == nil)
-            let target = LookTarget(image: referenceCG, features: needsFeatures ? features.features(for: referenceCG) : nil,
-                                    areas: areas, skinMode: options.skinMode, authoredSkinRegions: authoredSkinRegions)
+            let needsFeatures = areas == .subject || (options.skinMode != .off && authoredSkinTones == nil)
+            // A portrait study's person and face are drawn, so they are known, not looked for.
+            let found = needsFeatures ? study?.features(for: referenceCG) ?? features.features(for: referenceCG) : nil
+            let target = LookTarget(image: referenceCG, features: found, areas: areas, skinMode: options.skinMode,
+                                    authoredSkinTones: authoredSkinTones)
             let result = target.flatMap { target in
                 LookMatcher.match(session: fitSession, settings: base, target: target, options: options,
                                   photoFaces: photoFaces, isCancelled: { latest.current != generation })

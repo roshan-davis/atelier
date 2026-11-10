@@ -80,12 +80,53 @@ enum BuiltInLookReference: String, CaseIterable, Identifiable {
         }
     }
 
-    /// A swatch on the lit cheek of each portrait (0 to 1 of the drawing). Wide studies have no skin sample.
-    var skinRegions: [CGRect] {
+    /// The skin samples of each portrait, 0 to 1 of the drawing: shadows, midtones and highlights,
+    /// one inside each of the face's tone bands. Wide studies have no skin sample.
+    var skinToneRegions: [CGRect] {
         guard let head else { return [] }
-        let swatch = head.cheek(litOnRight: light.dx > 0)
-        return [CGRect(x: swatch.minX / 120, y: swatch.minY / 80,
-                       width: swatch.width / 120, height: swatch.height / 80)]
+        return head.toneSwatches(litOnRight: light.dx > 0).map(Self.unit)
+    }
+
+    /// The lit cheek's midtone sample alone.
+    var skinRegions: [CGRect] {
+        skinToneRegions.count == 3 ? [skinToneRegions[1]] : []
+    }
+
+    private static func unit(_ r: CGRect) -> CGRect {
+        CGRect(x: r.minX / 120, y: r.minY / 80, width: r.width / 120, height: r.height / 80)
+    }
+
+    /// What Subject & Background and Protect Skin Tones use from a portrait study, drawn rather
+    /// than found by Vision: the person (head, hair, neck and clothes) and the face. Nil for
+    /// wide studies.
+    func features(for image: CGImage) -> LookReferenceFeatures? {
+        guard let head, let body = bodyOutline, let mask = subjectMask(head: head, body: body) else { return nil }
+        return LookReferenceFeatures(image: image, subjectMask: mask, faces: [Self.unit(head.face)])
+    }
+
+    /// The clothes' outline in each portrait (the same points as its drawing).
+    private var bodyOutline: [(CGFloat, CGFloat)]? {
+        switch self {
+        case .matrixPortrait: return [(19, 80), (35, 64), (60, 53), (79, 55), (107, 65), (117, 80)]
+        case .thronesPortrait: return [(4, 80), (15, 67), (32, 59), (54, 57), (80, 61), (93, 80)]
+        case .furyRoadPortrait: return [(29, 80), (41, 64), (54, 59), (70, 56), (86, 60), (104, 68), (115, 80)]
+        case .darkKnightPortrait: return [(21, 80), (31, 65), (50, 57), (73, 56), (94, 64), (108, 80)]
+        default: return nil
+        }
+    }
+
+    private func subjectMask(head: StudyHead, body: [(CGFloat, CGFloat)], width: Int = 480) -> CGImage? {
+        let height = width * 2 / 3
+        let space = CGColorSpace(name: CGColorSpace.sRGB)!
+        guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8,
+                                      bytesPerRow: 0, space: space,
+                                      bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return nil }
+        context.setFillColor(CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        context.translateBy(x: 0, y: CGFloat(height))
+        context.scaleBy(x: CGFloat(width) / 120, y: -CGFloat(height) / 80)
+        StudyCanvas(context: context, light: light).silhouette(head, body: body)
+        return context.makeImage()
     }
 
     func image(width: Int = 960) -> CGImage? {
@@ -209,13 +250,24 @@ private struct StudyCanvas {
     // MARK: Paths and light
 
     /// A shape through the points in four flat tones.
-    func form(_ color: SIMD3<Double>, _ points: [Point], rounded: Bool = true) {
+    func form(_ color: SIMD3<Double>, _ points: [Point], rounded: Bool = true, bands: ToneBands = .standard) {
         let outline = Self.pushed(points)
         if rounded {
-            paint(smooth(points), outline: smooth(outline), color)
+            paint(smooth(points), outline: smooth(outline), color, bands: bands)
         } else {
-            paint(straight(points), outline: straight(outline), color)
+            paint(straight(points), outline: straight(outline), color, bands: bands)
         }
+    }
+
+    /// How wide the tone bands are, as fractions of how far a shape is moved to cut them: the
+    /// highlight rim toward the light, the shadow and dark crescents away from it.
+    struct ToneBands {
+        var highlight: CGFloat
+        var shadow: CGFloat
+        var dark: CGFloat
+        static let standard = ToneBands(highlight: 0.18, shadow: 0.38, dark: 0.14)
+        /// Skin: wider highlight and shadow, so each tone is a clear area to sample and match.
+        static let skin = ToneBands(highlight: 0.3, shadow: 0.42, dark: 0.12)
     }
 
     /// Fills `path` with its highlight, then lays the midtone where a copy of the shape moved
@@ -223,7 +275,7 @@ private struct StudyCanvas {
     /// shadow and dark bands where copies moved toward the light no longer cover it (crescents
     /// on the shaded side). `outline` is the same shape with its canvas-edge points pushed off
     /// the canvas, so moving it never opens a gap along the frame.
-    private func paint(_ path: CGPath, outline: CGPath, _ color: SIMD3<Double>) {
+    func paint(_ path: CGPath, outline: CGPath, _ color: SIMD3<Double>, bands: ToneBands = .standard) {
         let tone = tones(color)
         let box = path.boundingBoxOfPath
         let reach = abs(light.dx) * min(12, box.width) + abs(light.dy) * min(12, box.height)
@@ -235,8 +287,8 @@ private struct StudyCanvas {
         context.addPath(path)
         context.clip()
         fill(tone.highlight, path)
-        fill(tone.midtone, moved(-0.18))
-        for (color, k) in [(tone.shadow, CGFloat(0.38)), (tone.dark, 0.14)] {
+        fill(tone.midtone, moved(-bands.highlight))
+        for (color, k) in [(tone.shadow, bands.shadow), (tone.dark, bands.dark)] {
             let crescent = CGMutablePath()
             crescent.addRect(CGRect(x: -1000, y: -1000, width: 2000, height: 2000))
             crescent.addPath(moved(k))
@@ -503,154 +555,98 @@ struct StudyHead {
     var hairLength: CGFloat
     var size: CGFloat = 1.25
 
-    /// Half the face's width and height.
-    var halfWidth: CGFloat { 12 * size }
-    var halfHeight: CGFloat { 17 * size }
+    typealias Point = (CGFloat, CGFloat)
 
-    /// A point in face space (u: -1 left to 1 right, v: -1 top to 1 chin). Features shift a
-    /// little toward the light, as if the head is turned slightly toward it.
-    func point(_ u: CGFloat, _ v: CGFloat, litOnRight: Bool) -> CGPoint {
-        let turn: CGFloat = litOnRight ? 0.12 : -0.12
-        return CGPoint(x: x + u * halfWidth + turn * halfWidth * (1 - abs(u)) * 0.6, y: y + v * halfHeight)
+    /// Half the face's width and height.
+    var halfWidth: CGFloat { 10.2 * size }
+    var halfHeight: CGFloat { 14.45 * size }
+
+    /// The oval face.
+    var face: CGRect {
+        CGRect(x: x - halfWidth, y: y - halfHeight, width: 2 * halfWidth, height: 2 * halfHeight)
     }
 
-    /// The lit cheek between the cheekbone's highlight and the mouth, in the skin's plain
-    /// midtone: the authored skin sample.
-    func cheek(litOnRight: Bool) -> CGRect {
-        let center = point(litOnRight ? 0.55 : -0.55, 0.38, litOnRight: litOnRight)
-        let w = halfWidth * 0.24, h = halfHeight * 0.14
-        return CGRect(x: center.x - w / 2, y: center.y - h / 2, width: w, height: h)
+    var neck: [Point] {
+        let w = halfWidth, h = halfHeight
+        return [(x - 0.4 * w, y + 0.5 * h), (x + 0.4 * w, y + 0.5 * h), (x + 0.45 * w, y + 1.05 * h),
+                (x + 0.62 * w, y + 1.3 * h), (x - 0.62 * w, y + 1.3 * h), (x - 0.45 * w, y + 1.05 * h)]
+    }
+
+    /// Hair behind the head: a rounded crown, falling past the jaw and tapering to the shoulders.
+    var hairBehind: [Point] {
+        let w = halfWidth, h = halfHeight, length = hairLength
+        return [(x - 1.12 * w, y - 0.3 * h), (x - 0.9 * w, y - 0.95 * h), (x, y - 1.2 * h), (x + 0.9 * w, y - 0.95 * h),
+                (x + 1.12 * w, y - 0.3 * h), (x + 1.1 * w, y + (0.15 + length * 0.6) * h),
+                (x + 0.95 * w, y + (0.25 + length) * h), (x + 0.6 * w, y + (0.15 + length * 0.8) * h),
+                (x - 0.6 * w, y + (0.15 + length * 0.8) * h), (x - 0.95 * w, y + (0.25 + length) * h),
+                (x - 1.1 * w, y + (0.15 + length * 0.6) * h)]
+    }
+
+    /// Hair over the forehead.
+    var fringe: [Point] {
+        let w = halfWidth, h = halfHeight
+        return [(x - 1.05 * w, y - 0.2 * h), (x - 0.98 * w, y - 0.85 * h), (x - 0.3 * w, y - 1.18 * h),
+                (x + 0.5 * w, y - 1.15 * h), (x + 1.02 * w, y - 0.8 * h), (x + 1.08 * w, y - 0.25 * h),
+                (x + 0.9 * w, y - 0.6 * h), (x + 0.3 * w, y - 0.75 * h), (x - 0.35 * w, y - 0.7 * h),
+                (x - 0.88 * w, y - 0.5 * h)]
+    }
+
+    /// The face's skin samples, one inside each tone band, clear of eyes, nose, mouth and hair:
+    /// shadows (the far cheek), midtones (the lit cheek) and highlights (the lit temple).
+    func toneSwatches(litOnRight: Bool) -> [CGRect] {
+        let side: CGFloat = litOnRight ? 1 : -1
+        let w = halfWidth * 0.2, h = halfHeight * 0.12
+        let spots: [Point] = [(-0.55, 0.45), (0.5, 0.3), (0.7, -0.45)]
+        return spots.map { spot in
+            CGRect(x: x + side * spot.0 * halfWidth - w / 2, y: y + spot.1 * halfHeight - h / 2, width: w, height: h)
+        }
     }
 }
 
 extension StudyCanvas {
-    /// A portrait head in flat tones: the face's midtone, a shadow side whose edge follows the
-    /// brow, cheek and jaw, a dark band at the far edge, highlight planes on the lit forehead,
-    /// cheekbone, nose bridge and chin, then sockets, eyes, brows, the nose's shadow plane, lips
-    /// in four tones and hair.
+    /// A simple portrait head, every part in flat tones like the rest of the study: hair behind,
+    /// a neck with the jaw's shadow, an oval face with wide highlight, midtone, shadow and dark
+    /// bands, small dark marks for eyes, brows, nose and mouth, and hair over the forehead.
     func head(_ head: StudyHead) {
         let right = light.dx > 0
-        let side: CGFloat = right ? 1 : -1, away = -side
+        let side: CGFloat = right ? 1 : -1
         let x = head.x, y = head.y, w = head.halfWidth, h = head.halfHeight
-        func f(_ u: CGFloat, _ v: CGFloat) -> Point {
-            let p = head.point(u, v, litOnRight: right)
-            return (p.x, p.y)
-        }
-        func region(_ color: SIMD3<Double>, _ points: [Point], within clip: CGPath? = nil, rounded: Bool = true) {
-            context.saveGState()
-            if let clip {
-                context.addPath(clip)
-                context.clip()
-            }
-            fill(color, rounded ? smooth(points) : straight(points))
-            context.restoreGState()
-        }
         let skin = tones(Self.rgb(head.skin))
-        let white = SIMD3<Double>(1, 1, 1)
 
-        // Neck: midtone, the side away from the light in shadow, the jaw's dark shadow across the top.
-        let neck = smooth([(x - 0.42 * w, y + 0.55 * h), (x + 0.42 * w, y + 0.55 * h), (x + 0.48 * w, y + 1.05 * h),
-                           (x + 0.6 * w, y + 1.25 * h), (x - 0.6 * w, y + 1.25 * h), (x - 0.48 * w, y + 1.05 * h)])
-        fill(skin.midtone, neck)
-        region(skin.shadow, [(x - side * 0.7 * w, y + 0.5 * h), (x + side * 0.1 * w, y + 0.5 * h),
-                             (x + side * 0.05 * w, y + 0.85 * h), (x - side * 0.2 * w, y + 1.3 * h),
-                             (x - side * 0.7 * w, y + 1.3 * h)], within: neck, rounded: false)
-        region(skin.dark, [(x - 0.7 * w, y + 0.5 * h), (x + 0.7 * w, y + 0.5 * h), (x + 0.5 * w, y + 0.78 * h),
-                           (x, y + 0.86 * h), (x - 0.5 * w, y + 0.78 * h)], within: neck)
+        form(Self.rgb(head.hair), head.hairBehind)
+        form(Self.rgb(head.skin), head.neck, bands: .skin)
+        fill(skin.dark, CGPath(ellipseIn: CGRect(x: x - 0.55 * w, y: y + 0.52 * h, width: 1.1 * w, height: 0.4 * h),
+                               transform: nil))
+        let face = CGPath(ellipseIn: head.face, transform: nil)
+        paint(face, outline: face, Self.rgb(head.skin), bands: .skin)
 
-        // Hair behind the head: a rounded crown, falling past the jaw and tapering to the shoulders.
-        let length = head.hairLength
-        form(Self.rgb(head.hair), [(x - 1.1 * w, y - 0.35 * h), (x - 0.92 * w, y - 0.95 * h), (x, y - 1.18 * h),
-                                   (x + 0.92 * w, y - 0.95 * h), (x + 1.1 * w, y - 0.35 * h),
-                                   (x + 1.12 * w, y + (0.1 + length * 0.6) * h), (x + 0.98 * w, y + (0.2 + length) * h),
-                                   (x + 0.62 * w, y + (0.1 + length * 0.8) * h), (x - 0.62 * w, y + (0.1 + length * 0.8) * h),
-                                   (x - 0.98 * w, y + (0.2 + length) * h), (x - 1.12 * w, y + (0.1 + length * 0.6) * h)])
-
-        // Ears: midtone on the lit side, shadow on the other.
+        let iris = Self.rgb(head.iris), brow = Self.mix(Self.rgb(head.hair), .zero, 0.3)
         for s: CGFloat in [-1, 1] {
-            let ex = x + s * 0.98 * w
-            region(s == side ? skin.midtone : skin.shadow,
-                   [(ex - 0.16 * w, y - 0.3 * h), (ex + 0.16 * w, y - 0.25 * h), (ex + 0.12 * w, y + 0.1 * h),
-                    (ex - 0.1 * w, y + 0.12 * h)])
+            let ex = x + s * 0.4 * w + side * 0.05 * w, ey = y - 0.12 * h
+            fill(iris, CGPath(ellipseIn: CGRect(x: ex - 0.17 * w, y: ey - 0.05 * h, width: 0.34 * w, height: 0.1 * h),
+                              transform: nil))
+            fill(brow, straight([(ex - 0.24 * w, ey - 0.14 * h), (ex + 0.24 * w, ey - 0.17 * h),
+                                 (ex + 0.26 * w, ey - 0.13 * h), (ex - 0.22 * w, ey - 0.1 * h)]))
         }
-
-        // The face in midtone, its shadow side, the dark band at the far edge, the lit planes.
-        let face = smooth([f(0, -1), f(0.62, -0.9), f(0.95, -0.5), f(1, -0.05), f(0.9, 0.38), f(0.62, 0.72),
-                           f(0.3, 0.93), f(0, 0.98), f(-0.3, 0.93), f(-0.62, 0.72), f(-0.9, 0.38), f(-1, -0.05),
-                           f(-0.95, -0.5), f(-0.62, -0.9)])
-        fill(skin.midtone, face)
-        region(skin.shadow, [f(away * 0.2, -1.2), f(away * 0.3, -0.55), f(away * 0.22, -0.2), f(away * 0.42, 0.1),
-                             f(away * 0.3, 0.55), f(away * 0.05, 0.75), f(side * 0.15, 1.2), f(away * 1.4, 1.2),
-                             f(away * 1.4, -1.2)], within: face)
-        region(skin.dark, [f(away * 0.75, -1.2), f(away * 0.82, -0.3), f(away * 0.72, 0.35), f(away * 0.4, 0.85),
-                           f(away * 0.1, 1.2), f(away * 1.4, 1.2), f(away * 1.4, -1.2)], within: face)
-        region(skin.highlight, [f(0, -0.82), f(side * 0.35, -0.86), f(side * 0.55, -0.68), f(side * 0.35, -0.56),
-                                f(side * 0.05, -0.6)], within: face)
-        region(skin.highlight, [f(side * 0.38, 0.04), f(side * 0.7, -0.02), f(side * 0.74, 0.12), f(side * 0.5, 0.2)],
-               within: face)
-        region(skin.highlight, [f(side * 0.03, -0.3), f(side * 0.1, -0.3), f(side * 0.12, 0.22), f(side * 0.04, 0.24)],
-               within: face, rounded: false)
-        region(skin.highlight, [f(side * -0.05, 0.8), f(side * 0.15, 0.78), f(side * 0.12, 0.88), f(side * -0.03, 0.9)],
-               within: face)
-
-        // Eye sockets: shadow on the lit side, dark on the other.
-        for s: CGFloat in [-1, 1] {
-            let (ex, ey) = f(s * 0.42, -0.12)
-            region(s == side ? skin.shadow : skin.dark,
-                   [(ex - 0.32 * w, ey), (ex - 0.1 * w, ey - 0.13 * h), (ex + 0.25 * w, ey - 0.12 * h),
-                    (ex + 0.34 * w, ey + 0.02 * h), (ex + 0.05 * w, ey + 0.1 * h), (ex - 0.22 * w, ey + 0.08 * h)],
-                   within: face)
-        }
-
-        // Eyes (a light eye white on the lit side, shaded on the other), iris, catchlight and brows.
-        let turn = (right ? 0.12 : -0.12) * w
-        let glint = Self.mix(Self.rgb(light.glow), white, 0.7)
-        let brow = Self.mix(Self.rgb(head.hair), .zero, 0.3)
-        for s: CGFloat in [-1, 1] {
-            let (ex, ey) = f(s * 0.42, -0.1)
-            let ew = 0.24 * w, eh = 0.055 * h
-            let eye = smooth([(ex - ew, ey), (ex - ew * 0.3, ey - eh), (ex + ew * 0.4, ey - eh * 0.9), (ex + ew, ey),
-                              (ex + ew * 0.3, ey + eh * 0.8), (ex - ew * 0.4, ey + eh * 0.7)])
-            fill(s == side ? Self.mix(skin.midtone, white, 0.3) : skin.shadow, eye)
-            let cx = ex + turn * 0.3, cy = ey - 0.005 * h
-            region(Self.rgb(head.iris), [(cx - 0.1 * w, cy), (cx, cy - 0.07 * h), (cx + 0.1 * w, cy), (cx, cy + 0.07 * h)],
-                   within: eye)
-            if s == side {
-                region(glint, [(cx + 0.03 * w, cy - 0.035 * h), (cx + 0.07 * w, cy - 0.035 * h),
-                               (cx + 0.07 * w, cy - 0.005 * h), (cx + 0.03 * w, cy - 0.005 * h)], rounded: false)
-            }
-            let (bx, by) = f(s * 0.44, -0.33)
-            region(brow, [(bx - s * 0.36 * w, by + 0.03 * h), (bx - s * 0.1 * w, by - 0.06 * h),
-                          (bx + s * 0.3 * w, by - 0.04 * h), (bx + s * 0.38 * w, by + 0.02 * h),
-                          (bx + s * 0.1 * w, by), (bx - s * 0.25 * w, by + 0.06 * h)])
-        }
-
-        // Nose: its shadow plane and the dark under it.
-        let (nx, ny) = f(0, 0.18)
-        region(skin.shadow, [(nx - side * 0.02 * w, ny - 0.42 * h), (nx - side * 0.06 * w, ny - 0.42 * h),
-                             (nx - side * 0.24 * w, ny + 0.02 * h), (nx - side * 0.04 * w, ny + 0.05 * h)],
-               within: face, rounded: false)
-        region(skin.dark, [(nx - 0.2 * w, ny + 0.06 * h), (nx - 0.05 * w, ny + 0.01 * h), (nx + 0.05 * w, ny + 0.01 * h),
-                           (nx + 0.2 * w, ny + 0.06 * h), (nx, ny + 0.11 * h)], within: face)
-
-        // Mouth: upper lip in shadow, lower lip midtone with a highlight, the dark line between,
-        // and the shadow under the lower lip.
-        let (mx, my) = f(0, 0.5)
+        let nx = x + side * 0.06 * w
+        fill(skin.shadow, straight([(nx, y - 0.05 * h), (nx - side * 0.12 * w, y + 0.22 * h), (nx + side * 0.06 * w, y + 0.24 * h)]))
         let lips = tones(Self.rgb(head.lips))
-        region(lips.shadow, [(mx - 0.34 * w, my), (mx - 0.12 * w, my - 0.08 * h), (mx, my - 0.05 * h),
-                             (mx + 0.12 * w, my - 0.08 * h), (mx + 0.34 * w, my), (mx, my + 0.01 * h)])
-        region(lips.midtone, [(mx - 0.3 * w, my + 0.005 * h), (mx, my + 0.02 * h), (mx + 0.3 * w, my + 0.005 * h),
-                              (mx + 0.14 * w, my + 0.1 * h), (mx - 0.14 * w, my + 0.1 * h)])
-        region(lips.highlight, [(mx + side * 0.02 * w, my + 0.04 * h), (mx + side * 0.14 * w, my + 0.035 * h),
-                                (mx + side * 0.1 * w, my + 0.07 * h)])
-        region(lips.dark, [(mx - 0.33 * w, my), (mx, my + 0.012 * h), (mx + 0.33 * w, my), (mx, my + 0.025 * h)])
-        region(skin.shadow, [(mx - 0.16 * w, my + 0.14 * h), (mx + 0.16 * w, my + 0.14 * h), (mx, my + 0.2 * h)],
-               within: face)
+        let mx = x + side * 0.04 * w, my = y + 0.48 * h
+        fill(lips.midtone, CGPath(ellipseIn: CGRect(x: mx - 0.26 * w, y: my - 0.06 * h, width: 0.52 * w, height: 0.12 * h),
+                                  transform: nil))
+        fill(lips.dark, CGPath(rect: CGRect(x: mx - 0.28 * w, y: my - 0.005 * h, width: 0.56 * w, height: 0.015 * h),
+                               transform: nil))
 
-        // Hair over the forehead.
-        form(Self.rgb(head.hair), [(x - 1.05 * w, y - 0.25 * h), (x - 0.98 * w, y - 0.85 * h), (x - 0.3 * w, y - 1.15 * h),
-                                   (x + 0.5 * w, y - 1.12 * h), (x + 1.02 * w, y - 0.8 * h), (x + 1.08 * w, y - 0.3 * h),
-                                   (x + 0.9 * w, y - 0.62 * h), (x + 0.3 * w, y - 0.78 * h), (x - 0.35 * w, y - 0.72 * h),
-                                   (x - 0.88 * w, y - 0.55 * h)])
+        form(Self.rgb(head.hair), head.fringe)
+    }
+
+    /// The person, white on black: hair, neck, face and the clothes' outline.
+    func silhouette(_ head: StudyHead, body: [Point]) {
+        let white = SIMD3<Double>(1, 1, 1)
+        fill(white, smooth(head.hairBehind))
+        fill(white, smooth(head.neck))
+        fill(white, CGPath(ellipseIn: head.face, transform: nil))
+        fill(white, smooth(head.fringe))
+        fill(white, smooth(body))
     }
 }

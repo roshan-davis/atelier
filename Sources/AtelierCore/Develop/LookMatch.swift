@@ -36,16 +36,18 @@ public struct LookMatch: Sendable, Equatable {
     public func settings(strength: Double) -> DevelopSettings {
         var settings = applied(to: base, strength: strength)
         let s = min(1, max(0, strength))
-        guard s > 0, var mask = skinMask else { return settings }
-        let index = settings.masks.firstIndex { $0.id == mask.id }
-        for parameter in Self.skinParameters {
-            let from = index.map { settings.masks[$0][parameter] } ?? 0
-            if s < 1 { mask[parameter] = (from + (mask[parameter] - from) * s).rounded() }
-        }
-        if let index {
-            settings.masks[index] = mask
-        } else if mask.hasAdjustments {
-            settings.masks.append(mask)
+        guard s > 0 else { return settings }
+        for var mask in skinMasks {
+            let index = settings.masks.firstIndex { $0.id == mask.id }
+            for parameter in Self.skinParameters {
+                let from = index.map { settings.masks[$0][parameter] } ?? 0
+                if s < 1 { mask[parameter] = (from + (mask[parameter] - from) * s).rounded() }
+            }
+            if let index {
+                settings.masks[index] = mask
+            } else if mask.hasAdjustments {
+                settings.masks.append(mask)
+            }
         }
         return settings
     }
@@ -116,10 +118,19 @@ public struct LookMatch: Sendable, Equatable {
     public static let subjectParameters: [DevelopSettings.LocalParameter] = [.temperature, .tint, .exposure, .saturation]
 
     public static let skinMaskName = "Match Look: Skin"
+    /// Match Skin Tone's masks for the skin's darkest and brightest thirds (faces and a Luminance Range).
+    public static let skinShadowsMaskName = "Match Look: Skin Shadows"
+    public static let skinHighlightsMaskName = "Match Look: Skin Highlights"
+    static let skinMaskNames: Set<String> = [skinMaskName, skinShadowsMaskName, skinHighlightsMaskName]
     public static let skinParameters: [DevelopSettings.LocalParameter] = [.temperature, .tint, .saturation]
 
     public var skinMask: DevelopSettings.Mask? {
         matched.masks.first { $0.name == Self.skinMaskName && !base.masks.contains($0) }
+    }
+
+    /// Every mask Match Skin Tone adds or changes: midtones (`skinMask`), shadows and highlights.
+    public var skinMasks: [DevelopSettings.Mask] {
+        matched.masks.filter { Self.skinMaskNames.contains($0.name) && !base.masks.contains($0) }
     }
 
     /// The "Match Look: Subject" mask the match adds, if it adds one.

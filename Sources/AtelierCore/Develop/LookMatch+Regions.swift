@@ -42,6 +42,9 @@ public struct LookSkin: Sendable {
     /// Skin's Oklab hue (degrees) and mean chroma before the match.
     let hue: Double
     let chroma: Double
+    /// The mean Oklab a/b of the skin's shadows, midtones and highlights: drawn regions for a
+    /// built-in study, otherwise the darkest, middle and brightest thirds of its pixels.
+    let toneColors: [SIMD2<Double>]
 
     /// Faces Vision finds, 0 to 1 from the top left.
     public static func faces(in image: CGImage) -> [CGRect] {
@@ -88,10 +91,55 @@ public struct LookSkin: Sendable {
         }
         let used = kept.count >= 12 ? kept : picked
         guard let measured = Self.hueAndChroma(sample, used) else { return nil }
-        pixels = Array(Set(used)).sorted()
+        let skin = Array(Set(used)).sorted()
+        pixels = skin
         self.faces = usableFaces
         hue = measured.hue
         chroma = measured.chroma
+        toneColors = Self.toneSplit(sample, skin).groups.compactMap { Self.meanAB(sample, $0) }
+    }
+
+    /// A built-in study's skin, drawn in flat tones: one region per tone (shadows, midtones,
+    /// highlights, 0 to 1 from the top left), every pixel in each taken as skin. The overall hue
+    /// and chroma are the midtone's. Nil unless all three regions hold pixels.
+    init?(sample: LookSample, toneRegions: [CGRect]) {
+        guard toneRegions.count == 3, sample.width > 0, sample.height > 0 else { return nil }
+        let groups = toneRegions.map { Self.pixels(in: $0, of: sample) }
+        guard groups.allSatisfy({ $0.count >= 4 }), let mid = Self.hueAndChroma(sample, groups[1]) else { return nil }
+        pixels = Array(Set(groups.joined())).sorted()
+        faces = toneRegions
+        hue = mid.hue
+        chroma = mid.chroma
+        toneColors = groups.compactMap { Self.meanAB(sample, $0) }
+    }
+
+    static func pixels(in region: CGRect, of sample: LookSample) -> [Int] {
+        let x0 = max(0, Int((region.minX * CGFloat(sample.width)).rounded()))
+        let x1 = min(sample.width, Int((region.maxX * CGFloat(sample.width)).rounded()))
+        let y0 = max(0, Int((region.minY * CGFloat(sample.height)).rounded()))
+        let y1 = min(sample.height, Int((region.maxY * CGFloat(sample.height)).rounded()))
+        guard x1 > x0, y1 > y0 else { return [] }
+        return (y0..<y1).flatMap { y in (x0..<x1).map { y * sample.width + $0 } }
+    }
+
+    /// The pixels split into their darkest, middle and brightest thirds by brightness (luma),
+    /// with the two brightness levels between them (0 to 1).
+    static func toneSplit(_ sample: LookSample, _ pixels: [Int]) -> (groups: [[Int]], cuts: (Double, Double)) {
+        let sorted = pixels.filter { $0 < sample.count }.sorted { sample.luma[$0] < sample.luma[$1] }
+        guard sorted.count >= 3 else { return ([], (1.0 / 3, 2.0 / 3)) }
+        let first = sorted.count / 3, second = sorted.count * 2 / 3
+        let groups = [Array(sorted[..<first]), Array(sorted[first..<second]), Array(sorted[second...])]
+        return (groups, (Double(sample.luma[sorted[first]]), Double(sample.luma[sorted[second]])))
+    }
+
+    /// Mean Oklab a/b of the pixels.
+    static func meanAB(_ sample: LookSample, _ pixels: [Int]) -> SIMD2<Double>? {
+        var sum = SIMD2<Double>(0, 0), n = 0.0
+        for i in pixels where i < sample.count {
+            sum += SIMD2(Double(sample.a[i]), Double(sample.b[i]))
+            n += 1
+        }
+        return n > 0 ? sum / n : nil
     }
 
     static func looksLikeSkin(_ sample: LookSample, _ i: Int) -> Bool {
@@ -156,6 +204,15 @@ public struct LookReferenceFeatures: Sendable {
         faces = LookSkin.faces(in: image)
     }
 
+    /// Features that are known rather than found, as for a built-in study: its drawn person as
+    /// the subject mask (white is the subject) and its face boxes (0 to 1 from the top left).
+    public init(image: CGImage, subjectMask: CGImage, faces: [CGRect]) {
+        let size = LookSample.sampleSize(of: image)
+        subject = LookSample.focusValues(subjectMask, width: size.width, height: size.height)
+            .flatMap { LookMatcher.isUsableSubject($0) ? $0 : nil }
+        self.faces = faces
+    }
+
     public var hasSubject: Bool { subject != nil }
     public var hasFaces: Bool { !faces.isEmpty }
 }
@@ -171,14 +228,19 @@ public struct LookTarget: Sendable {
     let notices: Set<LookMatchNotice>
     let skin: LookSkin?
 
+    /// `authoredSkinTones` are a built-in study's drawn skin samples (shadows, midtones,
+    /// highlights); `authoredSkinRegions` drawn samples of a single tone.
     public init?(image: CGImage, features: LookReferenceFeatures? = nil, areas: LookAreas,
-                 skinMode: LookSkinMode = .off, authoredSkinRegions: [CGRect]? = nil) {
+                 skinMode: LookSkinMode = .off, authoredSkinRegions: [CGRect]? = nil,
+                 authoredSkinTones: [CGRect]? = nil) {
         guard var plain = LookSample(image: image) else { return nil }
         self.areas = areas
         var notices: Set<LookMatchNotice> = []
         let features = features ?? (areas == .subject ? LookReferenceFeatures(image: image) : nil)
         if skinMode == .off {
             skin = nil
+        } else if let authoredSkinTones {
+            skin = LookSkin(sample: plain, toneRegions: authoredSkinTones)
         } else if let authoredSkinRegions {
             skin = LookSkin(sample: plain, faces: authoredSkinRegions, authored: true)
         } else {

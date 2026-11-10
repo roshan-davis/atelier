@@ -2,38 +2,84 @@ import CoreGraphics
 import Foundation
 
 extension LookMatcher {
-    /// Fit ordinary mask color sliders on the rendered face pixels. Score hue and chroma
-    /// together in the Oklab color plane, with lightness left to the ordinary Tone fit.
+    /// Match Skin Tone: fit ordinary mask color sliders (Temp, Tint, Saturation) on the rendered
+    /// face pixels, tone by tone. The "Match Look: Skin" mask covers the faces and takes the
+    /// photo's skin midtones to the reference's; "Match Look: Skin Shadows" and "Match Look: Skin
+    /// Highlights" add a Luminance Range to the same faces and take the darkest and brightest
+    /// thirds of the skin to the reference's skin shadows and highlights. Color is scored in the
+    /// Oklab color plane; lightness is left to the ordinary Tone fit. False when no tone came closer.
     static func fitSkin(_ skin: LookSkin, to reference: LookSkin, in settings: inout DevelopSettings,
                         space: MaskSpace, measure: (DevelopSettings) -> LookSample?,
                         isCancelled: () -> Bool) -> Bool {
-        let target = colorVector(hue: reference.hue, chroma: reference.chroma)
+        let faces = skin.faces.map { face -> DevelopSettings.MaskComponent in
+            let center = CGPoint(x: face.midX * space.rect.width, y: (face.midY + 0.04 * face.height) * space.rect.height)
+            let gradient = space.radial(center: center, width: face.width * space.rect.width * 0.48,
+                                        height: face.height * space.rect.height * 0.48, feather: 45)
+            return DevelopSettings.MaskComponent(.radial(gradient))
+        }
+        guard reference.toneColors.count == 3, let start = measure(settings) else {
+            // Without tones: one mask, the skin's mean color to the reference's.
+            return fitMaskColor(LookMatch.skinMaskName, components: faces,
+                                target: colorVector(hue: reference.hue, chroma: reference.chroma),
+                                in: &settings, measure: measure, isCancelled: isCancelled) { sample in
+                LookSkin.hueAndChroma(sample, skin.pixels).map { colorVector(hue: $0.hue, chroma: $0.chroma) }
+            }
+        }
+        // The photo's skin split into thirds by brightness after the global fit, which is what
+        // the masks' Luminance Range sees.
+        let split = LookSkin.toneSplit(start, skin.pixels)
+        guard split.groups.count == 3 else { return false }
+        let (low, high) = (split.cuts.0 * 100, split.cuts.1 * 100)
+        let soft = 30.0
+        func range(_ low: Double, _ high: Double) -> DevelopSettings.MaskComponent {
+            DevelopSettings.MaskComponent(.luminance(DevelopSettings.LuminanceRange(low: low, high: high, smoothness: soft)),
+                                          mode: .intersect)
+        }
+        // Indexed by tone: shadows, midtones, highlights. Midtones go first: the whole-face mask
+        // moves every tone, and the other two correct the ends.
+        let masks: [(String, [DevelopSettings.MaskComponent])] = [
+            (LookMatch.skinShadowsMaskName, faces + [range(0, low)]),
+            (LookMatch.skinMaskName, faces),
+            (LookMatch.skinHighlightsMaskName, faces + [range(high, 100)])
+        ]
+        var matched = false
+        for tone in [1, 0, 2] where !isCancelled() {
+            let pixels = split.groups[tone]
+            if fitMaskColor(masks[tone].0, components: masks[tone].1, target: reference.toneColors[tone],
+                            in: &settings, measure: measure, isCancelled: isCancelled,
+                            color: { LookSkin.meanAB($0, pixels) }) {
+                matched = true
+            }
+        }
+        return matched
+    }
+
+    /// Adds (or reuses) the mask `name` made of `components` and fits its Temp, Tint and
+    /// Saturation so `color` of the render comes to `target`. Temp and Tint are solved together
+    /// because their color directions overlap, then Saturation refines it; each step is kept only
+    /// when it brings the color closer. A mask that moved nothing isn't added. True when the color
+    /// was already close or came closer.
+    private static func fitMaskColor(_ name: String, components: [DevelopSettings.MaskComponent],
+                                     target: SIMD2<Double>, in settings: inout DevelopSettings,
+                                     measure: (DevelopSettings) -> LookSample?, isCancelled: () -> Bool,
+                                     color colorOf: (LookSample) -> SIMD2<Double>?) -> Bool {
         func color(_ candidate: DevelopSettings) -> SIMD2<Double>? {
-            guard !isCancelled(), let sample = measure(candidate),
-                  let measured = LookSkin.hueAndChroma(sample, skin.pixels) else { return nil }
-            return colorVector(hue: measured.hue, chroma: measured.chroma)
+            guard !isCancelled(), let sample = measure(candidate) else { return nil }
+            return colorOf(sample)
         }
         guard var measured = color(settings) else { return false }
         let tolerance = 0.002
         var error = target - measured
         if (error * error).sum() < tolerance * tolerance { return true }
 
-        let existing = settings.masks.firstIndex { $0.name == LookMatch.skinMaskName }
+        let existing = settings.masks.firstIndex { $0.name == name }
         let index = existing ?? settings.masks.count
         var best = settings
         if existing == nil {
-            let components = skin.faces.map { face in
-                let center = CGPoint(x: face.midX * space.rect.width, y: (face.midY + 0.04 * face.height) * space.rect.height)
-                let gradient = space.radial(center: center, width: face.width * space.rect.width * 0.48,
-                                            height: face.height * space.rect.height * 0.48, feather: 45)
-                return DevelopSettings.MaskComponent(.radial(gradient))
-            }
-            best.masks.append(.init(name: LookMatch.skinMaskName, components: components))
+            best.masks.append(.init(name: name, components: components))
         }
 
         var improved = false
-        // Measure the response to each slider on this image. Solve for Temp and Tint
-        // together because their color directions overlap, then let Saturation refine it.
         for _ in 0..<3 {
             func slope(_ parameter: DevelopSettings.LocalParameter) -> SIMD2<Double> {
                 var trial = best

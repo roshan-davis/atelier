@@ -48,7 +48,7 @@
   </div>
   <figcaption>The built-in gallery opens from the reference buttons.</figcaption>
 </figure>
-<p>The fit uses <b>Whole Photo</b> for every study, including those with region labels. The four portrait studies have cheek samples for <b>Match Skin Tone</b>. For a face match, pick a portrait study or a photo that shows usable face skin. When you choose a file or catalog photo again, Atelier restores your previous Match Areas choice and any boxes.</p>
+<p>Wide studies use <b>Whole Photo</b>. Portrait studies start on <b>Subject &amp; Background</b>: the study's background is matched to your photo's background and its drawn person to your subject. Choose <b>Whole Photo</b> in <b>Match Areas</b> to match everything at once. Each portrait study has three skin samples, in the face's shadow, midtone and highlight, for <b>Match Skin Tone</b>. For a face match, pick a portrait study or a photo that shows usable face skin. When you choose a file or catalog photo again, Atelier restores your previous Match Areas choice and any boxes.</p>
 <figure>
   <div class="trio">
     <figure><div class="pic"><img src="images/match-built-in-reference.jpg" alt="An illustrated winter landscape in slate blue and pale snow"><span class="tag">Winter Landscape study</span></div></figure>
@@ -102,8 +102,8 @@
 <p>If the photo has no usable face skin, the dialog tells you.</p>
 
 <h3 id="match-skin">Match Skin Tone</h3>
-<p>Choose <b>Match Skin Tone</b> to bring the hue and saturation of faces toward the reference. Atelier fits the face color with a feathered <b>Match Look: Skin</b> mask. You can use it by itself by clearing White Balance, Tone and Color. Keep Tone selected if you also want the ordinary brightness match. If either image lacks usable face skin, the dialog names that image and you can still apply the other selected adjustments. With several photos selected and usable skin in the reference, Atelier can still match faces in the rest of the selection.</p>
-<p>Use <b>Show Differences</b> to see the skin sliders at the current <b>Strength</b>. After <b>Apply</b>, open <b>Masking</b> (⇧W) and choose <b>Match Look: Skin</b> to edit Temp, Tint and Saturation or refine the feathered shapes. The adjustment is fitted on faces and can feather into nearby features.</p>
+<p>Choose <b>Match Skin Tone</b> to bring the color of faces toward the reference, tone by tone: skin in light, in midtone and in shade each takes the reference's color for that tone. Atelier uses three masks over the faces: <b>Match Look: Skin</b> for the midtones, and <b>Match Look: Skin Shadows</b> and <b>Match Look: Skin Highlights</b>, which add a Luminance Range so they reach only the darker or brighter skin. You can use it by itself by clearing White Balance, Tone and Color. Keep Tone selected if you also want the ordinary brightness match. If either image lacks usable face skin, the dialog names that image and you can still apply the other selected adjustments. With several photos selected and usable skin in the reference, Atelier can still match faces in the rest of the selection.</p>
+<p>Use <b>Show Differences</b> to see the skin sliders at the current <b>Strength</b>. After <b>Apply</b>, open <b>Masking</b> (⇧W) and choose one of the <b>Match Look: Skin</b> masks to edit Temp, Tint and Saturation or refine the feathered shapes and the Luminance Range. The adjustment is fitted on faces and can feather into nearby features.</p>
 <figure>
   <div class="trio">
     <figure><div class="pic"><img src="images/match-skin-reference.jpg" alt="The Matrix illustrated portrait with olive face lighting"><span class="tag">Portrait study</span></div></figure>
@@ -125,7 +125,7 @@
 <p>With several photos selected in the filmstrip, choose:</p>
 <dl class="defs">
   <dt>Same settings</dt><dd>One match, on the open photo, applied to all. Like Sync.</dd>
-  <dt>Match each photo</dt><dd>Each photo matched on its own, for mixed light. Runs in the background with progress and Cancel in the status bar. Match Skin Tone selects this option so each face mask is placed for its own photo.</dd>
+  <dt>Match each photo</dt><dd>Each photo matched on its own, for mixed light. Runs in the background with progress and Cancel in the status bar. Match Skin Tone selects this option so the face masks are placed for each photo.</dd>
 </dl>
 
 <div class="see-also">See also: <a href="masking.html">Masking</a> · <a href="presets.html">Presets</a> · <a href="color-grading.html">Color Grading</a></div>
