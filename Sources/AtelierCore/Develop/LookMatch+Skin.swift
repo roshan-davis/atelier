@@ -22,8 +22,10 @@ extension LookMatcher {
         let index = existing ?? settings.masks.count
         var best = settings
         if skin.usesPeople {
-            // Everyone's face and body skin, editable as a Select People part in Masking.
-            let part = DevelopSettings.MaskComponent(.people(DevelopSettings.PeopleSelection()))
+            // Everyone's face skin, editable as a Select People part in Masking (tick Body Skin
+            // there to carry the change to neck and hands). Body skin is found by color alone, so
+            // warm clothes can join it; the match leaves it out.
+            let part = DevelopSettings.MaskComponent(.people(LookSkin.matchSelection))
             if let existing {
                 // An earlier match's face ellipses become the people part.
                 if !best.masks[existing].components.contains(where: { $0.kind == .people }) {
@@ -43,6 +45,15 @@ extension LookMatcher {
         }
 
         var improved = false
+        // Keep the skin sliders near where they started: a reference whose skin sits under very
+        // different light shouldn't paint the face.
+        let start = DevelopSettings.LocalParameter.allCases.reduce(into: [DevelopSettings.LocalParameter: Double]()) {
+            $0[$1] = best.masks[index][$1]
+        }
+        func limited(_ parameter: DevelopSettings.LocalParameter, _ value: Double) -> Double {
+            let from = start[parameter] ?? 0
+            return min(from + maxSkinShift, max(from - maxSkinShift, value))
+        }
         // Measure the response to each slider on this image. Solve for Temp and Tint
         // together because their color directions overlap, then let Saturation refine it.
         for _ in 0..<3 {
@@ -60,7 +71,7 @@ extension LookMatcher {
                     var trial = best
                     for (parameter, delta) in changes {
                         let value = trial.masks[index][parameter]
-                        trial.masks[index][parameter] = (value + min(30, max(-30, delta)) * fraction).rounded()
+                        trial.masks[index][parameter] = limited(parameter, (value + min(30, max(-30, delta)) * fraction).rounded())
                     }
                     guard trial != best, let result = color(trial) else { continue }
                     let next = target - result
@@ -90,6 +101,9 @@ extension LookMatcher {
         if improved { settings = best }
         return improved
     }
+
+    /// The most Match Skin Tone moves each skin slider (Temp, Tint, Saturation) from where it was.
+    static let maxSkinShift = 35.0
 
     private static func colorVector(hue: Double, chroma: Double) -> SIMD2<Double> {
         let angle = hue * .pi / 180

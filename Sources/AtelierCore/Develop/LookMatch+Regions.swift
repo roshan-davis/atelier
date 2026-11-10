@@ -111,11 +111,16 @@ public struct LookSkin: Sendable {
         chroma = measured.chroma
     }
 
-    /// Select People's skin (everyone's face and body skin) on an image, at `width` × `height`,
-    /// with the faces it found; nil when it finds no one.
+    /// What the skin treatments measure and Match Skin Tone adjusts: everyone's Face Skin. Body
+    /// Skin is found by color alone, so warm clothes touching skin can join it; it stays a choice
+    /// in Masking.
+    public static let matchSelection = DevelopSettings.PeopleSelection(parts: [.faceSkin], feather: 0)
+
+    /// Select People's face skin on an image, at `width` × `height`, with the faces it found; nil
+    /// when it finds no one.
     static func people(in image: CGImage, width: Int, height: Int) -> (values: [Double], faces: [CGRect])? {
         guard let found = PeopleSkin.find(in: image),
-              let mask = found.mask(DevelopSettings.PeopleSelection(feather: 0)),
+              let mask = found.mask(matchSelection),
               let values = LookSample.focusValues(mask, width: width, height: height) else { return nil }
         return (values, found.people.map(\.face))
     }
@@ -282,9 +287,9 @@ extension LookMatcher {
         let asShot = session.asShotTemperature
         var skin: LookSkin?
         if options.skinMode != .off {
-            // Select People's face and body skin, the same skin the "Match Look: Skin" mask
-            // adjusts; face boxes when it finds no one.
-            if let mask = session.peopleMask(base),
+            // Select People's face skin, the same skin the "Match Look: Skin" mask adjusts; face
+            // boxes when it finds no one.
+            if let mask = session.peopleMask(base, selection: LookSkin.matchSelection),
                let values = LookSample.focusValues(mask, width: plain.width, height: plain.height) {
                 skin = LookSkin(sample: plain, skin: values, faces: photoFaces ?? [])
             }

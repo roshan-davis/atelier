@@ -71,13 +71,14 @@ public struct FaceShape: Sendable, Equatable {
     }
 
     /// The face's outline from Vision's jaw contour (ear to ear, under the chin) closed with a
-    /// half-ellipse over the forehead that reaches a quarter of the face's height above the brows.
+    /// half-ellipse over the forehead that reaches an eighth of the face's height above the brows
+    /// (higher reaches into hats and hairlines, which are often skin-colored).
     public static func outline(jaw: [CGPoint], brows: [CGPoint], box: CGRect) -> [CGPoint] {
         guard let first = jaw.first, let last = jaw.last, jaw.count >= 3 else { return ellipse(in: box).outline }
         let mid = CGPoint(x: (first.x + last.x) / 2, y: (first.y + last.y) / 2)
         let radius = hypot(last.x - first.x, last.y - first.y) / 2
         let browTop = brows.map(\.y).min() ?? (box.minY + box.height * 0.3)
-        let up = max(0, mid.y - browTop) + box.height * 0.25
+        let up = max(0, mid.y - browTop) + box.height * 0.12
         // Over the top from `last` back to `first`.
         let goesRight = last.x >= first.x
         var arc: [CGPoint] = []
@@ -294,7 +295,7 @@ public struct PeopleSkin: Sendable {
             }
             // Skin in shadow or light keeps its color but not its lightness: allow much more
             // lightness spread than the face shows, and a floor so a flat face isn't too strict.
-            cov[0][0] = cov[0][0] * 4 + 0.004
+            cov[0][0] = cov[0][0] * 2 + 0.0025
             cov[1][1] += 0.00012
             cov[2][2] += 0.00012
             guard let inverse = invert3(cov) else { return nil }
@@ -311,10 +312,10 @@ public struct PeopleSkin: Sendable {
         }
 
         /// 1 for colors well inside the face's spread, fading to 0 past it (chi-square 3
-        /// degrees of freedom: 95% at 7.8, 99.9% at 16.3).
+        /// degrees of freedom: 90% at 6.25, 99% at 11.3).
         func likelihood(_ c: SIMD3<Float>) -> Float {
             let d = distance(SIMD3(Double(c.x), Double(c.y), Double(c.z)))
-            let t = min(1, max(0, (d - 7.8) / (16.3 - 7.8)))
+            let t = min(1, max(0, (d - 6.25) / (11.3 - 6.25)))
             return Float(1 - t * t * (3 - 2 * t))
         }
     }

@@ -119,11 +119,12 @@ final class PeopleSkinTests: XCTestCase {
         }
         let brows = [CGPoint(x: 80, y: 80), CGPoint(x: 120, y: 80)]
         let outline = FaceShape.outline(jaw: jaw, brows: brows, box: CGRect(x: 60, y: 60, width: 80, height: 100))
-        XCTAssertLessThan(outline.map(\.y).min()!, 80 - 20)
+        // Above the brows (y 80) by an eighth of the face's height: 80 - 12 = 68.
+        XCTAssertEqual(outline.map(\.y).min()!, 68, accuracy: 0.5)
         XCTAssertEqual(outline.count, jaw.count + 15)
         // Jaw drawn right to left closes over the top too.
         let reversed = FaceShape.outline(jaw: jaw.reversed(), brows: brows, box: CGRect(x: 60, y: 60, width: 80, height: 100))
-        XCTAssertLessThan(reversed.map(\.y).min()!, 60)
+        XCTAssertEqual(reversed.map(\.y).min()!, 68, accuracy: 0.5)
     }
 
     func testPeopleSelectionCodingAndDefaults() throws {

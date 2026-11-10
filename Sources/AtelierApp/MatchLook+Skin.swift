@@ -16,13 +16,13 @@ extension MatchLookModel {
         let needsReference = referenceSkinOverlay == nil && reference != nil
         guard needsPhoto || needsReference else { return }
         DispatchQueue.global(qos: .userInitiated).async {
-            let photo = needsPhoto ? session?.peopleMask(settings).flatMap { Self.tinted($0) } : nil
+            let photo = needsPhoto ? session?.peopleMask(settings, selection: LookSkin.matchSelection).flatMap { Self.tinted($0) } : nil
             var referenceOverlay: CGImage?
             if needsReference, let reference {
                 if let authored {
                     referenceOverlay = Self.tinted(boxes: authored, width: reference.width, height: reference.height)
                 } else if let found = PeopleSkin.find(in: reference),
-                          let mask = found.mask(DevelopSettings.PeopleSelection(feather: 0)) {
+                          let mask = found.mask(LookSkin.matchSelection) {
                     referenceOverlay = Self.tinted(mask)
                 }
             }
