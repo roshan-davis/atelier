@@ -651,6 +651,10 @@ final class ZoomCanvasView: NSView {
     /// Where a Targeted Adjustment drag began, in window coordinates.
     private var pressStart: NSPoint?
     private var currentImage: NSImage?
+    /// Shows live frames (`showFrame`) over the image. Core Animation draws an IOSurface in this
+    /// flipped view's layer upside down, where it draws a CGImage the right way up (Rosh saw the
+    /// photo flip during drags, Nov 10, 2026), so this layer turns its contents back over.
+    private let frameLayer = CALayer()
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -658,6 +662,27 @@ final class ZoomCanvasView: NSView {
         layer?.contentsGravity = .resize
         layer?.minificationFilter = .trilinear
         layer?.magnificationFilter = .linear
+        frameLayer.contentsGravity = .resize
+        frameLayer.minificationFilter = .trilinear
+        frameLayer.magnificationFilter = .linear
+        frameLayer.isHidden = true
+        frameLayer.setAffineTransform(CGAffineTransform(scaleX: 1, y: -1))
+        layer?.addSublayer(frameLayer)
+        placeFrameLayer()
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        placeFrameLayer()
+    }
+
+    /// Covers the view; set by bounds and position because the layer is transformed.
+    private func placeFrameLayer() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        frameLayer.bounds = CGRect(origin: .zero, size: bounds.size)
+        frameLayer.position = CGPoint(x: bounds.midX, y: bounds.midY)
+        CATransaction.commit()
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
@@ -671,6 +696,11 @@ final class ZoomCanvasView: NSView {
         if let image, let feed = scrollView?.feed, feed.isOlderThanShown(image) { return }
         currentImage = image
         layer?.contents = image?.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        frameLayer.contents = nil
+        frameLayer.isHidden = true
+        CATransaction.commit()
         if let scrollView { scrollView.feed?.imageShown(in: scrollView) }
     }
 
@@ -686,7 +716,8 @@ final class ZoomCanvasView: NSView {
         guard abs(CGFloat(surface.height) - expectedHeight) <= 1.5 else { return false }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        layer?.contents = surface
+        frameLayer.contents = surface
+        frameLayer.isHidden = false
         CATransaction.commit()
         return true
     }
