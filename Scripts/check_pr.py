@@ -8,6 +8,10 @@ from pathlib import Path
 import subprocess
 import sys
 
+STANDARD_GROUPS = ("checks", "build", "swift")
+UI_GROUPS = ("smoke", "visual")
+GROUPS = STANDARD_GROUPS + UI_GROUPS
+
 
 def whitespace_commands(root, base):
     """Check the PR's net changes, including tracked worktree and new files."""
@@ -33,7 +37,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--samples", type=Path, help="Existing sample RAW directory (no downloads)")
     parser.add_argument("--base", default="origin/main", help="Fetched PR base ref (default: origin/main)")
+    selection = parser.add_mutually_exclusive_group()
+    selection.add_argument("--group", action="append", choices=("all", *GROUPS), metavar="NAME",
+                           help="Repeat to combine checks, build, swift, smoke, visual, or all")
+    selection.add_argument("--ui", action="store_true", help="Run all groups, including native UI checks")
+    parser.add_argument("--quiet", action="store_true", help="Show progress and the summary, with detailed output in logs")
     args = parser.parse_args()
+    groups = set(GROUPS if args.ui or "all" in (args.group or ()) else args.group or STANDARD_GROUPS)
     root = Path(__file__).resolve().parents[1]
     if sys.platform != "darwin":
         parser.error("Run on a Mac with full Xcode installed.")
@@ -67,7 +77,7 @@ def main():
         return (git("rev-parse", "HEAD"), git("diff", "HEAD", "--", ".", ":(exclude)Package.resolved"))
 
     try:
-        merge_base, whitespace = whitespace_commands(root, args.base)
+        merge_base, whitespace = whitespace_commands(root, args.base) if "checks" in groups else (None, ())
     except subprocess.CalledProcessError:
         parser.error("Cannot resolve PR base. Fetch origin main or supply --base <ref>.")
     before = fingerprint()
@@ -90,7 +100,8 @@ def main():
                 try:
                     for line in process.stdout:
                         has_output = True
-                        print(line, end="", flush=True)
+                        if not args.quiet:
+                            print(line, end="", flush=True)
                         log.write(line)
                     code = check_exit_code(command, process.wait(), has_output)
                 except KeyboardInterrupt:
@@ -103,7 +114,10 @@ def main():
         results.append((name, code))
 
     print("Revision: " + before[0].strip())
-    print("PR base: " + args.base + " (merge base " + merge_base + ")")
+    selection_line = "Selected groups: " + ", ".join(group for group in GROUPS if group in groups)
+    base_line = "PR base: " + args.base + (f" (merge base {merge_base})" if merge_base else "")
+    print(selection_line)
+    print(base_line)
     print("Worktree: " + str(root))
     print("Xcode: " + env["DEVELOPER_DIR"])
     print("Logs: " + str(out))
@@ -111,18 +125,35 @@ def main():
     check("toolchain", ["xcrun", "swift", "--version"])
     for index, command in enumerate(whitespace):
         check("whitespace" if index == 0 else "whitespace-new-" + str(index), command)
-    check("script-tests", [sys.executable, "-m", "unittest", "discover", "-s", "Scripts/tests"])
-    check("help", [sys.executable, str(root / "Scripts/help/build_help_index.py"), "--check"])
-    check("build", ["xcrun", "swift", "build"])
-    check("tests", ["xcrun", "swift", "test"])
+    if "checks" in groups:
+        check("script-tests", [sys.executable, "-m", "unittest", "discover", "-s", "Scripts/tests"])
+        check("help", [sys.executable, str(root / "Scripts/help/build_help_index.py"), "--check"])
+    if "build" in groups:
+        check("build", ["xcrun", "swift", "build"])
+    if "swift" in groups:
+        check("tests", ["xcrun", "swift", "test"])
+    ui_groups = groups.intersection(UI_GROUPS)
+    if ui_groups:
+        ui_selection = "all" if len(ui_groups) == len(UI_GROUPS) else next(iter(ui_groups))
+        check("ui", [sys.executable, str(root / "Scripts/check_ui.py"), "--base", args.base,
+                     "--group", ui_selection, "--output", str(out / "ui")])
     if fingerprint() != before or untracked_hashes() != untracked_before:
         results.append(("source-changed-during-checks", 1))
-    notes = ["Layout snapshots: NOT RUN; render and inspect separately for UI changes.",
-             "Real RAW coverage: inspect tests.log for skipped tests; sample files are never downloaded."]
-    if not samples:
-        notes.append("No sample RAW directory supplied; real-RAW tests may skip.")
-    summary = "Revision: " + before[0].strip() + "\n"
-    summary += "PR base: " + args.base + " (merge base " + merge_base + ")\n"
+    notes = []
+    omitted = [group for group in GROUPS if group not in groups]
+    if omitted:
+        notes.append("Groups not selected: " + ", ".join(omitted))
+    if "swift" in groups:
+        notes.append("Real RAW coverage: inspect tests.log for skipped tests; sample files are never downloaded.")
+        if not samples:
+            notes.append("No sample RAW directory supplied; real-RAW tests may skip.")
+    if ui_groups:
+        ui_summary = out / "ui" / "summary.txt"
+        if ui_summary.is_file():
+            notes.extend(line for line in ui_summary.read_text().splitlines()
+                         if line.startswith(("Native smoke:", "Visual comparison:", "Baseline:", "UI checks:")))
+        notes.append("UI results: " + str(ui_summary.parent))
+    summary = "Revision: " + before[0].strip() + "\n" + selection_line + "\n" + base_line + "\n"
     summary += "Working changes at start:\n" + (working_status or "(clean)\n")
     summary += "Working changes at end:\n" + (git("status", "--short") or "(clean)\n")
     summary += "Xcode: " + env["DEVELOPER_DIR"] + "\n"

@@ -196,11 +196,14 @@ extension LibraryModel {
                     self.selection = Set(opened.map(\.0))
                     self.focusedID = first
                 }
-                let configuration = NSWorkspace.OpenConfiguration()
-                NSWorkspace.shared.open(opened.map(\.1), withApplicationAt: editor.appURL,
-                                        configuration: configuration) { _, error in
-                    guard let error else { return }
-                    Task { @MainActor in self.status = "\(editor.name) could not open the file: \(error.localizedDescription)" }
+                // Snapshot runs need the derivative and stack, while Preview owns its own windows.
+                if LayoutSnapshots.outputFolder == nil {
+                    let configuration = NSWorkspace.OpenConfiguration()
+                    NSWorkspace.shared.open(opened.map(\.1), withApplicationAt: editor.appURL,
+                                            configuration: configuration) { _, error in
+                        guard let error else { return }
+                        Task { @MainActor in self.status = "\(editor.name) could not open the file: \(error.localizedDescription)" }
+                    }
                 }
                 self.status = opened.isEmpty ? "Nothing was sent to \(editor.name)"
                     : "Opened \(opened.count) photo\(opened.count == 1 ? "" : "s") in \(editor.name). Saves show up here."

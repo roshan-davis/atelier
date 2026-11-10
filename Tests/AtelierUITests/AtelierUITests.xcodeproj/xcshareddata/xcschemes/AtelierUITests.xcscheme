@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Scheme version="1.7">
+    <BuildAction>
+        <BuildActionEntries>
+            <BuildActionEntry buildForTesting="YES" buildForRunning="NO" buildForProfiling="NO"
+                              buildForArchiving="NO" buildForAnalyzing="NO">
+                <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="A00000000000000000000005"
+                                    BuildableName="AtelierUITests.xctest" BlueprintName="AtelierUITests"
+                                    ReferencedContainer="container:AtelierUITests.xcodeproj"/>
+            </BuildActionEntry>
+        </BuildActionEntries>
+    </BuildAction>
+    <TestAction buildConfiguration="Debug">
+        <Testables>
+            <TestableReference skipped="NO">
+                <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="A00000000000000000000005"
+                                    BuildableName="AtelierUITests.xctest" BlueprintName="AtelierUITests"
+                                    ReferencedContainer="container:AtelierUITests.xcodeproj"/>
+            </TestableReference>
+        </Testables>
+    </TestAction>
+</Scheme>

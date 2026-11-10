@@ -443,7 +443,23 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 **Approved review fixes (Nov 9):** Rosh approved all three in the PR #84 Codex chat. Apply and Show Differences wait for the current refit, a repeat match updates checked sliders on the existing subject mask, and skin protection reduces the whole fit when restoring color sliders alone misses the limits. The focused Match Look run passed all 19 tests, including the real portrait, Yosemite landscape, camera product photo, and the dialog debounce. Logs: `/private/tmp/atelier-pr84-artifacts/targeted.log`. Manual acceptance remains pending.
 
-## AT-030 — Built-in References for Match Look
+## AT-030 — Run routine UI checks without agent-driven desktop testing
+
+**Status:** Implemented in draft [PR #88](https://github.com/roshan-davis/atelier/pull/88). Validation and acceptance pending. **Owner:** Codex. **Chat:** [PR planning](codex://threads/01a1c1fe-a0b2-7f00-aa05-a3c288cfc592). **Branch:** `codex/pr-ui-automation`. **Approved:** Rosh, November 9, 2026.
+
+**Evidence and scope:** At `5b8bf19`, CI uploaded layout screenshots but did not compare them, and local pre-PR checks excluded GUI snapshots. Build on the existing snapshot generator and require full Xcode and a logged-in Mac desktop session. Use isolated fixture data, compare PR and base pixels on the same runner, and run one native Exposure and Undo smoke test.
+
+**Acceptance:** One scripted command and one concise CI report give the tested revision, test result, and only the changed screenshots for visual review. Manual acceptance remains for intentional design changes and uncovered workflows.
+
+**Validation:** Build, Help, script checks and all 295 Swift tests passed on Mac at `0ace368`, with both Nikon RAW fixtures and zero skips. The native smoke and the initial 98-screen comparison passed on the working patch. The complete one-command run passed at `0ace368`, including the native smoke and a comparison of 98 screenshots. Fifty images were flagged for review against the old snapshot fixtures. Logs: `/private/tmp/atelier-pr-ui-automation/.build/local-checks/20261109-131534-464163`. GitHub Actions reported a billing/spending-limit block before starting a runner.
+
+**Grouping and documentation:** Rosh requested a testing guide with report interpretation and recommended groups. Added selectable checks, build, Swift, smoke and visual groups to the same PR.
+
+**Local packaging fix:** The visual run at `a6aa648` from the App checkout stopped before launch because its existing SwiftPM output contained a stale HDR Help symlink. The UI runner now packages the current revision from a fresh SwiftPM build directory.
+
+**Edit In fixture cleanup:** The App visual run at `555faf8` compared 98 screens but left two documents open in Preview. The snapshot scenario now checks the generated stack without launching Preview, and the runner adapts older baselines so their Edit In TIFF is also cleaned with the run.
+
+## AT-031 — Built-in References for Match Look
 
 **Status:** Implementation in review. Manual acceptance pending. **Owner:** Codex. **Chat:** [Match Look Built-in References](codex://threads/01a1c197-aa52-7d60-be48-b20e2b243b9f). **Branch:** `codex/match-look-built-in-references`. **PR:** [#87](https://github.com/roshan-davis/atelier/pull/87). **Baseline:** freshly fetched `5b8bf1919e3047a125d86a37fbbd3e133ecccd92`. **Dependencies:** AT-029 / PR #84, merged.
 
@@ -452,3 +468,5 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 **Acceptance:** Qualify all eight through the production fit on real photo fixtures. Verify reference switching, Match Areas, Strength, Protect Skin Tones and normal Apply behavior. Inspect the dialog, picker and Help. Record Mac and GitHub checks for the PR and leave manual acceptance to Rosh.
 
 **Validation:** Implementation commit `dd4a57a15343fcf284f85065f7b2ff27daa3905a` passed the Mac pre-PR checks with Nikon Z6 and Zf RAW fixtures, 297 Swift tests, zero failures or skips, and passing script, Help and whitespace checks. All eight studies improved palette distance on the real fixtures by 48–90%. Maximum measured portrait skin drift was 4.60° hue and 12.8% chroma. Reviewed the eight fits, the updated Help in Chrome and local Match Look snapshots from the implementation commit. Logs: `/private/tmp/atelier-match-look-references/.build/local-checks/20261109-120312-379418`. The PR records final-head checks and CI. Rosh's manual interaction and visual acceptance remain open.
+
+**Conflict resolution:** Merged PR #88's main revision `67931d7` into the PR branch. PR #88 retains AT-030. This item was previously AT-030 on the PR branch.

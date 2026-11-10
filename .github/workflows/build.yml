@@ -11,9 +11,11 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 30
     permissions:
-      contents: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Toolchain
         run: |
           sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
@@ -45,21 +47,28 @@ jobs:
           export ATELIER_SAMPLE_RAWS="$PWD/samples" ATELIER_SAMPLE_OUT="$PWD/snapshots"
           swift test 2>&1 | tee test.log
           grep "CAMERA MATCH" test.log || true
-      - name: Layout snapshots
+      - name: Native UI smoke and visual comparison
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
         run: |
-          export ATELIER_SNAPSHOTS="$PWD/snapshots"
-          perl -e 'alarm 180; exec @ARGV' .build/debug/AtelierApp
-          ls -l snapshots
+          git fetch --no-tags --depth=1 origin "$PR_BASE"
+          python3 Scripts/check_ui.py --base "$PR_BASE" --output "$PWD/ui-results"
+      - name: Publish UI check summary
+        if: always() && github.event_name == 'pull_request'
+        run: |
+          if [ -f ui-results/summary.txt ]; then
+            {
+              echo '### Atelier UI checks'
+              echo '```'
+              cat ui-results/summary.txt
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: layout-snapshots
-          path: snapshots
-      - name: Publish snapshots to the layout-snapshots branch
-        if: always() && github.event_name == 'pull_request'
-        run: |
-          cd snapshots
-          git init -q -b layout-snapshots
-          git -c user.name=ci -c user.email=ci@localhost add .
-          git -c user.name=ci -c user.email=ci@localhost commit -qm "Snapshots for ${{ github.event.pull_request.head.sha }}"
-          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" layout-snapshots
+          path: |
+            ui-results
+            snapshots

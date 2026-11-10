@@ -98,12 +98,17 @@ It honors `DEVELOPER_DIR`, otherwise uses selected Xcode or `/Applications/Xcode
 Command Line Tools are selected. It never changes the global Xcode selection.
 
 Report failures and skipped RAW tests in the PR; a successful run does not certify real-RAW
-coverage or visual layout. For UI changes, render and inspect layout snapshots separately.
+coverage or visual layout. Use the separate UI check below for app interactions and screenshots.
 This local check requires no GitHub configuration and leaves the existing Actions workflow intact.
 Use `--base <ref>` to check against a different fetched PR base. Agent workspace and environment
 rules are in [AGENTS.md](AGENTS.md#where-you-work). Cloud Claude cannot execute this Mac-only
 command; its PR must disclose that and receive a Mac check before validation is complete.
 
+
+## Automated testing
+
+See the [Automated testing guide](Docs/Automated-Testing.md) for the full suite, repeatable
+group selectors, suggested checks by change type, and how to read the reports.
 
 ## Single-image HDR MVP (work in progress)
 
