@@ -58,7 +58,7 @@ final class DevelopSmokeTests: XCTestCase {
         XCTAssertTrue(exposure.waitForExistence(timeout: 15))
         let develop = app.menuBars.menuBarItems["Develop"]
         let diagnostics = develop.menuItems["Frame Diagnostics"]
-        let overlay = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Frame diagnostics")).firstMatch
+        let overlay = app.descendants(matching: .any)["develop-frame-diagnostics"]
 
         develop.click()
         diagnostics.click()

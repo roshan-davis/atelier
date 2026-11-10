@@ -180,6 +180,8 @@ struct DevelopFrameHUDOverlay: NSViewRepresentable {
             super.init(frame: .zero)
             label.font = .monospacedSystemFont(ofSize: 11, weight: .medium)
             label.textColor = .white
+            label.setAccessibilityIdentifier("develop-frame-diagnostics")
+            label.setAccessibilityLabel("Develop frame diagnostics")
             label.translatesAutoresizingMaskIntoConstraints = false
             addSubview(label)
             NSLayoutConstraint.activate([
