@@ -516,6 +516,8 @@ struct AISettingsTab: View {
                     .foregroundStyle(.secondary)
             }
 
+            MaskingModelsSection()
+
             Section {
                 LabeledContent("Workflows") {
                     Button("Show Workflows Folder") {
@@ -567,6 +569,44 @@ struct AISettingsTab: View {
                 connected = false
                 status = error.localizedDescription
             }
+        }
+    }
+}
+
+/// Settings > AI > Masking Models: the built-in people model and the optional Fine Edges download.
+private struct MaskingModelsSection: View {
+    @ObservedObject private var download = FineEdgesDownload.shared
+
+    var body: some View {
+        Section {
+            LabeledContent("People parts") {
+                Text("Built in (MediaPipe, 8 MB)").foregroundStyle(.secondary)
+            }
+            LabeledContent("Fine Edges") {
+                if download.installed {
+                    HStack {
+                        Text("Downloaded").foregroundStyle(.secondary)
+                        Button("Remove") { download.remove() }
+                    }
+                } else if let progress = download.progress {
+                    HStack {
+                        ProgressView(value: progress).frame(width: 120)
+                        Button("Cancel") { download.cancel() }
+                    }
+                } else {
+                    Button("Download (\(FineEdges.downloadSize))") { download.download() }
+                }
+            }
+            if let error = download.error {
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange).font(.callout).fixedSize(horizontal: false, vertical: true)
+            }
+        } header: {
+            Text("Masking Models")
+        } footer: {
+            Text("Select People's parts come from Google's MediaPipe model, built into Atelier. Fine Edges (BiRefNet lite, MIT license) is an optional download that redraws the edges of Select Subject, Select Object and Select People down to single hairs; turn it on in each selection's settings. Both run on this Mac; photos are never sent anywhere.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 }

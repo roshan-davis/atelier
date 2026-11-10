@@ -780,7 +780,12 @@ struct MasksPanel: View {
                         update(component, .subject(changed))
                     })
                 }
-                edgeControls(grow: value(\.grow), refine: value(\.refine), feather: value(\.feather), featherOrigin: 20)
+                edgeControls(grow: value(\.grow), refine: value(\.refine), feather: value(\.feather), featherOrigin: 20,
+                             fineEdges: Binding(get: { selection.fineEdges }, set: { on in
+                                 var changed = selection
+                                 changed.fineEdges = on
+                                 update(component, .subject(changed))
+                             }))
                 Text(selection.box == nil
                      ? "Found on this Mac with Apple's Vision. Invert it to adjust the background."
                      : "Found by Vision inside the box. Drag the pin to move the box, or draw a new one.")
@@ -840,7 +845,12 @@ struct MasksPanel: View {
                     update(component, .people(changed))
                 })
             }
-            edgeControls(grow: value(\.grow), refine: value(\.refine), feather: value(\.feather), featherOrigin: 10)
+            edgeControls(grow: value(\.grow), refine: value(\.refine), feather: value(\.feather), featherOrigin: 10,
+                         fineEdges: Binding(get: { selection.fineEdges }, set: { on in
+                             var changed = selection
+                             changed.fineEdges = on
+                             update(component, .people(changed))
+                         }))
             peoplePartsStatus
             invertToggle(component)
         }
@@ -867,8 +877,9 @@ struct MasksPanel: View {
     /// Grow, Refine Edge and Feather: the edge controls every AI selection part shares (Select
     /// Subject, Select Object, Select People).
     private func edgeControls(grow: Binding<Double>, refine: Binding<Double>, feather: Binding<Double>,
-                              featherOrigin: Double) -> some View {
+                              featherOrigin: Double, fineEdges: Binding<Bool>) -> some View {
         VStack(alignment: .leading, spacing: 6) {
+            FineEdgesControl(isOn: fineEdges)
             SliderRow(label: "Grow", value: grow, range: -100...100, step: 1, origin: 0,
                       trackHelp: "Left shrinks the selection, right grows it")
             SliderRow(label: "Refine Edge", value: refine, range: 0...100, step: 1, origin: 0,

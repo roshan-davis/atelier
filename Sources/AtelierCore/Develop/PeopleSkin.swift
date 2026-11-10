@@ -57,14 +57,17 @@ extension DevelopSettings {
         public var refine = 0.0
         /// -100...100; shrinks (below 0) or grows (above 0) the selection.
         public var grow = 0.0
+        /// Redraws the edge with the Fine Edges model (BiRefNet) when it is downloaded.
+        public var fineEdges = false
 
         public init(person: Int? = nil, parts: [Part] = PeopleSelection.defaultParts, feather: Double = 10,
-                    refine: Double = 0, grow: Double = 0) {
+                    refine: Double = 0, grow: Double = 0, fineEdges: Bool = false) {
             self.person = person
             self.parts = Part.allCases.filter(parts.contains)
             self.feather = feather
             self.refine = refine
             self.grow = grow
+            self.fineEdges = fineEdges
         }
 
         public func includes(_ part: Part) -> Bool { parts.contains(part) }
@@ -76,7 +79,7 @@ extension DevelopSettings {
             return changed
         }
 
-        private enum CodingKeys: String, CodingKey { case person, parts, feather, refine, grow }
+        private enum CodingKeys: String, CodingKey { case person, parts, feather, refine, grow, fineEdges }
 
         public init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -87,6 +90,7 @@ extension DevelopSettings {
             feather = try c.decodeIfPresent(Double.self, forKey: .feather) ?? 10
             refine = try c.decodeIfPresent(Double.self, forKey: .refine) ?? 0
             grow = try c.decodeIfPresent(Double.self, forKey: .grow) ?? 0
+            fineEdges = try c.decodeIfPresent(Bool.self, forKey: .fineEdges) ?? false
         }
     }
 }

@@ -73,10 +73,12 @@ extension DevelopRenderer {
     /// drawn once and kept in `brushCache` when given; `subject` finds Select Subject's mask
     /// (no box) or Select Object's (inside the box) on the photo's frame; `people` finds Select
     /// People's skin there.
-    /// `guide` is the photo on the same frame, which Refine Edge snaps AI selections to.
+    /// `guide` is the photo on the same frame, which Refine Edge snaps AI selections to; `fine`
+    /// gives the Fine Edges model's foreground matte on that frame (nil when not downloaded).
     static func sourceMask(_ component: DevelopSettings.MaskComponent, extent: CGRect,
                            subject: ((DevelopSettings.MaskRect?) -> CIImage?)?,
                            people: ((DevelopSettings.PeopleSelection) -> CIImage?)? = nil,
+                           fine: (() -> CIImage?)? = nil,
                            guide: CIImage? = nil,
                            brushCache: BrushCache?) -> CIImage? {
         let width = extent.width, height = extent.height
@@ -117,16 +119,51 @@ extension DevelopRenderer {
             brushCache?.store(image, for: key)
             return image.transformed(by: CGAffineTransform(translationX: extent.minX, y: extent.minY))
         case .subject(let selection):
-            guard let mask = subject?(selection.box) else { return nil }
+            guard var mask = subject?(selection.box) else { return nil }
+            if selection.fineEdges, let matte = fine?() {
+                mask = fineEdged(mask, outline: mask, matte: matte, extent: extent)
+            }
             return refinedSelection(mask, grow: selection.grow, refine: selection.refine, feather: selection.feather,
                                     guide: guide, extent: extent)
         case .people(let selection):
-            guard let mask = people?(selection) else { return nil }
+            guard var mask = people?(selection) else { return nil }
+            if selection.fineEdges, let matte = fine?() {
+                // The people's own outline, so parts inside them (face skin next to hair) keep
+                // their edges and only edges onto the background are redrawn.
+                var whole = selection
+                whole.parts = [.entirePerson]
+                mask = fineEdged(mask, outline: people?(whole) ?? mask, matte: matte, extent: extent)
+            }
             return refinedSelection(mask, grow: selection.grow, refine: selection.refine, feather: selection.feather,
                                     guide: guide, extent: extent)
         case .luminance:
             return nil
         }
+    }
+
+    /// Fine Edges: the selection's edge redrawn from the Fine Edges model's foreground `matte`,
+    /// within 0.8% of the long edge of where Vision put it. Inside the band, pixels inside
+    /// `outline` (Vision's outline of the subject or the people) are kept only where the matte
+    /// is foreground too (the background between strands of hair drops out), and pixels outside
+    /// it are added where the matte is foreground (strands Vision's outline missed). Away from the
+    /// edge the selection is unchanged, so someone the model misses keeps their selection.
+    /// max(shrunk, min(grown, matte, max(mask, 1 − outline))).
+    static func fineEdged(_ mask: CIImage, outline: CIImage, matte: CIImage, extent: CGRect) -> CIImage {
+        let radius = max(1, 0.008 * Double(max(extent.width, extent.height)))
+        func morphology(_ image: CIImage, _ name: String) -> CIImage {
+            image.clampedToExtent().applyingFilter(name, parameters: [kCIInputRadiusKey: radius]).cropped(to: extent)
+        }
+        func lower(_ a: CIImage, _ b: CIImage) -> CIImage {
+            a.applyingFilter("CIMinimumCompositing", parameters: [kCIInputBackgroundImageKey: b])
+        }
+        func higher(_ a: CIImage, _ b: CIImage) -> CIImage {
+            a.applyingFilter("CIMaximumCompositing", parameters: [kCIInputBackgroundImageKey: b])
+        }
+        let base = mask.cropped(to: extent)
+        let shrunk = morphology(base, "CIMorphologyMinimum")
+        let grown = morphology(base, "CIMorphologyMaximum")
+        let allowed = higher(base, invert(outline.cropped(to: extent)))
+        return higher(shrunk, lower(lower(grown, matte.cropped(to: extent)), allowed)).cropped(to: extent)
     }
 
     /// The edge controls every AI selection shares (Select Subject, Select Object, Select People),

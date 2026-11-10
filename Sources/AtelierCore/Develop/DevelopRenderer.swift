@@ -491,6 +491,9 @@ public final class DevelopSession: @unchecked Sendable {
     private var subjectKey: DevelopSettings?
     /// Select People's faces and skin on the corrected photo, found once per lens geometry.
     private var peopleFound: (key: DevelopSettings, skin: PeopleSkin?)?
+    /// Fine Edges' foreground matte on the corrected photo, found once per lens geometry (nil
+    /// inside when the model isn't downloaded or failed; tried again once it is downloaded).
+    private var fineFound: (key: DevelopSettings, installed: Bool, matte: CIImage?)?
     /// Pipeline step 1's results for the settings they were made from (see `CorrectedKey`), so a
     /// slider on any later panel doesn't decode the RAW and redo the lens corrections again.
     /// Two are kept, most recent last, so the Before view and the edit don't push each other out.
@@ -576,6 +579,7 @@ public final class DevelopSession: @unchecked Sendable {
             guard let mask = DevelopRenderer.sourceMask(component, extent: sourceExtent,
                                                         subject: { self.subject(of: source, key: key, box: $0) },
                                                         people: { self.people(of: source, key: key, selection: $0) },
+                                                        fine: { self.fineMatte(of: source, key: key) },
                                                         guide: source, brushCache: brushCache) else { return nil }
             guard let crop else { return mask }
             return DevelopRenderer.applyGeometry(crop, to: mask, cropping: cropping)
@@ -781,6 +785,33 @@ public final class DevelopSession: @unchecked Sendable {
         return skin
     }
 
+    /// Fine Edges' foreground matte on the corrected photo's frame, found once per lens geometry
+    /// at the model's 1024 × 1024 (the photo stretched to a square and back). Nil when the model
+    /// isn't downloaded or fails. Call with the lock held.
+    private func fineMatte(of source: CIImage, key: DevelopSettings) -> CIImage? {
+        let installed = FineEdges.isInstalled
+        if let fineFound, fineFound.key == key, fineFound.installed == installed { return fineFound.matte }
+        var matte: CIImage?
+        let extent = source.extent
+        if installed {
+            let side = CGFloat(FineEdges.size)
+            let square = source.transformed(by: CGAffineTransform(translationX: -extent.minX, y: -extent.minY))
+                .transformed(by: CGAffineTransform(scaleX: side / extent.width, y: side / extent.height))
+            if let cgImage = renderer.context.createCGImage(square, from: CGRect(x: 0, y: 0, width: side, height: side),
+                                                            format: .RGBA8, colorSpace: DevelopRenderer.sRGB),
+               let values = FineEdges.matte(of: cgImage),
+               let gray = PeopleSkin.grayImage(values, width: FineEdges.size, height: FineEdges.size) {
+                let image = DevelopRenderer.rawMask(gray)
+                matte = image
+                    .transformed(by: CGAffineTransform(scaleX: extent.width / side, y: extent.height / side))
+                    .transformed(by: CGAffineTransform(translationX: extent.minX, y: extent.minY))
+                    .cropped(to: extent)
+            }
+        }
+        fineFound = (key, installed, matte)
+        return matte
+    }
+
     /// Select People's mask on the corrected photo's frame.
     private func people(of source: CIImage, key: DevelopSettings,
                         selection: DevelopSettings.PeopleSelection) -> CIImage? {
@@ -816,6 +847,7 @@ public final class DevelopSession: @unchecked Sendable {
         let component = DevelopSettings.MaskComponent(.people(selection))
         guard var mask = DevelopRenderer.sourceMask(component, extent: source.extent, subject: nil,
                                                     people: { self.people(of: source, key: key, selection: $0) },
+                                                    fine: { self.fineMatte(of: source, key: key) },
                                                     guide: source, brushCache: brushCache) else { return nil }
         if let crop = settings.crop { mask = DevelopRenderer.applyGeometry(crop, to: mask) }
         return renderer.context.createCGImage(mask, from: mask.extent.integral, format: .L8,
@@ -843,6 +875,7 @@ public final class DevelopSession: @unchecked Sendable {
         let component = DevelopSettings.MaskComponent(.subject(DevelopSettings.Selection(feather: feather)))
         guard var mask = DevelopRenderer.sourceMask(component, extent: source.extent,
                                                     subject: { self.subject(of: source, key: key, box: $0) },
+                                                    fine: { self.fineMatte(of: source, key: key) },
                                                     guide: source, brushCache: brushCache) else { return nil }
         if let crop = settings.crop { mask = DevelopRenderer.applyGeometry(crop, to: mask) }
         // Mask values are stored as is, so linear gray keeps them unchanged.
