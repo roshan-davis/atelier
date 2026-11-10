@@ -2089,7 +2089,14 @@ final class DevelopController: ObservableObject {
             prefetchNeighboursWhenIdle()
         }
         guard latest else { return }
-        if shownLive { publishWhenSettled(request) }
+        // A live frame is a drag in progress: the full-size render waits for the settled render
+        // (`publishWhenSettled`), whose finish lands here again. Started after every live frame,
+        // it ran 24 MP renders beside the drag's on the GPU for settings never shown, since the
+        // zoomed photo shows the full-size image only once it matches (AT-039 D4).
+        if shownLive {
+            publishWhenSettled(request)
+            return
+        }
         scheduleFullRender()
         if compareMode != .off { scheduleFullBeforeRender() }
     }
