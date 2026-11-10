@@ -194,7 +194,7 @@
   </div>
   <figcaption>Illustrative values. Refresh timing is an estimate. Main tick covers the gesture callback. Main pass shows mean and worst busy time per main run-loop pass, including deferred SwiftUI updates and other work on that thread. CG fallbacks counts ordinary images generated because the surface pool was full or live frames were turned off during the drag.</figcaption>
 </figure>
-<p>Atelier writes a summary each active second to <code>Documents/Atelier Traces</code>, including the starting value, time to the first changed frame and longest gap for each completed drag. Choose the same menu item to hide the overlay.</p>
+<p>Atelier writes a summary each active second to <code>Documents/Atelier Traces</code>, including the starting value, time to the first changed frame and longest gap for each completed drag, how many main-thread passes took longer than one display refresh, and how many histogram updates the drag caused. In Instruments, each main-thread pass during a drag shows as a <em>Main pass</em> interval under Points of Interest. Choose the same menu item to hide the overlay.</p>
 
 <div class="see-also">Next: <a href="basic.html">Basic</a> · <a href="crop.html">Crop &amp; Straighten</a> · <a href="masking.html">Masking</a></div>
 

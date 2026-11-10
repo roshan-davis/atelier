@@ -1,4 +1,5 @@
 import AppKit
+import os
 import QuartzCore
 import SwiftUI
 
@@ -25,6 +26,11 @@ final class DevelopFrameHUD {
         var ticks = 0
         var frames = 0
         var busy = Sample()
+        /// Main passes longer than one display refresh: each one held back at least one frame.
+        var longPasses = 0
+        /// Histogram and color scope updates published on `DevelopController` (each one updates
+        /// every view observing it, like a settings change).
+        var histogramUpdates = 0
         var fallbacks = Fallbacks()
     }
 
@@ -62,6 +68,12 @@ final class DevelopFrameHUD {
     private var finished: [String] = []
     private var finishingDrag: Drag?
     private var passStart: CFTimeInterval?
+    /// Each measured main pass is also an Instruments interval ("Main pass" in Points of
+    /// Interest), so a trace can line long passes up with SwiftUI's and Time Profiler's tracks.
+    private var passInterval: OSSignpostIntervalState?
+    private static let signposter = OSSignposter(subsystem: "Atelier", category: .pointsOfInterest)
+    /// The display's refresh period, from the display link (120 Hz until it reports).
+    private var refreshPeriod: CFTimeInterval = 1.0 / 120
     private var busy = Sample()
     private var fallbacks = Fallbacks()
     private var lastCompletedDrag: Drag?
@@ -81,6 +93,8 @@ final class DevelopFrameHUD {
         drag = nil
         finishingDrag = nil
         passStart = nil
+        if let passInterval { Self.signposter.endInterval("Main pass", passInterval) }
+        passInterval = nil
         pending = nil
         lastCount = nil
         lastCompletedDrag = nil
@@ -126,7 +140,12 @@ final class DevelopFrameHUD {
         }
     }
 
-    func afterWaiting() { passStart = CACurrentMediaTime() }
+    func afterWaiting() {
+        passStart = CACurrentMediaTime()
+        if passInterval == nil, drag != nil {
+            passInterval = Self.signposter.beginInterval("Main pass", id: Self.signposter.makeSignpostID())
+        }
+    }
 
     func beforeWaiting() {
         if let passStart, drag != nil || finishingDrag != nil {
@@ -134,7 +153,13 @@ final class DevelopFrameHUD {
             busy.record(duration)
             drag?.busy.record(duration)
             finishingDrag?.busy.record(duration)
+            if duration > refreshPeriod {
+                drag?.longPasses += 1
+                finishingDrag?.longPasses += 1
+            }
         }
+        if let passInterval { Self.signposter.endInterval("Main pass", passInterval) }
+        passInterval = nil
         passStart = nil
         if let finishingDrag {
             finish(finishingDrag)
@@ -147,13 +172,21 @@ final class DevelopFrameHUD {
         lastCompletedDrag = drag
         let first = drag.firstFrame.flatMap { frame in drag.firstChange.map { frame - $0 } }
         let startingValue = drag.startingValue.map { String($0) } ?? "—"
-        finished.append("\(drag.name) start=\(startingValue) changed=\(drag.ticks) frames=\(drag.frames)"
-                        + " first=\(Self.ms(first)) ms firstRender=\(Self.ms(drag.firstRender)) ms longest=\(Self.ms(drag.longestGap)) ms"
-                        + " main pass \(drag.busy.meanMS)/\(drag.busy.maxMS) ms (\(drag.busy.count) passes)"
-                        + " CG fallbacks \(drag.fallbacks.detail)")
+        var line = "\(drag.name) start=\(startingValue) changed=\(drag.ticks) frames=\(drag.frames)"
+        line += " first=\(Self.ms(first)) ms firstRender=\(Self.ms(drag.firstRender)) ms longest=\(Self.ms(drag.longestGap)) ms"
+        line += " main pass \(drag.busy.meanMS)/\(drag.busy.maxMS) ms (\(drag.busy.count) passes,"
+        line += " \(drag.longPasses) over one refresh) histogram updates \(drag.histogramUpdates)"
+        line += " CG fallbacks \(drag.fallbacks.detail)"
+        finished.append(line)
     }
 
     func scheduled(_ count: Int) { lastScheduledCount = count }
+
+    /// `DevelopController` published a new histogram or color scope during a drag.
+    func histogramPublished() {
+        guard active, drag?.firstChange != nil else { return }
+        drag?.histogramUpdates += 1
+    }
 
     func fallback(_ reason: PhotoFeed.Fallback, count: Int) {
         guard let drag, drag.firstChange != nil, count >= drag.firstPossibleCount else { return }
@@ -189,7 +222,10 @@ final class DevelopFrameHUD {
 
         guard let start = intervalStart else { return nil }
         let period = link.targetTimestamp - link.timestamp
-        if period > 0 { refresh.record(period) }
+        if period > 0 {
+            refresh.record(period)
+            refreshPeriod = period
+        }
         let now = CACurrentMediaTime()
         guard now - start >= 1 else { return nil }
         let fps = Double(render.count) / (now - start)

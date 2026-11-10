@@ -2130,6 +2130,7 @@ final class DevelopController: ObservableObject {
                 + "counted in \(took) ms, shown +\(DevelopTimingLog.ms(since: openedAt)) ms")
         }
         measuredRank = request.rank
+        if histogram != nil || scope != nil { frameHUD.histogramPublished() }
         if let histogram { self.histogram = histogram }
         if let scope { colorScope = scope }
     }
