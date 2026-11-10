@@ -17,7 +17,7 @@
 
 <div class="chips">
   <a href="#start">Start a mask</a><a href="#panel">The Masks panel</a><a href="#linear">Linear Gradient</a><a href="#radial">Radial Gradient</a>
-  <a href="#brush">Brush</a><a href="#luminance">Luminance Range</a><a href="#subject">Select Subject and Object</a><a href="#combine">Add, Subtract, Intersect</a><a href="#adjust">Mask sliders</a>
+  <a href="#brush">Brush</a><a href="#luminance">Luminance Range</a><a href="#subject">Select Subject and Object</a><a href="#people">Select People</a><a href="#combine">Add, Subtract, Intersect</a><a href="#adjust">Mask sliders</a>
 </div>
 
 <h2 id="start">Start a mask</h2>
@@ -57,7 +57,7 @@
 <ol class="legend">
   <li><b>Masks</b>, in the order you made them. Click one to select it; double-click to rename. The eye hides its effect.</li>
   <li>A selected mask lists its <b>parts</b>, each with a badge: <b>+</b> added, <b>−</b> subtracted, <b>∩</b> intersected.</li>
-  <li><b>New Mask</b>, and with a mask selected, <b>Add</b> or <b>Subtract</b> a part: Brush, Linear Gradient, Radial Gradient, Luminance Range, Select Subject, Select Object.</li>
+  <li><b>New Mask</b>, and with a mask selected, <b>Add</b> or <b>Subtract</b> a part: Brush, Linear Gradient, Radial Gradient, Luminance Range, Select Subject, Select Object, Select People.</li>
   <li><b>Show Overlay</b> (<kbd>O</kbd>) tints the selected mask red, so you can see exactly where it lands.</li>
   <li>The selected mask's <a href="#adjust">sliders</a>.</li>
 </ol>
@@ -141,6 +141,29 @@
   <figure><div class="frame compare" data-before="mask-subject-before.jpg" data-after="mask-subject-after.jpg" data-labels="Before|Background muted"></div></figure>
 </div>
 <p>Both have a <b>Feather</b> slider (default 20) to soften Vision's hard edge. To change the background instead of the subject, tick <b>Invert</b>. If Vision finds nothing, the panel says so.</p>
+
+<h2 id="people">Select People</h2>
+<p><b>Select People</b> selects skin, like Lightroom's People masks. Apple's Vision finds each person whose face is visible, traces the face (jaw line, eyes, brows and lips) and outlines the person. Atelier learns each face's own skin color from the face, so it works for any skin tone and light, then looks for that color on the rest of the same person.</p>
+<figure>
+  <div class="pins pinned">
+  <div class="panel">
+    <div class="pb">
+      <div class="gh">Select People</div>
+      <div class="row" data-pin="1"><span class="name" style="width:auto">Person</span><span class="popup" style="flex:none;width:130px">All People</span></div>
+      <div class="check" data-pin="2"><i class="on"></i>Face Skin</div>
+      <div class="check"><i class="on"></i>Body Skin</div>
+      <div class="sl" data-name="Feather" data-value="10" data-at="0.1" data-def="0.1" data-pin="3"></div>
+      <div class="check"><i></i>Invert</div>
+    </div>
+  </div>
+  </div>
+</figure>
+<ol class="legend">
+  <li><b>Person</b>: everyone, or one person. People are numbered left to right by face.</li>
+  <li><b>Face Skin</b> is the face without the eyes, brows and lips. <b>Body Skin</b> is the neck, ears, arms and hands of the same person. The two meet under the jaw with no gap. Hair above the forehead, clothes and skin-colored background are left out.</li>
+  <li><b>Feather</b> (default 10) softens the edge, which already follows the photo's edges.</li>
+</ol>
+<p>Press <kbd>O</kbd> to see the selection in red. If Vision finds no face, the panel says so; try Select Subject or a Brush instead. Match Look's <a href="match-look.html#skin">Skin Tones</a> use the same selection.</p>
 
 <h2 id="combine">Add, Subtract and Intersect</h2>
 <p>A mask can have several parts:</p>

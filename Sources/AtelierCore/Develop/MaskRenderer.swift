@@ -71,9 +71,12 @@ extension DevelopRenderer {
 
     /// A drawn part on the upright, uncropped photo whose frame is `extent`. Brush strokes are
     /// drawn once and kept in `brushCache` when given; `subject` finds Select Subject's mask
-    /// (no box) or Select Object's (inside the box) on the photo's frame.
+    /// (no box) or Select Object's (inside the box) on the photo's frame; `people` finds Select
+    /// People's skin there.
     static func sourceMask(_ component: DevelopSettings.MaskComponent, extent: CGRect,
-                           subject: ((DevelopSettings.MaskRect?) -> CIImage?)?, brushCache: BrushCache?) -> CIImage? {
+                           subject: ((DevelopSettings.MaskRect?) -> CIImage?)?,
+                           people: ((DevelopSettings.PeopleSelection) -> CIImage?)? = nil,
+                           brushCache: BrushCache?) -> CIImage? {
         let width = extent.width, height = extent.height
         let longEdge = max(width, height)
         // Mask points are top-left fractions; Core Image's y axis points up.
@@ -113,6 +116,11 @@ extension DevelopRenderer {
             return image.transformed(by: CGAffineTransform(translationX: extent.minX, y: extent.minY))
         case .subject(let selection):
             guard let mask = subject?(selection.box) else { return nil }
+            guard selection.feather > 0 else { return mask.cropped(to: extent) }
+            let sigma = selection.feather / 100 * 0.012 * Double(longEdge)
+            return mask.clampedToExtent().applyingGaussianBlur(sigma: sigma).cropped(to: extent)
+        case .people(let selection):
+            guard let mask = people?(selection) else { return nil }
             guard selection.feather > 0 else { return mask.cropped(to: extent) }
             let sigma = selection.feather / 100 * 0.012 * Double(longEdge)
             return mask.clampedToExtent().applyingGaussianBlur(sigma: sigma).cropped(to: extent)

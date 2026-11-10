@@ -487,6 +487,8 @@ public final class DevelopSession: @unchecked Sendable {
     /// lens geometry; a nil mask when Vision found nothing.
     private var subjectMasks: [DevelopSettings.MaskRect?: CIImage?] = [:]
     private var subjectKey: DevelopSettings?
+    /// Select People's faces and skin on the corrected photo, found once per lens geometry.
+    private var peopleFound: (key: DevelopSettings, skin: PeopleSkin?)?
     /// Pipeline step 1's results for the settings they were made from (see `CorrectedKey`), so a
     /// slider on any later panel doesn't decode the RAW and redo the lens corrections again.
     /// Two are kept, most recent last, so the Before view and the edit don't push each other out.
@@ -571,6 +573,7 @@ public final class DevelopSession: @unchecked Sendable {
             if case .luminance = component.shape { return nil }
             guard let mask = DevelopRenderer.sourceMask(component, extent: sourceExtent,
                                                         subject: { self.subject(of: source, key: key, box: $0) },
+                                                        people: { self.people(of: source, key: key, selection: $0) },
                                                         brushCache: brushCache) else { return nil }
             guard let crop else { return mask }
             return DevelopRenderer.applyGeometry(crop, to: mask, cropping: cropping)
@@ -760,6 +763,61 @@ public final class DevelopSession: @unchecked Sendable {
         }
         subjectMasks.updateValue(found, forKey: box)
         return found
+    }
+
+    /// Select People's face and body skin, found by Vision once per lens geometry. Call with the
+    /// lock held.
+    private func peopleSkin(of source: CIImage, key: DevelopSettings) -> PeopleSkin? {
+        if let peopleFound, peopleFound.key == key { return peopleFound.skin }
+        let extent = source.extent
+        let factor = min(1, Double(PeopleSkin.size) / Double(max(extent.width, extent.height)))
+        let small = source.transformed(by: CGAffineTransform(translationX: -extent.minX, y: -extent.minY))
+            .transformed(by: CGAffineTransform(scaleX: factor, y: factor))
+        let skin = renderer.context.createCGImage(small, from: small.extent.integral, format: .RGBA8,
+                                                  colorSpace: DevelopRenderer.sRGB).flatMap(PeopleSkin.find)
+        peopleFound = (key, skin)
+        return skin
+    }
+
+    /// Select People's mask on the corrected photo's frame.
+    private func people(of source: CIImage, key: DevelopSettings,
+                        selection: DevelopSettings.PeopleSelection) -> CIImage? {
+        guard let skin = peopleSkin(of: source, key: key), let mask = skin.mask(selection) else { return nil }
+        let image = DevelopRenderer.rawMask(mask)
+        let extent = source.extent
+        return image
+            .transformed(by: CGAffineTransform(scaleX: extent.width / image.extent.width, y: extent.height / image.extent.height))
+            .transformed(by: CGAffineTransform(translationX: extent.minX, y: extent.minY))
+            .cropped(to: extent)
+    }
+
+    /// The faces Select People finds, left to right, 0 to 1 from the top left of the upright,
+    /// uncropped photo (one per person it can select). Empty when it finds no one.
+    public func peopleFaces(settings: DevelopSettings) -> [CGRect] {
+        let settings = settings.applyingPanelSwitches()
+        lock.lock()
+        defer { lock.unlock() }
+        guard let source = corrected(settings) else { return [] }
+        return peopleSkin(of: source, key: settings.lensGeometryKey)?.people.map(\.face) ?? []
+    }
+
+    /// Select People's mask on the cropped photo, as `renderSRGB` frames it (white is skin), or nil
+    /// when Vision finds no one. Match Look measures skin with it, so it sees the same skin the
+    /// "Match Look: Skin" mask adjusts.
+    public func peopleMask(_ settings: DevelopSettings,
+                           selection: DevelopSettings.PeopleSelection = .init(feather: 0)) -> CGImage? {
+        let settings = settings.applyingPanelSwitches()
+        lock.lock()
+        defer { lock.unlock() }
+        guard let source = corrected(settings) else { return nil }
+        let key = settings.lensGeometryKey
+        let component = DevelopSettings.MaskComponent(.people(selection))
+        guard var mask = DevelopRenderer.sourceMask(component, extent: source.extent, subject: nil,
+                                                    people: { self.people(of: source, key: key, selection: $0) },
+                                                    brushCache: brushCache) else { return nil }
+        if let crop = settings.crop { mask = DevelopRenderer.applyGeometry(crop, to: mask) }
+        return renderer.context.createCGImage(mask, from: mask.extent.integral, format: .L8,
+                                              colorSpace: CGColorSpace(name: CGColorSpace.linearGray), deferred: false)
     }
 
     /// Whether Vision finds anything for a Select Subject or Select Object part, so the Masks

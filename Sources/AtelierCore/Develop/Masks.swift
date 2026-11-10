@@ -147,7 +147,7 @@ extension DevelopSettings {
         }
 
         public enum Kind: String, Codable, CaseIterable, Sendable {
-            case brush, linear, radial, luminance, subject, object
+            case brush, linear, radial, luminance, subject, object, people
 
             public var title: String {
                 switch self {
@@ -157,6 +157,7 @@ extension DevelopSettings {
                 case .luminance: return "Luminance Range"
                 case .subject: return "Select Subject"
                 case .object: return "Select Object"
+                case .people: return "Select People"
                 }
             }
 
@@ -168,6 +169,7 @@ extension DevelopSettings {
                 case .luminance: return "sun.max"
                 case .subject: return "person.crop.rectangle"
                 case .object: return "viewfinder"
+                case .people: return "person.2"
                 }
             }
 
@@ -182,6 +184,8 @@ extension DevelopSettings {
             case luminance(LuminanceRange)
             /// Select Subject (no box) or Select Object (inside a box), found by Vision.
             case subject(Selection)
+            /// Select People: face and body skin of the people Vision finds.
+            case people(PeopleSelection)
 
             public var kind: Kind {
                 switch self {
@@ -190,6 +194,7 @@ extension DevelopSettings {
                 case .radial: return .radial
                 case .luminance: return .luminance
                 case .subject(let selection): return selection.box == nil ? .subject : .object
+                case .people: return .people
                 }
             }
         }
@@ -215,12 +220,12 @@ extension DevelopSettings {
             case .brush(let strokes): return strokes.first?.points.first
             case .subject(let selection):
                 return selection.box.map { MaskPoint(x: $0.x + $0.width / 2, y: $0.y + $0.height / 2) }
-            case .luminance: return nil
+            case .luminance, .people: return nil
             }
         }
 
         private enum CodingKeys: String, CodingKey {
-            case id, mode, inverted, kind, strokes, linear, radial, luminance, selection
+            case id, mode, inverted, kind, strokes, linear, radial, luminance, selection, people
         }
 
         public init(from decoder: Decoder) throws {
@@ -235,6 +240,7 @@ extension DevelopSettings {
             case .luminance: shape = .luminance(try c.decodeIfPresent(LuminanceRange.self, forKey: .luminance) ?? LuminanceRange())
             case .subject: shape = .subject(try c.decodeIfPresent(Selection.self, forKey: .selection) ?? Selection(feather: 0))
             case .object: shape = .subject(try c.decode(Selection.self, forKey: .selection))
+            case .people: shape = .people(try c.decodeIfPresent(PeopleSelection.self, forKey: .people) ?? PeopleSelection())
             }
         }
 
@@ -250,6 +256,7 @@ extension DevelopSettings {
             case .radial(let gradient): try c.encode(gradient, forKey: .radial)
             case .luminance(let range): try c.encode(range, forKey: .luminance)
             case .subject(let selection): try c.encode(selection, forKey: .selection)
+            case .people(let selection): try c.encode(selection, forKey: .people)
             }
         }
     }

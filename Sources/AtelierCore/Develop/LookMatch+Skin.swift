@@ -21,7 +21,18 @@ extension LookMatcher {
         let existing = settings.masks.firstIndex { $0.name == LookMatch.skinMaskName }
         let index = existing ?? settings.masks.count
         var best = settings
-        if existing == nil {
+        if skin.usesPeople {
+            // Everyone's face and body skin, editable as a Select People part in Masking.
+            let part = DevelopSettings.MaskComponent(.people(DevelopSettings.PeopleSelection()))
+            if let existing {
+                // An earlier match's face ellipses become the people part.
+                if !best.masks[existing].components.contains(where: { $0.kind == .people }) {
+                    best.masks[existing].components = [part]
+                }
+            } else {
+                best.masks.append(.init(name: LookMatch.skinMaskName, components: [part]))
+            }
+        } else if existing == nil {
             let components = skin.faces.map { face in
                 let center = CGPoint(x: face.midX * space.rect.width, y: (face.midY + 0.04 * face.height) * space.rect.height)
                 let gradient = space.radial(center: center, width: face.width * space.rect.width * 0.48,
