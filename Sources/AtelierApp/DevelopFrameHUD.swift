@@ -28,7 +28,7 @@ final class DevelopFrameHUD {
         var busy = Sample()
         /// Main passes longer than one display refresh: each one held back at least one frame.
         var longPasses = 0
-        /// Histogram and color scope updates published on `DevelopController` (each one updates
+        /// Histogram and color scope updates published by `DevelopController` (each one updates
         /// every view observing it, like a settings change).
         var histogramUpdates = 0
         var fallbacks = Fallbacks()

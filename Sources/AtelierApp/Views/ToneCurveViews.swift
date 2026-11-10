@@ -204,8 +204,8 @@ private struct ParametricCurveView: View {
     var body: some View {
         GeometryReader { geometry in
             let size = geometry.size
-            Canvas { context, size in
-                CurveBackdrop.draw(in: context, size: size, histogram: develop.histogram, channel: .rgb, color: .white)
+            MeasuresReader(develop.measures) { measures in Canvas { context, size in
+                CurveBackdrop.draw(in: context, size: size, histogram: measures.histogram, channel: .rgb, color: .white)
                 if let region = activeRegion {
                     let (low, high) = bounds(of: region)
                     let rect = CGRect(x: size.width * low, y: 0, width: size.width * (high - low), height: size.height)
@@ -214,7 +214,7 @@ private struct ParametricCurveView: View {
                 let settings = develop.settings
                 context.stroke(CurveBackdrop.path(size: size) { DevelopRenderer.regionCurveValue(settings, at: $0) },
                                with: .color(.white), lineWidth: 1.5)
-            }
+            } }
             .background(Color.black.opacity(0.85), in: RoundedRectangle(cornerRadius: 4))
             .contentShape(Rectangle())
             .onContinuousHover { phase in
@@ -340,8 +340,8 @@ struct CurveEditor: View {
         GeometryReader { geometry in
             let size = geometry.size
             let color = Self.color(channel)
-            Canvas { context, size in
-                CurveBackdrop.draw(in: context, size: size, histogram: develop.histogram, channel: channel, color: color)
+            MeasuresReader(develop.measures) { measures in Canvas { context, size in
+                CurveBackdrop.draw(in: context, size: size, histogram: measures.histogram, channel: channel, color: color)
                 // The overall result, including Basic and the region curve, faintly.
                 if channel == .rgb, DevelopRenderer.hasToneCurve(develop.settings) {
                     let settings = develop.settings
@@ -368,7 +368,7 @@ struct CurveEditor: View {
                     context.fill(Path(ellipseIn: rect), with: .color(index == dragIndex || index == selected ? color : .black))
                     context.stroke(Path(ellipseIn: rect), with: .color(color.opacity(fading ? 0.3 : 1)), lineWidth: 1.5)
                 }
-            }
+            } }
             .background(Color.black.opacity(0.85), in: RoundedRectangle(cornerRadius: 4))
             .contentShape(Rectangle())
             .onHover { inside in

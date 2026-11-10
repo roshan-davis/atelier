@@ -43,6 +43,15 @@ private struct DevelopMeasureRequest {
     var rank: Int { count * 2 + (fromPreview ? 0 : 1) }
 }
 
+/// The open photo's histogram and color scope. They change with every render, so they are
+/// published here rather than on `DevelopController`, whose every change updates the whole
+/// Develop window (reports/develop-slider-smoothness-design-2026-11-10.md, S2 and D2).
+@MainActor
+final class DevelopMeasures: ObservableObject {
+    @Published fileprivate(set) var histogram: Histogram?
+    @Published fileprivate(set) var colorScope: ColorScope?
+}
+
 /// What a live frame shows: frames requested for another key are dropped (`LiveFrameSink`).
 private struct LiveFrameKey: Equatable {
     let assetID: Int64?
@@ -252,9 +261,12 @@ final class DevelopController: ObservableObject {
     /// Where the slider divides before (left) and after (right), 0...1.
     @Published var sliderPosition = 0.5
 
-    @Published private(set) var histogram: Histogram?
+    /// The histogram and color scope, on an object of their own (D2): each new count updates
+    /// only the views that draw them, not every view watching the controller.
+    let measures = DevelopMeasures()
+    var histogram: Histogram? { measures.histogram }
     /// Where the render's colors sit on the Color Grading wheels.
-    @Published private(set) var colorScope: ColorScope?
+    var colorScope: ColorScope? { measures.colorScope }
 
     /// Lightroom's Option-drag view, while Option is held on a slider that has one.
     @Published var sliderPreview: SliderPreview? = nil {
@@ -657,9 +669,9 @@ final class DevelopController: ObservableObject {
         beforeImage = nil
         // Ranks only compare within one open (requests carry the open's generation).
         measuredRank = 0
-        histogram = nil
+        measures.histogram = nil
         shootingInfo = nil
-        colorScope = nil
+        measures.colorScope = nil
         fullImage = nil
         fullImageSettings = nil
         fullBeforeImage = nil
@@ -990,7 +1002,7 @@ final class DevelopController: ObservableObject {
     func set(_ parameter: DevelopSettings.Parameter, to value: Double) {
         guard assetID != nil else { return }
         settings[parameter] = value
-        if (parameter.panel == .lensCorrections && !parameter.isDefringe) || parameter.panel == .transform { beforeImage = nil }
+        if (parameter.panel == .lensCorrections && !parameter.isDefringe) || parameter.panel == .transform, beforeImage != nil { beforeImage = nil }
         let shown = parameter == .tint ? asShotTint + settings[parameter] : settings[parameter]
         changed(step: Self.stepName(parameter, value: shown))
     }
@@ -1535,7 +1547,8 @@ final class DevelopController: ObservableObject {
     /// place (a preset, a snapshot, Paste), whose panel switches stand as they come.
     private func changed(step: String?, replacing: Bool = false) {
         if step != nil, !replacing { turnOnEditedPanels() }
-        if !settingPresetAmount { presetAmount = nil }
+        // Only when it changes: assigning a published property updates every watching view.
+        if !settingPresetAmount, presetAmount != nil { presetAmount = nil }
         constrainCropIfNeeded()
         dirty = true
         if let step { pendingStep = step }
@@ -2183,8 +2196,8 @@ final class DevelopController: ObservableObject {
         }
         measuredRank = request.rank
         if histogram != nil || scope != nil { frameHUD.histogramPublished() }
-        if let histogram { self.histogram = histogram }
-        if let scope { colorScope = scope }
+        if let histogram { measures.histogram = histogram }
+        if let scope { measures.colorScope = scope }
     }
 
     /// Until the photo's first render is counted, the histogram comes from the cached preview
