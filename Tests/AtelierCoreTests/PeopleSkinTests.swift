@@ -77,6 +77,36 @@ final class PeopleSkinTests: XCTestCase {
         XCTAssertLessThan(mean(face, 112..<123, 100..<130), 0.1, "the arm is body skin, not face")
     }
 
+    func testFacialFeaturePartsFromTheFaceOutline() throws {
+        let drawn = portrait()
+        func box(_ x0: CGFloat, _ y0: CGFloat, _ x1: CGFloat, _ y1: CGFloat) -> [CGPoint] {
+            [CGPoint(x: x0, y: y0), CGPoint(x: x1, y: y0), CGPoint(x: x1, y: y1), CGPoint(x: x0, y: y1)]
+        }
+        var face = drawn.face
+        face.eyes = [FaceShape.Eye(outline: box(69, 38, 76, 42), pupil: CGPoint(x: 72.5, y: 40)),
+                     FaceShape.Eye(outline: box(84, 38, 91, 42), pupil: CGPoint(x: 87.5, y: 40))]
+        face.outerLips = box(74, 58, 87, 62)
+        face.brows = [[CGPoint(x: 68, y: 34), CGPoint(x: 72, y: 33), CGPoint(x: 77, y: 34)]]
+        let found = try XCTUnwrap(PeopleSkin.build(pixels: drawn.pixels, width: width, height: height,
+                                                   faces: [face], mattes: [drawn.matte]))
+        let lips = found.values(.init(parts: [.lips]))
+        XCTAssertGreaterThan(mean(lips, 76..<85, 59..<61), 0.6, "lips")
+        XCTAssertLessThan(mean(lips, 64..<70, 46..<54), 0.05, "cheek is not lips")
+        XCTAssertLessThan(mean(lips, 113..<122, 100..<130), 0.01, "arm is not lips")
+        let iris = found.values(.init(parts: [.iris]))
+        XCTAssertGreaterThan(iris[40 * width + 72], 0.2, "iris at the pupil")
+        XCTAssertLessThan(mean(iris, 64..<70, 46..<54), 0.05, "cheek is not iris")
+        // The drawn eyes are dark all over: no white of the eye to select.
+        XCTAssertLessThan(mean(found.values(.init(parts: [.eyeSclera])), 69..<76, 38..<42), 0.1)
+        XCTAssertGreaterThan(mean(found.values(.init(parts: [.eyebrows])), 69..<76, 33..<35), 0.4, "brow")
+        // Face Skin and Lips ticked together cover the mouth with the face.
+        let both = found.values(.init(parts: [.faceSkin, .lips]))
+        XCTAssertGreaterThan(mean(both, 76..<85, 59..<61), 0.6)
+        XCTAssertGreaterThan(mean(both, 64..<70, 46..<54), 0.8)
+        // Nothing ticked selects nothing.
+        XCTAssertEqual(found.values(.init(parts: [])).max() ?? 0, 0)
+    }
+
     func testBodySkinFollowsThePersonOnly() throws {
         let drawn = portrait()
         // The wrist seed stands in for Vision's body pose.
@@ -171,5 +201,17 @@ final class PeopleSkinTests: XCTestCase {
         // A part saved with nothing but its kind selects everyone's skin.
         let bare = try JSONDecoder().decode(DevelopSettings.MaskComponent.self, from: Data(#"{"kind":"people"}"#.utf8))
         XCTAssertEqual(bare.shape, .people(.init()))
+        XCTAssertEqual(selection.refine, 0)
+        XCTAssertEqual(selection.grow, 0)
+        // Ticking and unticking keeps one order and may leave nothing ticked.
+        let none = DevelopSettings.PeopleSelection().setting(.faceSkin, false).setting(.bodySkin, false)
+        XCTAssertEqual(none.parts, [])
+        XCTAssertEqual(none.setting(.teeth, true).setting(.lips, true).parts, [.lips, .teeth])
+        // Edge controls round-trip, and older parts decode with them off.
+        let refined = DevelopSettings.MaskComponent(.subject(.init(box: nil, feather: 5, refine: 40, grow: -20)))
+        XCTAssertEqual(try JSONDecoder().decode(DevelopSettings.MaskComponent.self, from: JSONEncoder().encode(refined)), refined)
+        let old = try JSONDecoder().decode(DevelopSettings.MaskComponent.self,
+                                           from: Data(#"{"kind":"subject","selection":{"feather":20}}"#.utf8))
+        XCTAssertEqual(old.shape, .subject(.init(feather: 20, refine: 0, grow: 0)))
     }
 }

@@ -5,59 +5,119 @@ import Foundation
 import Vision
 
 extension DevelopSettings {
-    /// Select People: skin on the people Vision finds, like Lightroom's People masks. Each person
-    /// with a visible face is found; their face skin and body skin are separate parts.
+    /// Select People: parts of the people Vision finds, like Lightroom's People masks. Each person
+    /// with a visible face is found; face skin, body skin and each facial feature are separate
+    /// parts, ticked in any combination.
     public struct PeopleSelection: Codable, Hashable, Sendable {
         public enum Part: String, Codable, CaseIterable, Sendable {
-            case faceSkin, bodySkin
+            case faceSkin, bodySkin, eyebrows, eyeSclera, iris, lips, teeth
 
             public var title: String {
                 switch self {
                 case .faceSkin: return "Face Skin"
                 case .bodySkin: return "Body Skin"
+                case .eyebrows: return "Eyebrows"
+                case .eyeSclera: return "Eye Sclera"
+                case .iris: return "Iris and Pupil"
+                case .lips: return "Lips"
+                case .teeth: return "Teeth"
+                }
+            }
+
+            /// What the part covers, for its tooltip.
+            public var help: String {
+                switch self {
+                case .faceSkin: return "The face's skin, leaving out eyes, brows and lips"
+                case .bodySkin: return "Neck, arms, hands and other skin on the same person"
+                case .eyebrows: return "Both eyebrows"
+                case .eyeSclera: return "The whites of the eyes"
+                case .iris: return "The colored part of the eyes and the pupils"
+                case .lips: return "Upper and lower lip"
+                case .teeth: return "Teeth showing between the lips"
                 }
             }
         }
 
+        /// The parts a new Select People part starts with.
+        public static let defaultParts: [Part] = [.faceSkin, .bodySkin]
+
         /// Which person, counted from the left (0 is the leftmost face); nil is everyone.
         public var person: Int?
-        /// The parts selected, in `Part.allCases` order.
+        /// The parts selected, in `Part.allCases` order. May be empty while choosing (selects nothing).
         public var parts: [Part]
         /// 0...100; softens the edge.
         public var feather = 10.0
+        /// 0...100; snaps the edge to the photo's edges (0 is off).
+        public var refine = 0.0
+        /// -100...100; shrinks (below 0) or grows (above 0) the selection.
+        public var grow = 0.0
 
-        public init(person: Int? = nil, parts: [Part] = Part.allCases, feather: Double = 10) {
+        public init(person: Int? = nil, parts: [Part] = PeopleSelection.defaultParts, feather: Double = 10,
+                    refine: Double = 0, grow: Double = 0) {
             self.person = person
             self.parts = Part.allCases.filter(parts.contains)
             self.feather = feather
+            self.refine = refine
+            self.grow = grow
         }
 
         public func includes(_ part: Part) -> Bool { parts.contains(part) }
 
-        private enum CodingKeys: String, CodingKey { case person, parts, feather }
+        /// The same selection with `part` ticked or unticked.
+        public func setting(_ part: Part, _ on: Bool) -> PeopleSelection {
+            var changed = self
+            changed.parts = Part.allCases.filter { $0 == part ? on : parts.contains($0) }
+            return changed
+        }
+
+        private enum CodingKeys: String, CodingKey { case person, parts, feather, refine, grow }
 
         public init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             person = try c.decodeIfPresent(Int.self, forKey: .person)
-            let stored = try c.decodeIfPresent([String].self, forKey: .parts) ?? Part.allCases.map(\.rawValue)
+            // Parts saved before the facial features existed meant face and body skin.
+            let stored = try c.decodeIfPresent([String].self, forKey: .parts) ?? Self.defaultParts.map(\.rawValue)
             parts = Part.allCases.filter { stored.contains($0.rawValue) }
             feather = try c.decodeIfPresent(Double.self, forKey: .feather) ?? 10
+            refine = try c.decodeIfPresent(Double.self, forKey: .refine) ?? 0
+            grow = try c.decodeIfPresent(Double.self, forKey: .grow) ?? 0
         }
     }
 }
 
 /// A face as Vision outlines it, in the analysed image's pixels (top-left origin): the outline of
-/// the face (jaw line closed over the forehead) and the features inside it that aren't skin
-/// (eyes, brows, lips).
+/// the face (jaw line closed over the forehead), the features inside it that aren't skin (eyes,
+/// brows; cut out of Face Skin a little larger than drawn), and the outlines Select People's
+/// feature parts are made from.
 public struct FaceShape: Sendable, Equatable {
+    /// One eye: its outline (lid to lid) and its pupil when Vision finds it.
+    public struct Eye: Sendable, Equatable {
+        public var outline: [CGPoint]
+        public var pupil: CGPoint?
+
+        public init(outline: [CGPoint], pupil: CGPoint? = nil) {
+            self.outline = outline
+            self.pupil = pupil
+        }
+    }
+
     public var box: CGRect
     public var outline: [CGPoint]
     public var features: [[CGPoint]]
+    public var brows: [[CGPoint]]
+    public var eyes: [Eye]
+    public var outerLips: [CGPoint]
+    public var innerLips: [CGPoint]
 
-    public init(box: CGRect, outline: [CGPoint], features: [[CGPoint]] = []) {
+    public init(box: CGRect, outline: [CGPoint], features: [[CGPoint]] = [], brows: [[CGPoint]] = [],
+                eyes: [Eye] = [], outerLips: [CGPoint] = [], innerLips: [CGPoint] = []) {
         self.box = box
         self.outline = outline
         self.features = features
+        self.brows = brows
+        self.eyes = eyes
+        self.outerLips = outerLips
+        self.innerLips = innerLips
     }
 
     /// An ellipse inside the face box, for a face Vision gave no landmarks for.
@@ -98,6 +158,24 @@ public struct PeopleSkin: Sendable {
         public var face: CGRect
         var faceSkin: [Float]
         var bodySkin: [Float]
+        /// Eyebrows, sclera, iris, lips and teeth, each kept only around where it is.
+        var features: [DevelopSettings.PeopleSelection.Part: Patch] = [:]
+    }
+
+    /// Part of a mask: the values inside a rectangle of the analysed image, 0 elsewhere.
+    struct Patch: Sendable {
+        var x: Int, y: Int, width: Int, height: Int
+        var values: [Float]
+
+        func add(to out: inout [Float], imageWidth: Int) {
+            for row in 0..<height {
+                for column in 0..<width {
+                    let v = values[row * width + column]
+                    let i = (y + row) * imageWidth + x + column
+                    if i < out.count, v > out[i] { out[i] = v }
+                }
+            }
+        }
     }
 
     public let width: Int
@@ -113,8 +191,13 @@ public struct PeopleSkin: Sendable {
         var out = [Float](repeating: 0, count: width * height)
         for (index, person) in people.enumerated() where selection.person == nil || selection.person == index {
             for part in selection.parts {
-                let values = part == .faceSkin ? person.faceSkin : person.bodySkin
-                for i in 0..<min(out.count, values.count) where values[i] > out[i] { out[i] = values[i] }
+                switch part {
+                case .faceSkin, .bodySkin:
+                    let values = part == .faceSkin ? person.faceSkin : person.bodySkin
+                    for i in 0..<min(out.count, values.count) where values[i] > out[i] { out[i] = values[i] }
+                default:
+                    person.features[part]?.add(to: &out, imageWidth: width)
+                }
             }
         }
         return out
@@ -206,11 +289,17 @@ public struct PeopleSkin: Sendable {
         guard let landmarks = face.landmarks else { return .ellipse(in: box) }
         let jaw = points(landmarks.faceContour)
         let leftBrow = points(landmarks.leftEyebrow), rightBrow = points(landmarks.rightEyebrow)
-        let features = [points(landmarks.leftEye), points(landmarks.rightEye), leftBrow, rightBrow,
-                        points(landmarks.outerLips)].filter { $0.count >= 3 }
-        guard jaw.count >= 3 else { return FaceShape(box: box, outline: FaceShape.ellipse(in: box).outline, features: features) }
-        return FaceShape(box: box, outline: FaceShape.outline(jaw: jaw, brows: leftBrow + rightBrow, box: box),
-                         features: features)
+        let leftEye = points(landmarks.leftEye), rightEye = points(landmarks.rightEye)
+        let eyes = [FaceShape.Eye(outline: leftEye, pupil: points(landmarks.leftPupil).first),
+                    FaceShape.Eye(outline: rightEye, pupil: points(landmarks.rightPupil).first)]
+            .filter { $0.outline.count >= 3 }
+        let outerLips = points(landmarks.outerLips), innerLips = points(landmarks.innerLips)
+        let features = [leftEye, rightEye, leftBrow, rightBrow].filter { $0.count >= 3 }
+        let brows = [leftBrow, rightBrow].filter { $0.count >= 2 }
+        let outline = jaw.count >= 3 ? FaceShape.outline(jaw: jaw, brows: leftBrow + rightBrow, box: box)
+                                     : FaceShape.ellipse(in: box).outline
+        return FaceShape(box: box, outline: outline, features: features, brows: brows, eyes: eyes,
+                         outerLips: outerLips, innerLips: innerLips)
     }
 
     // MARK: Skin from faces and mattes (no Vision; tested directly)
@@ -249,6 +338,11 @@ public struct PeopleSkin: Sendable {
                 let grown = raster(scaled(feature, by: 1.35), width: width, height: height)
                 for i in 0..<count where grown[i] > holes[i] { holes[i] = grown[i] }
             }
+            // Lips are cut out closer to their edge, so Face Skin and Lips together leave no gap.
+            if face.outerLips.count >= 3 {
+                let lips = raster(scaled(face.outerLips, by: 1.1), width: width, height: height)
+                for i in 0..<count where lips[i] > holes[i] { holes[i] = lips[i] }
+            }
             var samples: [SIMD3<Float>] = []
             for i in 0..<count where outline[i] > 0.5 && holes[i] < 0.5 && looksLikeSkin(lab[i]) {
                 samples.append(lab[i])
@@ -286,12 +380,144 @@ public struct PeopleSkin: Sendable {
             let radius = max(2, max(width, height) / 300)
             faceSkin = guidedFilter(faceSkin, guide: guide, width: width, height: height, radius: radius)
             bodySkin = guidedFilter(bodySkin, guide: guide, width: width, height: height, radius: radius)
+            // Features are small: a finer edge than skin's.
+            let featureRadius = max(1, radius / 2)
+            var features: [DevelopSettings.PeopleSelection.Part: Patch] = [:]
+            for (part, map) in featureMaps(face, lab: lab, width: width, height: height) {
+                if let patch = patch(map, guide: guide, width: width, height: height, radius: featureRadius) {
+                    features[part] = patch
+                }
+            }
             people.append(Person(face: CGRect(x: face.box.minX / CGFloat(width), y: face.box.minY / CGFloat(height),
                                               width: face.box.width / CGFloat(width), height: face.box.height / CGFloat(height)),
-                                 faceSkin: faceSkin, bodySkin: bodySkin))
+                                 faceSkin: faceSkin, bodySkin: bodySkin, features: features))
         }
         guard !people.isEmpty else { return nil }
         return PeopleSkin(width: width, height: height, people: people)
+    }
+
+    /// Eyebrows, sclera, iris and pupil, lips and teeth of one face from Vision's outlines, before
+    /// edge smoothing. Brows are drawn as a band along Vision's brow line (filled too, when the
+    /// points close round the brow). The iris is a disc at the pupil, 42% of the eye's width
+    /// across, clipped by the lids; the sclera is the rest of the eye where it is light (not
+    /// lashes or shadow). Lips are the outer lip outline less the mouth opening; teeth are the
+    /// light, nearly colorless pixels inside the opening.
+    static func featureMaps(_ face: FaceShape, lab: [SIMD3<Float>], width: Int, height: Int)
+        -> [(DevelopSettings.PeopleSelection.Part, [Float])] {
+        let count = width * height
+        func ramp(_ v: Float, _ a: Float, _ b: Float) -> Float {
+            let t = min(1, max(0, (v - a) / (b - a)))
+            return t * t * (3 - 2 * t)
+        }
+        var result: [(DevelopSettings.PeopleSelection.Part, [Float])] = []
+
+        var brows = [Float](repeating: 0, count: count)
+        let browThickness = max(1.5, face.box.height * 0.05)
+        for brow in face.brows {
+            let line = stroke(brow, thickness: browThickness, width: width, height: height)
+            let filled = brow.count >= 3 ? raster(brow, width: width, height: height) : line
+            for i in 0..<count { brows[i] = max(brows[i], line[i], filled[i]) }
+        }
+        result.append((.eyebrows, brows))
+
+        var iris = [Float](repeating: 0, count: count), sclera = iris
+        for eye in face.eyes {
+            let inside = raster(eye.outline, width: width, height: height)
+            let xs = eye.outline.map(\.x)
+            let eyeWidth = (xs.max() ?? 0) - (xs.min() ?? 0)
+            let center = eye.pupil ?? CGPoint(x: xs.reduce(0, +) / CGFloat(max(1, xs.count)),
+                                              y: eye.outline.map(\.y).reduce(0, +) / CGFloat(max(1, eye.outline.count)))
+            let round = disc(center: center, radius: max(1, eyeWidth * 0.21), width: width, height: height)
+            for i in 0..<count where inside[i] > 0 {
+                iris[i] = max(iris[i], inside[i] * round[i])
+                sclera[i] = max(sclera[i], inside[i] * (1 - round[i]) * ramp(lab[i].x, 0.45, 0.62))
+            }
+        }
+        result.append((.eyeSclera, sclera))
+        result.append((.iris, iris))
+
+        var lips = [Float](repeating: 0, count: count), teeth = lips
+        if face.outerLips.count >= 3 {
+            let outer = raster(face.outerLips, width: width, height: height)
+            let opening = face.innerLips.count >= 3 ? raster(face.innerLips, width: width, height: height)
+                                                    : [Float](repeating: 0, count: count)
+            for i in 0..<count {
+                lips[i] = outer[i] * (1 - opening[i])
+                guard opening[i] > 0 else { continue }
+                let chroma = (lab[i].y * lab[i].y + lab[i].z * lab[i].z).squareRoot()
+                teeth[i] = opening[i] * ramp(lab[i].x, 0.5, 0.65) * (1 - ramp(chroma, 0.04, 0.08))
+            }
+        }
+        result.append((.lips, lips))
+        result.append((.teeth, teeth))
+        return result
+    }
+
+    /// `map` smoothed along the photo's edges and kept only around where it isn't 0; nil when it
+    /// is 0 everywhere.
+    static func patch(_ map: [Float], guide: [Float], width: Int, height: Int, radius: Int) -> Patch? {
+        var minX = width, minY = height, maxX = -1, maxY = -1
+        for i in 0..<min(map.count, width * height) where map[i] > 0.001 {
+            let x = i % width, y = i / width
+            minX = min(minX, x); maxX = max(maxX, x); minY = min(minY, y); maxY = max(maxY, y)
+        }
+        guard maxX >= 0 else { return nil }
+        let margin = radius * 2 + 2
+        let x0 = max(0, minX - margin), y0 = max(0, minY - margin)
+        let x1 = min(width - 1, maxX + margin), y1 = min(height - 1, maxY + margin)
+        let w = x1 - x0 + 1, h = y1 - y0 + 1
+        var values = [Float](repeating: 0, count: w * h), light = values
+        for row in 0..<h {
+            for column in 0..<w {
+                let i = (y0 + row) * width + x0 + column
+                values[row * w + column] = map[i]
+                light[row * w + column] = guide[i]
+            }
+        }
+        return Patch(x: x0, y: y0, width: w, height: h,
+                     values: guidedFilter(values, guide: light, width: w, height: h, radius: radius))
+    }
+
+    /// 1 within `thickness / 2` of the polyline, 0 elsewhere.
+    static func stroke(_ line: [CGPoint], thickness: CGFloat, width: Int, height: Int) -> [Float] {
+        var out = [Float](repeating: 0, count: width * height)
+        guard let first = line.first else { return out }
+        let half = thickness / 2
+        let segments = line.count > 1 ? Array(zip(line, line.dropFirst())) : [(first, first)]
+        let minX = max(0, Int(floor((line.map(\.x).min() ?? 0) - half)))
+        let maxX = min(width - 1, Int(ceil((line.map(\.x).max() ?? 0) + half)))
+        let minY = max(0, Int(floor((line.map(\.y).min() ?? 0) - half)))
+        let maxY = min(height - 1, Int(ceil((line.map(\.y).max() ?? 0) + half)))
+        guard minX <= maxX, minY <= maxY else { return out }
+        for y in minY...maxY {
+            for x in minX...maxX {
+                let p = CGPoint(x: CGFloat(x) + 0.5, y: CGFloat(y) + 0.5)
+                for (a, b) in segments {
+                    let dx = b.x - a.x, dy = b.y - a.y
+                    let length = dx * dx + dy * dy
+                    let t = length > 0 ? min(1, max(0, ((p.x - a.x) * dx + (p.y - a.y) * dy) / length)) : 0
+                    if hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy)) <= half {
+                        out[y * width + x] = 1
+                        break
+                    }
+                }
+            }
+        }
+        return out
+    }
+
+    /// 1 inside the circle (pixel centers), 0 outside.
+    static func disc(center: CGPoint, radius: CGFloat, width: Int, height: Int) -> [Float] {
+        var out = [Float](repeating: 0, count: width * height)
+        let minX = max(0, Int(floor(center.x - radius))), maxX = min(width - 1, Int(ceil(center.x + radius)))
+        let minY = max(0, Int(floor(center.y - radius))), maxY = min(height - 1, Int(ceil(center.y + radius)))
+        guard minX <= maxX, minY <= maxY else { return out }
+        for y in minY...maxY {
+            for x in minX...maxX where hypot(CGFloat(x) + 0.5 - center.x, CGFloat(y) + 0.5 - center.y) <= radius {
+                out[y * width + x] = 1
+            }
+        }
+        return out
     }
 
     /// A loose test that a color could be skin at all, whatever the skin tone: warm hues, some

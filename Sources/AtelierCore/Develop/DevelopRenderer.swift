@@ -576,7 +576,7 @@ public final class DevelopSession: @unchecked Sendable {
             guard let mask = DevelopRenderer.sourceMask(component, extent: sourceExtent,
                                                         subject: { self.subject(of: source, key: key, box: $0) },
                                                         people: { self.people(of: source, key: key, selection: $0) },
-                                                        brushCache: brushCache) else { return nil }
+                                                        guide: source, brushCache: brushCache) else { return nil }
             guard let crop else { return mask }
             return DevelopRenderer.applyGeometry(crop, to: mask, cropping: cropping)
         }
@@ -816,7 +816,7 @@ public final class DevelopSession: @unchecked Sendable {
         let component = DevelopSettings.MaskComponent(.people(selection))
         guard var mask = DevelopRenderer.sourceMask(component, extent: source.extent, subject: nil,
                                                     people: { self.people(of: source, key: key, selection: $0) },
-                                                    brushCache: brushCache) else { return nil }
+                                                    guide: source, brushCache: brushCache) else { return nil }
         if let crop = settings.crop { mask = DevelopRenderer.applyGeometry(crop, to: mask) }
         return renderer.context.createCGImage(mask, from: mask.extent.integral, format: .L8,
                                               colorSpace: CGColorSpace(name: CGColorSpace.linearGray), deferred: false)
@@ -843,7 +843,7 @@ public final class DevelopSession: @unchecked Sendable {
         let component = DevelopSettings.MaskComponent(.subject(DevelopSettings.Selection(feather: feather)))
         guard var mask = DevelopRenderer.sourceMask(component, extent: source.extent,
                                                     subject: { self.subject(of: source, key: key, box: $0) },
-                                                    brushCache: brushCache) else { return nil }
+                                                    guide: source, brushCache: brushCache) else { return nil }
         if let crop = settings.crop { mask = DevelopRenderer.applyGeometry(crop, to: mask) }
         // Mask values are stored as is, so linear gray keeps them unchanged.
         return renderer.context.createCGImage(mask, from: mask.extent.integral, format: .L8,

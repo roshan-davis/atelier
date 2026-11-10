@@ -293,19 +293,27 @@ extension DevelopSettings {
         public var box: MaskRect?
         /// 0...100; softens Vision's hard edge.
         public var feather = 20.0
+        /// 0...100; snaps the edge to the photo's edges (0 is off).
+        public var refine = 0.0
+        /// -100...100; shrinks (below 0) or grows (above 0) the selection.
+        public var grow = 0.0
 
-        public init(box: MaskRect? = nil, feather: Double = 20) {
+        public init(box: MaskRect? = nil, feather: Double = 20, refine: Double = 0, grow: Double = 0) {
             self.box = box
             self.feather = feather
+            self.refine = refine
+            self.grow = grow
         }
 
-        private enum CodingKeys: String, CodingKey { case box, feather }
+        private enum CodingKeys: String, CodingKey { case box, feather, refine, grow }
 
         public init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             box = try c.decodeIfPresent(MaskRect.self, forKey: .box)
             // Masks made before the slider existed keep their hard edge.
             feather = try c.decodeIfPresent(Double.self, forKey: .feather) ?? 0
+            refine = try c.decodeIfPresent(Double.self, forKey: .refine) ?? 0
+            grow = try c.decodeIfPresent(Double.self, forKey: .grow) ?? 0
         }
     }
 
