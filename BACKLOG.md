@@ -473,10 +473,12 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 ## AT-032 — Match Skin Tone in Match Look
 
-**Status:** In implementation. **Owner:** Codex. **Chat:** [Match Skin Tone](codex://threads/01a1c2e4-4756-7d71-be00-48275f5eda30), continued from [PR #87](codex://threads/01a1c197-aa52-7d60-be48-b20e2b243b9f). **Branch:** `codex/match-skin-tone`. **Baseline:** `15f1757ea74ee5b32facebada4595d7d53187414`. **Dependencies:** AT-029 and AT-031, merged.
+**Status:** Implementation in review. Manual acceptance pending. **Owner:** Codex. **Chat:** [Match Skin Tone](codex://threads/01a1c2e4-4756-7d71-be00-48275f5eda30), continued from [PR #87](codex://threads/01a1c197-aa52-7d60-be48-b20e2b243b9f). **Branch:** `codex/match-skin-tone`. **PR:** [#89](https://github.com/roshan-davis/atelier/pull/89). **Baseline:** `15f1757ea74ee5b32facebada4595d7d53187414`. **Dependencies:** AT-029 and AT-031, merged.
 
 **Scope:** Rosh requested Match Skin Tone as an alternative to Protect Skin Tones. Measure face color on both images and fit editable local color sliders. Author face samples for the four built-in portraits. Other labeled regions are deferred.
 
 **Acceptance:** Verify both skin treatments on real portraits with different skin tones. Exercise missing skin, switching treatments and references, Strength, Show Differences, one-step Apply and per-photo batch behavior. Record Mac and native UI results and leave visual acceptance to Rosh.
 
 **Missing-skin fallback:** Keep other selected adjustments available when either image lacks face skin. A skin-only batch can continue when the lead photo lacks skin and the reference has usable skin. Skip unchanged photos without adding a history step. The native test checks the visible warning and whether Apply remains available.
+
+**Validation:** Implementation revision `54365dfd5547bef0b10a63449fc3dab9556011c0` passed the Mac build and all 300 Swift tests with Nikon Z6 and Zf RAW fixtures and zero skips. Both native smoke tests passed, including missing skin, Apply and switching back to Off. The model regression covers the face-free lead photo in a skin-only batch. Reviewed the updated Help and face color example in Chrome. Mac logs: `/private/tmp/atelier-match-skin-tone/.build/local-checks/20261109-170936-868837`. UI and CI details are recorded in the PR.
