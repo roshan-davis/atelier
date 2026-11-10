@@ -162,7 +162,10 @@ extension DevelopSession {
         let renderer = DevelopRenderer.shared
         guard shadowClipping || highlightClipping else {
             guard let surface = renderer.render(image, into: surfaces) else { return nil }
-            return (surface, renderer.sample(of: surface, colorSpace: surfaces.colorSpace, sampleSize: sampleSize))
+            let sample = RenderSignposts.measure("Live frame sample") {
+                renderer.sample(of: surface, colorSpace: surfaces.colorSpace, sampleSize: sampleSize)
+            }
+            return (surface, sample)
         }
         // As in `renderForDisplay`: the histogram is counted from the photo without the overlay,
         // made from the render Core Image just cached.
@@ -177,6 +180,9 @@ extension DevelopSession {
             small = image.applyingFilter("CILanczosScaleTransform", parameters: [kCIInputScaleKey: factor,
                                                                                  kCIInputAspectRatioKey: 1])
         }
-        return (surface, renderer.cgImage(small, colorSpace: surfaces.colorSpace))
+        let sample = RenderSignposts.measure("Live frame sample") {
+            renderer.cgImage(small, colorSpace: surfaces.colorSpace)
+        }
+        return (surface, sample)
     }
 }

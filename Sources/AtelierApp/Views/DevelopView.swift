@@ -9,6 +9,7 @@ struct DevelopImageView: View {
     @ObservedObject var develop: DevelopController
     /// The original has taken over 0.6 s to open, so the spinner shows over the photo.
     @State private var slowLoad = false
+    @AppStorage(DevelopFrameHUD.preference) private var showFrameHUD = false
     /// With the Filmstrip showing, ⌃Tab's "photos" outline goes on the Filmstrip instead.
     @AppStorage(Filmstrip.visibleKey) private var filmstripVisible = true
 
@@ -73,6 +74,16 @@ struct DevelopImageView: View {
                 }
                 if develop.showingBefore {
                     Badge(text: "Before").padding(14)
+                }
+            }
+            .overlay(alignment: .topTrailing) {
+                if showFrameHUD, develop.compareMode == .off, !develop.isCropping, !develop.isAIOpen,
+                   !develop.isGuiding, develop.image != nil {
+                    DevelopFrameHUDOverlay(hud: develop.frameHUD, assetID: develop.assetID)
+                        .frame(width: 264, height: 89)
+                        .background(.black.opacity(0.84), in: RoundedRectangle(cornerRadius: 7))
+                        .allowsHitTesting(false)
+                        .padding(12)
                 }
             }
             .areaFocusFlash(.photo, enabled: !filmstripVisible)

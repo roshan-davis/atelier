@@ -12,13 +12,25 @@ import IOSurface
 /// compare views, crop and the other tools keep the ordinary path.
 @MainActor
 final class PhotoFeed {
+    struct RenderTiming {
+        let count: Int
+        let readyAt: CFTimeInterval
+        let duration: CFTimeInterval
+        let queueWait: CFTimeInterval
+    }
+
+    private let onFrame: ((RenderTiming) -> Void)?
+
+    init(onFrame: ((RenderTiming) -> Void)? = nil) { self.onFrame = onFrame }
+
+
     private weak var view: ZoomScrollView?
     /// The surface on screen now, and the pool it came from.
     private var shown: (surface: IOSurface, pool: DisplaySurfaces)?
     /// The render count of the newest frame put on screen.
     private(set) var shownCount = -1
     /// The image the controller published last, with the render count it was made from.
-    private var published: (id: ObjectIdentifier, count: Int)?
+    private var published: (id: ObjectIdentifier, count: Int, timing: RenderTiming?)?
 
     /// A view is showing the photo and can take frames.
     var isAttached: Bool { view != nil }
@@ -38,7 +50,7 @@ final class PhotoFeed {
     /// Puts a live frame on screen. False when it can't be shown (no view, or its shape differs
     /// from the photo on screen, e.g. after an Aspect change); the surface is returned to the
     /// pool and the frame must be shown the ordinary way.
-    func show(_ surface: IOSurface, count: Int, from pool: DisplaySurfaces) -> Bool {
+    func show(_ surface: IOSurface, count: Int, from pool: DisplaySurfaces, timing: RenderTiming? = nil) -> Bool {
         guard let view, view.showFrame(surface) else {
             pool.checkIn(surface)
             return false
@@ -46,12 +58,13 @@ final class PhotoFeed {
         releaseShown()
         shown = (surface, pool)
         shownCount = max(shownCount, count)
+        if let timing { onFrame?(timing) }
         return true
     }
 
     /// The controller published `image`, made from render `count`.
-    func published(_ image: NSImage, count: Int) {
-        published = (ObjectIdentifier(image), count)
+    func published(_ image: NSImage, count: Int, timing: RenderTiming? = nil) {
+        published = (ObjectIdentifier(image), count, timing)
     }
 
     /// Whether `image` is a published render older than the frame on screen, which must not
@@ -62,9 +75,12 @@ final class PhotoFeed {
     }
 
     /// `view` has put an ordinary image on screen in place of the frame.
-    func imageShown(in view: ZoomScrollView) {
+    func imageShown(_ image: NSImage?, in view: ZoomScrollView) {
         guard self.view === view else { return }
         releaseShown()
+        if let image, let published, published.id == ObjectIdentifier(image), let timing = published.timing {
+            onFrame?(timing)
+        }
     }
 
     private func releaseShown() {

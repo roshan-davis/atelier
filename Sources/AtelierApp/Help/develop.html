@@ -186,6 +186,16 @@
   <li><b>Drag to adjust.</b> Hover over the graph and the part under the pointer lights up: Blacks, Shadows, Exposure, Highlights or Whites, from left to right. The line underneath shows that slider and its value. Drag left or right to change it, or double-click to reset it.</li>
 </ul>
 
+<h2 id="frame-diagnostics">Frame diagnostics</h2>
+<p>In the single-photo Develop view, choose <span class="path">Develop › Frame Diagnostics</span> and drag a slider. The overlay estimates how many new photo frames reach a display refresh each second. It shows time spent handling a slider tick on the main thread, rendering, and waiting for a refresh after the frame is ready, plus the longest gap between photo frames during the drag.</p>
+<figure>
+  <div class="panel narrow" style="margin:0 auto">
+    <div class="pb" style="font-family:monospace">92 fps / 120 Hz · estimated display<br>Main tick &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 1.0 ms<br>Render &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 7.3 ms<br>Ready → refresh 5.6 ms<br>Longest gap &nbsp;&nbsp;&nbsp; 25.0 ms</div>
+  </div>
+  <figcaption>Illustrative values. Refresh timing is an estimate. Main tick covers the slider callback, with deferred SwiftUI updates outside that number.</figcaption>
+</figure>
+<p>Atelier writes a summary each active second to <code>Documents/Atelier Traces</code>, including the starting value, time to the first changed frame and longest gap for each completed drag. Choose the same menu item to hide the overlay.</p>
+
 <div class="see-also">Next: <a href="basic.html">Basic</a> · <a href="crop.html">Crop &amp; Straighten</a> · <a href="masking.html">Masking</a></div>
 
 </main>

@@ -552,3 +552,11 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 **Validation:** Cloud only, no Swift toolchain: source review; Help page checked in Chromium (drawn sliders and the live Temp slider's grab/jump behavior).
 
 **Follow-up (2026-11-10, after #94 merged as `0ab8fba`):** Rosh built it and found a knob at the maximum could only be caught (and showed the arrow) on its left half. Cause: the slider's ZStack was sized by its children (the track, now inset, and the knob), so its hit shape stopped 12 pt short of the right end and 8 pt short of the bottom; framed to the full slider in `DevelopSlider` and `HueRangeSlider`. Knob 12 → 13 pt at Rosh's ask. HSL / Color was cut off on the left in a narrow right column (Rosh's screenshot): the Hue / Saturation / Luminance / All bar is wider than the column, and the panel centered its too-wide content. That bar now falls back to Hue / Sat / Lum / All when the full names don't fit, and every panel's content is aligned left, so anything too wide overflows at the value end instead of cutting names. Branch `claude/slider-end-grab`, PR [#95](https://github.com/roshan-davis/atelier/pull/95).
+
+## AT-038 — Develop frame diagnostics (D0)
+
+**Status:** In progress. **Owner:** Codex. **Chat:** PR planning: Develop slider frame HUD (D0). **Branch:** `codex/develop-frame-hud`. **Dependencies:** AT-011a, AT-036.
+
+**Scope and evidence:** Rosh requested D0 only, based on Claude's November 10 smoothness report and Codex's PR #93 benchmark. Add opt-in frame diagnostics in single-photo Develop, with once-a-second timing-log summaries in Debug and Release. Run the same real slider gesture on the Z6 and Zf NEFs, including zero-start and 100% zoom, with Basic, Tone Curve, HSL, Detail and Effects open. Record actual display cadence and distinguish a display-link estimate from physical presentation. D1–D5 require separate scope and approval.
+
+**Acceptance:** The overlay reports refresh-estimated photo FPS, synchronous main-thread slider callback time, render time, frame-ready to estimated refresh and longest gap per drag. The overlay leaves the slider and photo gesture paths in place. Confirm native appearance and log output. Attribute frame loss only where evidence supports it.

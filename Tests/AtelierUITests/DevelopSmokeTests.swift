@@ -51,6 +51,23 @@ final class DevelopSmokeTests: XCTestCase {
         assertLabel(original, on: value)
     }
 
+    func testFrameDiagnosticsTogglesInDevelop() throws {
+        let app = try launchDevelop()
+        defer { app.terminate() }
+        let exposure = app.staticTexts["develop-slider-value-Exposure"]
+        XCTAssertTrue(exposure.waitForExistence(timeout: 15))
+        let develop = app.menuBars.menuBarItems["Develop"]
+        let diagnostics = develop.menuItems["Frame Diagnostics"]
+        let overlay = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Frame diagnostics")).firstMatch
+
+        develop.click()
+        diagnostics.click()
+        XCTAssertTrue(overlay.waitForExistence(timeout: 10))
+        develop.click()
+        diagnostics.click()
+        XCTAssertTrue(overlay.waitForNonExistence(timeout: 10))
+    }
+
     private func launchDevelop() throws -> XCUIApplication {
         let appPath = try XCTUnwrap(ProcessInfo.processInfo.environment["ATELIER_UI_APP"])
         let dataPath = try XCTUnwrap(ProcessInfo.processInfo.environment["ATELIER_UI_DATA"])

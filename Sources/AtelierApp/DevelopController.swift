@@ -3,6 +3,7 @@ import AtelierCore
 import CoreImage
 import Foundation
 import IOSurface
+import QuartzCore
 
 /// How the Develop view shows the photo before edits next to the edited one.
 enum CompareMode: String, CaseIterable {
@@ -515,7 +516,8 @@ final class DevelopController: ObservableObject {
     /// How long an edit rests before its last live frame is published as `image`.
     private static let settleDelay: TimeInterval = 0.12
     /// Gives the photo view its live frames straight from the GPU; see `PhotoFeed`.
-    let photoFeed = PhotoFeed()
+    let frameHUD = DevelopFrameHUD()
+    lazy var photoFeed = PhotoFeed { [weak frameHUD] timing in frameHUD?.submit(timing) }
     private let displaySurfaces = DisplaySurfaces()
     /// A live frame didn't fit the photo on screen; frames take the ordinary path until the
     /// pointer edit ends or another photo opens.
@@ -1870,6 +1872,7 @@ final class DevelopController: ObservableObject {
         let overlay = isMasking && showMaskOverlay ? selectedMaskID : nil
         let clipping = overlay == nil && preview == nil ? clippingOverlay : (shadows: false, highlights: false)
         renderCount += 1
+        frameHUD.scheduled(renderCount)
         // Once the photo is up, live frames go straight from the GPU to the photo view (see
         // `PhotoFeed`); the first render is published the ordinary way, as it ends the stand-in.
         let direct = photoFeed.isAttached && firstRenderDone && cropping && !liveFramesOff
@@ -1901,6 +1904,7 @@ final class DevelopController: ObservableObject {
                                                controller: DevelopController) {
         guard let request = job.take() else { return }
         let renderBegan = DevelopTimingLog.now()
+        let renderClock = CACurrentMediaTime()
         request.renderBeganAt.value = renderBegan
         var surface: IOSurface?
         var cgImage: CGImage?
@@ -1922,6 +1926,7 @@ final class DevelopController: ObservableObject {
                 plain = rendered.plain
             }
         }
+        let readyAt = CACurrentMediaTime()
         let renderTook = DevelopTimingLog.ms(since: renderBegan)
         if renderTook > 300 || (surface == nil && cgImage == nil) {
             DevelopTimingLog.shared.log(request.assetID, surface == nil && cgImage == nil ? "render FAILED after \(renderTook) ms"
@@ -1937,16 +1942,18 @@ final class DevelopController: ObservableObject {
                 MainActor.assumeIsolated { controller.applyMeasure(measured, histogram: histogram, scope: scope, took: took) }
             }
         }
+        let timing = PhotoFeed.RenderTiming(count: request.count, readyAt: readyAt, duration: readyAt - renderClock,
+                                           queueWait: max(0, renderBegan - request.queuedAt))
         DispatchQueue.main.async {
             MainActor.assumeIsolated {
-                controller.finishRender(request, surface: surface, cgImage: cgImage, renderBegan: renderBegan)
+                controller.finishRender(request, surface: surface, cgImage: cgImage, renderBegan: renderBegan, timing: timing)
             }
         }
         queue.async { Self.renderNext(job: job, on: queue, controller: controller) }
     }
 
     private func finishRender(_ request: ProxyRenderRequest, surface: IOSurface?, cgImage: CGImage?,
-                              renderBegan: CFAbsoluteTime) {
+                              renderBegan: CFAbsoluteTime, timing: PhotoFeed.RenderTiming) {
         // Nothing newer has been asked for.
         let latest = request.count == renderCount
         if latest { rendering = false }
@@ -1960,7 +1967,7 @@ final class DevelopController: ObservableObject {
         var shownLive = false
         if let surface, let surfaces = request.surfaces {
             if fits {
-                shownLive = photoFeed.show(surface, count: request.count, from: surfaces)
+                shownLive = photoFeed.show(surface, count: request.count, from: surfaces, timing: timing)
                 if !shownLive {
                     // Another shape than the photo on screen (an Aspect or crop change): frames
                     // take the ordinary path until the edit ends, and this one is redone that way.
@@ -1980,7 +1987,7 @@ final class DevelopController: ObservableObject {
         if fits, let cgImage {
             let shown = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
             image = shown
-            photoFeed.published(shown, count: request.count)
+            photoFeed.published(shown, count: request.count, timing: timing)
             showsStandIn = false
             imageIsWhole = !request.cropping
         }

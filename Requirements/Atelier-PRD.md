@@ -357,6 +357,10 @@ Edits are a versioned list of parameters stored in the catalog, rendered live on
 8. Effects: Glow, post-crop vignetting, grain.
 9. Output transform: working space (linear Rec. 2020) to display or export space.
 
+### Frame diagnostics (D0)
+
+Develop › Frame Diagnostics is an opt-in diagnostic for slider drags in the single-photo view in Debug and Release. It shows estimated edit frames per second and display refresh rate, synchronous main-thread slider handling, render time, frame-ready to estimated refresh, and the longest gap between edit frames during the drag. It adds one summary per active second to the Develop timing log, with a completed-drag summary including the first changed tick. A display link estimates presentation. These readings do not measure physical scan-out or separately time SwiftUI's deferred view updates.
+
 ### Tools and requirements
 
 - Live preview at 60 fps on a 2560 px proxy; full-resolution render once the photo is zoomed past fit, and for export. A mouse drag updates the control and live photo as it moves. It saves one history step when released, including when the mouse pauses during the drag. Live frames go straight from the GPU to the photo view, as LightCraft draws its renders: Core Image renders into a surface the view shows, with no copy through the CPU and no window update per frame, and the next render starts as soon as one finishes. When the edit rests (0.12 s) the ordinary image is published, so the photo at rest, the Navigator and every other view of it are as before (AT-036, Nov 10, 2026).
