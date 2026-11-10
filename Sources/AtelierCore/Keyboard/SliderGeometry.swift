@@ -5,14 +5,14 @@ import Foundation
 /// `DevelopSlider` and `HueRangeSlider`; this is the math they share, kept here so it can be
 /// tested without a window.
 ///
-/// - The knob is 12 pt, a little bigger than Lightroom's, but it can be caught anywhere in a
+/// - The knob is 13 pt (12 until Rosh asked for one point more, Nov 10, 2026), a little bigger than Lightroom's, but it can be caught anywhere in a
 ///   20 pt zone around it: a press there picks the knob up where it is, with no jump.
 /// - A press elsewhere on the track jumps the knob there, as in Lightroom, and the drag goes on
 ///   from there.
 /// - The track is inset by the knob's radius, so the knob never hangs over the slider's name or
 ///   value at either end and all of it can be grabbed.
 public enum SliderGeometry {
-    public static let knobDiameter = 12.0
+    public static let knobDiameter = 13.0
     /// How wide (and tall) the zone is where a press picks the knob up instead of jumping.
     public static let grabZone = 20.0
     public static let trackHeight = 3.0

@@ -96,6 +96,10 @@ struct PanelSection<Content: View>: View {
             }
             if isExpanded {
                 content()
+                    // If a panel's controls ever need more width than the column has, they
+                    // overflow to the right (the value end) instead of being centered and
+                    // cutting off the names on the left.
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 10)
                     .opacity(isOn?.wrappedValue == false ? 0.45 : 1)
@@ -190,7 +194,7 @@ struct SliderRow: View {
 /// Atelier's one slider, used for every slider in the app (Develop, Masking, Presets Amount,
 /// Export, Cull, Match Look, the grid's thumbnail size and the HDR app): a thin track (colored
 /// where Lightroom colors it), a mark at the default, the change from the default filled in,
-/// and a 12 pt round knob. The sizes and the press rules are `SliderGeometry`'s: a press within
+/// and a 13 pt round knob. The sizes and the press rules are `SliderGeometry`'s: a press within
 /// the knob's 20 pt grab zone picks it up where it is, a press elsewhere on the track jumps it
 /// there. The pointer is a left-right arrow over the knob and during every drag (Rosh, Nov 10,
 /// 2026). Never use SwiftUI's `Slider`; add an option here instead.
@@ -249,6 +253,10 @@ struct DevelopSlider: View {
                 SliderKnob()
                     .offset(x: knob - SliderGeometry.knobDiameter / 2, y: midY - SliderGeometry.knobDiameter / 2)
             }
+            // The ZStack is only as big as its widest and tallest child (the inset track and the
+            // knob), so without this frame the right end and the bottom of the slider took no
+            // clicks and no cursor: a knob at the maximum could only be caught on its left half.
+            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 0)
                 .onChanged { drag in

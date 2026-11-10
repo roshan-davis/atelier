@@ -61,13 +61,13 @@ struct HSLPanel: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
                 targetButton
-                Picker("Channel", selection: $channel) {
-                    ForEach(DevelopSettings.HSLChannel.allCases, id: \.self) { Text($0.rawValue).tag($0.rawValue) }
-                    Text("All").tag("All")
+                // Lightroom's full names when they fit; in a narrow panel "Sat" and "Lum", so the
+                // row never pushes the panel wider than its column (Rosh saw HSL cut off on the
+                // left, Nov 10, 2026).
+                ViewThatFits(in: .horizontal) {
+                    channelPicker(short: false)
+                    channelPicker(short: true)
                 }
-                .pickerStyle(.segmented)
-                .controlSize(.small)
-                .labelsHidden()
             }
             ForEach(channels, id: \.self) { channel in
                 if channels.count > 1 {
@@ -83,6 +83,27 @@ struct HSLPanel: View {
         }
         .onChange(of: channel) {
             if let shown = DevelopSettings.HSLChannel(rawValue: channel) { develop.targetChannel = shown }
+        }
+    }
+
+    private func channelPicker(short: Bool) -> some View {
+        Picker("Channel", selection: $channel) {
+            ForEach(DevelopSettings.HSLChannel.allCases, id: \.self) { option in
+                Text(short ? Self.shortName(option) : option.rawValue).tag(option.rawValue)
+            }
+            Text("All").tag("All")
+        }
+        .pickerStyle(.segmented)
+        .controlSize(.small)
+        .labelsHidden()
+        .help("Hue, Saturation, Luminance, or All three")
+    }
+
+    private static func shortName(_ channel: DevelopSettings.HSLChannel) -> String {
+        switch channel {
+        case .hue: return "Hue"
+        case .saturation: return "Sat"
+        case .luminance: return "Lum"
         }
     }
 
