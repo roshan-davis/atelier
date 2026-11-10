@@ -79,8 +79,10 @@ final class PeopleSkinTests: XCTestCase {
 
     func testBodySkinFollowsThePersonOnly() throws {
         let drawn = portrait()
+        // The wrist seed stands in for Vision's body pose.
         let found = try XCTUnwrap(PeopleSkin.build(pixels: drawn.pixels, width: width, height: height,
-                                                   faces: [drawn.face], mattes: [drawn.matte]))
+                                                   faces: [drawn.face], mattes: [drawn.matte],
+                                                   seeds: [CGPoint(x: 117, y: 115)]))
         let body = found.values(.init(parts: [.bodySkin]))
         XCTAssertGreaterThan(mean(body, 75..<85, 74..<82), 0.7, "neck")
         XCTAssertGreaterThan(mean(body, 113..<122, 100..<130), 0.7, "arm in shadow")
@@ -92,6 +94,37 @@ final class PeopleSkinTests: XCTestCase {
         let both = found.values(.init())
         XCTAssertGreaterThan(mean(both, 64..<70, 46..<54), 0.8)
         XCTAssertGreaterThan(mean(both, 113..<122, 100..<130), 0.7)
+    }
+
+    func testWarmClothesTouchingTheNeckAreLeftOut() throws {
+        var drawn = portrait()
+        // A knit scarf close to skin color across the top of the shirt, touching the neck.
+        var noise: UInt32 = 12345
+        for y in 85..<97 {
+            for x in 55..<105 {
+                noise = noise &* 1_103_515_245 &+ 12345
+                let n = Int((noise >> 16) % 29) - 14
+                let i = (y * width + x) * 4
+                drawn.pixels[i] = UInt8(196 + n); drawn.pixels[i + 1] = UInt8(146 + n); drawn.pixels[i + 2] = UInt8(112 + n)
+            }
+        }
+        let found = try XCTUnwrap(PeopleSkin.build(pixels: drawn.pixels, width: width, height: height,
+                                                   faces: [drawn.face], mattes: [drawn.matte],
+                                                   seeds: [CGPoint(x: 117, y: 115)]))
+        let body = found.values(.init(parts: [.bodySkin]))
+        XCTAssertGreaterThan(mean(body, 75..<85, 74..<82), 0.7, "neck")
+        XCTAssertGreaterThan(mean(body, 113..<122, 100..<130), 0.7, "arm")
+        XCTAssertLessThan(mean(body, 60..<100, 88..<95), 0.1, "scarf")
+    }
+
+    func testArmWithoutASeedIsLeftOut() throws {
+        // Without a pose seed, a bare arm that doesn't touch the neck isn't guessed from color alone.
+        let drawn = portrait()
+        let found = try XCTUnwrap(PeopleSkin.build(pixels: drawn.pixels, width: width, height: height,
+                                                   faces: [drawn.face], mattes: [drawn.matte]))
+        let body = found.values(.init(parts: [.bodySkin]))
+        XCTAssertGreaterThan(mean(body, 75..<85, 74..<82), 0.7, "neck")
+        XCTAssertLessThan(mean(body, 113..<122, 100..<130), 0.1, "arm")
     }
 
     func testNoMatteMeansNoBodySkin() throws {

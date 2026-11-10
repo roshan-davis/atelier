@@ -160,7 +160,39 @@ public struct PeopleSkin: Sendable {
                 mattes.append(values)
             }
         }
-        return build(pixels: pixels.pixels, width: width, height: height, faces: faces, mattes: mattes)
+        return build(pixels: pixels.pixels, width: width, height: height, faces: faces, mattes: mattes,
+                     seeds: limbSeeds(handler, imageSize: imageSize))
+    }
+
+    /// Where bare arms and hands usually are, from Vision's body and hand poses (no model of our
+    /// own): each wrist, a point a quarter of the way up the forearm, and every hand joint. A seed
+    /// on a sleeve finds no smooth skin next to it and grows nothing.
+    static func limbSeeds(_ handler: VNImageRequestHandler, imageSize: CGSize) -> [CGPoint] {
+        let bodyRequest = VNDetectHumanBodyPoseRequest()
+        let handRequest = VNDetectHumanHandPoseRequest()
+        handRequest.maximumHandCount = 8
+        guard (try? handler.perform([bodyRequest, handRequest])) != nil else { return [] }
+        func point(_ p: VNRecognizedPoint?) -> CGPoint? {
+            guard let p, p.confidence > 0.3 else { return nil }
+            return CGPoint(x: p.location.x * imageSize.width, y: (1 - p.location.y) * imageSize.height)
+        }
+        var seeds: [CGPoint] = []
+        for body in bodyRequest.results ?? [] {
+            guard let joints = try? body.recognizedPoints(.all) else { continue }
+            for (elbow, wrist) in [(VNHumanBodyPoseObservation.JointName.leftElbow, VNHumanBodyPoseObservation.JointName.leftWrist),
+                                   (.rightElbow, .rightWrist)] {
+                guard let w = point(joints[wrist]) else { continue }
+                seeds.append(w)
+                if let e = point(joints[elbow]) {
+                    seeds.append(CGPoint(x: w.x + (e.x - w.x) * 0.25, y: w.y + (e.y - w.y) * 0.25))
+                }
+            }
+        }
+        for hand in handRequest.results ?? [] {
+            guard let joints = try? hand.recognizedPoints(.all) else { continue }
+            seeds += joints.values.compactMap { point($0) }
+        }
+        return seeds
     }
 
     static func faceShape(_ face: VNFaceObservation, imageSize: CGSize) -> FaceShape {
@@ -184,12 +216,15 @@ public struct PeopleSkin: Sendable {
     // MARK: Skin from faces and mattes (no Vision; tested directly)
 
     /// Each face's skin color is learned from the face itself (inside its outline, leaving out the
-    /// eyes, brows and lips), then looked for on the face (Face Skin) and over that person's matte
-    /// (Body Skin: neck, arms, hands). Body skin starts where the face's outline ends, so the two
-    /// together leave no gap under the jaw. It keeps only pieces joined to the face or big enough
-    /// to be a limb, so specks of skin-colored background or clothes are left out.
+    /// eyes, brows and lips), then looked for on the face (Face Skin). Body Skin is grown, not
+    /// just color-matched: it starts from the neck just under the jaw and from `seeds` (wrists,
+    /// forearms and hands from Vision's poses, in pixels from the top left) and spreads over that
+    /// person's matte only to neighbors of the face's skin color that are smooth (skin has little
+    /// texture, knit and fabric have more) and close in color (no edge between them). So a warm
+    /// scarf, hat or coat touching the neck stops the growth at its edge, and skin-colored specks
+    /// that no seed reaches are left out.
     public static func build(pixels: [UInt8], width: Int, height: Int, faces: [FaceShape],
-                             mattes: [[Float]]) -> PeopleSkin? {
+                             mattes: [[Float]], seeds: [CGPoint] = []) -> PeopleSkin? {
         let count = width * height
         guard count > 0, pixels.count >= count * 4 else { return nil }
         var lab = [SIMD3<Float>](repeating: .zero, count: count)
@@ -199,9 +234,15 @@ public struct PeopleSkin: Sendable {
             lab[i] = SIMD3(Float(v.0), Float(v.1), Float(v.2))
         }
         let lightness = lab.map(\.x)
+        let texture = localDeviation(lightness, width: width, height: height)
         let usableMattes = mattes.filter { $0.count == count }
+        let ordered = faces.sorted(by: { $0.box.midX < $1.box.midX })
+        func nearestFace(_ p: CGPoint) -> Int? {
+            ordered.indices.min { hypot(ordered[$0].box.midX - p.x, ordered[$0].box.midY - p.y)
+                < hypot(ordered[$1].box.midX - p.x, ordered[$1].box.midY - p.y) }
+        }
         var people: [Person] = []
-        for face in faces.sorted(by: { $0.box.midX < $1.box.midX }) {
+        for (faceIndex, face) in ordered.enumerated() {
             let outline = raster(face.outline, width: width, height: height)
             var holes = [Float](repeating: 0, count: count)
             for feature in face.features {
@@ -223,16 +264,23 @@ public struct PeopleSkin: Sendable {
             let matte = usableMattes.max { $0[center.0 * width + center.1] < $1[center.0 * width + center.1] }
             var bodySkin = [Float](repeating: 0, count: count)
             if let matte, matte[center.0 * width + center.1] > 0.3 {
-                let near = raster(scaled(face.outline, by: 1.6), width: width, height: height)
                 // Hair: the band above the forehead, as wide as the face.
                 let hairBottom = face.outline.map(\.y).min() ?? face.box.minY
                 let hairTop = hairBottom - face.box.height * 0.6
+                var allowed = [Bool](repeating: false, count: count)
                 for i in 0..<count {
                     let x = CGFloat(i % width), y = CGFloat(i / width)
-                    if y < hairBottom, y > hairTop, x > face.box.minX - face.box.width * 0.2, x < face.box.maxX + face.box.width * 0.2 { continue }
-                    bodySkin[i] = matte[i] * likelihood[i] * (1 - outline[i])
+                    let hair = y < hairBottom && y > hairTop
+                        && x > face.box.minX - face.box.width * 0.2 && x < face.box.maxX + face.box.width * 0.2
+                    allowed[i] = !hair && matte[i] > 0.4 && outline[i] < 0.5 && likelihood[i] > 0.15
+                        && texture[i] < maxSkinTexture
                 }
-                keepJoined(&bodySkin, width: width, height: height, near: near, minimumShare: 0.002)
+                let chin = face.outline.map(\.y).max() ?? face.box.maxY
+                var starts = [CGPoint(x: face.box.midX, y: chin + face.box.height * 0.12)]
+                starts += seeds.filter { nearestFace($0) == faceIndex }
+                let grown = grow(from: starts, allowed: allowed, likelihood: likelihood, lab: lab,
+                                 width: width, height: height)
+                for i in 0..<count where grown[i] { bodySkin[i] = 1 }
             }
             let guide = lightness
             let radius = max(2, max(width, height) / 300)
@@ -362,35 +410,58 @@ public struct PeopleSkin: Sendable {
         return out
     }
 
-    /// Leaves out pieces of the mask (above half) that neither touch `near` nor hold
-    /// `minimumShare` of the image.
-    static func keepJoined(_ mask: inout [Float], width: Int, height: Int, near: [Float], minimumShare: Double) {
+    /// Skin is smooth at this size; knit, fabric and hair vary more from pixel to pixel.
+    static let maxSkinTexture: Float = 0.025
+    /// The largest color step (Oklab) growth crosses between neighbors; a seam or edge is larger.
+    static let maxSkinStep: Float = 0.03
+
+    /// Grows a region from each start (moved to the nearest allowed pixel that is clearly skin,
+    /// within 3% of the image) through allowed neighbors whose color differs by less than
+    /// `maxSkinStep`.
+    static func grow(from starts: [CGPoint], allowed: [Bool], likelihood: [Float], lab: [SIMD3<Float>],
+                     width: Int, height: Int) -> [Bool] {
         let count = width * height
-        var label = [Int32](repeating: -1, count: count)
+        var grown = [Bool](repeating: false, count: count)
         var stack: [Int] = []
-        let minimum = Int(Double(count) * minimumShare)
-        for start in 0..<count where mask[start] > 0.5 && label[start] < 0 {
-            var piece: [Int] = []
-            var touches = false
-            label[start] = 0
-            stack.append(start)
-            while let i = stack.popLast() {
-                piece.append(i)
-                if near[i] > 0.5 { touches = true }
-                let x = i % width, y = i / width
-                for (nx, ny) in [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)]
-                where nx >= 0 && ny >= 0 && nx < width && ny < height {
-                    let j = ny * width + nx
-                    if label[j] < 0, mask[j] > 0.5 {
-                        label[j] = 0
-                        stack.append(j)
-                    }
+        let reach = max(2, max(width, height) * 3 / 100)
+        for start in starts {
+            let sx = Int(start.x), sy = Int(start.y)
+            var best: (distance: Int, index: Int)?
+            for dy in -reach...reach {
+                for dx in -reach...reach {
+                    let x = sx + dx, y = sy + dy
+                    guard x >= 0, y >= 0, x < width, y < height else { continue }
+                    let i = y * width + x
+                    guard allowed[i], likelihood[i] > 0.5 else { continue }
+                    let d = dx * dx + dy * dy
+                    if d < best?.distance ?? .max { best = (d, i) }
                 }
             }
-            if !touches && piece.count < minimum {
-                for i in piece { mask[i] = 0 }
+            if let best, !grown[best.index] {
+                grown[best.index] = true
+                stack.append(best.index)
             }
         }
+        while let i = stack.popLast() {
+            let x = i % width, y = i / width
+            for (nx, ny) in [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)]
+            where nx >= 0 && ny >= 0 && nx < width && ny < height {
+                let j = ny * width + nx
+                guard !grown[j], allowed[j] else { continue }
+                let step = lab[j] - lab[i]
+                guard (step * step).sum() < maxSkinStep * maxSkinStep else { continue }
+                grown[j] = true
+                stack.append(j)
+            }
+        }
+        return grown
+    }
+
+    /// The standard deviation of `values` over each pixel's 3 × 3 neighborhood.
+    static func localDeviation(_ values: [Float], width: Int, height: Int) -> [Float] {
+        let mean = boxMean(values, width: width, height: height, radius: 1)
+        let meanSquare = boxMean(values.map { $0 * $0 }, width: width, height: height, radius: 1)
+        return zip(meanSquare, mean).map { max(0, $0 - $1 * $1).squareRoot() }
     }
 
     /// He, Sun and Tang's guided filter (2010): smooths the mask while keeping its edges on the
