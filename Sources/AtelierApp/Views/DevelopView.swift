@@ -574,7 +574,7 @@ private struct HistogramView: View {
             guard canAdjust else { return }
             develop.reset(ToneRegion.at(point.x / max(1, width)).parameter)
         }
-        .cursor(.columnResize)
+        .cursor(.slide)
         .help("Drag a tone region left or right to change it: Blacks, Shadows, Exposure, Highlights or Whites. "
               + "Double-click a region to reset it.")
     }

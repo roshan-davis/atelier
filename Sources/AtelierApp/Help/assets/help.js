@@ -196,8 +196,8 @@
     const def = el.dataset.def === undefined ? 0.5 : Number(el.dataset.def);
     const grad = gradient(el.dataset.gradient);
     el.innerHTML =
-      '<span class="name"></span><span class="track"><span class="bar"></span><span class="fill"></span>' +
-      '<span class="mark"></span><span class="knob"></span></span><span class="value"></span>';
+      '<span class="name"></span><span class="track"><span class="rail"><span class="bar"></span><span class="fill"></span>' +
+      '<span class="mark"></span><span class="knob"></span></span></span><span class="value"></span>';
     el.querySelector(".name").textContent = el.dataset.name || "";
     const value = el.querySelector(".value");
     value.textContent = el.dataset.value ?? "0";
@@ -266,16 +266,30 @@
       value.textContent = values[i];
       value.classList.toggle("changed", i !== defIndex);
     }
+    // As in the app (SliderGeometry): a press within 10 px of the knob picks it up where it is;
+    // a press elsewhere on the track jumps it there. The arrow shows for the whole drag.
+    const rail = slider.querySelector(".rail");
+    let grabOffset = 0;
+    function knobX() {
+      const rect = rail.getBoundingClientRect();
+      return rect.left + (index / n) * rect.width;
+    }
     function at(event) {
-      const rect = track.getBoundingClientRect();
-      const f = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+      const rect = rail.getBoundingClientRect();
+      const f = Math.min(1, Math.max(0, (event.clientX + grabOffset - rect.left) / rect.width));
       show(Math.round(f * n));
     }
     track.addEventListener("pointerdown", (event) => {
       track.setPointerCapture(event.pointerId);
+      track.classList.add("dragging");
+      const k = knobX();
+      grabOffset = Math.abs(event.clientX - k) <= 10 ? k - event.clientX : 0;
       at(event);
     });
     track.addEventListener("pointermove", (event) => { if (event.buttons) at(event); });
+    const endDrag = () => { track.classList.remove("dragging"); grabOffset = 0; };
+    track.addEventListener("pointerup", endDrag);
+    track.addEventListener("pointercancel", endDrag);
     track.addEventListener("dblclick", () => show(defIndex));
     slider.querySelector(".name").addEventListener("dblclick", () => show(defIndex));
     show(start);

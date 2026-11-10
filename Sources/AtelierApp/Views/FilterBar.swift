@@ -94,8 +94,8 @@ struct FilterBar: View {
         if model.mode == .grid {
             HStack(spacing: 5) {
                 Image(systemName: "minus")
-                Slider(value: $thumbnailSize, in: GridThumbnails.sizeRange)
-                    .controlSize(.small)
+                DevelopSlider(value: $thumbnailSize, range: GridThumbnails.sizeRange, step: 1,
+                              origin: GridThumbnails.sizeRange.lowerBound, gradient: nil, name: "Thumbnail size")
                     .frame(width: 90)
                 Image(systemName: "plus")
             }

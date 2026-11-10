@@ -211,7 +211,8 @@ struct MatchLookSheet: View {
             }
             HStack {
                 Text("Strength")
-                Slider(value: $match.strength, in: 0...100)
+                DevelopSlider(value: $match.strength, range: 0...100, step: 1, origin: 0, gradient: nil,
+                              name: "Strength")
                     .frame(maxWidth: 360)
                 Text("\(Int(match.strength.rounded()))")
                     .monospacedDigit()

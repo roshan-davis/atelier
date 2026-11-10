@@ -538,3 +538,15 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 **Acceptance:** Mac build and tests (`DisplaySurfacesTests`: surface frame equals `renderForDisplay` within one level, right way up, with and without the clipping overlay; pool limit). Timings before/after in a Release build: settings→pixels on screen for Basic > Contrast and Tone Curve drags at Fit (target AT-011a: photo < 50 ms median, ≤ 100 ms p95). Rosh: no color shift or flip between a drag and its release; Before (\), J overlay, Masking brush and sliders, zoomed drags, Aspect drag, photo changes during and right after a drag all show the right image.
 
 **Validation:** Cloud only, no Swift toolchain: source review.
+
+## AT-037 — One slider for the whole app: easier-to-grab knob and a left-right arrow
+
+**Status:** Implementation in review. Never compiled (cloud, no Swift toolchain); Mac build, tests, layout snapshots and Rosh's manual acceptance pending. **Owner:** Cl. **Chat:** Claude project thread "Make app-wide slider style with bigger knob". **Branch:** `claude/project-thread-3d1h14`. **PR:** [#94](https://github.com/roshan-davis/atelier/pull/94). **Baseline:** `88b3328`. Part of AT-014 (UI, gestures and accessibility).
+
+**Scope:** Rosh (2026-11-10): a slightly bigger knob with a different cursor, on all sliders, as the app's slider standard. Agreed: 12 pt knob (was 11), 20 pt grab zone around it (a press there keeps the knob under the pointer; elsewhere on the track jumps it), the left-right arrow over the knob and through every drag (`CursorShape.slide`), track inset by the knob's radius. `SliderGeometry` (Core, tested) holds the numbers and math; `DevelopSlider`, `SliderKnob` and `HueRangeSlider` use it. The system sliders in Cull (Grouping), Match Look (Strength) and the grid toolbar (thumbnail size) now use `DevelopSlider`. Tone Curve region splits and the histogram drag show the same arrow. `DevelopSlider` gains VoiceOver value and increment/decrement. Help (Develop basics > Sliders) and its drawn sliders updated.
+
+**Not in scope:** keyboard focus (`KeyboardSlider`) for the three formerly-system sliders outside Develop: they never had Atelier's arrow-key focus, and adding it would take the arrows from Cull and grid navigation. Point curve handles and color wheels are not sliders.
+
+**Acceptance:** Mac build and tests (`SliderGeometryTests`), layout snapshots reviewed (every panel's slider rows shift by the knob inset; the Color Grading luminance slider and Presets Amount rows are 4 pt taller). Rosh: knob easy to catch, no jump when grabbing it, arrow over the knob and while dragging, drags as smooth as PR #93, double-click name reset, click-to-type, Tab/arrow keys and ⌥-drag views unchanged.
+
+**Validation:** Cloud only, no Swift toolchain: source review; Help page checked in Chromium (drawn sliders and the live Temp slider's grab/jump behavior).

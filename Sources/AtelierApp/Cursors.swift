@@ -26,6 +26,9 @@ enum CursorShape: Equatable {
     case resize(NSCursor.FrameResizePosition)
     /// A divider dragged left and right.
     case columnResize
+    /// A slider's knob (or a slider-like handle, such as a Tone Curve region split), dragged
+    /// left and right. Every slider shows it over its knob and while it is dragged.
+    case slide
     /// A divider dragged up and down.
     case rowResize
     case notAllowed
@@ -45,7 +48,7 @@ enum CursorShape: Equatable {
         case .zoomOut: return .zoomOut
         case .rotate: return CustomCursors.rotate
         case .resize(let position): return .frameResize(position: position, directions: .all)
-        case .columnResize: return .columnResize
+        case .columnResize, .slide: return .columnResize
         case .rowResize: return .rowResize
         case .notAllowed: return .operationNotAllowed
         }
