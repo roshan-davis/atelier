@@ -535,8 +535,9 @@ struct HueRangeSlider: View {
     var onOption: ((Bool) -> Void)?
 
     private enum Grab {
-        case low, high
-        case both(startLow: Double, startHigh: Double, startX: CGFloat)
+        /// An end, and how far it sits from the pointer (0 when the press jumped it there).
+        case low(Double), high(Double)
+        case both(startLow: Double, startHigh: Double, startX: Double)
     }
 
     @State private var grab: Grab?
@@ -549,47 +550,49 @@ struct HueRangeSlider: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let width = geometry.size.width
-            let midY = geometry.size.height / 2
-            let lowX = low / 100 * width, highX = high / 100 * width
+            let width = Double(geometry.size.width)
+            let midY = Double(geometry.size.height) / 2
+            let lowX = SliderGeometry.x(fraction: low / 100, width: width)
+            let highX = SliderGeometry.x(fraction: high / 100, width: width)
+            let inset = SliderGeometry.trackInset, length = SliderGeometry.trackLength(width: width)
             ZStack(alignment: .topLeading) {
                 Capsule()
                     .fill(LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing))
-                    .frame(width: width, height: 5)
-                    .offset(y: midY - 2.5)
+                    .frame(width: length, height: 5)
+                    .offset(x: inset, y: midY - 2.5)
                 // Dim the colors outside the range.
                 Rectangle()
                     .fill(Color.black.opacity(0.55))
-                    .frame(width: max(0, lowX), height: 5)
-                    .offset(y: midY - 2.5)
+                    .frame(width: max(0, lowX - inset), height: 5)
+                    .offset(x: inset, y: midY - 2.5)
                 Rectangle()
                     .fill(Color.black.opacity(0.55))
-                    .frame(width: max(0, width - highX), height: 5)
+                    .frame(width: max(0, width - inset - highX), height: 5)
                     .offset(x: highX, y: midY - 2.5)
                 ForEach([lowX, highX], id: \.self) { x in
-                    Circle()
-                        .fill(Color.white)
-                        .overlay(Circle().stroke(Color.black.opacity(0.25), lineWidth: 0.5))
-                        .shadow(color: .black.opacity(0.3), radius: 1, y: 0.5)
-                        .frame(width: 11, height: 11)
-                        .offset(x: x - 5.5, y: midY - 5.5)
+                    SliderKnob()
+                        .offset(x: x - SliderGeometry.knobDiameter / 2, y: midY - SliderGeometry.knobDiameter / 2)
                 }
             }
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 0)
                 .onChanged { drag in
                     onOption?(NSEvent.modifierFlags.contains(.option))
-                    guard width > 0 else { return }
-                    let value = min(100, max(0, Double(drag.location.x / width) * 100))
-                    let current = grab ?? startGrab(at: drag.startLocation.x, width: width)
+                    guard length > 0 else { return }
+                    let current = grab ?? startGrab(at: Double(drag.startLocation.x), width: width)
                     grab = current
                     switch current {
-                    // An end stops at the minimum span rather than pushing the other.
-                    case .low: onChange(min(value, high - DevelopSettings.minimumHueSpan), high, color.hueLow)
-                    case .high: onChange(low, max(value, low + DevelopSettings.minimumHueSpan), color.hueHigh)
+                    // An end stops at the minimum span rather than pushing the other. A press on
+                    // an end keeps it under the pointer, as on every slider.
+                    case .low(let offset):
+                        let value = SliderGeometry.fraction(x: Double(drag.location.x) + offset, width: width) * 100
+                        onChange(min(value, high - DevelopSettings.minimumHueSpan), high, color.hueLow)
+                    case .high(let offset):
+                        let value = SliderGeometry.fraction(x: Double(drag.location.x) + offset, width: width) * 100
+                        onChange(low, max(value, low + DevelopSettings.minimumHueSpan), color.hueHigh)
                     case .both(let startLow, let startHigh, let startX):
                         let span = startHigh - startLow
-                        let shift = Double((drag.location.x - startX) / width) * 100
+                        let shift = (Double(drag.location.x) - startX) / length * 100
                         let newLow = min(100 - span, max(0, startLow + shift))
                         onChange(newLow, newLow + span, nil)
                     }
@@ -598,8 +601,15 @@ struct HueRangeSlider: View {
                     grab = nil
                     onOption?(false)
                 })
+            // Same hit test as the press: left-right arrow over an end or between the ends
+            // (both move), the arrow outside the range (a press there jumps the nearer end).
+            .cursor(whileDragging: .slide) { point in
+                let x = Double(point.x)
+                let onEnd = SliderGeometry.isOnKnob(x, knobX: lowX) || SliderGeometry.isOnKnob(x, knobX: highX)
+                return onEnd || (x > lowX && x < highX) ? .slide : .arrow
+            }
         }
-        .frame(height: 16)
+        .frame(height: SliderGeometry.height)
         .onReceive(ModifierKeys.shared.$option) { held in
             if grab != nil { onOption?(held) }
         }
@@ -608,12 +618,16 @@ struct HueRangeSlider: View {
         }
     }
 
-    /// An end when the drag starts on or outside it (the nearer one), both between them.
-    private func startGrab(at x: CGFloat, width: CGFloat) -> Grab {
-        let lowX = low / 100 * width, highX = high / 100 * width
+    /// An end when the press is in its grab zone (the nearer one) or outside the range, both
+    /// between them.
+    private func startGrab(at x: Double, width: Double) -> Grab {
+        let lowX = SliderGeometry.x(fraction: low / 100, width: width)
+        let highX = SliderGeometry.x(fraction: high / 100, width: width)
         let toLow = abs(x - lowX), toHigh = abs(x - highX)
-        if min(toLow, toHigh) <= 7 { return toLow <= toHigh ? .low : .high }
+        if SliderGeometry.isOnKnob(x, knobX: toLow <= toHigh ? lowX : highX) {
+            return toLow <= toHigh ? .low(lowX - x) : .high(highX - x)
+        }
         if x > lowX, x < highX { return .both(startLow: low, startHigh: high, startX: x) }
-        return toLow <= toHigh ? .low : .high
+        return toLow <= toHigh ? .low(0) : .high(0)
     }
 }

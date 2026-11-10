@@ -103,7 +103,8 @@ struct CullView: View {
                 HStack(spacing: 8) {
                     Text("Grouping").foregroundStyle(.secondary)
                     Text("Tight").font(.caption).foregroundStyle(.secondary)
-                    Slider(value: $cull.looseness, in: 0...1)
+                    DevelopSlider(value: $cull.looseness, range: 0...1, step: 0, origin: 0, gradient: nil,
+                                  name: "Grouping")
                         .frame(width: 160)
                         .disabled(cull.isAnalyzing)
                     Text("Loose").font(.caption).foregroundStyle(.secondary)

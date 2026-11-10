@@ -1,4 +1,5 @@
 import AppKit
+import AtelierCore
 import SwiftUI
 
 @MainActor enum PanelHelp {
@@ -143,7 +144,7 @@ struct SliderRow: View {
                 }
                 .help(auto != nil ? "Double-click to reset; Shift-double-click for Auto" : "Double-click to reset")
             DevelopSlider(value: $value, range: range, step: step, origin: origin, gradient: gradient,
-                          logarithmic: logarithmic, onOption: onOption, onEditingChanged: onEditingChanged)
+                          logarithmic: logarithmic, name: label, onOption: onOption, onEditingChanged: onEditingChanged)
                 .help(trackHelp)
             Group {
                 if editing {
@@ -186,46 +187,43 @@ struct SliderRow: View {
     }
 }
 
-/// A slim Lightroom-style slider: thin track (colored where Lightroom colors it), a mark at the
-/// default, the change from the default filled in, and a small round knob.
+/// Atelier's one slider, used for every slider in the app (Develop, Masking, Presets Amount,
+/// Export, Cull, Match Look, the grid's thumbnail size and the HDR app): a thin track (colored
+/// where Lightroom colors it), a mark at the default, the change from the default filled in,
+/// and a 12 pt round knob. The sizes and the press rules are `SliderGeometry`'s: a press within
+/// the knob's 20 pt grab zone picks it up where it is, a press elsewhere on the track jumps it
+/// there. The pointer is a left-right arrow over the knob and during every drag (Rosh, Nov 10,
+/// 2026). Never use SwiftUI's `Slider`; add an option here instead.
 struct DevelopSlider: View {
     @Binding var value: Double
     let range: ClosedRange<Double>
     let step: Double
-    /// Where the fill starts: the parameter's default.
+    /// Where the fill starts: the parameter's default (the low end for a plain slider).
     let origin: Double
     let gradient: [Color]?
     /// Temperature moves in equal steps of perceived warmth rather than Kelvin.
     var logarithmic = false
+    /// The slider's name for VoiceOver.
+    var name = ""
     /// Told while dragging whether Option is held, and false when the drag ends, for the
     /// slider's Option-drag view.
     var onOption: ((Bool) -> Void)?
     var onEditingChanged: ((Bool) -> Void)?
-    @State private var isDragging = false
+    /// Set while dragging: how far the knob sits from the pointer (0 when the press jumped it).
+    @State private var grabOffset: Double?
     @Environment(\.takeKeyboardFocus) private var takeKeyboardFocus
-
-    private func fraction(_ v: Double) -> Double {
-        let clamped = min(max(v, range.lowerBound), range.upperBound)
-        if logarithmic {
-            return (log(clamped) - log(range.lowerBound)) / (log(range.upperBound) - log(range.lowerBound))
-        }
-        return (clamped - range.lowerBound) / (range.upperBound - range.lowerBound)
-    }
-
-    private func value(at fraction: Double) -> Double {
-        let f = min(1, max(0, fraction))
-        let raw = logarithmic
-            ? exp(log(range.lowerBound) + f * (log(range.upperBound) - log(range.lowerBound)))
-            : range.lowerBound + f * (range.upperBound - range.lowerBound)
-        return (raw / step).rounded() * step
-    }
+    @Environment(\.isEnabled) private var isEnabled
 
     var body: some View {
         GeometryReader { geometry in
-            let width = geometry.size.width
-            let midY = geometry.size.height / 2
-            let knob = fraction(value) * width
-            let start = fraction(origin) * width
+            let width = Double(geometry.size.width)
+            let midY = Double(geometry.size.height) / 2
+            let knob = SliderGeometry.x(fraction: SliderGeometry.fraction(of: value, in: range, logarithmic: logarithmic),
+                                        width: width)
+            let start = SliderGeometry.x(fraction: SliderGeometry.fraction(of: origin, in: range, logarithmic: logarithmic),
+                                         width: width)
+            let inset = SliderGeometry.trackInset, length = SliderGeometry.trackLength(width: width)
+            let track = SliderGeometry.trackHeight
             ZStack(alignment: .topLeading) {
                 Group {
                     if let gradient {
@@ -234,50 +232,80 @@ struct DevelopSlider: View {
                         Capsule().fill(Color.secondary.opacity(0.28))
                     }
                 }
-                .frame(width: width, height: 3)
-                .offset(y: midY - 1.5)
+                .frame(width: length, height: track)
+                .offset(x: inset, y: midY - track / 2)
                 if gradient == nil {
                     Rectangle()
                         .fill(Color.accentColor)
-                        .frame(width: abs(knob - start), height: 3)
-                        .offset(x: min(knob, start), y: midY - 1.5)
+                        .frame(width: abs(knob - start), height: track)
+                        .offset(x: min(knob, start), y: midY - track / 2)
                 }
-                if start > 1, start < width - 1 {
+                if start > inset + 1, start < width - inset - 1 {
                     Rectangle()
                         .fill(Color.secondary.opacity(0.7))
                         .frame(width: 1, height: 7)
                         .offset(x: start - 0.5, y: midY - 3.5)
                 }
-                Circle()
-                    .fill(Color.white)
-                    .overlay(Circle().stroke(Color.black.opacity(0.25), lineWidth: 0.5))
-                    .shadow(color: .black.opacity(0.3), radius: 1, y: 0.5)
-                    .frame(width: 11, height: 11)
-                    .offset(x: knob - 5.5, y: midY - 5.5)
+                SliderKnob()
+                    .offset(x: knob - SliderGeometry.knobDiameter / 2, y: midY - SliderGeometry.knobDiameter / 2)
             }
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 0)
                 .onChanged { drag in
-                    if !isDragging {
-                        isDragging = true
+                    let offset: Double
+                    if let held = grabOffset {
+                        offset = held
+                    } else {
+                        offset = SliderGeometry.grabOffset(start: Double(drag.startLocation.x), knobX: knob)
+                        grabOffset = offset
                         takeKeyboardFocus?()
                         onEditingChanged?(true)
                     }
                     onOption?(NSEvent.modifierFlags.contains(.option))
-                    guard width > 0 else { return }
-                    let newValue = value(at: Double(drag.location.x / width))
+                    guard length > 0 else { return }
+                    let newValue = SliderGeometry.value(at: SliderGeometry.fraction(x: Double(drag.location.x) + offset, width: width),
+                                                        in: range, step: step, logarithmic: logarithmic)
                     if newValue != value { value = newValue }
                 }
                 .onEnded { _ in
-                    onOption?(false); isDragging = false; onEditingChanged?(false)
+                    onOption?(false); grabOffset = nil; onEditingChanged?(false)
                 })
+            // Same hit test as the press: left-right arrow over the knob, and through any drag.
+            .cursor(whileDragging: .slide) { point in
+                isEnabled && SliderGeometry.isOnKnob(Double(point.x), knobX: knob) ? .slide : .arrow
+            }
         }
-        .frame(height: 16)
+        .frame(height: SliderGeometry.height)
+        .opacity(isEnabled ? 1 : 0.5)
         .onReceive(ModifierKeys.shared.$option) { held in
-            if isDragging { onOption?(held) }
+            if grabOffset != nil { onOption?(held) }
         }
         .onDisappear {
-            if isDragging { onOption?(false) }
+            if grabOffset != nil { onOption?(false) }
         }
+        .accessibilityElement()
+        .accessibilityLabel(name)
+        .accessibilityValue(Text(value.formatted(.number.precision(.fractionLength(0...2)))))
+        .accessibilityAdjustableAction { direction in
+            let sign: Int
+            switch direction {
+            case .increment: sign = 1
+            case .decrement: sign = -1
+            @unknown default: return
+            }
+            value = SliderNudge.value(from: value, range: range, step: step, logarithmic: logarithmic,
+                                      direction: sign, large: false)
+        }
+    }
+}
+
+/// Every slider's knob (`DevelopSlider`, both ends of `HueRangeSlider`).
+struct SliderKnob: View {
+    var body: some View {
+        Circle()
+            .fill(Color.white)
+            .overlay(Circle().stroke(Color.black.opacity(0.25), lineWidth: 0.5))
+            .shadow(color: .black.opacity(0.3), radius: 1, y: 0.5)
+            .frame(width: SliderGeometry.knobDiameter, height: SliderGeometry.knobDiameter)
     }
 }

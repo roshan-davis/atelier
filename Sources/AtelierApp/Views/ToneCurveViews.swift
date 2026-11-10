@@ -297,7 +297,7 @@ private struct SplitBar: View {
                     develop.set(dragging, to: (Double(value.location.x / width) * 100).rounded())
                 }
                 .onEnded { _ in dragging = nil })
-            .cursor { _ in .columnResize }
+            .cursor(.slide)
             .help("Drag a triangle to move where one region ends and the next begins")
         }
     }
