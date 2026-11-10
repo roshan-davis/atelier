@@ -125,6 +125,7 @@ struct ContentView: View {
         }
         .background(WindowAccessor { model.mainWindow = $0 })
         .environment(\.theme, theme)
+        .environment(\.developFrameHUD, model.mode == .develop ? model.develop.frameHUD : nil)
         .onAppear { theme.apply() }
         .onChange(of: theme) { _, newTheme in newTheme.apply() }
     }

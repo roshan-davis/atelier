@@ -701,7 +701,7 @@ final class ZoomCanvasView: NSView {
         frameLayer.contents = nil
         frameLayer.isHidden = true
         CATransaction.commit()
-        if let scrollView { scrollView.feed?.imageShown(in: scrollView) }
+        if let scrollView { scrollView.feed?.imageShown(image, in: scrollView) }
     }
 
     /// Shows a live frame, a GPU surface Core Image rendered into, as the layer's contents,

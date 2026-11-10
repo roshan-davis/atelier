@@ -1,5 +1,6 @@
 import AppKit
 import AtelierCore
+import QuartzCore
 import SwiftUI
 
 @MainActor enum PanelHelp {
@@ -215,6 +216,9 @@ struct DevelopSlider: View {
     var onEditingChanged: ((Bool) -> Void)?
     /// Set while dragging: how far the knob sits from the pointer (0 when the press jumped it).
     @State private var grabOffset: Double?
+    #if !ATELIER_HDR_APP
+    @Environment(\.developFrameHUD) private var frameHUD
+    #endif
     @Environment(\.takeKeyboardFocus) private var takeKeyboardFocus
     @Environment(\.isEnabled) private var isEnabled
 
@@ -260,6 +264,13 @@ struct DevelopSlider: View {
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 0)
                 .onChanged { drag in
+                    #if !ATELIER_HDR_APP
+                    let hud = frameHUD?.active == true ? frameHUD : nil
+                    let began = hud == nil ? 0 : CACurrentMediaTime()
+                    var changed = false
+                    if grabOffset == nil { hud?.begin(name, value: value) }
+                    defer { hud?.recordTick(from: began, changed: changed) }
+                    #endif
                     let offset: Double
                     if let held = grabOffset {
                         offset = held
@@ -273,9 +284,17 @@ struct DevelopSlider: View {
                     guard length > 0 else { return }
                     let newValue = SliderGeometry.value(at: SliderGeometry.fraction(x: Double(drag.location.x) + offset, width: width),
                                                         in: range, step: step, logarithmic: logarithmic)
-                    if newValue != value { value = newValue }
+                    if newValue != value {
+                        #if !ATELIER_HDR_APP
+                        changed = true
+                        #endif
+                        value = newValue
+                    }
                 }
                 .onEnded { _ in
+                    #if !ATELIER_HDR_APP
+                    frameHUD?.end(name)
+                    #endif
                     onOption?(false); grabOffset = nil; onEditingChanged?(false)
                 })
             // Same hit test as the press: left-right arrow over the knob, and through any drag.
@@ -289,7 +308,12 @@ struct DevelopSlider: View {
             if grabOffset != nil { onOption?(held) }
         }
         .onDisappear {
-            if grabOffset != nil { onOption?(false) }
+            if grabOffset != nil {
+                #if !ATELIER_HDR_APP
+                frameHUD?.end(name)
+                #endif
+                onOption?(false)
+            }
         }
         .accessibilityElement()
         .accessibilityLabel(name)

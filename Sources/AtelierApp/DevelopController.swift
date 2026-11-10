@@ -3,6 +3,7 @@ import AtelierCore
 import CoreImage
 import Foundation
 import IOSurface
+import QuartzCore
 
 /// How the Develop view shows the photo before edits next to the edited one.
 enum CompareMode: String, CaseIterable {
@@ -58,6 +59,7 @@ private struct ProxyRenderRequest {
     let queuedAt: CFAbsoluteTime
     /// Set when the frame goes straight to the photo view (`PhotoFeed`); nil renders a CGImage.
     var surfaces: DisplaySurfaces?
+    var fallback: PhotoFeed.Fallback? = nil
     let measureJob: LatestJob<DevelopMeasureRequest>
     let measureQueue: DispatchQueue
     let openGeneration: LockedValue<Int>
@@ -515,7 +517,8 @@ final class DevelopController: ObservableObject {
     /// How long an edit rests before its last live frame is published as `image`.
     private static let settleDelay: TimeInterval = 0.12
     /// Gives the photo view its live frames straight from the GPU; see `PhotoFeed`.
-    let photoFeed = PhotoFeed()
+    let frameHUD = DevelopFrameHUD()
+    lazy var photoFeed = PhotoFeed { [weak frameHUD] timing in frameHUD?.submit(timing) }
     private let displaySurfaces = DisplaySurfaces()
     /// A live frame didn't fit the photo on screen; frames take the ordinary path until the
     /// pointer edit ends or another photo opens.
@@ -1870,6 +1873,7 @@ final class DevelopController: ObservableObject {
         let overlay = isMasking && showMaskOverlay ? selectedMaskID : nil
         let clipping = overlay == nil && preview == nil ? clippingOverlay : (shadows: false, highlights: false)
         renderCount += 1
+        frameHUD.scheduled(renderCount)
         // Once the photo is up, live frames go straight from the GPU to the photo view (see
         // `PhotoFeed`); the first render is published the ordinary way, as it ends the stand-in.
         let direct = photoFeed.isAttached && firstRenderDone && cropping && !liveFramesOff
@@ -1878,6 +1882,7 @@ final class DevelopController: ObservableObject {
             overlay: overlay, clipping: clipping, assetID: assetID, count: renderCount,
             measures: overlay == nil && preview == nil, generation: openGeneration.value,
             queuedAt: DevelopTimingLog.now(), surfaces: direct ? displaySurfaces : nil,
+            fallback: liveFramesOff && photoFeed.isAttached && firstRenderDone && cropping ? .liveFramesOff : nil,
             measureJob: measureJob, measureQueue: measureQueue, openGeneration: openGeneration,
             renderBeganAt: renderBeganAt))
     }
@@ -1901,17 +1906,19 @@ final class DevelopController: ObservableObject {
                                                controller: DevelopController) {
         guard let request = job.take() else { return }
         let renderBegan = DevelopTimingLog.now()
+        let renderClock = CACurrentMediaTime()
         request.renderBeganAt.value = renderBegan
         var surface: IOSurface?
         var cgImage: CGImage?
         var plain: CGImage?
+        var fallback = request.fallback
         RenderSignposts.measure("Proxy render") {
             if let surfaces = request.surfaces,
                let frame = request.session.renderToSurface(request.settings, cropping: request.cropping,
                                                            overlay: request.overlay, preview: request.preview,
                                                            shadowClipping: request.clipping.shadows,
                                                            highlightClipping: request.clipping.highlights,
-                                                           surfaces: surfaces) {
+                                                           surfaces: surfaces, onPoolFull: { fallback = .poolFull }) {
                 surface = frame.surface
                 plain = frame.plain
             } else if let rendered = request.session.renderForDisplay(request.settings, cropping: request.cropping,
@@ -1922,6 +1929,7 @@ final class DevelopController: ObservableObject {
                 plain = rendered.plain
             }
         }
+        let readyAt = CACurrentMediaTime()
         let renderTook = DevelopTimingLog.ms(since: renderBegan)
         if renderTook > 300 || (surface == nil && cgImage == nil) {
             DevelopTimingLog.shared.log(request.assetID, surface == nil && cgImage == nil ? "render FAILED after \(renderTook) ms"
@@ -1937,16 +1945,20 @@ final class DevelopController: ObservableObject {
                 MainActor.assumeIsolated { controller.applyMeasure(measured, histogram: histogram, scope: scope, took: took) }
             }
         }
-        DispatchQueue.main.async {
+        let timing = PhotoFeed.RenderTiming(count: request.count, readyAt: readyAt, duration: readyAt - renderClock,
+                                           queueWait: max(0, renderBegan - request.queuedAt))
+        DispatchQueue.main.async { [fallback] in
             MainActor.assumeIsolated {
-                controller.finishRender(request, surface: surface, cgImage: cgImage, renderBegan: renderBegan)
+                controller.finishRender(request, surface: surface, cgImage: cgImage, fallback: fallback,
+                                        renderBegan: renderBegan, timing: timing)
             }
         }
         queue.async { Self.renderNext(job: job, on: queue, controller: controller) }
     }
 
     private func finishRender(_ request: ProxyRenderRequest, surface: IOSurface?, cgImage: CGImage?,
-                              renderBegan: CFAbsoluteTime) {
+                              fallback: PhotoFeed.Fallback?,
+                              renderBegan: CFAbsoluteTime, timing: PhotoFeed.RenderTiming) {
         // Nothing newer has been asked for.
         let latest = request.count == renderCount
         if latest { rendering = false }
@@ -1960,7 +1972,7 @@ final class DevelopController: ObservableObject {
         var shownLive = false
         if let surface, let surfaces = request.surfaces {
             if fits {
-                shownLive = photoFeed.show(surface, count: request.count, from: surfaces)
+                shownLive = photoFeed.show(surface, count: request.count, from: surfaces, timing: timing)
                 if !shownLive {
                     // Another shape than the photo on screen (an Aspect or crop change): frames
                     // take the ordinary path until the edit ends, and this one is redone that way.
@@ -1968,6 +1980,7 @@ final class DevelopController: ObservableObject {
                     if latest {
                         var ordinary = request
                         ordinary.surfaces = nil
+                        ordinary.fallback = .liveFramesOff
                         rendering = true
                         submitRender(ordinary)
                         return
@@ -1978,9 +1991,10 @@ final class DevelopController: ObservableObject {
             }
         }
         if fits, let cgImage {
+            if let fallback { frameHUD.fallback(fallback, count: request.count) }
             let shown = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
             image = shown
-            photoFeed.published(shown, count: request.count)
+            photoFeed.published(shown, count: request.count, timing: timing)
             showsStandIn = false
             imageIsWhole = !request.cropping
         }
@@ -2009,6 +2023,7 @@ final class DevelopController: ObservableObject {
             MainActor.assumeIsolated {
                 guard let self, self.renderCount == count, var settled = self.lastRender, settled.count == count else { return }
                 settled.surfaces = nil
+                settled.fallback = nil
                 self.rendering = true
                 self.submitRender(settled)
             }
@@ -2115,6 +2130,7 @@ final class DevelopController: ObservableObject {
                 + "counted in \(took) ms, shown +\(DevelopTimingLog.ms(since: openedAt)) ms")
         }
         measuredRank = request.rank
+        if histogram != nil || scope != nil { frameHUD.histogramPublished() }
         if let histogram { self.histogram = histogram }
         if let scope { colorScope = scope }
     }

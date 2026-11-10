@@ -64,6 +64,7 @@ struct LibraryCommands: Commands {
 }
 
 private struct ReadyLibraryCommands: Commands {
+    @AppStorage(DevelopFrameHUD.preference) private var showFrameHUD = false
     @ObservedObject var model: LibraryModel
 
     var body: some Commands {
@@ -171,6 +172,9 @@ private struct ReadyLibraryCommands: Commands {
                 }
             }
             CommandMenu("Develop") {
+                Toggle("Frame Diagnostics", isOn: $showFrameHUD)
+                    .disabled(model.mode != .develop)
+                Divider()
                 Button("Copy Settings") { model.copyDevelopSettings() }
                     .keyboardShortcut("c", modifiers: [.command, .shift])
                 Button("Paste Settings") { model.pasteDevelopSettings() }

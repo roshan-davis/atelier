@@ -30,9 +30,13 @@ public final class DisplaySurfaces: @unchecked Sendable {
     }
 
     /// A surface of `width` × `height` that isn't on screen, or nil when all of them are.
-    func checkOut(width: Int, height: Int) -> IOSurface? {
+    func checkOut(width: Int, height: Int, onPoolFull: (() -> Void)? = nil) -> IOSurface? {
         lock.lock()
-        defer { lock.unlock() }
+        var full = false
+        defer {
+            lock.unlock()
+            if full { onPoolFull?() }
+        }
         if width != self.width || height != self.height {
             // A new size (another photo, a crop): surfaces of the old size are let go as they
             // come back.
@@ -44,9 +48,11 @@ public final class DisplaySurfaces: @unchecked Sendable {
         if let index = free.firstIndex(where: { !$0.isInUse }) {
             return free.remove(at: index)
         }
-        guard made < Self.limit, let surface = Self.make(width: width, height: height, colorSpace: colorSpace) else {
+        guard made < Self.limit else {
+            full = true
             return nil
         }
+        guard let surface = Self.make(width: width, height: height, colorSpace: colorSpace) else { return nil }
         made += 1
         return surface
     }
@@ -117,10 +123,10 @@ extension DevelopRenderer {
 
     /// Renders `image` into a free surface from `surfaces`, on the calling thread, and returns
     /// it once the GPU has finished; nil when no surface is free or the render failed.
-    func render(_ image: CIImage, into surfaces: DisplaySurfaces) -> IOSurface? {
+    func render(_ image: CIImage, into surfaces: DisplaySurfaces, onPoolFull: (() -> Void)?) -> IOSurface? {
         let extent = image.extent.integral
         guard extent.width > 0, extent.height > 0, extent.width.isFinite, extent.height.isFinite,
-              let surface = surfaces.checkOut(width: Int(extent.width), height: Int(extent.height)) else { return nil }
+              let surface = surfaces.checkOut(width: Int(extent.width), height: Int(extent.height), onPoolFull: onPoolFull) else { return nil }
         let destination = CIRenderDestination(ioSurface: surface)
         destination.colorSpace = surfaces.colorSpace
         destination.isFlipped = Self.surfaceNeedsFlip
@@ -157,19 +163,22 @@ extension DevelopSession {
     public func renderToSurface(_ settings: DevelopSettings, cropping: Bool = true, overlay: UUID? = nil,
                                 preview: SliderPreview? = nil, shadowClipping: Bool = false,
                                 highlightClipping: Bool = false, surfaces: DisplaySurfaces,
-                                sampleSize: Int = Histogram.sampleSize) -> (surface: IOSurface, plain: CGImage?)? {
+                                sampleSize: Int = Histogram.sampleSize, onPoolFull: (() -> Void)? = nil) -> (surface: IOSurface, plain: CGImage?)? {
         guard var image = image(with: settings, cropping: cropping, overlay: overlay, preview: preview) else { return nil }
         let renderer = DevelopRenderer.shared
         guard shadowClipping || highlightClipping else {
-            guard let surface = renderer.render(image, into: surfaces) else { return nil }
-            return (surface, renderer.sample(of: surface, colorSpace: surfaces.colorSpace, sampleSize: sampleSize))
+            guard let surface = renderer.render(image, into: surfaces, onPoolFull: onPoolFull) else { return nil }
+            let sample = RenderSignposts.measure("Live frame sample") {
+                renderer.sample(of: surface, colorSpace: surfaces.colorSpace, sampleSize: sampleSize)
+            }
+            return (surface, sample)
         }
         // As in `renderForDisplay`: the histogram is counted from the photo without the overlay,
         // made from the render Core Image just cached.
         image = image.insertingIntermediate(cache: true)
         let painted = ClippingOverlay.apply(to: image, shadows: shadowClipping, highlights: highlightClipping,
                                             shownIn: surfaces.colorSpace)
-        guard let surface = renderer.render(painted, into: surfaces) else { return nil }
+        guard let surface = renderer.render(painted, into: surfaces, onPoolFull: onPoolFull) else { return nil }
         let extent = image.extent
         let factor = min(1, CGFloat(sampleSize) / max(1, max(extent.width, extent.height)))
         var small = image
@@ -177,6 +186,9 @@ extension DevelopSession {
             small = image.applyingFilter("CILanczosScaleTransform", parameters: [kCIInputScaleKey: factor,
                                                                                  kCIInputAspectRatioKey: 1])
         }
-        return (surface, renderer.cgImage(small, colorSpace: surfaces.colorSpace))
+        let sample = RenderSignposts.measure("Live frame sample") {
+            renderer.cgImage(small, colorSpace: surfaces.colorSpace)
+        }
+        return (surface, sample)
     }
 }

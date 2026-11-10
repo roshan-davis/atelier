@@ -50,6 +50,11 @@ enum LayoutSnapshots {
         for (name, size, view) in shots {
             await capture(view, size: size, to: folder.appendingPathComponent(name + ".png"))
         }
+        let frameHUD = UserDefaults.standard.bool(forKey: DevelopFrameHUD.preference)
+        UserDefaults.standard.set(true, forKey: DevelopFrameHUD.preference)
+        await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
+                      to: folder.appendingPathComponent("develop-frame-diagnostics-1280x800.png"))
+        UserDefaults.standard.set(frameHUD, forKey: DevelopFrameHUD.preference)
         // Slider Compare adds a hint to the wide toolbar. Check it both with room and
         // with the editing panels open in the smallest supported window.
         model.develop.compareMode = .slider
