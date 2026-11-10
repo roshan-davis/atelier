@@ -359,7 +359,7 @@ Edits are a versioned list of parameters stored in the catalog, rendered live on
 
 ### Frame diagnostics (D0)
 
-Develop › Frame Diagnostics is an opt-in diagnostic for slider drags in the single-photo view in Debug and Release. It shows estimated edit frames per second and display refresh rate, synchronous main-thread slider handling, render time, frame-ready to estimated refresh, and the longest gap between edit frames during the drag. It adds one summary per active second to the Develop timing log, with a completed-drag summary including the first changed tick. A display link estimates presentation. These readings do not measure physical scan-out or separately time SwiftUI's deferred view updates.
+Develop › Frame Diagnostics is opt-in in the single-photo view in Debug and Release. It covers slider, Tone Curve point and Color Grading wheel drags. The overlay shows estimated edit FPS and refresh rate, synchronous gesture callback time, mean and worst main run-loop busy time, render time, frame-ready to estimated refresh, longest inter-frame gap, and ordinary CGImage fallbacks caused by a full surface pool or the live path being turned off. The log includes interval and per-drag busy-pass and fallback counts. Run-loop time includes deferred SwiftUI work and other main-thread work in that pass. A display link estimates presentation rather than measuring physical scan-out.
 
 ### Tools and requirements
 

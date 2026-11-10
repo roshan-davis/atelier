@@ -293,7 +293,7 @@ struct DevelopSlider: View {
                 }
                 .onEnded { _ in
                     #if !ATELIER_HDR_APP
-                    frameHUD?.end()
+                    frameHUD?.end(name)
                     #endif
                     onOption?(false); grabOffset = nil; onEditingChanged?(false)
                 })
@@ -310,7 +310,7 @@ struct DevelopSlider: View {
         .onDisappear {
             if grabOffset != nil {
                 #if !ATELIER_HDR_APP
-                frameHUD?.end()
+                frameHUD?.end(name)
                 #endif
                 onOption?(false)
             }

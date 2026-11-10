@@ -187,12 +187,12 @@
 </ul>
 
 <h2 id="frame-diagnostics">Frame diagnostics</h2>
-<p>In the single-photo Develop view, choose <span class="path">Develop › Frame Diagnostics</span> and drag a slider. The overlay estimates how many new photo frames reach a display refresh each second. It shows time spent handling a slider tick on the main thread, rendering, and waiting for a refresh after the frame is ready, plus the longest gap between photo frames during the drag.</p>
+<p>In the single-photo Develop view, choose <span class="path">Develop › Frame Diagnostics</span> and drag a slider, Tone Curve point or Color Grading wheel. The overlay estimates how many new photo frames reach a display refresh each second. It shows time spent handling a gesture tick on the main thread, rendering, and waiting for a refresh after the frame is ready, plus the longest gap between photo frames during the drag.</p>
 <figure>
   <div class="panel narrow" style="margin:0 auto">
-    <div class="pb" style="font-family:monospace">92 fps / 120 Hz · estimated display<br>Main tick &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 1.0 ms<br>Render &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 7.3 ms<br>Ready → refresh 5.6 ms<br>Longest gap &nbsp;&nbsp;&nbsp; 25.0 ms</div>
+    <div class="pb" style="font-family:monospace">92 fps / 120 Hz · estimated display<br>Main tick &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 1.0 ms<br>Main pass &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 4.2 / 12.8 ms<br>Render &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 7.3 ms<br>Ready → refresh 5.6 ms<br>Longest gap &nbsp;&nbsp;&nbsp; 25.0 ms<br>CG fallbacks &nbsp;&nbsp; 2</div>
   </div>
-  <figcaption>Illustrative values. Refresh timing is an estimate. Main tick covers the slider callback, with deferred SwiftUI updates outside that number.</figcaption>
+  <figcaption>Illustrative values. Refresh timing is an estimate. Main tick covers the gesture callback. Main pass shows mean and worst busy time per main run-loop pass, including deferred SwiftUI updates and other work on that thread. CG fallbacks counts ordinary images generated because the surface pool was full or live frames were turned off during the drag.</figcaption>
 </figure>
 <p>Atelier writes a summary each active second to <code>Documents/Atelier Traces</code>, including the starting value, time to the first changed frame and longest gap for each completed drag. Choose the same menu item to hide the overlay.</p>
 

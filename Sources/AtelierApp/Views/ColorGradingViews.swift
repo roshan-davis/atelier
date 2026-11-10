@@ -185,6 +185,7 @@ struct ColorWheel: View {
         case rim
     }
 
+    @Environment(\.developFrameHUD) private var frameHUD
     @State private var grab: Grab?
     @State private var lastLocation: CGPoint = .zero
     @State private var lastTap: (time: Date, location: CGPoint)?
@@ -193,6 +194,8 @@ struct ColorWheel: View {
     private static let inset: CGFloat = 6
     /// How far off the spoke (points) the pointer can stray before the hue follows it.
     private static let constraintWidth: CGFloat = 10
+
+    private var diagnosticName: String { "Color Grading \(region.rawValue)" }
 
     private var hue: Double { develop.value(region.hue) }
     private var saturation: Double { develop.value(region.saturation) }
@@ -232,8 +235,19 @@ struct ColorWheel: View {
             }
             .contentShape(Circle().inset(by: Self.inset - 8))
             .gesture(DragGesture(minimumDistance: 0)
-                .onChanged { value in drag(value, center: center, radius: radius, dot: dot, rimDot: rimDot) }
-                .onEnded { value in endDrag(value) })
+                .onChanged { value in
+                    if let frameHUD, frameHUD.active {
+                        frameHUD.measure(diagnosticName, startingValue: saturation) {
+                            drag(value, center: center, radius: radius, dot: dot, rimDot: rimDot)
+                        }
+                    } else {
+                        drag(value, center: center, radius: radius, dot: dot, rimDot: rimDot)
+                    }
+                }
+                .onEnded { value in
+                    endDrag(value)
+                    frameHUD?.end(diagnosticName)
+                })
             .cursor(.crosshair)
             .onHover { inside in
                 if inside {
@@ -244,6 +258,7 @@ struct ColorWheel: View {
             }
             .onDisappear {
                 if develop.hoveredGradeRegion == region { develop.hoveredGradeRegion = nil }
+                frameHUD?.end(diagnosticName)
             }
         }
         .aspectRatio(1, contentMode: .fit)

@@ -312,6 +312,7 @@ struct CurveEditor: View {
     @Binding var selected: Int?
     var snapToGrid = false
     var showAllCurves = false
+    @Environment(\.developFrameHUD) private var frameHUD
     @State private var dragIndex: Int?
     @State private var removing = false
     @State private var lastTap: (index: Int, time: Date)?
@@ -321,6 +322,8 @@ struct CurveEditor: View {
 
     /// Lightroom's limit.
     static let maxPoints = 16
+
+    private var diagnosticName: String { "Tone Curve \(channel.rawValue)" }
 
     private var points: [Point] { develop.settings.points(for: channel) }
 
@@ -373,10 +376,22 @@ struct CurveEditor: View {
                 updateNudgeTarget()
             }
             .onChange(of: selected) { updateNudgeTarget() }
-            .onDisappear { develop.hoveredCurvePoint = nil }
+            .onDisappear {
+                develop.hoveredCurvePoint = nil
+                frameHUD?.end(diagnosticName)
+            }
             .gesture(DragGesture(minimumDistance: 0)
-                .onChanged { value in drag(value, size: size) }
-                .onEnded { value in endDrag(value, size: size) })
+                .onChanged { value in
+                    if let frameHUD, frameHUD.active {
+                        frameHUD.measure(diagnosticName) { drag(value, size: size) }
+                    } else {
+                        drag(value, size: size)
+                    }
+                }
+                .onEnded { value in
+                    endDrag(value, size: size)
+                    frameHUD?.end(diagnosticName)
+                })
             // A hand on a point; elsewhere a click adds one, as with Lightroom's point curve.
             .cursor(whileDragging: .grabbing) { location in nearestPoint(to: location, in: size) == nil ? .crosshair : .grab }
         }

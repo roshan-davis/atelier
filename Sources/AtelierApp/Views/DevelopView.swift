@@ -80,7 +80,7 @@ struct DevelopImageView: View {
                 if showFrameHUD, develop.compareMode == .off, !develop.isCropping, !develop.isAIOpen,
                    !develop.isGuiding, develop.image != nil {
                     DevelopFrameHUDOverlay(hud: develop.frameHUD, assetID: develop.assetID)
-                        .frame(width: 264, height: 89)
+                        .frame(width: 264, height: 116)
                         .background(.black.opacity(0.84), in: RoundedRectangle(cornerRadius: 7))
                         .allowsHitTesting(false)
                         .padding(12)

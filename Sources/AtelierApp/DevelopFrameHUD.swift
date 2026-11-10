@@ -15,7 +15,7 @@ final class DevelopFrameHUD {
 
     private struct Drag {
         let name: String
-        let startingValue: Double
+        let startingValue: Double?
         let firstPossibleCount: Int
         var firstChange: CFTimeInterval?
         var firstFrame: CFTimeInterval?
@@ -24,6 +24,8 @@ final class DevelopFrameHUD {
         var longestGap: CFTimeInterval?
         var ticks = 0
         var frames = 0
+        var busy = Sample()
+        var fallbacks = Fallbacks()
     }
 
     private struct Sample {
@@ -41,10 +43,28 @@ final class DevelopFrameHUD {
         var maxMS: String { count == 0 ? "—" : String(format: "%.1f", 1_000 * maximum) }
     }
 
+    private struct Fallbacks {
+        var liveOff = 0
+        var poolFull = 0
+
+        mutating func record(_ reason: PhotoFeed.Fallback) {
+            switch reason {
+            case .liveFramesOff: liveOff += 1
+            case .poolFull: poolFull += 1
+            }
+        }
+
+        var detail: String { "\(liveOff + poolFull) (live off \(liveOff), pool full \(poolFull))" }
+    }
+
     private(set) var active = false
     private var drag: Drag?
     private var finished: [String] = []
-    private var lastCompletedGap: CFTimeInterval?
+    private var finishingDrag: Drag?
+    private var passStart: CFTimeInterval?
+    private var busy = Sample()
+    private var fallbacks = Fallbacks()
+    private var lastCompletedDrag: Drag?
     private var pending: Submission?
     private var lastScheduledCount = 0
     private var lastCount: Int?
@@ -59,16 +79,18 @@ final class DevelopFrameHUD {
     func setActive(_ active: Bool) {
         self.active = active
         drag = nil
+        finishingDrag = nil
+        passStart = nil
         pending = nil
         lastCount = nil
-        lastCompletedGap = nil
+        lastCompletedDrag = nil
         finished.removeAll()
         intervalStart = nil
         resetSamples()
     }
 
-    func begin(_ name: String, value: Double) {
-        guard active else { return }
+    func begin(_ name: String, value: Double? = nil) {
+        guard active, drag?.name != name else { return }
         end()
         if intervalStart == nil { intervalStart = CACurrentMediaTime() }
         drag = Drag(name: name, startingValue: value, firstPossibleCount: lastScheduledCount + 1)
@@ -83,18 +105,61 @@ final class DevelopFrameHUD {
         }
     }
 
-    func end() {
-        guard let drag else { return }
+    /// Point and wheel callbacks use the same clock and render serial as slider callbacks.
+    func measure(_ name: String, startingValue: @autoclosure () -> Double? = nil, _ edit: () -> Void) {
+        guard active else { edit(); return }
+        let start = CACurrentMediaTime()
+        if drag?.name != name { begin(name, value: startingValue()) }
+        let count = lastScheduledCount
+        edit()
+        recordTick(from: start, changed: count != lastScheduledCount)
+    }
+
+    func end(_ name: String? = nil) {
+        guard let drag, name == nil || drag.name == name else { return }
         self.drag = nil
         pending = nil
+        if passStart != nil {
+            finishingDrag = drag
+        } else {
+            finish(drag)
+        }
+    }
+
+    func afterWaiting() { passStart = CACurrentMediaTime() }
+
+    func beforeWaiting() {
+        if let passStart, drag != nil || finishingDrag != nil {
+            let duration = CACurrentMediaTime() - passStart
+            busy.record(duration)
+            drag?.busy.record(duration)
+            finishingDrag?.busy.record(duration)
+        }
+        passStart = nil
+        if let finishingDrag {
+            finish(finishingDrag)
+            self.finishingDrag = nil
+        }
+    }
+
+    private func finish(_ drag: Drag) {
         guard drag.ticks > 0 else { return }
-        lastCompletedGap = drag.longestGap
+        lastCompletedDrag = drag
         let first = drag.firstFrame.flatMap { frame in drag.firstChange.map { frame - $0 } }
-        finished.append("\(drag.name) start=\(drag.startingValue) changed=\(drag.ticks) frames=\(drag.frames)"
-                        + " first=\(Self.ms(first)) ms firstRender=\(Self.ms(drag.firstRender)) ms longest=\(Self.ms(drag.longestGap)) ms")
+        let startingValue = drag.startingValue.map { String($0) } ?? "—"
+        finished.append("\(drag.name) start=\(startingValue) changed=\(drag.ticks) frames=\(drag.frames)"
+                        + " first=\(Self.ms(first)) ms firstRender=\(Self.ms(drag.firstRender)) ms longest=\(Self.ms(drag.longestGap)) ms"
+                        + " main pass \(drag.busy.meanMS)/\(drag.busy.maxMS) ms (\(drag.busy.count) passes)"
+                        + " CG fallbacks \(drag.fallbacks.detail)")
     }
 
     func scheduled(_ count: Int) { lastScheduledCount = count }
+
+    func fallback(_ reason: PhotoFeed.Fallback, count: Int) {
+        guard let drag, drag.firstChange != nil, count >= drag.firstPossibleCount else { return }
+        fallbacks.record(reason)
+        self.drag?.fallbacks.record(reason)
+    }
 
     func submit(_ render: PhotoFeed.RenderTiming) {
         guard active, let drag, drag.firstChange != nil, render.count >= drag.firstPossibleCount,
@@ -130,12 +195,19 @@ final class DevelopFrameHUD {
         let fps = Double(render.count) / (now - start)
         let hz = refresh.total > 0 ? Double(refresh.count) / refresh.total : 0
         let rate = String(format: "%.0f fps / %.0f Hz", fps, hz)
-        let gap = Self.ms(drag == nil ? lastCompletedGap : drag?.longestGap)
+        let shownDrag = drag ?? lastCompletedDrag
+        let gap = Self.ms(shownDrag?.longestGap)
+        let shownBusy = shownDrag?.busy ?? busy
+        let shownFallbacks = shownDrag?.fallbacks ?? fallbacks
         let line = "Frame HUD \(rate), main tick \(tick.meanMS)/\(tick.maxMS) ms, render \(render.meanMS)/\(render.maxMS) ms"
             + ", queue \(wait.meanMS)/\(wait.maxMS) ms, ready to layer \(handoff.meanMS)/\(handoff.maxMS) ms"
             + ", ready to refresh \(ready.meanMS)/\(ready.maxMS) ms, drag gap \(gap) ms"
-        DevelopTimingLog.shared.log(assetID, line + finished.map { " | drag \($0)" }.joined())
-        let summary = "\(rate)  ·  estimated display\nMain tick      \(tick.meanMS) ms\nRender         \(render.meanMS) ms\nReady → refresh \(ready.meanMS) ms\nLongest gap    \(gap) ms"
+        DevelopTimingLog.shared.log(assetID, line + ", main pass \(busy.meanMS)/\(busy.maxMS) ms (\(busy.count) passes)"
+                                    + ", CG fallbacks \(fallbacks.detail)" + finished.map { " | drag \($0)" }.joined())
+        let summary = "\(rate)  ·  estimated display\nMain tick       \(tick.meanMS) ms"
+            + "\nMain pass       \(shownBusy.meanMS)/\(shownBusy.maxMS) ms"
+            + "\nRender          \(render.meanMS) ms\nReady → refresh \(ready.meanMS) ms\nLongest gap     \(gap) ms"
+            + "\nCG fallbacks    \(shownFallbacks.liveOff + shownFallbacks.poolFull)"
         finished.removeAll(keepingCapacity: true)
         resetSamples()
         intervalStart = drag == nil ? nil : now
@@ -149,6 +221,8 @@ final class DevelopFrameHUD {
         handoff = Sample()
         wait = Sample()
         refresh = Sample()
+        busy = Sample()
+        fallbacks = Fallbacks()
     }
 
     private static func ms(_ seconds: CFTimeInterval?) -> String {
@@ -172,7 +246,8 @@ struct DevelopFrameHUDOverlay: NSViewRepresentable {
         let hud: DevelopFrameHUD
         var assetID: Int64?
         private var link: CADisplayLink?
-        private let label = NSTextField(wrappingLabelWithString: "Frame diagnostics\nDrag a Develop slider")
+        private var observers: [CFRunLoopObserver] = []
+        private let label = NSTextField(wrappingLabelWithString: "Frame diagnostics\nDrag a slider, curve point or wheel")
         private static let highRefresh = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120)
 
         init(hud: DevelopFrameHUD) {
@@ -202,9 +277,22 @@ struct DevelopFrameHUDOverlay: NSViewRepresentable {
             link.add(to: .main, forMode: .common)
             self.link = link
             hud.setActive(true)
+            // Start early and stop late to bracket the work in the pass, including deferred UI work.
+            observe(.afterWaiting, order: CFIndex.min) { $0.afterWaiting() }
+            observe(.beforeWaiting, order: CFIndex.max) { $0.beforeWaiting() }
+        }
+
+        private func observe(_ activity: CFRunLoopActivity, order: CFIndex, record: @escaping (DevelopFrameHUD) -> Void) {
+            guard let observer = CFRunLoopObserverCreateWithHandler(nil, activity.rawValue, true, order, { [weak hud] _, _ in
+                MainActor.assumeIsolated { if let hud { record(hud) } }
+            }) else { return }
+            CFRunLoopAddObserver(CFRunLoopGetMain(), observer, .commonModes)
+            observers.append(observer)
         }
 
         func stop() {
+            observers.forEach { CFRunLoopObserverInvalidate($0) }
+            observers.removeAll()
             link?.invalidate()
             link = nil
             hud.setActive(false)

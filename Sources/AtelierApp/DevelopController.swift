@@ -59,6 +59,7 @@ private struct ProxyRenderRequest {
     let queuedAt: CFAbsoluteTime
     /// Set when the frame goes straight to the photo view (`PhotoFeed`); nil renders a CGImage.
     var surfaces: DisplaySurfaces?
+    var fallback: PhotoFeed.Fallback? = nil
     let measureJob: LatestJob<DevelopMeasureRequest>
     let measureQueue: DispatchQueue
     let openGeneration: LockedValue<Int>
@@ -1881,6 +1882,7 @@ final class DevelopController: ObservableObject {
             overlay: overlay, clipping: clipping, assetID: assetID, count: renderCount,
             measures: overlay == nil && preview == nil, generation: openGeneration.value,
             queuedAt: DevelopTimingLog.now(), surfaces: direct ? displaySurfaces : nil,
+            fallback: liveFramesOff && photoFeed.isAttached && firstRenderDone && cropping ? .liveFramesOff : nil,
             measureJob: measureJob, measureQueue: measureQueue, openGeneration: openGeneration,
             renderBeganAt: renderBeganAt))
     }
@@ -1909,13 +1911,14 @@ final class DevelopController: ObservableObject {
         var surface: IOSurface?
         var cgImage: CGImage?
         var plain: CGImage?
+        var fallback = request.fallback
         RenderSignposts.measure("Proxy render") {
             if let surfaces = request.surfaces,
                let frame = request.session.renderToSurface(request.settings, cropping: request.cropping,
                                                            overlay: request.overlay, preview: request.preview,
                                                            shadowClipping: request.clipping.shadows,
                                                            highlightClipping: request.clipping.highlights,
-                                                           surfaces: surfaces) {
+                                                           surfaces: surfaces, onPoolFull: { fallback = .poolFull }) {
                 surface = frame.surface
                 plain = frame.plain
             } else if let rendered = request.session.renderForDisplay(request.settings, cropping: request.cropping,
@@ -1944,15 +1947,17 @@ final class DevelopController: ObservableObject {
         }
         let timing = PhotoFeed.RenderTiming(count: request.count, readyAt: readyAt, duration: readyAt - renderClock,
                                            queueWait: max(0, renderBegan - request.queuedAt))
-        DispatchQueue.main.async {
+        DispatchQueue.main.async { [fallback] in
             MainActor.assumeIsolated {
-                controller.finishRender(request, surface: surface, cgImage: cgImage, renderBegan: renderBegan, timing: timing)
+                controller.finishRender(request, surface: surface, cgImage: cgImage, fallback: fallback,
+                                        renderBegan: renderBegan, timing: timing)
             }
         }
         queue.async { Self.renderNext(job: job, on: queue, controller: controller) }
     }
 
     private func finishRender(_ request: ProxyRenderRequest, surface: IOSurface?, cgImage: CGImage?,
+                              fallback: PhotoFeed.Fallback?,
                               renderBegan: CFAbsoluteTime, timing: PhotoFeed.RenderTiming) {
         // Nothing newer has been asked for.
         let latest = request.count == renderCount
@@ -1975,6 +1980,7 @@ final class DevelopController: ObservableObject {
                     if latest {
                         var ordinary = request
                         ordinary.surfaces = nil
+                        ordinary.fallback = .liveFramesOff
                         rendering = true
                         submitRender(ordinary)
                         return
@@ -1985,6 +1991,7 @@ final class DevelopController: ObservableObject {
             }
         }
         if fits, let cgImage {
+            if let fallback { frameHUD.fallback(fallback, count: request.count) }
             let shown = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
             image = shown
             photoFeed.published(shown, count: request.count, timing: timing)
@@ -2016,6 +2023,7 @@ final class DevelopController: ObservableObject {
             MainActor.assumeIsolated {
                 guard let self, self.renderCount == count, var settled = self.lastRender, settled.count == count else { return }
                 settled.surfaces = nil
+                settled.fallback = nil
                 self.rendering = true
                 self.submitRender(settled)
             }

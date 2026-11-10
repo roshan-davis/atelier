@@ -58,9 +58,12 @@ final class DisplaySurfacesTests: XCTestCase {
             guard let surface = surfaces.checkOut(width: 8, height: 8) else { return XCTFail("pool ran out early") }
             out.append(surface)
         }
-        XCTAssertNil(surfaces.checkOut(width: 8, height: 8))
+        var full = 0
+        XCTAssertNil(surfaces.checkOut(width: 8, height: 8, onPoolFull: { full += 1 }))
+        XCTAssertEqual(full, 1)
         surfaces.checkIn(out[0])
-        XCTAssertTrue(surfaces.checkOut(width: 8, height: 8) === out[0])
+        XCTAssertTrue(surfaces.checkOut(width: 8, height: 8, onPoolFull: { full += 1 }) === out[0])
+        XCTAssertEqual(full, 1)
         // A new size starts a new set; old ones coming back are let go.
         XCTAssertNotNil(surfaces.checkOut(width: 16, height: 8))
         surfaces.checkIn(out[1])

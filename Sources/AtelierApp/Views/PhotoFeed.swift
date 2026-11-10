@@ -12,6 +12,8 @@ import IOSurface
 /// compare views, crop and the other tools keep the ordinary path.
 @MainActor
 final class PhotoFeed {
+    enum Fallback { case liveFramesOff, poolFull }
+
     struct RenderTiming {
         let count: Int
         let readyAt: CFTimeInterval
