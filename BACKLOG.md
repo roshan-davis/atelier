@@ -602,3 +602,15 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 **Acceptance:** Mac build and tests (`HistogramPictureTests`; `DevelopTests.testHistogramOfGrayImage` with 128 bins). Frame Diagnostics in Side by Side and the split slider at Fit and zoomed: frames per drag close to the single-photo view, no CG fallbacks. Rosh: no freeze editing in either compare view; the divider and panning still work; the After side updates live under the Before side of the split; the histogram updates smoothly with the Lightroom-style colors; no change to how photos look (no `PreviewCache.version` bump).
 
 **Validation:** Cloud only, no Swift toolchain: source review; the histogram drawing ported to Python and checked on a real photo; Help page checked in Chromium.
+
+## AT-041 — Build: `build_macos_app.py` works with the Command Line Tools toolchain
+
+**Status:** PR open, never compiled (cloud has no Swift toolchain); needs Rosh's or a Mac agent's build. **Owner:** Claude. **Chat:** Claude project thread "Fix command-line release build". **Branch:** `claude/project-thread-3a1y7r`. **Baseline:** main after AT-040.
+
+**Evidence:** Rosh (2026-11-10): `python3 Scripts/build_macos_app.py` failed with `external macro implementation type 'SwiftUIMacros.EntryMacro' could not be found` at `DevelopFrameHUD.swift:272` (`@Entry`, from AT-038). `swift build` ran from `/Library/Developer/CommandLineTools`, which has no SwiftUI macro plugins; Xcode does.
+
+**Scope:** (1) `developFrameHUD` environment value uses a hand-written `EnvironmentKey` instead of `@Entry` (the only SwiftUI macro in the app). (2) `DevelopController.previewWriteLock` is `nonisolated` so the nonisolated preview writer can use it (Swift 6 warning). (3) The build script resolves the toolchain like `check_pr.py` (keeps `DEVELOPER_DIR`, else `xcode-select`, else Xcode.app over the Command Line Tools), runs `xcrun swift build`, and prints the toolchain it used.
+
+**Not in scope:** the other Swift 6 concurrency warnings (`EditIn.swift`, `ImportFlow.swift`, `NSEvent` monitors, `SettingsView` enumerator).
+
+**Acceptance:** `python3 Scripts/build_macos_app.py` builds with Xcode selected and with only the Command Line Tools selected; Develop > Frame Diagnostics still shows its overlay and slider timings.

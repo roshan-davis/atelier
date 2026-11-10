@@ -29,8 +29,10 @@ def swift_build(configuration, arch, env, scratch_path):
         # One triple per build keeps SwiftPM's own build system (and its resource bundle
         # layout); the two results are joined with lipo for universal.
         flags += ["--triple", arch + "-apple-macosx" + MIN_MACOS]
-    subprocess.run(["swift", "build"] + flags, cwd=ROOT, env=env, check=True)
-    return Path(subprocess.check_output(["swift", "build"] + flags + ["--show-bin-path"],
+    # xcrun picks the toolchain from DEVELOPER_DIR, even when a `swift` from the Command
+    # Line Tools comes first on PATH.
+    subprocess.run(["xcrun", "swift", "build"] + flags, cwd=ROOT, env=env, check=True)
+    return Path(subprocess.check_output(["xcrun", "swift", "build"] + flags + ["--show-bin-path"],
                                         cwd=ROOT, env=env, text=True).strip())
 
 
@@ -53,7 +55,17 @@ def main():
     if args.arch == "all" and args.output:
         parser.error("--arch all writes one app per architecture; leave out --output")
     env = os.environ.copy()
-    env.setdefault("DEVELOPER_DIR", "/Applications/Xcode.app/Contents/Developer")
+    # Prefer full Xcode (as check_pr.py does) without changing the Mac's xcode-select
+    # setting. The app also builds with the Command Line Tools if Xcode isn't there.
+    if not env.get("DEVELOPER_DIR"):
+        selected = subprocess.run(["xcode-select", "-p"], capture_output=True, text=True)
+        developer = selected.stdout.strip()
+        xcode = "/Applications/Xcode.app/Contents/Developer"
+        if (selected.returncode or "/CommandLineTools" in developer) and Path(xcode).is_dir():
+            developer = xcode
+        if developer:
+            env["DEVELOPER_DIR"] = developer
+    print("Toolchain: " + env.get("DEVELOPER_DIR", "(xcode-select default)"))
     revision = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, text=True).strip()
 
     products = {}

@@ -2535,7 +2535,7 @@ final class DevelopController: ObservableObject {
     /// render queue and from independent decodes (`refreshPreviews`), so an older one can finish
     /// last; it is dropped instead of overwriting the newer saved look.
     private let previewRevisions = LockedValue<[Int64: Int]>([:])
-    private static let previewWriteLock = NSLock()
+    private nonisolated static let previewWriteLock = NSLock()
 
     private func nextPreviewRevision(for assetID: Int64) -> Int {
         var revisions = previewRevisions.value

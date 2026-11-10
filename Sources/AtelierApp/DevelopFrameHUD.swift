@@ -268,8 +268,17 @@ final class DevelopFrameHUD {
     }
 }
 
+// A hand-written key instead of SwiftUI's @Entry macro: the macro's plugin ships only
+// with Xcode, so `swift build` with the Command Line Tools toolchain can't expand it.
+private struct DevelopFrameHUDKey: EnvironmentKey {
+    static var defaultValue: DevelopFrameHUD? { nil }
+}
+
 extension EnvironmentValues {
-    @Entry var developFrameHUD: DevelopFrameHUD?
+    var developFrameHUD: DevelopFrameHUD? {
+        get { self[DevelopFrameHUDKey.self] }
+        set { self[DevelopFrameHUDKey.self] = newValue }
+    }
 }
 
 struct DevelopFrameHUDOverlay: NSViewRepresentable {
