@@ -574,6 +574,10 @@ struct HueRangeSlider: View {
                         .offset(x: x - SliderGeometry.knobDiameter / 2, y: midY - SliderGeometry.knobDiameter / 2)
                 }
             }
+            // The ZStack is only as big as its widest and tallest child (the inset track and the
+            // knob), so without this frame the right end and the bottom of the slider took no
+            // clicks and no cursor: a knob at the maximum could only be caught on its left half.
+            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 0)
                 .onChanged { drag in
