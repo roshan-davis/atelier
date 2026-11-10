@@ -40,6 +40,9 @@ public struct LookSkin: Sendable {
     /// The sample's pixels that are skin.
     let pixels: [Int]
     let faces: [CGRect]
+    /// Whether the skin came from Select People (face and body skin), so the skin mask the match
+    /// adds is a Select People part; otherwise it's ellipses on the face boxes.
+    let usesPeople: Bool
     /// Skin's Oklab hue (degrees) and mean chroma before the match.
     let hue: Double
     let chroma: Double
@@ -95,6 +98,7 @@ public struct LookSkin: Sendable {
         let skin = Array(Set(used)).sorted()
         pixels = skin
         self.faces = usableFaces
+        usesPeople = false
         hue = measured.hue
         chroma = measured.chroma
         toneColors = Self.toneSplit(sample, skin).groups.compactMap { Self.meanAB(sample, $0) }
@@ -109,6 +113,7 @@ public struct LookSkin: Sendable {
         guard groups.allSatisfy({ $0.count >= 4 }), let mid = Self.hueAndChroma(sample, groups[1]) else { return nil }
         pixels = Array(Set(groups.joined())).sorted()
         faces = toneRegions
+        usesPeople = false
         hue = mid.hue
         chroma = mid.chroma
         toneColors = groups.compactMap { Self.meanAB(sample, $0) }
@@ -141,6 +146,34 @@ public struct LookSkin: Sendable {
             n += 1
         }
         return n > 0 ? sum / n : nil
+    }
+
+    /// The skin Select People finds (face and body skin, 1 is skin) at the sample's size. Nil
+    /// when there's too little to measure.
+    init?(sample: LookSample, skin values: [Double], faces: [CGRect]) {
+        guard values.count == sample.count else { return nil }
+        let picked = values.indices.filter { values[$0] >= 0.5 }
+        guard picked.count >= 12, let measured = Self.hueAndChroma(sample, picked) else { return nil }
+        pixels = picked
+        self.faces = faces
+        usesPeople = true
+        hue = measured.hue
+        chroma = measured.chroma
+        toneColors = Self.toneSplit(sample, picked).groups.compactMap { Self.meanAB(sample, $0) }
+    }
+
+    /// What the skin treatments measure and Match Skin Tone adjusts: everyone's Face Skin. Body
+    /// Skin is found by color alone, so warm clothes touching skin can join it; it stays a choice
+    /// in Masking.
+    public static let matchSelection = DevelopSettings.PeopleSelection(parts: [.faceSkin], feather: 0)
+
+    /// Select People's face skin on an image, at `width` × `height`, with the faces it found; nil
+    /// when it finds no one.
+    static func people(in image: CGImage, width: Int, height: Int) -> (values: [Double], faces: [CGRect])? {
+        guard let found = PeopleSkin.find(in: image),
+              let mask = found.mask(matchSelection),
+              let values = LookSample.focusValues(mask, width: width, height: height) else { return nil }
+        return (values, found.people.map(\.face))
     }
 
     static func looksLikeSkin(_ sample: LookSample, _ i: Int) -> Bool {
@@ -195,6 +228,8 @@ public struct LookReferenceFeatures: Sendable {
     /// nothing or almost everything).
     let subject: [Double]?
     let faces: [CGRect]
+    /// Select People's face and body skin at the sample's size, or nil when it finds no one.
+    let skin: [Double]?
 
     public init(image: CGImage) {
         let size = LookSample.sampleSize(of: image)
@@ -202,7 +237,9 @@ public struct LookReferenceFeatures: Sendable {
         subject = mask
             .flatMap { LookSample.focusValues($0, width: size.width, height: size.height) }
             .flatMap { LookMatcher.isUsableSubject($0) ? $0 : nil }
-        faces = LookSkin.faces(in: image)
+        let people = LookSkin.people(in: image, width: size.width, height: size.height)
+        skin = people?.values
+        faces = people?.faces ?? LookSkin.faces(in: image)
     }
 
     /// Features that are known rather than found, as for a built-in study: its drawn person as
@@ -212,6 +249,8 @@ public struct LookReferenceFeatures: Sendable {
         subject = LookSample.focusValues(subjectMask, width: size.width, height: size.height)
             .flatMap { LookMatcher.isUsableSubject($0) ? $0 : nil }
         self.faces = faces
+        // A study's skin is drawn (`authoredSkinTones`), not found.
+        skin = nil
     }
 
     public var hasSubject: Bool { subject != nil }
@@ -244,6 +283,9 @@ public struct LookTarget: Sendable {
             skin = LookSkin(sample: plain, toneRegions: authoredSkinTones)
         } else if let authoredSkinRegions {
             skin = LookSkin(sample: plain, faces: authoredSkinRegions, authored: true)
+        } else if let found = Self.peopleSkin(plain, image: image, features: features) {
+            // Select People's face and body skin; face boxes when it finds no one.
+            skin = found
         } else {
             skin = LookSkin(sample: plain, faces: features?.faces ?? LookSkin.faces(in: image))
         }
@@ -272,6 +314,19 @@ public struct LookTarget: Sendable {
         self.background = background
         self.subject = subject
         self.notices = notices
+    }
+}
+
+extension LookTarget {
+    /// The reference's face and body skin from Select People, from `features` when they were
+    /// found already.
+    static func peopleSkin(_ sample: LookSample, image: CGImage, features: LookReferenceFeatures?) -> LookSkin? {
+        if let features {
+            guard let values = features.skin else { return nil }
+            return LookSkin(sample: sample, skin: values, faces: features.faces)
+        }
+        guard let people = LookSkin.people(in: image, width: sample.width, height: sample.height) else { return nil }
+        return LookSkin(sample: sample, skin: people.values, faces: people.faces)
     }
 }
 
@@ -307,7 +362,13 @@ extension LookMatcher {
         let asShot = session.asShotTemperature
         var skin: LookSkin?
         if options.skinMode != .off {
-            skin = LookSkin(sample: plain, faces: photoFaces ?? LookSkin.faces(in: baseImage))
+            // Select People's face skin, the same skin the "Match Look: Skin" mask adjusts; face
+            // boxes when it finds no one.
+            if let mask = session.peopleMask(base, selection: LookSkin.matchSelection),
+               let values = LookSample.focusValues(mask, width: plain.width, height: plain.height) {
+                skin = LookSkin(sample: plain, skin: values, faces: photoFaces ?? [])
+            }
+            skin = skin ?? LookSkin(sample: plain, faces: photoFaces ?? LookSkin.faces(in: baseImage))
             if skin == nil { notices.insert(options.skinMode == .protect ? .noFaces : .noSkinInPhoto) }
         }
         let skinPixels = options.skinMode == .protect ? skin?.pixels ?? [] : []

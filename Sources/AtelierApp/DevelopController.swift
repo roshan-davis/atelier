@@ -369,6 +369,9 @@ final class DevelopController: ObservableObject {
     @Published var brushErasing = false
     /// A note under the Masks list, e.g. when Select Subject finds nothing.
     @Published var maskMessage: String?
+    /// The faces Select People finds on this photo, left to right (0 to 1 from the top left of the
+    /// upright, uncropped photo); nil until it has looked.
+    @Published var peopleFaces: [CGRect]?
     /// The decoded photo's size (upright, uncropped) at proxy scale; its aspect drives the crop tool.
     @Published private(set) var sourceSize: CGSize?
 
@@ -618,6 +621,7 @@ final class DevelopController: ObservableObject {
         selectedComponentID = nil
         maskTool = nil
         maskMessage = nil
+        peopleFaces = nil
         presetAmount = nil
         previewingPreset = nil
         navigatorPreview = nil
@@ -2308,7 +2312,7 @@ struct MaskTool: Equatable {
         case .radial: return "Drag on the photo from the center outward to draw the ellipse."
         case .brush: return "Paint on the photo. Hold ⌥ to erase; [ and ] change the size."
         case .object: return "Drag a box around the object to select it."
-        case .luminance, .subject: return ""
+        case .luminance, .subject, .people: return ""
         }
     }
 }
@@ -2371,6 +2375,7 @@ extension DevelopController {
         case .luminance: return .luminance(DevelopSettings.LuminanceRange(low: 50, high: 100))
         case .subject: return .subject(DevelopSettings.Selection())
         case .object: return .subject(DevelopSettings.Selection(box: .init(x: 0.3, y: 0.3, width: 0.4, height: 0.4)))
+        case .people: return .people(DevelopSettings.PeopleSelection())
         case .brush: return .brush([])
         case .linear: return .linear(.init(start: .init(x: 0.5, y: 0.2), end: .init(x: 0.5, y: 0.5)))
         case .radial: return .radial(.init(center: .init(x: 0.5, y: 0.5), radiusX: 0.2, radiusY: 0.15))
@@ -2388,6 +2393,7 @@ extension DevelopController {
         var component = component
         maskMessage = nil
         if case .subject(let selection) = component.shape { checkSubject(selection) }
+        if case .people = component.shape { findPeople(reportNone: true) }
         if tool.newMask || selectedMask == nil {
             component.mode = .add
             let mask = Mask(name: settings.nextMaskName(), components: [component])
@@ -2429,6 +2435,30 @@ extension DevelopController {
             }
         }
     }
+
+    /// Runs Select People's Vision search in the background for the panel's person list, and
+    /// says so when it finds no one.
+    func findPeople(reportNone: Bool = false) {
+        guard let session else { return }
+        if let peopleFaces {
+            if reportNone, peopleFaces.isEmpty { maskMessage = Self.noPeopleMessage }
+            return
+        }
+        let settings = self.settings
+        let assetID = self.assetID
+        queue.async {
+            let faces = session.peopleFaces(settings: settings)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard self.assetID == assetID else { return }
+                    self.peopleFaces = faces
+                    if reportNone, faces.isEmpty { self.maskMessage = Self.noPeopleMessage }
+                }
+            }
+        }
+    }
+
+    static let noPeopleMessage = "No faces found. Select People finds people whose face is visible; try Select Subject or a Brush."
 
     /// Adds a brush stroke to the selected brush part.
     func addStroke(_ stroke: DevelopSettings.MaskStroke) {

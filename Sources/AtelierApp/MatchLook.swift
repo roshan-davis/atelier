@@ -142,7 +142,7 @@ final class MatchLookModel: ObservableObject, Identifiable {
     @Published private(set) var referenceImage: NSImage?
     @Published private(set) var builtInReference: BuiltInLookReference?
     @Published private var referenceRequest: UUID?
-    private var referenceCG: CGImage?
+    private(set) var referenceCG: CGImage?
     var isLoadingReference: Bool { referenceRequest != nil }
     @Published private(set) var recent = RecentReference.load()
 
@@ -222,7 +222,13 @@ final class MatchLookModel: ObservableObject, Identifiable {
     private var fittedTarget: LookTarget?
 
     private var fitSession: DevelopSession?
-    private var previewSession: DevelopSession?
+    private(set) var previewSession: DevelopSession?
+    /// Show Skin: the skin the match measures, tinted on the photo and the reference.
+    @Published var showSkin = false {
+        didSet { if showSkin { findSkinOverlays() } }
+    }
+    @Published var photoSkinOverlay: NSImage?
+    @Published var referenceSkinOverlay: NSImage?
     private let fitQueue = DispatchQueue(label: "atelier.matchlook.fit", qos: .userInitiated)
     private let previewQueue = DispatchQueue(label: "atelier.matchlook.preview", qos: .userInitiated)
     private let latest = Generation()
@@ -256,6 +262,7 @@ final class MatchLookModel: ObservableObject, Identifiable {
                 MainActor.assumeIsolated {
                     self.fitSession = fit
                     self.previewSession = preview
+                    if self.showSkin { self.findSkinOverlays() }
                     self.photoFaces = faces
                     if !self.userSetSkin { self.options.skinMode = faces.isEmpty ? .off : .protect }
                     if let beforeImage {
@@ -370,6 +377,8 @@ final class MatchLookModel: ObservableObject, Identifiable {
         referenceImage = NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))
         referenceName = name
         builtInReference = builtIn
+        referenceSkinOverlay = nil
+        if showSkin { findSkinOverlays() }
         match = nil
         preview = before
         scheduleMatch(delay: 0)

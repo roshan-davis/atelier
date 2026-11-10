@@ -16,12 +16,15 @@ extension LookMatcher {
         // whole face gets the full effect (inside 70% of the radius) and it fades out past the
         // jaw, ears and hairline. A box-sized ellipse with a long feather reached only the
         // middle of each face.
-        let faces = skin.faces.map { face -> DevelopSettings.MaskComponent in
+        // With Select People (Vision face landmarks), the masks use its Face Skin part instead:
+        // editable in Masking, where ticking Body Skin carries the change to neck and hands.
+        let radials = skin.faces.map { face -> DevelopSettings.MaskComponent in
             let center = CGPoint(x: face.midX * space.rect.width, y: (face.midY - 0.08 * face.height) * space.rect.height)
             let gradient = space.radial(center: center, width: face.width * space.rect.width * 0.62,
                                         height: face.height * space.rect.height * 0.75, feather: 30)
             return DevelopSettings.MaskComponent(.radial(gradient))
         }
+        let faces = skin.usesPeople ? [DevelopSettings.MaskComponent(.people(LookSkin.matchSelection))] : radials
         guard reference.toneColors.count == 3, let start = measure(settings) else {
             // Without tones: one mask, the skin's mean color to the reference's.
             return fitMaskColor(LookMatch.skinMaskName, components: faces,
@@ -87,6 +90,16 @@ extension LookMatcher {
             best.masks[index].components = components
         }
 
+        // Keep the skin sliders near where they started: a reference whose skin sits under very
+        // different light shouldn't paint the face.
+        let start = DevelopSettings.LocalParameter.allCases.reduce(into: [DevelopSettings.LocalParameter: Double]()) {
+            $0[$1] = best.masks[index][$1]
+        }
+        func limited(_ parameter: DevelopSettings.LocalParameter, _ value: Double) -> Double {
+            let from = start[parameter] ?? 0
+            return min(from + maxSkinShift, max(from - maxSkinShift, value))
+        }
+
         // Each slider's effect on the color is measured once (three renders) and reused for
         // every step: the response is close to linear over this range, and each render with
         // masks is the slow part of a match.
@@ -108,7 +121,7 @@ extension LookMatcher {
                 var trial = best
                 for (parameter, delta) in changes {
                     let value = trial.masks[index][parameter]
-                    trial.masks[index][parameter] = (value + min(30, max(-30, delta)) * fraction).rounded()
+                    trial.masks[index][parameter] = limited(parameter, (value + min(30, max(-30, delta)) * fraction).rounded())
                 }
                 guard trial != best, let result = color(trial) else { continue }
                 let next = target - result
@@ -134,6 +147,9 @@ extension LookMatcher {
         if improved { settings = best }
         return improved
     }
+
+    /// The most Match Skin Tone moves each skin slider (Temp, Tint, Saturation) from where it was.
+    static let maxSkinShift = 35.0
 
     private static func colorVector(hue: Double, chroma: Double) -> SIMD2<Double> {
         let angle = hue * .pi / 180

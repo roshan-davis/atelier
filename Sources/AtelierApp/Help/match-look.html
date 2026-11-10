@@ -73,7 +73,7 @@
   <div class="pins pinned wide" style="max-width:640px">
   <div class="panel" style="background:#323232">
     <div class="pb" style="gap:9px">
-      <div class="row" data-pin="1"><span class="name" style="width:auto">Match:</span><span class="check"><i class="on"></i>White Balance</span><span class="check"><i class="on"></i>Tone</span><span class="check"><i class="on"></i>Color</span><span class="muted">|</span><span class="name" style="width:auto">Skin Tones:</span><span class="popup" style="flex:none;width:150px" data-pin="2" data-pin-side="right">Protect Skin Tones</span></div>
+      <div class="row" data-pin="1"><span class="name" style="width:auto">Match:</span><span class="check"><i class="on"></i>White Balance</span><span class="check"><i class="on"></i>Tone</span><span class="check"><i class="on"></i>Color</span><span class="muted">|</span><span class="name" style="width:auto">Skin Tones:</span><span class="popup" style="flex:none;width:150px" data-pin="2" data-pin-side="right">Protect Skin Tones</span><span class="check"><i></i>Show Skin</span></div>
       <div class="row" data-pin="3"><span class="name" style="width:auto">Match Areas:</span><span class="popup" style="flex:none;width:180px">Subject &amp; Background</span><span class="muted">Background matches background; a Match Look: Subject mask matches the subject.</span></div>
       <div class="sl" data-pin="4" data-pin-side="right" data-name="Strength" data-value="100" data-at="1" data-def="1"></div>
       <div class="row" style="justify-content:flex-end;gap:8px"><span class="btn">Show Differences</span><span class="grow" style="flex:1"></span><span class="btn">Cancel</span><span class="btn on">Apply</span></div>
@@ -83,7 +83,7 @@
 </figure>
 <ol class="legend">
   <li><b>Match</b>: what the match may change. Turn off any of the three to leave those sliders alone.</li>
-  <li><b>Skin Tones</b> starts at Protect Skin Tones when Atelier finds a face in your photo and Off otherwise.</li>
+  <li><b>Skin Tones</b> starts at Protect Skin Tones when Atelier finds a face in your photo and Off otherwise. <b>Show Skin</b> tints the skin it measures.</li>
   <li><b>Match Areas</b>: Whole Photo, Subject &amp; Background, or Boxes.</li>
   <li><b>Strength</b> scales everything the match sets, including the subject and skin mask sliders.</li>
 </ol>
@@ -97,14 +97,16 @@
 
 <h2 id="skin">Skin Tones</h2>
 <p>Choose <b>Off</b> to let the ordinary match set face color. Your choice stays selected while the dialog is open, even when you switch references.</p>
+<p>Both treatments work on the face skin <a href="masking.html#people">Select People</a> finds (without eyes, brows and lips), in your photo and in the reference. Tick <b>Show Skin</b> next to the Skin Tones menu to see that skin tinted red on both pictures before you apply. If no face is found, Atelier falls back to the middle of each face box.</p>
+
 <h3 id="protect-skin">Protect Skin Tones</h3>
-<p>A strong look, such as teal and orange or a cold film stock, can turn skin orange, green or grey. With <b>Protect Skin Tones</b> on, the skin on the faces Atelier finds is left out of the match, and the match may move its color by only a little (at most 5° of hue and 15% of saturation). The rest of the photo takes the full look; the skin is held at its own colors in its shadows, midtones and highlights with the <b>Match Look: Skin</b> masks, which you can edit in Masking (⇧W) after <b>Apply</b>. Only when the masks can't hold the skin is the whole match made weaker.</p>
+<p>A strong look, such as teal and orange or a cold film stock, can turn skin orange, green or grey. With <b>Protect Skin Tones</b> on, the skin Atelier finds is left out of the match, and the match may move its color by only a little (at most 5° of hue and 15% of saturation). The rest of the photo takes the full look; the skin is held at its own colors in its shadows, midtones and highlights with the <b>Match Look: Skin</b> masks, which you can edit in Masking (⇧W) after <b>Apply</b>. Only when the masks can't hold the skin is the whole match made weaker.</p>
 <p>Atelier does this with ordinary sliders. It first turns back the HSL Hue and Saturation of the colors skin falls in (Orange, usually), when <b>Color</b> is on. If that isn't enough, it pulls White Balance, Saturation and Color Grading back toward where they were, just as far as needed. If that still leaves the skin outside the limits, Atelier backs off the rest of the match too. Show Differences lists the changes once the new match is ready.</p>
 <p>If the photo has no usable face skin, the dialog tells you.</p>
 
 <h3 id="match-skin">Match Skin Tone</h3>
-<p>Choose <b>Match Skin Tone</b> to bring the color of faces toward the reference, tone by tone: skin in light, in midtone and in shade each takes the reference's color for that tone. Atelier uses three masks over the faces: <b>Match Look: Skin</b> for the midtones, and <b>Match Look: Skin Shadows</b> and <b>Match Look: Skin Highlights</b>, which add a Luminance Range so they reach only the darker or brighter skin. You can use it by itself by clearing White Balance, Tone and Color. Keep Tone selected if you also want the ordinary brightness match. If either image lacks usable face skin, the dialog names that image and you can still apply the other selected adjustments. With several photos selected and usable skin in the reference, Atelier can still match faces in the rest of the selection.</p>
-<p>Use <b>Show Differences</b> to see the skin sliders at the current <b>Strength</b>. After <b>Apply</b>, open <b>Masking</b> (⇧W) and choose one of the <b>Match Look: Skin</b> masks to edit Temp, Tint and Saturation or refine the feathered shapes and the Luminance Range. The adjustment is fitted on faces and can feather into nearby features.</p>
+<p>Choose <b>Match Skin Tone</b> to bring the color of faces toward the reference, tone by tone: skin in light, in midtone and in shade each takes the reference's color for that tone. Atelier uses three masks on everyone's Face Skin (a Select People part; ellipses over the face boxes when Select People finds no one): <b>Match Look: Skin</b> for the midtones, and <b>Match Look: Skin Shadows</b> and <b>Match Look: Skin Highlights</b>, which add a Luminance Range so they reach only the darker or brighter skin. Each skin slider moves at most 35 from where it was. You can use it by itself by clearing White Balance, Tone and Color. Keep Tone selected if you also want the ordinary brightness match. If either image lacks usable face skin, the dialog names that image and you can still apply the other selected adjustments. With several photos selected and usable skin in the reference, Atelier can still match faces in the rest of the selection.</p>
+<p>Use <b>Show Differences</b> to see the skin sliders at the current <b>Strength</b>. After <b>Apply</b>, open <b>Masking</b> (⇧W) and choose one of the <b>Match Look: Skin</b> masks to edit Temp, Tint and Saturation, refine the Luminance Range, or click its Select People part to choose one person or tick Body Skin to carry the change to neck and hands.</p>
 <figure>
   <div class="trio">
     <figure><div class="pic"><img src="images/match-skin-reference.jpg" alt="The Matrix illustrated portrait with olive face lighting"><span class="tag">Portrait study</span></div></figure>

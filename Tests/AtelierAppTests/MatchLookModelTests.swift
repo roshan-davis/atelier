@@ -108,7 +108,9 @@ final class MatchLookModelTests: XCTestCase {
         let first = try XCTUnwrap(expected.masks.first)
         let second = try XCTUnwrap(library.catalog.developSettings(for: model.targets[1]).masks.first)
         XCTAssertNotEqual(first.id, second.id)
-        XCTAssertNotEqual(first.components.first?.shape, second.components.first?.shape)
+        // Each photo gets its own masks; with Select People they share the same Face Skin part,
+        // which finds each photo's own faces when rendered.
+        XCTAssertFalse(second.components.isEmpty)
         XCTAssertEqual(try library.catalog.developSettings(for: model.targets[2]), .neutral)
         for id in model.targets.prefix(2) {
             let history = try library.catalog.developHistory(for: id)
