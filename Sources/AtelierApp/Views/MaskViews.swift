@@ -814,10 +814,14 @@ struct MasksPanel: View {
                 }
             }
             .help("People are numbered left to right by face")
-            // Lightroom's layout: two columns of parts, ticked in any combination.
+            // Lightroom's layout: Entire Person, then two columns of parts, ticked in any combination.
+            Toggle(DevelopSettings.PeopleSelection.Part.entirePerson.title, isOn: Binding(
+                get: { selection.includes(.entirePerson) },
+                set: { update(component, .people(selection.setting(.entirePerson, $0))) }))
+                .help(DevelopSettings.PeopleSelection.Part.entirePerson.help)
             LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)],
                       alignment: .leading, spacing: 4) {
-                ForEach(DevelopSettings.PeopleSelection.Part.allCases, id: \.self) { part in
+                ForEach(DevelopSettings.PeopleSelection.Part.allCases.filter { $0 != .entirePerson }, id: \.self) { part in
                     Toggle(part.title, isOn: Binding(get: { selection.includes(part) }, set: { on in
                         update(component, .people(selection.setting(part, on)))
                     }))
@@ -837,7 +841,7 @@ struct MasksPanel: View {
                 })
             }
             edgeControls(grow: value(\.grow), refine: value(\.refine), feather: value(\.feather), featherOrigin: 10)
-            Text("Found on this Mac with Apple's Vision: skin by each face's own color, the eyes, brows, lips and teeth from the face's outline.")
+            Text("Found on this Mac: skin, hair and clothes by the built-in MediaPipe model, the eyes, brows, lips and teeth from Apple's Vision.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             invertToggle(component)
         }

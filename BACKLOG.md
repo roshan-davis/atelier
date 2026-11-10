@@ -628,3 +628,15 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 **Acceptance:** Mac build and `PeopleSkinTests` pass. Rosh, on real portraits: untick both skin parts without the panel refusing; Lips and Teeth (open mouth) select only the mouth; Iris and Pupil and Eye Sclera on a close portrait; Face Skin + Lips has no ring around the mouth; Grow shrinks/grows, Refine Edge pulls Select Subject's edge onto hair; an old catalog's masks look the same (apart from the small lip edge change).
 
 **Validation:** source review only. If `CIGuidedFilter` is missing at run time, Refine Edge does nothing (no crash).
+
+## AT-043 — Select People: skin, hair and clothes from a built-in MediaPipe model
+
+**Status:** PR open, never compiled (cloud has no Swift toolchain); needs a Mac build and tests (`PeoplePartsTests` runs the real model), then Rosh's acceptance. **Owner:** Claude. **Chat:** Claude project thread "Improve people and object selection masks". **Branch:** `claude/project-thread-m96qwc` (new PR after #100 merged). **Baseline:** `464d5bf`. **Dependencies:** AT-042 (merged).
+
+**Evidence:** Rosh (2026-11-10): Body Skin takes clothes; wants the AI model built into the app, no download (report `reports/people-object-selection-2026-11-10.md`). Step 2 of 5.
+
+**Scope:** Google's MediaPipe Multiclass Selfie Segmentation (Apache 2.0) converted to Core ML (`Sources/AtelierCore/Models/PeopleParts.mlpackage`, 8.0 MB, fp16, softmax output) by `Scripts/models/convert_mediapipe_multiclass.py` (rebuilds the TFLite graph op by op with coremltools' MIL builder; `--check` runs the same graph in NumPy against Google's TFLite runtime: max difference 2.8e-5, identical classes on random input and a real portrait). License and change notice next to the model. `PeopleParts` loads it from AtelierCore's resource bundle, compiles it once into Caches, runs it per person on a box around their matte; Face Skin, Body Skin, Hair, Clothes and Entire Person come from it (eyes/brows/lips still cut out of Face Skin; the color method stays as the fallback). Entire Person checkbox above the parts. `build_macos_app.py` copies `Atelier_AtelierCore.bundle` into both apps. `PreviewCache.version` 10.
+
+**Acceptance:** Mac build; `PeoplePartsTests` (model found in the bundle, loads, class shares on the Help portrait within tolerance of TFLite's) and `PeopleSkinTests` pass; `python3 Scripts/build_macos_app.py` app also finds the model. Rosh: on the Louvre photo, the woman in sunglasses is found; Body Skin no longer takes beige/orange coats or scarves; Hair and Clothes select hair and clothes; Entire Person selects the whole person. Time the first Select People on a Z6 RAW.
+
+**Not in scope:** people whose face Vision doesn't find are still not offered; SAM 2.1 / BiRefNet downloads (steps 3 and 5).

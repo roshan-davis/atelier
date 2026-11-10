@@ -22,6 +22,8 @@ let package = Package(
         .target(
             name: "AtelierCore",
             dependencies: [.product(name: "GRDB", package: "GRDB.swift")],
+            // Select People's built-in parts model (MediaPipe, Apache 2.0), compiled on first use.
+            resources: [.copy("Models")],
             // Optimized in Debug too, like AtelierHDRCore: Match Look, histograms, color cubes
             // and camera matching run per-pixel Swift loops that are many times slower unoptimized,
             // and the app is run from Xcode in Debug.

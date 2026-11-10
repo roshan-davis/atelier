@@ -1,0 +1,13 @@
+PeopleParts.mlpackage
+
+Contains Google's MediaPipe Multiclass Selfie Segmentation model
+(selfie_multiclass_256x256, float32, SHA-256
+c6748b1253a99067ef71f7e26ca71096cd449baefa8f101900ea23016507e0e0), from
+https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_multiclass_256x256/float32/latest/selfie_multiclass_256x256.tflite
+Copyright Google LLC. Licensed under the Apache License, Version 2.0 (see
+PeopleParts-LICENSE.txt).
+
+Changes made for Atelier: the TFLite graph was rebuilt op by op as a Core ML
+program, the weights stored in 16-bit floating point, and a softmax added after
+the model's output. Made by Scripts/models/convert_mediapipe_multiclass.py in the
+Atelier repository.

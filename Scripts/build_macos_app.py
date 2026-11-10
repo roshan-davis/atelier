@@ -140,10 +140,10 @@ def package(args, arch, products, revision, output):
         return executable_for(arch, products, name, scratch)
 
     bundle(staging, "AtelierApp", "Atelier", args.bundle_id,
-           ["Atelier_AtelierApp.bundle", "GRDB_GRDB.bundle"])
+           ["Atelier_AtelierApp.bundle", "GRDB_GRDB.bundle", "Atelier_AtelierCore.bundle"])
     helper = staging / "Contents/Helpers/Atelier HDR.app"
     bundle(helper, "AtelierHDRApp", "Atelier HDR", args.bundle_id + ".hdr",
-           ["Atelier_AtelierHDRApp.bundle", "GRDB_GRDB.bundle"])
+           ["Atelier_AtelierHDRApp.bundle", "GRDB_GRDB.bundle", "Atelier_AtelierCore.bundle"])
     subprocess.run(["codesign", "--force", "--sign", "-", str(helper)], check=True)
     subprocess.run(["codesign", "--force", "--sign", "-", str(staging)], check=True)
     if output.exists():

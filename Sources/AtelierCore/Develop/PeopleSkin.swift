@@ -10,7 +10,7 @@ extension DevelopSettings {
     /// parts, ticked in any combination.
     public struct PeopleSelection: Codable, Hashable, Sendable {
         public enum Part: String, Codable, CaseIterable, Sendable {
-            case faceSkin, bodySkin, eyebrows, eyeSclera, iris, lips, teeth
+            case faceSkin, bodySkin, eyebrows, eyeSclera, iris, lips, teeth, hair, clothes, entirePerson
 
             public var title: String {
                 switch self {
@@ -21,6 +21,9 @@ extension DevelopSettings {
                 case .iris: return "Iris and Pupil"
                 case .lips: return "Lips"
                 case .teeth: return "Teeth"
+                case .hair: return "Hair"
+                case .clothes: return "Clothes"
+                case .entirePerson: return "Entire Person"
                 }
             }
 
@@ -34,6 +37,9 @@ extension DevelopSettings {
                 case .iris: return "The colored part of the eyes and the pupils"
                 case .lips: return "Upper and lower lip"
                 case .teeth: return "Teeth showing between the lips"
+                case .hair: return "Hair on the head"
+                case .clothes: return "Clothes, scarves and hats"
+                case .entirePerson: return "The whole person"
                 }
             }
         }
@@ -243,8 +249,12 @@ public struct PeopleSkin: Sendable {
                 mattes.append(values)
             }
         }
+        // The built-in parts model when it loads; Vision and skin color alone otherwise.
+        let segment: ((CGRect) -> [[Float]]?)? = PeopleParts.isAvailable
+            ? { PeopleParts.segment(pixels: pixels.pixels, width: width, height: height, region: $0) }
+            : nil
         return build(pixels: pixels.pixels, width: width, height: height, faces: faces, mattes: mattes,
-                     seeds: limbSeeds(handler, imageSize: imageSize))
+                     seeds: limbSeeds(handler, imageSize: imageSize), segment: segment)
     }
 
     /// Where bare arms and hands usually are, from Vision's body and hand poses (no model of our
@@ -304,6 +314,10 @@ public struct PeopleSkin: Sendable {
 
     // MARK: Skin from faces and mattes (no Vision; tested directly)
 
+    /// With `segment` (the built-in MediaPipe parts model, `PeopleParts`, run on a box around each
+    /// person and returning per-class chances at full size), Face Skin, Body Skin, Hair, Clothes
+    /// and Entire Person come from the model, kept to that person's matte, with eyes, brows and
+    /// lips cut out of Face Skin. Without it, as follows.
     /// Each face's skin color is learned from the face itself (inside its outline, leaving out the
     /// eyes, brows and lips), then looked for on the face (Face Skin). Body Skin is grown, not
     /// just color-matched: it starts from the neck just under the jaw and from `seeds` (wrists,
@@ -313,7 +327,8 @@ public struct PeopleSkin: Sendable {
     /// scarf, hat or coat touching the neck stops the growth at its edge, and skin-colored specks
     /// that no seed reaches are left out.
     public static func build(pixels: [UInt8], width: Int, height: Int, faces: [FaceShape],
-                             mattes: [[Float]], seeds: [CGPoint] = []) -> PeopleSkin? {
+                             mattes: [[Float]], seeds: [CGPoint] = [],
+                             segment: ((CGRect) -> [[Float]]?)? = nil) -> PeopleSkin? {
         let count = width * height
         guard count > 0, pixels.count >= count * 4 else { return nil }
         var lab = [SIMD3<Float>](repeating: .zero, count: count)
@@ -323,16 +338,10 @@ public struct PeopleSkin: Sendable {
             lab[i] = SIMD3(Float(v.0), Float(v.1), Float(v.2))
         }
         let lightness = lab.map(\.x)
-        let texture = localDeviation(lightness, width: width, height: height)
         let usableMattes = mattes.filter { $0.count == count }
         let ordered = faces.sorted(by: { $0.box.midX < $1.box.midX })
-        func nearestFace(_ p: CGPoint) -> Int? {
-            ordered.indices.min { hypot(ordered[$0].box.midX - p.x, ordered[$0].box.midY - p.y)
-                < hypot(ordered[$1].box.midX - p.x, ordered[$1].box.midY - p.y) }
-        }
         var people: [Person] = []
         for (faceIndex, face) in ordered.enumerated() {
-            let outline = raster(face.outline, width: width, height: height)
             var holes = [Float](repeating: 0, count: count)
             for feature in face.features {
                 let grown = raster(scaled(feature, by: 1.35), width: width, height: height)
@@ -343,56 +352,45 @@ public struct PeopleSkin: Sendable {
                 let lips = raster(scaled(face.outerLips, by: 1.1), width: width, height: height)
                 for i in 0..<count where lips[i] > holes[i] { holes[i] = lips[i] }
             }
-            var samples: [SIMD3<Float>] = []
-            for i in 0..<count where outline[i] > 0.5 && holes[i] < 0.5 && looksLikeSkin(lab[i]) {
-                samples.append(lab[i])
-            }
-            // Sunglasses, a scarf or a small face can leave too few clean skin pixels to learn the
-            // face's color from. Then learn it from the whole outline (holes included), and failing
-            // that use the loose skin test, so the person is still found and their features
-            // (lips, teeth, brows) still work.
-            var model = SkinModel(samples: samples)
-            if model == nil {
-                var loose: [SIMD3<Float>] = []
-                for i in 0..<count where outline[i] > 0.5 && looksLikeSkin(lab[i]) { loose.append(lab[i]) }
-                model = SkinModel(samples: loose)
-            }
-            let likelihood: [Float] = model.map { m in lab.map { m.likelihood($0) } }
-                ?? lab.map { looksLikeSkin($0) ? 0.6 : 0 }
-
-            var faceSkin = [Float](repeating: 0, count: count)
-            for i in 0..<count { faceSkin[i] = outline[i] * (1 - holes[i]) * likelihood[i] }
-
             // The person whose matte covers the face's middle.
-            let center = (min(height - 1, max(0, Int(face.box.midY))), min(width - 1, max(0, Int(face.box.midX))))
-            let matte = usableMattes.max { $0[center.0 * width + center.1] < $1[center.0 * width + center.1] }
-            var bodySkin = [Float](repeating: 0, count: count)
-            if let matte, matte[center.0 * width + center.1] > 0.3 {
-                // Hair: the band above the forehead, as wide as the face.
-                let hairBottom = face.outline.map(\.y).min() ?? face.box.minY
-                let hairTop = hairBottom - face.box.height * 0.6
-                var allowed = [Bool](repeating: false, count: count)
-                for i in 0..<count {
-                    let x = CGFloat(i % width), y = CGFloat(i / width)
-                    let hair = y < hairBottom && y > hairTop
-                        && x > face.box.minX - face.box.width * 0.2 && x < face.box.maxX + face.box.width * 0.2
-                    allowed[i] = !hair && matte[i] > 0.4 && outline[i] < 0.5 && likelihood[i] > 0.15
-                        && texture[i] < maxSkinTexture
+            let center = min(height - 1, max(0, Int(face.box.midY))) * width + min(width - 1, max(0, Int(face.box.midX)))
+            let matte = usableMattes.max { $0[center] < $1[center] }.flatMap { $0[center] > 0.3 ? $0 : nil }
+
+            var faceSkin: [Float], bodySkin: [Float]
+            var modelParts: [(DevelopSettings.PeopleSelection.Part, [Float])] = []
+            let region = personRegion(face: face, matte: matte, width: width, height: height)
+            if !region.isEmpty, let classes = segment?(region), classes.count == PeopleParts.Class.allCases.count,
+               classes.allSatisfy({ $0.count == count }) {
+                // The built-in model tells skin from clothes and hair; kept to this person.
+                var keep = [Float](repeating: 0, count: count)
+                if let matte {
+                    keep = matte
+                } else {
+                    for y in Int(region.minY)..<Int(region.maxY) {
+                        for x in Int(region.minX)..<Int(region.maxX) { keep[y * width + x] = 1 }
+                    }
                 }
-                let chin = face.outline.map(\.y).max() ?? face.box.maxY
-                var starts = [CGPoint(x: face.box.midX, y: chin + face.box.height * 0.12)]
-                starts += seeds.filter { nearestFace($0) == faceIndex }
-                let grown = grow(from: starts, allowed: allowed, likelihood: likelihood, lab: lab,
-                                 width: width, height: height)
-                for i in 0..<count where grown[i] { bodySkin[i] = 1 }
+                func part(_ c: PeopleParts.Class) -> [Float] { (0..<count).map { classes[c.rawValue][$0] * keep[$0] } }
+                faceSkin = (0..<count).map { classes[PeopleParts.Class.faceSkin.rawValue][$0] * keep[$0] * (1 - holes[$0]) }
+                bodySkin = part(.bodySkin)
+                let person = matte ?? (0..<count).map { (1 - classes[PeopleParts.Class.background.rawValue][$0]) * keep[$0] }
+                modelParts = [(.hair, part(.hair)), (.clothes, part(.clothes)), (.entirePerson, person)]
+            } else {
+                (faceSkin, bodySkin) = colorSkin(face: face, faceIndex: faceIndex, faces: ordered, holes: holes,
+                                                 matte: matte, seeds: seeds, lab: lab, width: width, height: height)
             }
             let guide = lightness
             let radius = max(2, max(width, height) / 300)
             faceSkin = guidedFilter(faceSkin, guide: guide, width: width, height: height, radius: radius)
             bodySkin = guidedFilter(bodySkin, guide: guide, width: width, height: height, radius: radius)
+            var features: [DevelopSettings.PeopleSelection.Part: Patch] = [:]
+            for (part, map) in modelParts {
+                if let patch = patch(map, guide: guide, width: width, height: height, radius: radius) {
+                    features[part] = patch
+                }
+            }
             // Features are small: a finer edge than skin's.
             let featureRadius = max(1, radius / 2)
-            var features: [DevelopSettings.PeopleSelection.Part: Patch] = [:]
             for (part, map) in featureMaps(face, lab: lab, width: width, height: height) {
                 if let patch = patch(map, guide: guide, width: width, height: height, radius: featureRadius) {
                     features[part] = patch
@@ -404,6 +402,80 @@ public struct PeopleSkin: Sendable {
         }
         guard !people.isEmpty else { return nil }
         return PeopleSkin(width: width, height: height, people: people)
+    }
+
+    /// Where to look for one person's parts, in pixels: their matte's extent, or without a matte
+    /// a box around the face reaching down over the body; a little margin all round.
+    static func personRegion(face: FaceShape, matte: [Float]?, width: Int, height: Int) -> CGRect {
+        var box = CGRect(x: face.box.minX - face.box.width * 1.5, y: face.box.minY - face.box.height * 0.6,
+                         width: face.box.width * 4, height: face.box.height * 5.6)
+        if let matte {
+            var minX = width, minY = height, maxX = -1, maxY = -1
+            for i in 0..<min(matte.count, width * height) where matte[i] > 0.3 {
+                let x = i % width, y = i / width
+                minX = min(minX, x); maxX = max(maxX, x); minY = min(minY, y); maxY = max(maxY, y)
+            }
+            if maxX >= 0 {
+                box = CGRect(x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1).union(face.box)
+            }
+        }
+        box = box.insetBy(dx: -box.width * 0.06, dy: -box.height * 0.06).integral
+        return box.intersection(CGRect(x: 0, y: 0, width: width, height: height))
+    }
+
+    /// Face and body skin without the model (when it can't load): each face's skin color is
+    /// learned from the face itself, then looked for on the face; body skin is grown from the neck
+    /// and the pose seeds over smooth pixels of that color.
+    static func colorSkin(face: FaceShape, faceIndex: Int, faces ordered: [FaceShape], holes: [Float], matte: [Float]?,
+                          seeds: [CGPoint], lab: [SIMD3<Float>], width: Int, height: Int) -> ([Float], [Float]) {
+        let count = width * height
+        let outline = raster(face.outline, width: width, height: height)
+        var samples: [SIMD3<Float>] = []
+        for i in 0..<count where outline[i] > 0.5 && holes[i] < 0.5 && looksLikeSkin(lab[i]) {
+            samples.append(lab[i])
+        }
+        // Sunglasses, a scarf or a small face can leave too few clean skin pixels to learn the
+        // face's color from. Then learn it from the whole outline (holes included), and failing
+        // that use the loose skin test, so the person is still found and their features
+        // (lips, teeth, brows) still work.
+        var model = SkinModel(samples: samples)
+        if model == nil {
+            var loose: [SIMD3<Float>] = []
+            for i in 0..<count where outline[i] > 0.5 && looksLikeSkin(lab[i]) { loose.append(lab[i]) }
+            model = SkinModel(samples: loose)
+        }
+        let likelihood: [Float] = model.map { m in lab.map { m.likelihood($0) } }
+            ?? lab.map { looksLikeSkin($0) ? 0.6 : 0 }
+
+        var faceSkin = [Float](repeating: 0, count: count)
+        for i in 0..<count { faceSkin[i] = outline[i] * (1 - holes[i]) * likelihood[i] }
+
+        var bodySkin = [Float](repeating: 0, count: count)
+        if let matte {
+            func nearestFace(_ p: CGPoint) -> Int? {
+                ordered.indices.min { hypot(ordered[$0].box.midX - p.x, ordered[$0].box.midY - p.y)
+                    < hypot(ordered[$1].box.midX - p.x, ordered[$1].box.midY - p.y) }
+            }
+            let texture = localDeviation(lab.map(\.x), width: width, height: height)
+            // Hair: the band above the forehead, as wide as the face.
+            let hairBottom = face.outline.map(\.y).min() ?? face.box.minY
+            let hairTop = hairBottom - face.box.height * 0.6
+            var allowed = [Bool](repeating: false, count: count)
+            for i in 0..<count {
+                let x = CGFloat(i % width), y = CGFloat(i / width)
+                let hair = y < hairBottom && y > hairTop
+                    && x > face.box.minX - face.box.width * 0.2 && x < face.box.maxX + face.box.width * 0.2
+                allowed[i] = !hair && matte[i] > 0.4 && outline[i] < 0.5 && likelihood[i] > 0.15
+                    && texture[i] < maxSkinTexture
+            }
+            let chin = face.outline.map(\.y).max() ?? face.box.maxY
+            var starts = [CGPoint(x: face.box.midX, y: chin + face.box.height * 0.12)]
+            starts += seeds.filter { nearestFace($0) == faceIndex }
+            let grown = grow(from: starts, allowed: allowed, likelihood: likelihood, lab: lab,
+                             width: width, height: height)
+            for i in 0..<count where grown[i] { bodySkin[i] = 1 }
+        }
+        return (faceSkin, bodySkin)
     }
 
     /// Eyebrows, sclera, iris and pupil, lips and teeth of one face from Vision's outlines, before
