@@ -27,6 +27,17 @@ public enum PeopleParts {
     /// Whether the model is in the app and loads.
     public static var isAvailable: Bool { model() != nil }
 
+    /// Whether the model loaded, without loading it: nil until something first asked for it (Select
+    /// People does, in the background), so a view can show it without waiting.
+    public static var loadedState: Bool? {
+        lock.lock()
+        defer { lock.unlock() }
+        return tried ? loaded != nil : nil
+    }
+
+    /// Why the model didn't load, for the mask panel and the log; nil when it loaded or hasn't been tried.
+    nonisolated(unsafe) public private(set) static var failure: String?
+
     static func model() -> MLModel? {
         lock.lock()
         defer { lock.unlock() }
@@ -53,21 +64,37 @@ public enum PeopleParts {
 
     /// Compiles the package once into Caches (a fraction of a second) and loads it.
     private static func load() -> MLModel? {
-        guard let source = packageURL() else { return nil }
+        do {
+            return try loadOrThrow()
+        } catch {
+            failure = "\(error)"
+            NSLog("Atelier: people parts model didn't load: %@", "\(error)")
+            return nil
+        }
+    }
+
+    struct LoadError: Error, CustomStringConvertible {
+        let description: String
+    }
+
+    private static func loadOrThrow() throws -> MLModel {
+        guard let source = packageURL() else { throw LoadError(description: "PeopleParts.mlpackage isn't in the app's resources") }
         let files = FileManager.default
         let configuration = MLModelConfiguration()
         configuration.computeUnits = .all
-        guard let caches = files.urls(for: .cachesDirectory, in: .userDomainMask).first else { return nil }
+        guard let caches = files.urls(for: .cachesDirectory, in: .userDomainMask).first else {
+            throw LoadError(description: "no Caches folder")
+        }
         let folder = caches.appendingPathComponent("Atelier/Models", isDirectory: true)
         let compiled = folder.appendingPathComponent("PeopleParts-\(version).mlmodelc", isDirectory: true)
         if !files.fileExists(atPath: compiled.path) {
-            guard let temporary = try? MLModel.compileModel(at: source) else { return nil }
+            let temporary = try MLModel.compileModel(at: source)
             try? files.createDirectory(at: folder, withIntermediateDirectories: true)
             if (try? files.moveItem(at: temporary, to: compiled)) == nil {
-                return try? MLModel(contentsOf: temporary, configuration: configuration)
+                return try MLModel(contentsOf: temporary, configuration: configuration)
             }
         }
-        return try? MLModel(contentsOf: compiled, configuration: configuration)
+        return try MLModel(contentsOf: compiled, configuration: configuration)
     }
 
     /// Runs the model on `region` (pixels, top-left origin) of an RGBA image and returns one map

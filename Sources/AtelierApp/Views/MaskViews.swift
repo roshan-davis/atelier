@@ -841,11 +841,27 @@ struct MasksPanel: View {
                 })
             }
             edgeControls(grow: value(\.grow), refine: value(\.refine), feather: value(\.feather), featherOrigin: 10)
-            Text("Found on this Mac: skin, hair and clothes by the built-in MediaPipe model, the eyes, brows, lips and teeth from Apple's Vision.")
-                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            peoplePartsStatus
             invertToggle(component)
         }
         .onAppear { develop.findPeople() }
+    }
+
+    /// Which way Select People found the parts, so it's clear whether the built-in model ran.
+    @ViewBuilder private var peoplePartsStatus: some View {
+        switch PeopleParts.loadedState {
+        case true?:
+            Label("Skin, hair and clothes from the built-in people model (MediaPipe); eyes, brows, lips and teeth from Apple's Vision.",
+                  systemImage: "checkmark.circle")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        case false?:
+            Label("The built-in people model didn't load, so skin is guessed from color and Hair, Clothes and Entire Person select nothing.",
+                  systemImage: "exclamationmark.triangle")
+                .font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+                .help(PeopleParts.failure ?? "")
+        case nil:
+            Text("Finding people…").font(.caption).foregroundStyle(.secondary)
+        }
     }
 
     /// Grow, Refine Edge and Feather: the edge controls every AI selection part shares (Select

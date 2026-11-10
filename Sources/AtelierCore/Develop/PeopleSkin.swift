@@ -229,8 +229,7 @@ public struct PeopleSkin: Sendable {
         let handler = VNImageRequestHandler(cgImage: small)
         guard (try? handler.perform([faceRequest])) != nil else { return nil }
         let imageSize = CGSize(width: width, height: height)
-        let faces = (faceRequest.results ?? []).map { faceShape($0, imageSize: imageSize) }
-        guard !faces.isEmpty else { return nil }
+        var faces = (faceRequest.results ?? []).map { faceShape($0, imageSize: imageSize) }
         var mattes: [[Float]] = []
         if (try? handler.perform([personRequest])) != nil, let observation = personRequest.results?.first {
             for instance in observation.allInstances {
@@ -240,6 +239,13 @@ public struct PeopleSkin: Sendable {
                 }
             }
         }
+        // A person Vision outlines but whose face it missed at this size (sunglasses, turned
+        // away, small in the frame): look again for a face on their head, enlarged; failing that,
+        // they are still a person, with a head box guessed from their outline.
+        for missing in facelessPeople(mattes: mattes, faces: faces, width: width, height: height) {
+            faces.append(face(in: missing.head, of: small) ?? FaceShape(box: missing.head, outline: []))
+        }
+        guard !faces.isEmpty else { return nil }
         if mattes.isEmpty {
             // Older systems or an odd image: one matte for everyone.
             let segmentation = VNGeneratePersonSegmentationRequest()
@@ -255,6 +261,66 @@ public struct PeopleSkin: Sendable {
             : nil
         return build(pixels: pixels.pixels, width: width, height: height, faces: faces, mattes: mattes,
                      seeds: limbSeeds(handler, imageSize: imageSize), segment: segment)
+    }
+
+    /// The people (instance mattes) with no found face's middle inside them, at least 0.5% of the
+    /// image: their outline's extent and the head box guessed from it (the top of the outline, as
+    /// wide as a third of the person and a bit taller than wide, centered on the outline there).
+    static func facelessPeople(mattes: [[Float]], faces: [FaceShape], width: Int, height: Int)
+        -> [(extent: CGRect, head: CGRect)] {
+        var result: [(extent: CGRect, head: CGRect)] = []
+        for matte in mattes where matte.count == width * height {
+            let covered = faces.contains { face in
+                let x = min(width - 1, max(0, Int(face.box.midX))), y = min(height - 1, max(0, Int(face.box.midY)))
+                return matte[y * width + x] > 0.3
+            }
+            guard !covered else { continue }
+            var minX = width, minY = height, maxX = -1, maxY = -1, area = 0
+            for i in 0..<matte.count where matte[i] > 0.3 {
+                let x = i % width, y = i / width
+                minX = min(minX, x); maxX = max(maxX, x); minY = min(minY, y); maxY = max(maxY, y)
+                area += 1
+            }
+            guard maxX >= 0, Double(area) >= 0.005 * Double(width * height) else { continue }
+            let extent = CGRect(x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1)
+            let side = max(4, min(extent.width * 0.35, extent.height * 0.25))
+            // Middle of the outline's top band.
+            var sum = 0, n = 0
+            for y in minY..<min(maxY + 1, minY + Int(side)) {
+                for x in minX...maxX where matte[y * width + x] > 0.3 { sum += x; n += 1 }
+            }
+            let middle = n > 0 ? CGFloat(sum) / CGFloat(n) : extent.midX
+            result.append((extent, CGRect(x: middle - side / 2, y: extent.minY, width: side, height: side * 1.25)))
+        }
+        return result
+    }
+
+    /// The largest face Vision finds in `region` (pixels, top left) of `image`, enlarged so the
+    /// region is about 640 pixels across, in `image`'s pixels.
+    static func face(in region: CGRect, of image: CGImage) -> FaceShape? {
+        let area = region.insetBy(dx: -region.width * 0.6, dy: -region.height * 0.4).integral
+            .intersection(CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        guard area.width >= 8, area.height >= 8, let piece = image.cropping(to: area) else { return nil }
+        let scale = max(1, min(8, 640 / max(area.width, area.height)))
+        let w = Int(area.width * scale), h = Int(area.height * scale)
+        guard let context = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: DevelopRenderer.sRGB,
+                                      bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return nil }
+        context.interpolationQuality = .high
+        context.draw(piece, in: CGRect(x: 0, y: 0, width: w, height: h))
+        guard let enlarged = context.makeImage() else { return nil }
+        let request = VNDetectFaceLandmarksRequest()
+        guard (try? VNImageRequestHandler(cgImage: enlarged).perform([request])) != nil,
+              let best = (request.results ?? []).max(by: { $0.boundingBox.width < $1.boundingBox.width }) else { return nil }
+        let found = faceShape(best, imageSize: CGSize(width: w, height: h))
+        func back(_ p: CGPoint) -> CGPoint { CGPoint(x: area.minX + p.x / scale, y: area.minY + p.y / scale) }
+        func backAll(_ points: [CGPoint]) -> [CGPoint] { points.map { back($0) } }
+        let box = CGRect(x: area.minX + found.box.minX / scale, y: area.minY + found.box.minY / scale,
+                         width: found.box.width / scale, height: found.box.height / scale)
+        return FaceShape(box: box, outline: backAll(found.outline), features: found.features.map { backAll($0) },
+                         brows: found.brows.map { backAll($0) },
+                         eyes: found.eyes.map { FaceShape.Eye(outline: backAll($0.outline), pupil: $0.pupil.map { back($0) }) },
+                         outerLips: backAll(found.outerLips), innerLips: backAll(found.innerLips))
     }
 
     /// Where bare arms and hands usually are, from Vision's body and hand poses (no model of our

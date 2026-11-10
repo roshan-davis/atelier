@@ -277,4 +277,29 @@ final class PeopleSkinTests: XCTestCase {
                                            from: Data(#"{"kind":"subject","selection":{"feather":20}}"#.utf8))
         XCTAssertEqual(old.shape, .subject(.init(feather: 20, refine: 0, grow: 0)))
     }
+
+    func testPersonWithoutAFoundFaceGetsAHeadFromTheirOutline() {
+        let width = 100, height = 100
+        // Two people: one whose face was found, one (right) whose face wasn't.
+        var found = [Float](repeating: 0, count: width * height)
+        var missed = [Float](repeating: 0, count: width * height)
+        for y in 20..<90 {
+            for x in 10..<30 { found[y * width + x] = 1 }
+            for x in 60..<80 { missed[y * width + x] = 1 }
+        }
+        let face = FaceShape(box: CGRect(x: 14, y: 20, width: 12, height: 14), outline: [])
+        let people = PeopleSkin.facelessPeople(mattes: [found, missed], faces: [face], width: width, height: height)
+        XCTAssertEqual(people.count, 1)
+        guard let person = people.first else { return }
+        XCTAssertEqual(person.extent, CGRect(x: 60, y: 20, width: 20, height: 70))
+        XCTAssertEqual(person.head.midX, 69.5, accuracy: 0.5)
+        XCTAssertEqual(person.head.minY, 20)
+        XCTAssertTrue(person.extent.contains(CGPoint(x: person.head.midX, y: person.head.midY)))
+    }
+
+    func testTinyOutlinesAreNotPeople() {
+        var speck = [Float](repeating: 0, count: 100 * 100)
+        for y in 0..<5 { for x in 0..<5 { speck[y * 100 + x] = 1 } }
+        XCTAssertTrue(PeopleSkin.facelessPeople(mattes: [speck], faces: [], width: 100, height: 100).isEmpty)
+    }
 }
