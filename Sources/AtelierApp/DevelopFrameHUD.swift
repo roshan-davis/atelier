@@ -197,7 +197,9 @@ final class DevelopFrameHUD {
     func submit(_ render: PhotoFeed.RenderTiming) {
         guard active, let drag, drag.firstChange != nil, render.count >= drag.firstPossibleCount,
               render.count > (lastCount ?? -1) else { return }
-        pending = Submission(render: render, time: CACurrentMediaTime())
+        // A live frame reaches the layer on the render queue (`LiveFrameSink`); an ordinary image
+        // on the main thread, now.
+        pending = Submission(render: render, time: render.shownAt ?? CACurrentMediaTime())
     }
 
     func display(_ link: CADisplayLink, assetID: Int64?) -> String? {

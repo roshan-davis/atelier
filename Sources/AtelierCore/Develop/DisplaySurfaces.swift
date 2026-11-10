@@ -159,15 +159,19 @@ extension DevelopSession {
     /// A live frame for the Develop photo view: drawn straight into a GPU surface the view shows,
     /// with `plain`, a small copy without the clipping overlay for the histogram. Renders the same
     /// image as `renderForDisplay`; only where the pixels land differs. Nil when no surface is
-    /// free or the render failed; render the ordinary way then.
+    /// free or the render failed; render the ordinary way then. `onRendered` gets the surface as
+    /// soon as the GPU has finished it, on this thread, before the histogram copy is made.
     public func renderToSurface(_ settings: DevelopSettings, cropping: Bool = true, overlay: UUID? = nil,
                                 preview: SliderPreview? = nil, shadowClipping: Bool = false,
                                 highlightClipping: Bool = false, surfaces: DisplaySurfaces,
-                                sampleSize: Int = Histogram.sampleSize, onPoolFull: (() -> Void)? = nil) -> (surface: IOSurface, plain: CGImage?)? {
+                                sampleSize: Int = Histogram.sampleSize, onPoolFull: (() -> Void)? = nil,
+                                onRendered: ((IOSurface) -> Void)? = nil) -> (surface: IOSurface, plain: CGImage?)? {
         guard var image = image(with: settings, cropping: cropping, overlay: overlay, preview: preview) else { return nil }
         let renderer = DevelopRenderer.shared
         guard shadowClipping || highlightClipping else {
             guard let surface = renderer.render(image, into: surfaces, onPoolFull: onPoolFull) else { return nil }
+            // The frame can go on screen before its histogram copy is made.
+            onRendered?(surface)
             let sample = RenderSignposts.measure("Live frame sample") {
                 renderer.sample(of: surface, colorSpace: surfaces.colorSpace, sampleSize: sampleSize)
             }
@@ -179,6 +183,7 @@ extension DevelopSession {
         let painted = ClippingOverlay.apply(to: image, shadows: shadowClipping, highlights: highlightClipping,
                                             shownIn: surfaces.colorSpace)
         guard let surface = renderer.render(painted, into: surfaces, onPoolFull: onPoolFull) else { return nil }
+        onRendered?(surface)
         let extent = image.extent
         let factor = min(1, CGFloat(sampleSize) / max(1, max(extent.width, extent.height)))
         var small = image

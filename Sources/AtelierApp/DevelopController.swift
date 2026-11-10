@@ -43,6 +43,15 @@ private struct DevelopMeasureRequest {
     var rank: Int { count * 2 + (fromPreview ? 0 : 1) }
 }
 
+/// What a live frame shows: frames requested for another key are dropped (`LiveFrameSink`).
+private struct LiveFrameKey: Equatable {
+    let assetID: Int64?
+    let generation: Int
+    let cropping: Bool
+    let preview: SliderPreview?
+    let renderBefore: Bool
+}
+
 /// A proxy render handed to the render queue (`DevelopController.submitRender`).
 private struct ProxyRenderRequest {
     let session: DevelopSession
@@ -60,6 +69,9 @@ private struct ProxyRenderRequest {
     /// Set when the frame goes straight to the photo view (`PhotoFeed`); nil renders a CGImage.
     var surfaces: DisplaySurfaces?
     var fallback: PhotoFeed.Fallback? = nil
+    /// Puts the frame on screen from the render queue, if it still matches (`liveEpoch`).
+    var sink: LiveFrameSink? = nil
+    var liveEpoch = 0
     let measureJob: LatestJob<DevelopMeasureRequest>
     let measureQueue: DispatchQueue
     let openGeneration: LockedValue<Int>
@@ -520,6 +532,8 @@ final class DevelopController: ObservableObject {
     let frameHUD = DevelopFrameHUD()
     lazy var photoFeed = PhotoFeed { [weak frameHUD] timing in frameHUD?.submit(timing) }
     private let displaySurfaces = DisplaySurfaces()
+    /// What live frames were last requested for; a change drops frames still rendering.
+    private var lastLiveKey: LiveFrameKey?
     /// A live frame didn't fit the photo on screen; frames take the ordinary path until the
     /// pointer edit ends or another photo opens.
     private var liveFramesOff = false
@@ -1877,12 +1891,21 @@ final class DevelopController: ObservableObject {
         // Once the photo is up, live frames go straight from the GPU to the photo view (see
         // `PhotoFeed`); the first render is published the ordinary way, as it ends the stand-in.
         let direct = photoFeed.isAttached && firstRenderDone && cropping && !liveFramesOff
+        // A frame still rendering for another photo, the Before view, the crop tool or an
+        // Option view must not reach the screen once this one is asked for.
+        let liveKey = LiveFrameKey(assetID: assetID, generation: openGeneration.value, cropping: cropping,
+                                   preview: preview, renderBefore: renderBefore)
+        if liveKey != lastLiveKey {
+            lastLiveKey = liveKey
+            photoFeed.sink.invalidate()
+        }
         submitRender(ProxyRenderRequest(
             session: session, settings: settings, preview: preview, renderBefore: renderBefore, cropping: cropping,
             overlay: overlay, clipping: clipping, assetID: assetID, count: renderCount,
             measures: overlay == nil && preview == nil, generation: openGeneration.value,
             queuedAt: DevelopTimingLog.now(), surfaces: direct ? displaySurfaces : nil,
             fallback: liveFramesOff && photoFeed.isAttached && firstRenderDone && cropping ? .liveFramesOff : nil,
+            sink: direct ? photoFeed.sink : nil, liveEpoch: photoFeed.sink.currentEpoch,
             measureJob: measureJob, measureQueue: measureQueue, openGeneration: openGeneration,
             renderBeganAt: renderBeganAt))
     }
@@ -1912,13 +1935,24 @@ final class DevelopController: ObservableObject {
         var cgImage: CGImage?
         var plain: CGImage?
         var fallback = request.fallback
+        var outcome: LiveFrameSink.Outcome?
+        var renderedAt: CFTimeInterval?
+        var shownAt: CFTimeInterval?
         RenderSignposts.measure("Proxy render") {
-            if let surfaces = request.surfaces,
+            if let surfaces = request.surfaces, let sink = request.sink,
                let frame = request.session.renderToSurface(request.settings, cropping: request.cropping,
                                                            overlay: request.overlay, preview: request.preview,
                                                            shadowClipping: request.clipping.shadows,
                                                            highlightClipping: request.clipping.highlights,
-                                                           surfaces: surfaces, onPoolFull: { fallback = .poolFull }) {
+                                                           surfaces: surfaces, onPoolFull: { fallback = .poolFull },
+                                                           onRendered: { rendered in
+                    // On screen now, from this thread: the main thread may be busy (D1). The
+                    // histogram's small copy is made after this, never before.
+                    renderedAt = CACurrentMediaTime()
+                    let result = sink.present(rendered, count: request.count, epoch: request.liveEpoch, pool: surfaces)
+                    outcome = result
+                    if result == .shown { shownAt = CACurrentMediaTime() }
+                }) {
                 surface = frame.surface
                 plain = frame.plain
             } else if let rendered = request.session.renderForDisplay(request.settings, cropping: request.cropping,
@@ -1929,7 +1963,7 @@ final class DevelopController: ObservableObject {
                 plain = rendered.plain
             }
         }
-        let readyAt = CACurrentMediaTime()
+        let readyAt = renderedAt ?? CACurrentMediaTime()
         let renderTook = DevelopTimingLog.ms(since: renderBegan)
         if renderTook > 300 || (surface == nil && cgImage == nil) {
             DevelopTimingLog.shared.log(request.assetID, surface == nil && cgImage == nil ? "render FAILED after \(renderTook) ms"
@@ -1946,17 +1980,20 @@ final class DevelopController: ObservableObject {
             }
         }
         let timing = PhotoFeed.RenderTiming(count: request.count, readyAt: readyAt, duration: readyAt - renderClock,
-                                           queueWait: max(0, renderBegan - request.queuedAt))
+                                           queueWait: max(0, renderBegan - request.queuedAt), shownAt: shownAt)
+        // A live frame is already on screen (or was dropped and its surface returned); the main
+        // thread only does the bookkeeping.
+        let live = surface == nil ? nil : outcome
         DispatchQueue.main.async { [fallback] in
             MainActor.assumeIsolated {
-                controller.finishRender(request, surface: surface, cgImage: cgImage, fallback: fallback,
+                controller.finishRender(request, live: live, cgImage: cgImage, fallback: fallback,
                                         renderBegan: renderBegan, timing: timing)
             }
         }
         queue.async { Self.renderNext(job: job, on: queue, controller: controller) }
     }
 
-    private func finishRender(_ request: ProxyRenderRequest, surface: IOSurface?, cgImage: CGImage?,
+    private func finishRender(_ request: ProxyRenderRequest, live: LiveFrameSink.Outcome?, cgImage: CGImage?,
                               fallback: PhotoFeed.Fallback?,
                               renderBegan: CFAbsoluteTime, timing: PhotoFeed.RenderTiming) {
         // Nothing newer has been asked for.
@@ -1970,25 +2007,39 @@ final class DevelopController: ObservableObject {
         let fits = current && request.cropping != isCropping && request.preview == sliderPreview
             && request.renderBefore == (showingBefore && sliderPreview == nil)
         var shownLive = false
-        if let surface, let surfaces = request.surfaces {
-            if fits {
-                shownLive = photoFeed.show(surface, count: request.count, from: surfaces, timing: timing)
-                if !shownLive {
-                    // Another shape than the photo on screen (an Aspect or crop change): frames
-                    // take the ordinary path until the edit ends, and this one is redone that way.
-                    liveFramesOff = true
-                    if latest {
-                        var ordinary = request
-                        ordinary.surfaces = nil
-                        ordinary.fallback = .liveFramesOff
-                        rendering = true
-                        submitRender(ordinary)
-                        return
-                    }
-                }
-            } else {
-                surfaces.checkIn(surface)
+        switch live {
+        case .shown:
+            shownLive = true
+            photoFeed.frameShown(timing)
+        case .wrongShape, .noView:
+            guard fits else { break }
+            // Another shape than the photo on screen (an Aspect or crop change), or the view is
+            // gone: frames take the ordinary path until the edit ends, and this one is redone
+            // that way.
+            liveFramesOff = true
+            if latest {
+                var ordinary = request
+                ordinary.surfaces = nil
+                ordinary.sink = nil
+                ordinary.fallback = .liveFramesOff
+                rendering = true
+                submitRender(ordinary)
+                return
             }
+        case .stale:
+            // Dropped because the photo view changed under it (attached again, another mode). If
+            // nothing newer is coming, show this edit the ordinary way so the photo isn't left on
+            // an older frame.
+            if latest, fits {
+                var ordinary = request
+                ordinary.surfaces = nil
+                ordinary.sink = nil
+                rendering = true
+                submitRender(ordinary)
+                return
+            }
+        case nil:
+            break
         }
         if fits, let cgImage {
             if let fallback { frameHUD.fallback(fallback, count: request.count) }
@@ -2023,6 +2074,7 @@ final class DevelopController: ObservableObject {
             MainActor.assumeIsolated {
                 guard let self, self.renderCount == count, var settled = self.lastRender, settled.count == count else { return }
                 settled.surfaces = nil
+                settled.sink = nil
                 settled.fallback = nil
                 self.rendering = true
                 self.submitRender(settled)
