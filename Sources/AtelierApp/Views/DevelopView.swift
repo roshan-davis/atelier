@@ -568,7 +568,7 @@ private struct HistogramView: View {
     }
 
     private func graph(width: CGFloat) -> some View {
-        HistogramGraph(histogram: histogram, picture: develop.measures.histogramPicture, highlight: active?.span)
+        HistogramGraph(histogram: nil, sink: develop.histogramSink, highlight: active?.span)
         .equatable()
         .contentShape(Rectangle())
         .onContinuousHover { phase in
@@ -654,12 +654,13 @@ private struct HistogramView: View {
 /// The RGB graph itself, shared by Develop and the Library's right panel. `highlight` lights a
 /// band of it (a tone region under the pointer), as a fraction of its width.
 ///
-/// It shows one finished picture of the three channels (`HistogramPicture`): Develop passes the
-/// one made off the main thread beside the counting; elsewhere it is made here, once per
-/// histogram. Equatable, so a redraw of the panel around it leaves the graph alone.
+/// It shows one finished picture of the three channels (`HistogramPicture`). In Develop the
+/// measure queue puts it on screen itself (`sink`, `HistogramSink`), so the graph keeps up with
+/// the photo whatever the main thread is doing; elsewhere it is made here, once per histogram.
+/// Equatable, so a redraw of the panel around it leaves the graph alone.
 struct HistogramGraph: View, Equatable {
     let histogram: Histogram?
-    var picture: CGImage? = nil
+    var sink: HistogramSink? = nil
     var highlight: ClosedRange<CGFloat>?
 
     var body: some View {
@@ -671,7 +672,11 @@ struct HistogramGraph: View, Equatable {
                         .frame(width: geometry.size.width * (highlight.upperBound - highlight.lowerBound))
                         .offset(x: geometry.size.width * highlight.lowerBound)
                 }
-                if let image = picture ?? histogram.flatMap(Self.picture(for:)) {
+                if let sink {
+                    HistogramLayerView(sink: sink)
+                        .frame(width: geometry.size.width, height: geometry.size.height)
+                        .allowsHitTesting(false)
+                } else if let image = histogram.flatMap(Self.picture(for:)) {
                     Image(decorative: image, scale: 1)
                         .resizable()
                         .interpolation(.medium)
@@ -683,8 +688,8 @@ struct HistogramGraph: View, Equatable {
     }
 
     static func == (lhs: HistogramGraph, rhs: HistogramGraph) -> Bool {
-        lhs.highlight == rhs.highlight && lhs.picture === rhs.picture
-            && (lhs.picture != nil || lhs.histogram == rhs.histogram)
+        lhs.highlight == rhs.highlight && lhs.sink === rhs.sink
+            && (lhs.sink != nil || lhs.histogram == rhs.histogram)
     }
 
     /// The last picture made here, for the histogram it shows.

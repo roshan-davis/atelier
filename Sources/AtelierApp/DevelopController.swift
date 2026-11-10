@@ -49,8 +49,6 @@ private struct DevelopMeasureRequest {
 @MainActor
 final class DevelopMeasures: ObservableObject {
     @Published fileprivate(set) var histogram: Histogram?
-    /// `histogram` drawn, made beside the counting off the main thread (`HistogramPicture`).
-    @Published fileprivate(set) var histogramPicture: CGImage?
     @Published fileprivate(set) var colorScope: ColorScope?
 }
 
@@ -85,6 +83,7 @@ private struct ProxyRenderRequest {
     var liveEpoch = 0
     let measureJob: LatestJob<DevelopMeasureRequest>
     let measureQueue: DispatchQueue
+    let histogramSink: HistogramSink
     let openGeneration: LockedValue<Int>
     let renderBeganAt: LockedValue<CFAbsoluteTime>
 }
@@ -568,6 +567,12 @@ final class DevelopController: ObservableObject {
     /// queueing one per render built a backlog that left the histogram spinning for seconds
     /// after moving through photos or dragging (Rosh, Nov 9, 2026).
     private let measureJob = LatestJob<DevelopMeasureRequest>()
+    /// Puts the histogram's graph on screen from the measure queue (AT-040).
+    let histogramSink = HistogramSink()
+    /// Counts waiting to be published to SwiftUI, at most every `measurePublishInterval`.
+    private var pendingMeasure: (histogram: Histogram?, scope: ColorScope?)?
+    private var measurePublishedAt: CFTimeInterval = 0
+    private var measurePublishScheduled = false
     /// Decodes for opening photos. Every photo passed with ← → used to queue its decode (and,
     /// for an unedited RAW, a preview render) on the render queue, so after moving quickly the
     /// photo, panels and histogram waited for every photo passed (Rosh, Nov 9, 2026). Now a
@@ -656,6 +661,7 @@ final class DevelopController: ObservableObject {
         self.assetID = assetID
         openAsset.value = assetID
         openGeneration.value += 1
+        histogramSink.reset(generation: openGeneration.value)
         let generation = openGeneration.value
         firstRenderDone = false
         liveFramesOff = false
@@ -672,7 +678,7 @@ final class DevelopController: ObservableObject {
         // Ranks only compare within one open (requests carry the open's generation).
         measuredRank = 0
         measures.histogram = nil
-        measures.histogramPicture = nil
+        pendingMeasure = nil
         shootingInfo = nil
         measures.colorScope = nil
         fullImage = nil
@@ -1939,8 +1945,8 @@ final class DevelopController: ObservableObject {
             queuedAt: DevelopTimingLog.now(), surfaces: direct ? displaySurfaces : nil,
             fallback: liveFramesOff && photoFeed.isAttached && firstRenderDone && cropping ? .liveFramesOff : nil,
             sink: direct ? photoFeed.sink : nil, liveEpoch: photoFeed.sink.currentEpoch,
-            measureJob: measureJob, measureQueue: measureQueue, openGeneration: openGeneration,
-            renderBeganAt: renderBeganAt))
+            measureJob: measureJob, measureQueue: measureQueue, histogramSink: histogramSink,
+            openGeneration: openGeneration, renderBeganAt: renderBeganAt))
     }
 
     /// Hands `request` to the render queue, latest-wins: a request still waiting is replaced, and
@@ -2007,11 +2013,9 @@ final class DevelopController: ObservableObject {
         if request.measures, let plain {
             Self.measure(DevelopMeasureRequest(image: plain, assetID: request.assetID, count: request.count,
                                           generation: request.generation),
-                    job: request.measureJob, on: request.measureQueue,
-                    openGeneration: request.openGeneration) { measured, histogram, picture, scope, took in
-                MainActor.assumeIsolated {
-                    controller.applyMeasure(measured, histogram: histogram, picture: picture, scope: scope, took: took)
-                }
+                    job: request.measureJob, on: request.measureQueue, sink: request.histogramSink,
+                    openGeneration: request.openGeneration) { measured, histogram, scope, took in
+                MainActor.assumeIsolated { controller.applyMeasure(measured, histogram: histogram, scope: scope, took: took) }
             }
         }
         let timing = PhotoFeed.RenderTiming(count: request.count, readyAt: readyAt, duration: readyAt - renderClock,
@@ -2193,8 +2197,8 @@ final class DevelopController: ObservableObject {
     /// open photo's waiting request. `apply` must not depend on the request it was passed with:
     /// the drain applies whichever request it takes with the first caller's closure.
     private nonisolated static func measure(_ request: DevelopMeasureRequest, job: LatestJob<DevelopMeasureRequest>,
-                                            on queue: DispatchQueue, openGeneration: LockedValue<Int>,
-                                            apply: @escaping (DevelopMeasureRequest, Histogram?, CGImage?, ColorScope?, Int) -> Void) {
+                                            on queue: DispatchQueue, sink: HistogramSink, openGeneration: LockedValue<Int>,
+                                            apply: @escaping (DevelopMeasureRequest, Histogram?, ColorScope?, Int) -> Void) {
         // Not for an earlier open, and never in place of a waiting request that outranks it (the
         // render's count must not be replaced by the preview that arrived late).
         guard job.submit(request, if: { new, pending in
@@ -2210,13 +2214,15 @@ final class DevelopController: ObservableObject {
                     return (histogram, histogram.flatMap { HistogramPicture.make($0) }, ColorScope(image: request.image))
                 }
                 let took = DevelopTimingLog.ms(since: began)
-                DispatchQueue.main.async { apply(request, histogram, picture, scope, took) }
+                // The graph goes on screen from here (`HistogramSink`); the main thread gets the
+                // counts for the clipping triangles, curve backdrops and wheels.
+                if let picture { sink.present(picture, generation: request.generation, rank: request.rank) }
+                DispatchQueue.main.async { apply(request, histogram, scope, took) }
             }
         }
     }
 
-    private func applyMeasure(_ request: DevelopMeasureRequest, histogram: Histogram?, picture: CGImage?,
-                              scope: ColorScope?, took: Int) {
+    private func applyMeasure(_ request: DevelopMeasureRequest, histogram: Histogram?, scope: ColorScope?, took: Int) {
         guard assetID == request.assetID, openGeneration.value == request.generation,
               request.rank >= measuredRank else { return }
         let fromPreview = request.fromPreview
@@ -2226,12 +2232,36 @@ final class DevelopController: ObservableObject {
                 + "counted in \(took) ms, shown +\(DevelopTimingLog.ms(since: openedAt)) ms")
         }
         measuredRank = request.rank
-        if histogram != nil || scope != nil { frameHUD.histogramPublished() }
-        if let histogram {
-            measures.histogram = histogram
-            measures.histogramPicture = picture
+        guard histogram != nil || scope != nil else { return }
+        // At most one SwiftUI update for the counts per `measurePublishInterval` during a drag,
+        // the newest at its end; the graph itself is already on screen (`HistogramSink`). The
+        // first count of a photo goes out at once.
+        pendingMeasure = (histogram ?? pendingMeasure?.histogram, scope ?? pendingMeasure?.scope)
+        let wait = Self.measurePublishInterval - (CACurrentMediaTime() - measurePublishedAt)
+        if wait <= 0 || measures.histogram == nil {
+            publishPendingMeasure()
+        } else if !measurePublishScheduled {
+            measurePublishScheduled = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak self] in
+                MainActor.assumeIsolated {
+                    self?.measurePublishScheduled = false
+                    self?.publishPendingMeasure()
+                }
+            }
         }
-        if let scope { measures.colorScope = scope }
+    }
+
+    /// How often the counts reach SwiftUI during a drag: the clipping triangles, the Tone Curve
+    /// backdrops and the wheels' scope update about ten times a second, the graph at every frame.
+    private static let measurePublishInterval: CFTimeInterval = 0.1
+
+    private func publishPendingMeasure() {
+        guard let pending = pendingMeasure else { return }
+        pendingMeasure = nil
+        measurePublishedAt = CACurrentMediaTime()
+        frameHUD.histogramPublished()
+        if let histogram = pending.histogram { measures.histogram = histogram }
+        if let scope = pending.scope { measures.colorScope = scope }
     }
 
     /// Until the photo's first render is counted, the histogram comes from the cached preview
@@ -2242,10 +2272,8 @@ final class DevelopController: ObservableObject {
               let cgImage = preview.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
         Self.measure(DevelopMeasureRequest(image: cgImage, assetID: assetID, count: renderCount,
                                            generation: openGeneration.value, fromPreview: true),
-                     job: measureJob, on: measureQueue, openGeneration: openGeneration) { request, histogram, picture, scope, took in
-            MainActor.assumeIsolated {
-                self.applyMeasure(request, histogram: histogram, picture: picture, scope: scope, took: took)
-            }
+                     job: measureJob, on: measureQueue, sink: histogramSink, openGeneration: openGeneration) { request, histogram, scope, took in
+            MainActor.assumeIsolated { self.applyMeasure(request, histogram: histogram, scope: scope, took: took) }
         }
     }
 
