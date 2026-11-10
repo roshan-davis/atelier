@@ -643,7 +643,7 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 ## AT-044 — Masking: Fine Edges (BiRefNet) for Select Subject, Select Object and Select People
 
-**Status:** PR open, never compiled (cloud has no Swift toolchain); needs a Mac build, tests, a first run of the downloaded model, and Rosh's acceptance. **Owner:** Claude. **Chat:** Claude project thread "Improve people and object selection masks". **Branch:** `claude/project-thread-m96qwc` (restarted from main after #101 merged). **PR:** pending. **Baseline:** `cdf6530`. **Dependencies:** AT-042, AT-043 (merged).
+**Status:** PR open, never compiled (cloud has no Swift toolchain); needs a Mac build, tests, a first run of the downloaded model, and Rosh's acceptance. **Owner:** Claude. **Chat:** Claude project thread "Improve people and object selection masks". **Branch:** `claude/project-thread-m96qwc` (restarted from main after #101 merged). **PR:** [#102](https://github.com/roshan-davis/atelier/pull/102). **Baseline:** `cdf6530`. **Dependencies:** AT-042, AT-043 (merged).
 
 **Evidence:** Rosh (2026-11-10): asked for the model that is good at hair; chose ONNX Runtime in the app ("try that 30mb approach") over converting BiRefNet to Core ML and hosting it, since nobody publishes a Core ML BiRefNet and the repo is private. Step 5 of the plan, done before SAM (step 3).
 
