@@ -2425,7 +2425,12 @@ final class DevelopController: ObservableObject {
         dirty = false
         let settings = self.settings
         do {
+            let began = DevelopTimingLog.now()
             try catalog.saveDevelop(settings, history: history, for: assetID)
+            // On main, so reads that follow see it; timed so AT-039 D5 can tell whether moving it
+            // off main is worth a pending-save layer.
+            DevelopTimingLog.shared.log(assetID, "saved: \(DevelopTimingLog.ms(since: began)) ms on main, "
+                + "\(history.steps.count) history steps")
             onSettingsSaved?(assetID)
         } catch {
             dirty = true
@@ -2453,7 +2458,9 @@ final class DevelopController: ObservableObject {
         // Optional work never claims a revision: if it's skipped, it mustn't make a saved edit's
         // (required) write look obsolete. It writes only while no newer saved write was asked for.
         let revision = optional ? (previewRevisions.value[assetID] ?? 0) : nextPreviewRevision(for: assetID)
-        queue.async {
+        // Not on the live render queue: a 28–35 ms preview render there held the next drag's
+        // first frames (AT-039 D5).
+        Self.previewQueue.async {
             // Moving on quickly through photos: the optional first-open preview can wait.
             if optional, openAsset.value != assetID {
                 DispatchQueue.main.async {
@@ -2463,7 +2470,7 @@ final class DevelopController: ObservableObject {
                 return
             }
             let began = DevelopTimingLog.now()
-            defer { DevelopTimingLog.shared.log(assetID, "preview stored\(optional ? " (lens-corrected, first open)" : " (saved edit)"): \(DevelopTimingLog.ms(since: began)) ms on the render queue") }
+            defer { DevelopTimingLog.shared.log(assetID, "preview stored\(optional ? " (lens-corrected, first open)" : " (saved edit)"): \(DevelopTimingLog.ms(since: began)) ms on the preview queue") }
             if let cgImage = session.render(settings) {
                 Self.writePreviews(cgImage, for: assetID, revision: revision, previews: previews, revisions: revisions)
             }
@@ -2472,6 +2479,10 @@ final class DevelopController: ObservableObject {
             }
         }
     }
+
+    /// Grid and Loupe previews of the open photo, rendered beside the live renders instead of
+    /// between them.
+    private static let previewQueue = DispatchQueue(label: "atelier.develop.previews", qos: .utility)
 
     /// Each photo's latest preview write asked for (`nextPreviewRevision`). Writes come from the
     /// render queue and from independent decodes (`refreshPreviews`), so an older one can finish

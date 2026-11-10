@@ -6,6 +6,8 @@ import SwiftUI
 /// The library grid. NSCollectionView rather than SwiftUI so 100k cells scroll smoothly.
 struct GridView: NSViewRepresentable {
     @ObservedObject var model: LibraryModel
+    /// Redraws on new previews (`PreviewRevision`).
+    @ObservedObject private var previewRevision = PreviewRevision.shared
     var background: NSColor = .windowBackgroundColor
     /// The thumbnail size slider in the filter bar.
     @AppStorage(GridThumbnails.sizeKey) private var thumbnailSize = GridThumbnails.defaultSize
@@ -49,7 +51,7 @@ struct GridView: NSViewRepresentable {
         NotificationCenter.default.addObserver(context.coordinator, selector: #selector(Coordinator.didScroll),
                                                name: NSView.boundsDidChangeNotification, object: scrollView.contentView)
         context.coordinator.update(rows: model.rows, selection: model.selection, focusedID: model.focusedID,
-                                   revision: model.previewRevision)
+                                   revision: previewRevision.value)
         Task { @MainActor in collectionView.window?.makeFirstResponder(collectionView) }
         return scrollView
     }
@@ -65,7 +67,7 @@ struct GridView: NSViewRepresentable {
             context.coordinator.refreshVisibleItems()
         }
         context.coordinator.update(rows: model.rows, selection: model.selection, focusedID: model.focusedID,
-                                   revision: model.previewRevision)
+                                   revision: previewRevision.value)
     }
 
     @MainActor

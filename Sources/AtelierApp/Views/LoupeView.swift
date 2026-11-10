@@ -5,6 +5,8 @@ import SwiftUI
 /// One photo at a time from the 2560 px preview. Arrow keys step, Esc or G returns to the grid.
 struct LoupeView: View {
     @EnvironmentObject private var model: LibraryModel
+    /// Redraws on new previews (`PreviewRevision`).
+    @ObservedObject private var previewRevision = PreviewRevision.shared
     /// The model's zoom, watched here so the full-resolution load follows it.
     @ObservedObject var zoom: ZoomState
     @Environment(\.theme) private var theme
@@ -65,7 +67,7 @@ struct LoupeView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
         }
-        .task(id: LoadKey(id: model.focusedID, revision: model.previewRevision)) {
+        .task(id: LoadKey(id: model.focusedID, revision: previewRevision.value)) {
             await load()
         }
         .task(id: wantedFullKey) {
@@ -90,7 +92,7 @@ struct LoupeView: View {
     }
 
     private var currentFullKey: FullKey? {
-        model.focusedID.map { FullKey(id: $0, revision: model.previewRevision) }
+        model.focusedID.map { FullKey(id: $0, revision: previewRevision.value) }
     }
 
     private var wantedFullKey: FullKey? {
