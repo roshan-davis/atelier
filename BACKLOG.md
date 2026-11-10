@@ -485,7 +485,7 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 ## AT-034 — Match Look: lit built-in references, no fading, neutral white balance, light/shadow color
 
-**Status:** Implementation in review. Never compiled; Mac check and manual acceptance pending. **Owner:** Cl. **Chat:** Claude project thread "Match Look quality". **Branch:** `claude/match-look-color`. **PR:** opened from this branch (number recorded in the PR). **Baseline:** `20b58c5`. **Dependencies:** AT-031, AT-032 merged. PR #90 (AT-033, Select People) touches other Match Look files; no overlap expected.
+**Status:** Implementation in review. Never compiled; Mac check and manual acceptance pending. **Owner:** Cl. **Chat:** Claude project thread "Match Look quality". **Branch:** `claude/match-look-color`. **PR:** [#91](https://github.com/roshan-davis/atelier/pull/91). **Baseline:** `20b58c5`. **Dependencies:** AT-031, AT-032 merged. PR #90 (AT-033, Select People) touches other Match Look files; no overlap expected.
 
 **Scope:** Rosh (2026-11-10): built-in references "more vectorized and curvy", "colors of light and shadow rightly depicted", and the match must "do a better job". Rosh chose this color PR before the body-skin follow-up in PR #90. Items LM-1 to LM-4 of the Match Look quality audit (`reports/match-look-quality-2026-11-10.md` in project files):
 - LM-1: the eight studies redrawn with smooth Catmull-Rom paths (facets kept for buildings, roads, trees), each surface shaded from a key light, lit side leaning to the look's light color and shaded side to its shadow color; near-black accents, soft glints, ±2-level grain. Compositions and skin swatches unchanged.
