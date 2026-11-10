@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import os
 import Vision
 
 // Match Look Phase 3: Protect Skin Tones and Subject & Background. See the PRD's "Match Look to a
@@ -293,7 +294,15 @@ extension LookMatcher {
     public static func match(session: DevelopSession, settings base: DevelopSettings, target: LookTarget,
                              options: LookMatchOptions = LookMatchOptions(), photoFaces: [CGRect]? = nil,
                              isCancelled: () -> Bool = { false }) -> LookMatch? {
-        guard let baseImage = session.renderSRGB(base), let plain = LookSample(image: baseImage) else { return nil }
+        // Every step renders the photo at the fit size; the count and time are logged so slow
+        // matches can be measured (Console, subsystem Atelier, category Match Look).
+        let started = Date()
+        var renders = 0
+        func render(_ settings: DevelopSettings) -> CGImage? {
+            renders += 1
+            return session.renderSRGB(settings)
+        }
+        guard let baseImage = render(base), let plain = LookSample(image: baseImage) else { return nil }
         var notices = target.notices
         let asShot = session.asShotTemperature
         var skin: LookSkin?
@@ -326,7 +335,7 @@ extension LookMatcher {
         }
 
         func sample(_ settings: DevelopSettings) -> LookSample? {
-            guard let image = session.renderSRGB(settings) else { return nil }
+            guard let image = render(settings) else { return nil }
             if let photoBox { return LookSample(image: image, area: photoBox)?.excluding(skinPixels) }
             guard var measured = LookSample(image: image) else { return nil }
             if let subjectFocus {
@@ -343,7 +352,7 @@ extension LookMatcher {
 
         if let subjectFocus, let subjectReference = target.subject, !isCancelled() {
             func subjectSample(_ settings: DevelopSettings) -> LookSample? {
-                guard let image = session.renderSRGB(settings), var measured = LookSample(image: image) else { return nil }
+                guard let image = render(settings), var measured = LookSample(image: image) else { return nil }
                 measured.focusWeights(subjectFocus, share: 1)
                 return measured.excluding(skinPixels)
             }
@@ -352,14 +361,22 @@ extension LookMatcher {
 
         if let skin, !isCancelled() {
             func whole(_ settings: DevelopSettings) -> LookSample? {
-                session.renderSRGB(settings).flatMap { LookSample(image: $0) }
+                render(settings).flatMap { LookSample(image: $0) }
             }
+            let size = CGSize(width: baseImage.width, height: baseImage.height)
+            let space = MaskSpace(sourceSize: session.sourceSize, crop: base.crop ?? .init(),
+                                  rect: CGRect(origin: .zero, size: size), outputSize: size)
             if options.skinMode == .protect {
-                protect(skin, in: &current, from: base, asShot: asShot, options: options, measure: whole)
+                // Hold the skin at its own colors, tone by tone, with the skin masks, so the rest
+                // of the photo keeps the full look. Only if that can't bring it back inside the
+                // limits are the sliders pulled back (which weakens the whole match).
+                if let now = whole(current), !skin.isWithin(now) {
+                    _ = fitSkin(skin, to: skin, in: &current, space: space, measure: whole, isCancelled: isCancelled)
+                }
+                if !isCancelled(), let now = whole(current), !skin.isWithin(now) {
+                    protect(skin, in: &current, from: base, asShot: asShot, options: options, measure: whole)
+                }
             } else if let referenceSkin = target.skin {
-                let size = CGSize(width: baseImage.width, height: baseImage.height)
-                let space = MaskSpace(sourceSize: session.sourceSize, crop: base.crop ?? .init(),
-                                      rect: CGRect(origin: .zero, size: size), outputSize: size)
                 if !fitSkin(skin, to: referenceSkin, in: &current, space: space,
                             measure: whole, isCancelled: isCancelled) {
                     notices.insert(.skinMatchLimited)
@@ -367,6 +384,8 @@ extension LookMatcher {
             }
         }
         guard !isCancelled() else { return nil }
+        Logger(subsystem: "Atelier", category: "Match Look").info(
+            "Match: \(renders) renders in \(Date().timeIntervalSince(started), format: .fixed(precision: 2)) s at \(plain.width)×\(plain.height)")
         var match = LookMatch(base: base, matched: current, asShotTemperature: asShot, notices: notices)
         match.subjectFitParameters = options.subjectFitParameters
         return match

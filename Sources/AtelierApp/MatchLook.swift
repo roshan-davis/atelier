@@ -204,9 +204,12 @@ final class MatchLookModel: ObservableObject, Identifiable {
         didSet { renderPreview() }
     }
     @Published private var preferredApplyMode: MatchApplyMode = .same
+    /// Skin masks are placed on each photo's own faces, so a match that adds them (Match Skin
+    /// Tone, or Protect Skin Tones holding skin with masks) is fitted on each photo.
+    var fitsEachPhoto: Bool { skinMode == .match || !(match?.skinMasks.isEmpty ?? true) }
     var applyMode: MatchApplyMode {
-        get { skinMode == .match ? .each : preferredApplyMode }
-        set { if skinMode != .match { preferredApplyMode = newValue } }
+        get { fitsEachPhoto ? .each : preferredApplyMode }
+        set { if !fitsEachPhoto { preferredApplyMode = newValue } }
     }
 
     @Published private(set) var preview: NSImage?

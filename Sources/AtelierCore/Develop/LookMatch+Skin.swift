@@ -79,43 +79,44 @@ extension LookMatcher {
             best.masks.append(.init(name: name, components: components))
         }
 
+        // Each slider's effect on the color is measured once (three renders) and reused for
+        // every step: the response is close to linear over this range, and each render with
+        // masks is the slow part of a match.
+        func slope(_ parameter: DevelopSettings.LocalParameter) -> SIMD2<Double> {
+            var trial = best
+            let value = trial.masks[index][parameter]
+            let step = value > 85 ? -12.0 : 12.0
+            trial.masks[index][parameter] = value + step
+            guard let result = color(trial) else { return .zero }
+            return (result - measured) / step
+        }
+        let temp = slope(.temperature), tint = slope(.tint), saturation = slope(.saturation)
+        let determinant = temp.x * tint.y - tint.x * temp.y
+        let response = (saturation * saturation).sum()
+
         var improved = false
-        for _ in 0..<3 {
-            func slope(_ parameter: DevelopSettings.LocalParameter) -> SIMD2<Double> {
+        func tryStep(_ changes: [(DevelopSettings.LocalParameter, Double)]) {
+            for fraction in [1.0, 0.5] {
                 var trial = best
-                let value = trial.masks[index][parameter]
-                let step = value > 85 ? -12.0 : 12.0
-                trial.masks[index][parameter] = value + step
-                guard let result = color(trial) else { return .zero }
-                return (result - measured) / step
-            }
-
-            func tryStep(_ changes: [(DevelopSettings.LocalParameter, Double)]) {
-                for fraction in [1.0, 0.5, 0.25] {
-                    var trial = best
-                    for (parameter, delta) in changes {
-                        let value = trial.masks[index][parameter]
-                        trial.masks[index][parameter] = (value + min(30, max(-30, delta)) * fraction).rounded()
-                    }
-                    guard trial != best, let result = color(trial) else { continue }
-                    let next = target - result
-                    guard (next * next).sum() < (error * error).sum() else { continue }
-                    best = trial
-                    measured = result
-                    error = next
-                    improved = true
-                    break
+                for (parameter, delta) in changes {
+                    let value = trial.masks[index][parameter]
+                    trial.masks[index][parameter] = (value + min(30, max(-30, delta)) * fraction).rounded()
                 }
+                guard trial != best, let result = color(trial) else { continue }
+                let next = target - result
+                guard (next * next).sum() < (error * error).sum() else { continue }
+                best = trial
+                measured = result
+                error = next
+                improved = true
+                break
             }
-
-            let temp = slope(.temperature), tint = slope(.tint)
-            let determinant = temp.x * tint.y - tint.x * temp.y
+        }
+        for _ in 0..<2 {
             if abs(determinant) > 1e-10 {
                 tryStep([(.temperature, (error.x * tint.y - error.y * tint.x) / determinant),
                          (.tint, (temp.x * error.y - temp.y * error.x) / determinant)])
             }
-            let saturation = slope(.saturation)
-            let response = (saturation * saturation).sum()
             if response > 1e-10 {
                 tryStep([(.saturation, (error * saturation).sum() / response)])
             }

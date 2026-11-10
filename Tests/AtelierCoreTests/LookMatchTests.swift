@@ -331,7 +331,9 @@ final class LookMatchTests: XCTestCase {
             .deletingLastPathComponent().appendingPathComponent("Scripts/presets/fixtures/\(name).jpg")
     }
 
-    func testToneOnlyPortraitMatchPullsBackExposureWhenColorCorrectionCannotHelp() throws {
+    /// Protect Skin Tones keeps the look at full strength and holds the skin with the skin masks,
+    /// instead of pulling the whole match back (which used to leave the photo nearly unchanged).
+    func testToneOnlyPortraitMatchKeepsTheLookAndHoldsSkinWithMasks() throws {
         let url = fixture("portrait")
         let session = try XCTUnwrap(DevelopRenderer.shared.session(for: url, maxPixelSize: LookSample.size))
         let preview = try XCTUnwrap(DevelopRenderer.shared.session(for: url, maxPixelSize: 1400))
@@ -350,9 +352,9 @@ final class LookMatchTests: XCTestCase {
                                                        options: options, photoFaces: faces))
         let applied = guarded.settings(strength: 1)
         XCTAssertTrue(skin.isWithin(try sample(session, applied)))
-        XCTAssertGreaterThan(applied.exposure, 0)
-        XCTAssertLessThan(applied.exposure, free.matched.exposure)
+        XCTAssertGreaterThan(applied.exposure, free.matched.exposure * 0.8)
         XCTAssertEqual(applied.saturation, 0)
+        XCTAssertFalse(guarded.skinMasks.isEmpty)
     }
 
     func testGraySkinFailsChromaLimit() throws {

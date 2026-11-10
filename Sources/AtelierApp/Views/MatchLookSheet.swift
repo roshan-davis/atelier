@@ -224,9 +224,9 @@ struct MatchLookSheet: View {
                     }
                     .pickerStyle(.segmented)
                     .fixedSize()
-                    .disabled(match.skinMode == .match)
-                    .help(match.skinMode == .match
-                          ? "Match Skin Tone fits the face mask separately on each photo."
+                    .disabled(match.fitsEachPhoto)
+                    .help(match.fitsEachPhoto
+                          ? "Skin masks are fitted separately on each photo."
                           : "Same settings: one match for all, like Sync. Match each photo: a match per photo, for mixed light.")
                 }
             }
