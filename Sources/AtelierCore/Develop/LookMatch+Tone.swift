@@ -97,7 +97,10 @@ extension LookMatcher {
             if k >= last - 1, !fadedWhite, r[k] < p[k] - 0.07 { continue }
             let x = p[k]
             guard x > knots.last!.0 + 0.02, x < 0.98 else { continue }
-            let y = min(x + CameraMatch.maxShift, max(x - CameraMatch.maxShift, r[k]))
+            // Unless the reference is faded, dark tones may be lifted only a little (4% plus 40%
+            // of the tone), so a bright reference can't wash shadows out to gray.
+            let lift = fadedBlack ? CameraMatch.maxShift : min(CameraMatch.maxShift, 0.04 + 0.4 * x)
+            let y = min(x + lift, max(x - CameraMatch.maxShift, r[k]))
             knots.append((x, max(knots.last!.1, y)))
         }
         knots.append((1, max(knots.last!.1, white)))

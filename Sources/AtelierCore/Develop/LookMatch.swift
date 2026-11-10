@@ -469,7 +469,8 @@ public enum LookMatcher {
     /// Limits, so an odd reference can't wreck the photo.
     static let maxMiredShift = 150.0
     static let maxTintShift = 60.0
-    static let maxExposureShift = 2.0
+    /// One stop: a reference that is mostly bright sand or snow shouldn't wash a darker photo out.
+    static let maxExposureShift = 1.0
     static let saturationRange = -60.0...60.0
     static let maxGradeSaturation = 50.0
 

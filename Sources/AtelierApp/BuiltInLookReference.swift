@@ -223,11 +223,11 @@ private struct StudyCanvas {
         context.restoreGState()
     }
 
-    /// Lit side, the base color a little past the middle, shaded side.
+    /// Lit side, the base color near the lit side, shaded side (so most of a surface turns to shade).
     private func gradient(_ hex: UInt32) -> CGGradient {
         let base = Self.rgb(hex)
         let colors = [Self.cgColor(lit(base)), Self.cgColor(base), Self.cgColor(shaded(base))] as CFArray
-        return CGGradient(colorsSpace: Self.space, colors: colors, locations: [0, 0.45, 1])!
+        return CGGradient(colorsSpace: Self.space, colors: colors, locations: [0, 0.3, 1])!
     }
 
     private func lit(_ color: SIMD3<Double>) -> SIMD3<Double> {
@@ -235,7 +235,7 @@ private struct StudyCanvas {
     }
 
     private func shaded(_ color: SIMD3<Double>) -> SIMD3<Double> {
-        Self.mix(color, Self.rgb(light.shade), 0.45) * 0.62
+        Self.mix(color, Self.rgb(light.shade), 0.45) * 0.5
     }
 
     /// Catmull-Rom through the points, closed. A point on the canvas edge keeps a sharp corner.

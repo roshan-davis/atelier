@@ -489,7 +489,7 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 **Scope:** Rosh (2026-11-10): built-in references "more vectorized and curvy", "colors of light and shadow rightly depicted", and the match must "do a better job". Rosh chose this color PR before the body-skin follow-up in PR #90. Items LM-1 to LM-4 of the Match Look quality audit (`reports/match-look-quality-2026-11-10.md` in project files):
 - LM-1: the eight studies redrawn with smooth Catmull-Rom paths (facets kept for buildings, roads, trees), each surface shaded from a key light, lit side leaning to the look's light color and shaded side to its shadow color; near-black accents, soft glints, ±2-level grain. Compositions and skin swatches unchanged.
-- LM-4: Tone Curve from 7 brightness percentiles instead of full histogram matching; 7 curve points; blacks lift only for a really faded reference (darkest 1% > 6% with dark tones present), whites come down at most to 92%.
+- LM-4: Exposure capped at ±1 EV; shadow lift capped (4% + 40% of the tone) unless the reference is faded. Tone Curve from 7 brightness percentiles instead of full histogram matching; 7 curve points; blacks lift only for a really faded reference (darkest 1% > 6% with dark tones present), whites come down at most to 92%.
 - LM-3: White Balance matches the least colorful 30% of midtones (`neutralAB`), falling back to all midtones.
 - LM-2: Shadows, Midtones and Highlights wheels fitted together from the neutrals' color in each tonal range, using the renderer's `ColorGrade.weights`, 3 probes + joint solve, 2 rounds, a step kept only if it helps.
 
