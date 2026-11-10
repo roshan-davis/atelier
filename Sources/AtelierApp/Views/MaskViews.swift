@@ -174,7 +174,7 @@ private struct MaskOverlay: View {
             context.stroke(outline, with: .color(.black.opacity(0.5)), lineWidth: 3)
             context.stroke(outline, with: .color(.white), style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
             pinShape(in: &context, at: space.viewPoint(pin), filled: true)
-        case .luminance: break
+        case .luminance, .people: break
         }
     }
 
@@ -420,7 +420,7 @@ private struct MaskOverlay: View {
             case .radial: return .drawRadial(center: point)
             case .object: return .drawBox(start: point)
             case .brush: return painting
-            case .luminance, .subject: return .none
+            case .luminance, .subject, .people: return .none
             }
         }
         if let component = develop.selectedComponent {
@@ -783,9 +783,54 @@ struct MasksPanel: View {
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 invertToggle(component)
             }
+        case .people(let selection):
+            peopleSettings(component, selection)
         case .brush:
             invertToggle(component)
         }
+    }
+
+    /// Select People: which person and which parts, like Lightroom's People mask.
+    private func peopleSettings(_ component: DevelopSettings.MaskComponent,
+                                _ selection: DevelopSettings.PeopleSelection) -> some View {
+        let faces = develop.peopleFaces ?? []
+        return VStack(alignment: .leading, spacing: 6) {
+            GroupHeading(title: "Select People")
+            Picker("Person", selection: Binding(get: { selection.person }, set: { value in
+                var changed = selection
+                changed.person = value
+                update(component, .people(changed))
+            })) {
+                Text("All People").tag(Int?.none)
+                ForEach(Array(faces.indices), id: \.self) { index in
+                    Text("Person \(index + 1)").tag(Int?.some(index))
+                }
+                if let person = selection.person, person >= faces.count {
+                    Text("Person \(person + 1)").tag(Int?.some(person))
+                }
+            }
+            .help("People are numbered left to right by face")
+            ForEach(DevelopSettings.PeopleSelection.Part.allCases, id: \.self) { part in
+                Toggle(part.title, isOn: Binding(get: { selection.includes(part) }, set: { on in
+                    var parts = selection.parts.filter { $0 != part }
+                    if on { parts.append(part) }
+                    guard !parts.isEmpty else { return }
+                    update(component, .people(DevelopSettings.PeopleSelection(person: selection.person, parts: parts,
+                                                                                feather: selection.feather)))
+                }))
+                .help(part == .faceSkin ? "The face's skin, leaving out eyes, brows and lips"
+                                        : "Neck, arms, hands and other skin on the same person")
+            }
+            SliderRow(label: "Feather", value: Binding(get: { selection.feather }, set: { value in
+                var changed = selection
+                changed.feather = value
+                update(component, .people(changed))
+            }), range: 0...100, step: 1, origin: 10)
+            Text("Found on this Mac with Apple's Vision: each face's own skin color is found on the face, then on the rest of that person.")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            invertToggle(component)
+        }
+        .onAppear { develop.findPeople() }
     }
 
     private func invertToggle(_ component: DevelopSettings.MaskComponent) -> some View {

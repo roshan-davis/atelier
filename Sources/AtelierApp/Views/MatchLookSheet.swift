@@ -72,7 +72,8 @@ struct MatchLookSheet: View {
     @ViewBuilder private var referenceImage: some View {
         ZStack {
             if let image = match.referenceImage {
-                AreaImage(image: image, area: $match.referenceArea, showsArea: match.usesAreas)
+                AreaImage(image: image, area: $match.referenceArea, showsArea: match.usesAreas,
+                          overlay: match.showsSkin ? match.referenceSkinOverlay : nil)
             } else {
                 RoundedRectangle(cornerRadius: 6)
                     .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
@@ -153,7 +154,8 @@ struct MatchLookSheet: View {
     private var photoImage: some View {
         ZStack {
             AreaImage(image: showingBefore ? match.before : match.preview, area: $match.photoArea,
-                      showsArea: match.usesAreas && !showingBefore)
+                      showsArea: match.usesAreas && !showingBefore,
+                      overlay: match.showsSkin ? match.photoSkinOverlay : nil)
             if match.isLoadingReference || match.isMatching {
                 ProgressView()
                     .controlSize(.small)
@@ -185,7 +187,10 @@ struct MatchLookSheet: View {
                 .pickerStyle(.menu)
                 .fixedSize()
                 .accessibilityIdentifier("match-look-skin-tones")
-                .help("Keep face skin close to its current color or match its hue and saturation to the reference")
+                .help("Keep skin close to its current color or match its hue and saturation to the reference")
+                Toggle("Show Skin", isOn: $match.showSkin)
+                    .disabled(match.skinMode == .off)
+                    .help("Tint the face and body skin the match measures, on both images")
             }
             .toggleStyle(.checkbox)
             HStack(spacing: 10) {
@@ -282,6 +287,8 @@ struct AreaImage: View {
     let image: NSImage?
     @Binding var area: CGRect
     let showsArea: Bool
+    /// Drawn over the image at the same size, such as Show Skin's tint.
+    var overlay: NSImage? = nil
 
     var body: some View {
         GeometryReader { geometry in
@@ -294,6 +301,14 @@ struct AreaImage: View {
                         .interpolation(.high)
                         .frame(width: frame.width, height: frame.height)
                         .offset(x: frame.minX, y: frame.minY)
+                    if let overlay {
+                        Image(nsImage: overlay)
+                            .resizable()
+                            .interpolation(.high)
+                            .frame(width: frame.width, height: frame.height)
+                            .offset(x: frame.minX, y: frame.minY)
+                            .allowsHitTesting(false)
+                    }
                     if showsArea {
                         AreaBox(area: $area, frame: frame)
                     }
