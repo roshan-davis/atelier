@@ -65,16 +65,25 @@ enum BuiltInLookReference: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Cheek and lower face swatches on the 120 × 80 drawing. Wide studies have no skin sample.
-    var skinRegions: [CGRect] {
-        let swatch: CGRect
+    /// The portrait's head, drawn with its light and shade; wide studies have none.
+    var head: StudyHead? {
         switch self {
-        case .matrixPortrait: swatch = CGRect(x: 67, y: 38, width: 9, height: 6)
-        case .thronesPortrait: swatch = CGRect(x: 52, y: 39, width: 9, height: 8)
-        case .furyRoadPortrait: swatch = CGRect(x: 65, y: 38, width: 10, height: 9)
-        case .darkKnightPortrait: swatch = CGRect(x: 63, y: 38, width: 9, height: 9)
-        default: return []
+        case .matrixPortrait:
+            return StudyHead(x: 68, y: 31, skin: 0xb39674, hair: 0x1f2725, lips: 0x8a5f52, iris: 0x2a2a22, hairLength: 0.15)
+        case .thronesPortrait:
+            return StudyHead(x: 54, y: 34, skin: 0xc49e88, hair: 0x4a3b30, lips: 0x9a6058, iris: 0x3b4a52, hairLength: 1.3)
+        case .furyRoadPortrait:
+            return StudyHead(x: 69, y: 35, skin: 0xc08a62, hair: 0x3a2c22, lips: 0x96594a, iris: 0x3a2a20, hairLength: 0.6)
+        case .darkKnightPortrait:
+            return StudyHead(x: 62, y: 33, skin: 0xb08a70, hair: 0x1c2026, lips: 0x8a5a50, iris: 0x2a2422, hairLength: 0)
+        default: return nil
         }
+    }
+
+    /// A swatch on the lit cheek of each portrait (0 to 1 of the drawing). Wide studies have no skin sample.
+    var skinRegions: [CGRect] {
+        guard let head else { return [] }
+        let swatch = head.cheek(litOnRight: light.dx > 0)
         return [CGRect(x: swatch.minX / 120, y: swatch.minY / 80,
                        width: swatch.width / 120, height: swatch.height / 80)]
     }
@@ -98,6 +107,7 @@ enum BuiltInLookReference: String, CaseIterable, Identifiable {
         case .darkKnightPortrait: drawNightPortrait(art)
         case .darkKnightCity: drawNightCity(art)
         }
+        if let head { art.head(head) }
         StudyCanvas.dither(context)
         return context.makeImage()
     }
@@ -321,17 +331,6 @@ private func drawMatrixPortrait(_ a: StudyCanvas) {
     a.shape(0x37413d, (78, 57), (89, 61), (76, 72), (69, 80))
     a.deep((48, 66), (54, 62), (58, 68), (52, 78), (44, 80), (38, 80))
     a.deep((84, 66), (98, 68), (110, 80), (80, 80))
-    // Face and skin: olive bounce light and warm brown planes.
-    a.ellipse(0x273230, 52, 13, 33, 36)
-    a.shape(0x775e4e, (62, 41), (77, 40), (79, 57), (71, 64), (58, 58))
-    a.shape(0xb79a73, (59, 28), (70, 22), (81, 26), (84, 37), (82, 43), (77, 51), (67, 52), (57, 43))
-    a.shape(0x8c7457, (59, 28), (65, 34), (64, 43), (70, 52), (66, 52), (57, 43))
-    a.shape(0xc7b690, (75, 27), (81, 26), (84, 37), (87, 41), (80, 42), (77, 38))
-    a.shape(0x4f5143, (69, 34), (77, 33), (77, 35), (70, 36))
-    a.shape(0x685142, (75, 45), (81, 44), (78, 47))
-    a.shape(0x36463f, (52, 30), (53, 22), (60, 15), (73, 15), (80, 22), (69, 22), (60, 27), (57, 39))
-    a.spark(74.5, 33.6, 1.4, 1.2)
-    a.spark(80, 26, 4, 3)
 }
 
 private func drawMatrixCity(_ a: StudyCanvas) {
@@ -377,16 +376,6 @@ private func drawWinterPortrait(_ a: StudyCanvas) {
     a.shape(0x3a484e, (51, 73), (62, 65), (73, 68), (82, 65), (93, 80), (45, 80))
     a.deep((52, 80), (62, 70), (78, 71), (90, 80))
     a.deep((4, 80), (11, 71), (24, 80))
-    a.ellipse(0x4d4a45, 36, 14, 35, 40)
-    a.deep((36, 32), (40, 25), (43, 44), (38, 47))
-    a.shape(0x886f62, (45, 42), (62, 43), (62, 57), (53, 64), (42, 57))
-    a.shape(0xc09a83, (45, 24), (56, 21), (64, 26), (67, 33), (72, 40), (66, 42), (63, 51), (54, 54), (44, 46))
-    a.shape(0x9e7c6d, (44, 28), (50, 31), (48, 40), (53, 49), (62, 51), (54, 54), (44, 46))
-    a.shape(0xd9b499, (60, 24), (64, 26), (67, 33), (72, 40), (65, 39), (61, 34))
-    a.shape(0x61564f, (57, 34), (65, 34), (62, 36), (57, 36))
-    a.shape(0x605651, (35, 23), (46, 16), (58, 16), (64, 23), (53, 22), (48, 29), (44, 46), (38, 45))
-    a.spark(62.6, 34.4, 1.3, 1.1)
-    a.spark(65, 27, 3, 4)
 }
 
 private func drawWinterLandscape(_ a: StudyCanvas) {
@@ -428,17 +417,6 @@ private func drawDustPortrait(_ a: StudyCanvas) {
     a.shape(0x374340, (67, 71), (80, 57), (94, 63), (104, 68), (115, 80), (76, 80))
     a.deep((74, 80), (86, 67), (100, 70), (112, 80))
     a.deep((29, 80), (37, 70), (46, 80))
-    a.ellipse(0x524a42, 54, 15, 31, 40)
-    a.deep((80, 32), (84, 24), (86, 38), (83, 50))
-    a.shape(0x9c6f56, (59, 42), (75, 42), (77, 56), (70, 63), (55, 59))
-    a.shape(0xc38e66, (59, 28), (69, 24), (80, 27), (84, 39), (81, 48), (72, 54), (61, 50), (57, 43), (52, 41))
-    a.shape(0xd9aa7e, (60, 27), (68, 24), (68, 32), (63, 41), (64, 50), (57, 46), (52, 41))
-    a.shape(0xa77158, (79, 28), (84, 39), (81, 48), (72, 54), (68, 52), (76, 45))
-    a.shape(0x705c50, (60, 35), (67, 34), (68, 36), (60, 37))
-    a.shape(0xbda585, (52, 26), (56, 20), (66, 15), (80, 18), (86, 27), (73, 25), (61, 27), (56, 32))
-    a.shape(0x8f8975, (57, 54), (66, 57), (75, 56), (80, 59), (69, 67), (54, 63), (49, 60))
-    a.spark(61.5, 35, 1.3, 1.1)
-    a.spark(58, 17, 6, 4)
 }
 
 private func drawNightPortrait(_ a: StudyCanvas) {
@@ -457,15 +435,6 @@ private func drawNightPortrait(_ a: StudyCanvas) {
     a.shape(0x435463, (21, 80), (31, 65), (48, 58), (58, 68), (40, 80))
     a.shape(0x202b35, (60, 70), (73, 56), (94, 64), (108, 80), (74, 80))
     a.deep((76, 80), (88, 68), (100, 72), (107, 80))
-    a.ellipse(0x303841, 47, 15, 31, 36)
-    a.shape(0x84665a, (53, 41), (69, 41), (74, 56), (66, 65), (50, 58))
-    a.shape(0xb38b71, (55, 25), (69, 23), (75, 31), (76, 38), (81, 42), (75, 45), (72, 51), (63, 54), (53, 47))
-    a.shape(0x856a60, (55, 25), (61, 31), (60, 41), (65, 49), (69, 52), (63, 54), (53, 47))
-    a.shape(0xd0a586, (69, 23), (75, 31), (76, 38), (81, 42), (74, 41), (70, 36))
-    a.shape(0x594e4c, (64, 34), (73, 34), (71, 36), (64, 36))
-    a.shape(0x353f46, (45, 31), (47, 22), (57, 16), (69, 17), (74, 23), (61, 23), (55, 27), (53, 43))
-    a.spark(70.2, 34.5, 1.2, 1)
-    a.spark(73, 26, 3, 4)
 }
 
 private func drawNightCity(_ a: StudyCanvas) {
@@ -497,4 +466,177 @@ private func drawNightCity(_ a: StudyCanvas) {
     a.rect(0xc69273, 82, 73, 4, 2)
     a.spark(65, 72.5, 4, 3)
     a.spark(82, 72.5, 4, 3)
+}
+
+/// A portrait head in a study: where it sits (the face's center on the 120 × 80 canvas) and its
+/// colors. It is drawn with the study's light: a lit side and a shadow side split down the face,
+/// eye sockets, the nose's shadow plane, lips, and hair with a sheen.
+struct StudyHead {
+    var x: CGFloat
+    var y: CGFloat
+    var skin: UInt32
+    var hair: UInt32
+    var lips: UInt32
+    var iris: UInt32
+    /// How far the hair falls below the jaw line, in half face heights (0 is short).
+    var hairLength: CGFloat
+    var size: CGFloat = 1.25
+
+    /// Half the face's width and height.
+    var halfWidth: CGFloat { 12 * size }
+    var halfHeight: CGFloat { 17 * size }
+
+    /// A point in face space (u: -1 left to 1 right, v: -1 top to 1 chin). Features shift a
+    /// little toward the light, as if the head is turned slightly toward it.
+    func point(_ u: CGFloat, _ v: CGFloat, litOnRight: Bool) -> CGPoint {
+        let turn: CGFloat = litOnRight ? 0.12 : -0.12
+        return CGPoint(x: x + u * halfWidth + turn * halfWidth * (1 - abs(u)) * 0.6, y: y + v * halfHeight)
+    }
+
+    /// The lit cheek, below the eye socket and beside the nose: the authored skin sample.
+    func cheek(litOnRight: Bool) -> CGRect {
+        let center = point(litOnRight ? 0.52 : -0.52, 0.16, litOnRight: litOnRight)
+        let w = halfWidth * 0.3, h = halfHeight * 0.18
+        return CGRect(x: center.x - w / 2, y: center.y - h / 2, width: w, height: h)
+    }
+}
+
+extension StudyCanvas {
+    func head(_ head: StudyHead) {
+        let right = light.dx > 0
+        let side: CGFloat = right ? 1 : -1
+        let x = head.x, y = head.y, w = head.halfWidth, h = head.halfHeight
+        func f(_ u: CGFloat, _ v: CGFloat) -> Point {
+            let p = head.point(u, v, litOnRight: right)
+            return (p.x, p.y)
+        }
+        let skin = Self.rgb(head.skin)
+        let shade = shaded(skin), glow = lit(skin)
+
+        // Neck, in the jaw's shadow.
+        let neck = smooth([(x - 0.42 * w, y + 0.55 * h), (x + 0.42 * w, y + 0.55 * h), (x + 0.48 * w, y + 1.05 * h),
+                           (x + 0.6 * w, y + 1.25 * h), (x - 0.6 * w, y + 1.25 * h), (x - 0.48 * w, y + 1.05 * h)])
+        paint(neck, head.skin)
+        soft(shade, 0.85, x - 0.8 * w, y + 0.45 * h, 1.6 * w, 0.55 * h, within: neck)
+        soft(shade, 0.5, x - side * 0.9 * w - 0.5 * w, y + 0.6 * h, w, 0.9 * h, within: neck)
+
+        // Hair behind the head.
+        let length = head.hairLength
+        paint(smooth([(x - 1.12 * w, y - 0.35 * h), (x - 0.95 * w, y - 0.95 * h), (x, y - 1.18 * h),
+                      (x + 0.95 * w, y - 0.95 * h), (x + 1.12 * w, y - 0.35 * h), (x + 1.08 * w, y + (0.2 + length) * h),
+                      (x + 0.8 * w, y + (0.15 + length) * h), (x - 0.8 * w, y + (0.15 + length) * h),
+                      (x - 1.08 * w, y + (0.2 + length) * h)]), head.hair)
+
+        // Ears.
+        for s: CGFloat in [-1, 1] {
+            ellipse(head.skin, x + s * 0.98 * w - 0.16 * w, y - 0.12 * h, 0.32 * w, 0.36 * h)
+            soft(shade, 0.5, x + s * 0.98 * w - 0.08 * w, y - 0.05 * h, 0.16 * w, 0.22 * h)
+        }
+
+        // The face, then its form: the side away from the light falls into shadow, the lit
+        // cheekbone and forehead catch the light.
+        let face = smooth([f(0, -1), f(0.62, -0.9), f(0.95, -0.5), f(1, -0.05), f(0.9, 0.38), f(0.62, 0.72),
+                           f(0.3, 0.93), f(0, 0.98), f(-0.3, 0.93), f(-0.62, 0.72), f(-0.9, 0.38), f(-1, -0.05),
+                           f(-0.95, -0.5), f(-0.62, -0.9)])
+        paint(face, head.skin)
+        band(shade, 0.8, from: x + side * 0.05 * w, to: x - side * 0.45 * w, within: face)
+        soft(shade, 0.45, x - 0.9 * w, y + 0.55 * h, 1.8 * w, 0.6 * h, within: face)
+        soft(glow, 0.55, x + side * 0.45 * w - 0.35 * w, y - 0.05 * h, 0.7 * w, 0.45 * h, within: face)
+        soft(glow, 0.5, x + side * 0.15 * w - 0.5 * w, y - 0.92 * h, w, 0.5 * h, within: face)
+
+        // Eye sockets, eyes and brows.
+        let turn = (right ? 0.12 : -0.12) * w
+        for s: CGFloat in [-1, 1] {
+            let (ex, ey) = f(s * 0.42, -0.12)
+            soft(shade, s == side ? 0.35 : 0.55, ex - 0.32 * w, ey - 0.16 * h, 0.64 * w, 0.34 * h, within: face)
+        }
+        let brow = Self.mix(Self.rgb(head.hair), .zero, 0.4)
+        for s: CGFloat in [-1, 1] {
+            let (ex, ey) = f(s * 0.42, -0.1)
+            let ew = 0.26 * w, eh = 0.06 * h
+            let eye = smooth([(ex - ew, ey), (ex - ew * 0.3, ey - eh), (ex + ew * 0.4, ey - eh * 0.9), (ex + ew, ey),
+                              (ex + ew * 0.3, ey + eh * 0.7), (ex - ew * 0.4, ey + eh * 0.6)])
+            fill(Self.mix(Self.mix(skin, SIMD3(1, 1, 1), 0.25), shade, s == side ? 0.2 : 0.45), eye)
+            soft(Self.rgb(head.iris), 1, ex - 0.13 * w + turn * 0.3, ey - 0.1 * h, 0.26 * w, 0.2 * h, within: eye)
+            fill(brow, smooth([(ex - ew * 1.05, ey + 0.01 * h), (ex - ew * 0.3, ey - eh * 1.25), (ex + ew * 0.45, ey - eh * 1.15),
+                               (ex + ew * 1.05, ey + 0.01 * h), (ex + ew * 0.4, ey - eh * 0.75), (ex - ew * 0.3, ey - eh * 0.8)]))
+            if s == side { spark(ex + 0.04 * w + turn * 0.3, ey - 0.05 * h, 0.07 * w, 0.05 * h) }
+            let (bx, by) = f(s * 0.44, -0.33)
+            fill(Self.rgb(head.hair), smooth([(bx - s * 0.36 * w, by + 0.03 * h), (bx - s * 0.1 * w, by - 0.06 * h),
+                                              (bx + s * 0.3 * w, by - 0.04 * h), (bx + s * 0.38 * w, by + 0.02 * h),
+                                              (bx + s * 0.1 * w, by), (bx - s * 0.25 * w, by + 0.06 * h)]))
+        }
+
+        // Nose: its shadow plane, the lit bridge, the shadow under it, a light on the tip.
+        let (nx, ny) = f(0, 0.18)
+        soft(shade, 0.85, nx - side * 0.16 * w - 0.14 * w, ny - 0.42 * h, 0.28 * w, 0.6 * h, within: face)
+        soft(glow, 0.45, nx + side * 0.06 * w - 0.06 * w, ny - 0.38 * h, 0.12 * w, 0.45 * h, within: face)
+        soft(shade, 0.9, nx - 0.22 * w, ny + 0.02 * h, 0.44 * w, 0.13 * h, within: face)
+        soft(glow, 0.5, nx + side * 0.05 * w - 0.08 * w, ny - 0.06 * h, 0.16 * w, 0.1 * h, within: face)
+
+        // Mouth: upper lip in shade, lower lip catching light, the line between, chin.
+        let (mx, my) = f(0, 0.5)
+        let lips = Self.rgb(head.lips)
+        fill(shaded(lips) * 1.1, smooth([(mx - 0.34 * w, my), (mx - 0.12 * w, my - 0.08 * h), (mx, my - 0.05 * h),
+                                         (mx + 0.12 * w, my - 0.08 * h), (mx + 0.34 * w, my), (mx, my + 0.01 * h)]))
+        fill(lips, smooth([(mx - 0.3 * w, my + 0.005 * h), (mx, my + 0.02 * h), (mx + 0.3 * w, my + 0.005 * h),
+                           (mx + 0.14 * w, my + 0.1 * h), (mx - 0.14 * w, my + 0.1 * h)]))
+        soft(Self.mix(lips, SIMD3(1, 1, 1), 0.3), 0.6, mx + side * 0.06 * w - 0.08 * w, my + 0.035 * h, 0.16 * w, 0.05 * h)
+        fill(Self.mix(lips, .zero, 0.6), smooth([(mx - 0.33 * w, my), (mx, my + 0.012 * h), (mx + 0.33 * w, my),
+                                                 (mx, my + 0.02 * h)]))
+        soft(shade, 0.45, mx - 0.2 * w, my + 0.1 * h, 0.4 * w, 0.12 * h, within: face)
+        soft(glow, 0.35, mx + side * 0.05 * w - 0.15 * w, my + 0.25 * h, 0.3 * w, 0.15 * h, within: face)
+
+        // Hair over the forehead, with a sheen on the lit side.
+        let fringe = smooth([(x - 1.05 * w, y - 0.25 * h), (x - 0.98 * w, y - 0.85 * h), (x - 0.3 * w, y - 1.15 * h),
+                             (x + 0.5 * w, y - 1.12 * h), (x + 1.02 * w, y - 0.8 * h), (x + 1.08 * w, y - 0.3 * h),
+                             (x + 0.9 * w, y - 0.62 * h), (x + 0.3 * w, y - 0.78 * h), (x - 0.35 * w, y - 0.72 * h),
+                             (x - 0.88 * w, y - 0.55 * h)])
+        paint(fringe, head.hair)
+        soft(lit(Self.rgb(head.hair)), 0.5, x + side * 0.3 * w - 0.35 * w, y - 1.08 * h, 0.7 * w, 0.25 * h, within: fringe)
+    }
+
+    /// A soft spot of color: full `alpha` in the middle of the oval, fading smoothly to nothing
+    /// at its edge, optionally kept inside a shape.
+    func soft(_ color: SIMD3<Double>, _ alpha: CGFloat, _ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat,
+              within clip: CGPath? = nil) {
+        guard w > 0, h > 0, let gradient = Self.fade(color, alpha) else { return }
+        context.saveGState()
+        if let clip {
+            context.addPath(clip)
+            context.clip()
+        }
+        context.translateBy(x: x + w / 2, y: y + h / 2)
+        context.scaleBy(x: w / 2, y: h / 2)
+        context.drawRadialGradient(gradient, startCenter: .zero, startRadius: 0, endCenter: .zero, endRadius: 1, options: [])
+        context.restoreGState()
+    }
+
+    /// Color rising smoothly from nothing at `from` to `alpha` at `to` (horizontally) and beyond,
+    /// inside a shape: the line between a face's lit and shadow sides.
+    func band(_ color: SIMD3<Double>, _ alpha: CGFloat, from start: CGFloat, to end: CGFloat, within clip: CGPath) {
+        guard let gradient = Self.fade(color, alpha) else { return }
+        context.saveGState()
+        context.addPath(clip)
+        context.clip()
+        context.drawLinearGradient(gradient, start: CGPoint(x: end, y: 0), end: CGPoint(x: start, y: 0),
+                                   options: [.drawsBeforeStartLocation])
+        context.restoreGState()
+    }
+
+    func fill(_ color: SIMD3<Double>, _ path: CGPath) {
+        context.setFillColor(Self.cgColor(color))
+        context.addPath(path)
+        context.fillPath()
+    }
+
+    /// `alpha` at the start, falling off along a smoothstep to nothing at the end.
+    private static func fade(_ color: SIMD3<Double>, _ alpha: CGFloat) -> CGGradient? {
+        let steps: [CGFloat] = [0, 0.25, 0.5, 0.75, 1]
+        let colors = steps.map { d -> CGColor in
+            let t = 1 - d
+            return cgColor(color, alpha: alpha * t * t * (3 - 2 * t))
+        }
+        return CGGradient(colorsSpace: space, colors: colors as CFArray, locations: steps)
+    }
 }
