@@ -27,10 +27,9 @@ extension LookMatcher {
                                         height: face.height * space.rect.height * 0.75, feather: 30)
             return DevelopSettings.MaskComponent(.radial(gradient))
         }
-        // The whole face (lips too), not Face Skin alone, so the lips don't keep a look the skin
-        // around them was spared.
-        let selection = holdsLightness ? LookSkin.protectMaskSelection : LookSkin.matchMaskSelection
-        let faces = skin.usesPeople ? [DevelopSettings.MaskComponent(.people(selection))] : radials
+        // The Entire Face in one piece, so the base color has no holes and takes nothing by
+        // accident; the tone masks below blend in on top of it.
+        let faces = skin.usesPeople ? [DevelopSettings.MaskComponent(.people(LookSkin.maskSelection))] : radials
         guard reference.toneColors.count == 3, let start = measure(settings) else {
             // Without tones: one mask, the skin's mean color to the reference's.
             return fitMaskColor(LookMatch.skinMaskName, components: faces,
@@ -45,7 +44,9 @@ extension LookMatcher {
         let split = LookSkin.toneSplit(start, skin.pixels)
         guard split.groups.count == 3 else { return false }
         let (low, high) = (split.cuts.0 * 100, split.cuts.1 * 100)
-        let soft = 30.0
+        // Wide, soft ranges, so the shadow and highlight corrections fade into the base color
+        // over the face instead of meeting it at a visible step (Rosh: "gradual and seamless").
+        let soft = 70.0
         func range(_ low: Double, _ high: Double) -> DevelopSettings.MaskComponent {
             DevelopSettings.MaskComponent(.luminance(DevelopSettings.LuminanceRange(low: low, high: high, smoothness: soft)),
                                           mode: .intersect)

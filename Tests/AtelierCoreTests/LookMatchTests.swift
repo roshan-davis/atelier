@@ -251,13 +251,10 @@ final class LookMatchTests: XCTestCase {
         XCTAssertNil(LookSkin(sample: plain, faces: [CGRect(x: 0.05, y: 0.02, width: 0.1, height: 0.1)]))
     }
 
-    /// The skin masks cover the whole face, so the lips never keep a look the skin was spared.
-    func testSkinMasksCoverTheLips() {
-        XCTAssertTrue(LookSkin.matchMaskSelection.parts.contains(.faceSkin))
-        XCTAssertTrue(LookSkin.matchMaskSelection.parts.contains(.lips))
-        for part: DevelopSettings.PeopleSelection.Part in [.faceSkin, .lips, .teeth, .eyebrows, .eyeSclera, .iris] {
-            XCTAssertTrue(LookSkin.protectMaskSelection.parts.contains(part), part.rawValue)
-        }
+    /// The skin masks are the Entire Face in one piece, softly edged: one base color with no holes.
+    func testSkinMasksCoverTheEntireFace() {
+        XCTAssertEqual(LookSkin.maskSelection.parts, [.entireFace])
+        XCTAssertGreaterThan(LookSkin.maskSelection.feather, 0)
     }
 
     func testProtectSkinTonesKeepsSkinInsideItsLimits() throws {
