@@ -674,3 +674,14 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 **Acceptance:** Mac build; `FlatSVGTests` and `BuiltInLookReferenceTests` pass; the picker shows the eight drawings; each study matches a photo toward its palette without lifting blacks; Show Skin tints the drawn skin. Regenerate the Help before/after pictures with `ATELIER_BUILT_IN_LOOK_OUT` and `ATELIER_SKIN_LOOK_OUT` and `Scripts/help/make_help_images.py` (the reference pictures are updated; before/after still show the old studies' result).
 
 **Not in scope:** part-by-part matching (hair to hair, clothes to clothes) with fast Select People parts; it follows in its own PR.
+
+## AT-046 — Match Look: skin masks cover the lips; Protect Skin Tones holds brightness
+
+**Status:** PR open, never compiled (cloud has no Swift toolchain); needs a Mac build, tests and Rosh's acceptance. **Owner:** Claude. **Chat:** [Improve Match Colors quality](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKF2JPu63ZaHgkVxXXo1FmSC). **Branch:** `claude/match-look-skin-lips`. **Baseline:** `2747aea`. **Dependencies:** AT-045 (merged).
+
+**Evidence:** Rosh (2026-11-11), a smiling portrait in the rain: with Match Skin Tone or Protect Skin Tones "the lip area is weird, and the color is making pale". Source review: the skin masks used Select People's Face Skin, which leaves holes at lips, teeth, eyes and brows (AT-042), so the masks held or matched the skin while the lips kept the global look, with a hard edge (feather 0). Protect held only hue and saturation, and only past its 5°/15% limits, so a lighter, slightly greyer face was left alone.
+
+**Scope:** Match Skin Tone's masks use Face Skin + Lips; Protect's use Face Skin, Lips, Teeth, Eyebrows, Eye Sclera, Iris. Skin is still measured on Face Skin. Protect fits each skin mask's Exposure to hold the tone's Oklab lightness and runs whenever skin drifts visibly (`LookSkin.holds`: 1.5° hue, 4% chroma, 0.015 lightness); the 5°/15% pull-back stays the fallback.
+
+**Acceptance:** Mac build; `LookMatchTests` (holds, mask parts) and existing Match Look tests pass; Rosh: the same portrait with Protect and with Match Skin Tone, lips and skin consistent, skin not pale.
+

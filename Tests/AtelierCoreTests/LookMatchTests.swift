@@ -241,9 +241,23 @@ final class LookMatchTests: XCTestCase {
         let skin = try XCTUnwrap(LookSkin(sample: plain, faces: [skinPatch]))
         XCTAssertGreaterThan(skin.pixels.count, 100)
         XCTAssertTrue(skin.isWithin(plain))
+        XCTAssertTrue(skin.holds(plain))
+        // A brighter render of the same skin is not held, though its hue and saturation barely move.
+        var brighter = DevelopSettings()
+        brighter.exposure = 0.5
+        XCTAssertFalse(skin.holds(try sample(session, brighter)))
         XCTAssertNil(LookSkin(sample: plain, faces: []))
         // A face box over the blue sky finds no skin.
         XCTAssertNil(LookSkin(sample: plain, faces: [CGRect(x: 0.05, y: 0.02, width: 0.1, height: 0.1)]))
+    }
+
+    /// The skin masks cover the whole face, so the lips never keep a look the skin was spared.
+    func testSkinMasksCoverTheLips() {
+        XCTAssertTrue(LookSkin.matchMaskSelection.parts.contains(.faceSkin))
+        XCTAssertTrue(LookSkin.matchMaskSelection.parts.contains(.lips))
+        for part: DevelopSettings.PeopleSelection.Part in [.faceSkin, .lips, .teeth, .eyebrows, .eyeSclera, .iris] {
+            XCTAssertTrue(LookSkin.protectMaskSelection.parts.contains(part), part.rawValue)
+        }
     }
 
     func testProtectSkinTonesKeepsSkinInsideItsLimits() throws {

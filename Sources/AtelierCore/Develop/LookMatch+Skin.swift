@@ -7,10 +7,13 @@ extension LookMatcher {
     /// photo's skin midtones to the reference's; "Match Look: Skin Shadows" and "Match Look: Skin
     /// Highlights" add a Luminance Range to the same faces and take the darkest and brightest
     /// thirds of the skin to the reference's skin shadows and highlights. Color is scored in the
-    /// Oklab color plane; lightness is left to the ordinary Tone fit. False when no tone came closer.
+    /// Oklab color plane; lightness is left to the ordinary Tone fit, except that Protect Skin
+    /// Tones (`holdsLightness`) also brings each tone's brightness back with the mask's Exposure.
+    /// False when no tone came closer.
     static func fitSkin(_ skin: LookSkin, to reference: LookSkin, in settings: inout DevelopSettings,
                         space: MaskSpace, measure: (DevelopSettings) -> LookSample?,
-                        limit: Double = maxSkinShift, isCancelled: () -> Bool) -> Bool {
+                        limit: Double = maxSkinShift, holdsLightness: Bool = false,
+                        isCancelled: () -> Bool) -> Bool {
         // Vision's face box is tight: brows to chin, cheek to cheek, no forehead. The ellipse is
         // larger than the box and moved up over the forehead, with a short feather, so the
         // whole face gets the full effect (inside 70% of the radius) and it fades out past the
@@ -24,12 +27,16 @@ extension LookMatcher {
                                         height: face.height * space.rect.height * 0.75, feather: 30)
             return DevelopSettings.MaskComponent(.radial(gradient))
         }
-        let faces = skin.usesPeople ? [DevelopSettings.MaskComponent(.people(LookSkin.matchSelection))] : radials
+        // The whole face (lips too), not Face Skin alone, so the lips don't keep a look the skin
+        // around them was spared.
+        let selection = holdsLightness ? LookSkin.protectMaskSelection : LookSkin.matchMaskSelection
+        let faces = skin.usesPeople ? [DevelopSettings.MaskComponent(.people(selection))] : radials
         guard reference.toneColors.count == 3, let start = measure(settings) else {
             // Without tones: one mask, the skin's mean color to the reference's.
             return fitMaskColor(LookMatch.skinMaskName, components: faces,
                                 target: colorVector(hue: reference.hue, chroma: reference.chroma),
-                                in: &settings, measure: measure, limit: limit, isCancelled: isCancelled) { sample in
+                                in: &settings, measure: measure, limit: limit, lightness: nil,
+                                isCancelled: isCancelled, pixels: skin.pixels) { sample in
                 LookSkin.hueAndChroma(sample, skin.pixels).map { colorVector(hue: $0.hue, chroma: $0.chroma) }
             }
         }
@@ -53,8 +60,10 @@ extension LookMatcher {
         var matched = false
         for tone in [1, 0, 2] where !isCancelled() {
             let pixels = split.groups[tone]
+            let lightness = holdsLightness && reference.toneLightness.count == 3 ? reference.toneLightness[tone] : nil
             if fitMaskColor(masks[tone].0, components: masks[tone].1, target: reference.toneColors[tone],
-                            in: &settings, measure: measure, limit: limit, isCancelled: isCancelled,
+                            in: &settings, measure: measure, limit: limit, lightness: lightness,
+                            isCancelled: isCancelled, pixels: pixels,
                             color: { LookSkin.meanAB($0, pixels) }) {
                 matched = true
             }
@@ -70,7 +79,8 @@ extension LookMatcher {
     private static func fitMaskColor(_ name: String, components: [DevelopSettings.MaskComponent],
                                      target: SIMD2<Double>, in settings: inout DevelopSettings,
                                      measure: (DevelopSettings) -> LookSample?, limit: Double,
-                                     isCancelled: () -> Bool,
+                                     lightness lightnessTarget: Double?, isCancelled: () -> Bool,
+                                     pixels: [Int],
                                      color colorOf: (LookSample) -> SIMD2<Double>?) -> Bool {
         func color(_ candidate: DevelopSettings) -> SIMD2<Double>? {
             guard !isCancelled(), let sample = measure(candidate) else { return nil }
@@ -79,7 +89,12 @@ extension LookMatcher {
         guard var measured = color(settings) else { return false }
         let tolerance = 0.002
         var error = target - measured
-        if (error * error).sum() < tolerance * tolerance { return true }
+        let colorClose = (error * error).sum() < tolerance * tolerance
+        var lightnessClose = true
+        if let lightnessTarget, let sample = measure(settings), let now = LookSkin.meanLightness(sample, pixels) {
+            lightnessClose = abs(now - lightnessTarget) < 0.005
+        }
+        if colorClose && lightnessClose { return true }
 
         let existing = settings.masks.firstIndex { $0.name == name }
         let index = existing ?? settings.masks.count
@@ -143,6 +158,25 @@ extension LookMatcher {
                 tryStep([(.saturation, (error * saturation).sum() / response)])
             }
             if (error * error).sum() < tolerance * tolerance || isCancelled() { break }
+        }
+
+        // Protect Skin Tones: the tone's brightness back with the mask's Exposure. Oklab
+        // lightness is about the cube root of luminance, so a ratio r is about 3 log2(r) stops.
+        if let lightnessTarget, !isCancelled() {
+            func lightness(_ candidate: DevelopSettings) -> Double? {
+                measure(candidate).flatMap { LookSkin.meanLightness($0, pixels) }
+            }
+            if var now = lightness(best), now > 0.02, lightnessTarget > 0.02 {
+                for _ in 0..<2 where abs(now - lightnessTarget) >= 0.005 && !isCancelled() {
+                    var trial = best
+                    let exposure = trial.masks[index][.exposure] + 3 * log2(lightnessTarget / now)
+                    trial.masks[index][.exposure] = (min(1.5, max(-1.5, exposure)) * 100).rounded() / 100
+                    guard trial != best, let next = lightness(trial), abs(next - lightnessTarget) < abs(now - lightnessTarget) else { break }
+                    best = trial
+                    now = next
+                    improved = true
+                }
+            }
         }
 
         if improved { settings = best }
