@@ -677,7 +677,7 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 ## AT-046 — New app icon (aperture and film strip)
 
-**Status:** In progress; PR open (link below once GitHub assigns it). Not yet built or seen on a Mac. **Owner/chat/branch:** Claude (project thread "Replace Atelier app icon"), branch `claude/project-thread-dda2z7`. **Requested:** Rosh, November 11, 2026, with the icon art attached. **Dependencies:** none.
+**Status:** In progress; PR [#106](https://github.com/roshan-davis/atelier/pull/106) open. Not yet built or seen on a Mac. **Owner/chat/branch:** Claude (project thread "Replace Atelier app icon"), branch `claude/project-thread-dda2z7`. **Requested:** Rosh, November 11, 2026, with the icon art attached. **Dependencies:** none.
 
 **Scope:** replace the app icon everywhere it comes from: the Dock icon set at launch from `Sources/AtelierApp/Resources/AppIcon.icns` (Xcode runs), the same `.icns` copied into Atelier.app and the HDR helper by `Scripts/build_macos_app.py` (`CFBundleIconFile`), the `AppIcon.appiconset` in `Assets.xcassets`, and the icon shown in the Remove Photos and Delete Import sheets (`NSApp.applicationIconImage`). `Scripts/icon/make_app_icon.py` rebuilds all of them from `Scripts/icon/AppIcon-source.png`; the art keeps its own rounded square (no extra mask) and is placed on Apple's 824-on-1024 px grid so it matches other Dock icons.
 
