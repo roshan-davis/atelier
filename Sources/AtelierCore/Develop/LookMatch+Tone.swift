@@ -81,15 +81,13 @@ extension LookMatcher {
     /// the reference's. Black stays black and white stays white unless the reference itself is
     /// faded: its darkest 1% lifted above 6% while a quarter of it is still darker than 45% (so
     /// there are dark tones to judge by). White comes down at most to 92%, and only when the
-    /// reference's brightest 1% stays under 90% in a bright image. A drawn study
-    /// (`keepsBlackAndWhite`) is never taken as faded. Nil when either sample is empty.
+    /// reference's brightest 1% stays under 90% in a bright image. Nil when either sample is empty.
     static func toneCurve(photo: LookSample, reference: LookSample) -> [Float]? {
         let p = photo.lumaPercentiles(curvePercentiles), r = reference.lumaPercentiles(curvePercentiles)
         guard p.count == curvePercentiles.count, r.count == p.count else { return nil }
         let last = p.count - 1
-        let drawn = reference.keepsBlackAndWhite
-        let fadedBlack = !drawn && r[0] > 0.06 && r[2] < 0.45
-        let fadedWhite = !drawn && r[last] < 0.9 && r[last - 2] > 0.55
+        let fadedBlack = r[0] > 0.06 && r[2] < 0.45
+        let fadedWhite = r[last] < 0.9 && r[last - 2] > 0.55
         let black = fadedBlack ? min(0.15, max(0, r[0] - p[0])) : 0
         let white = fadedWhite ? max(0.92, 1 - max(0, p[last] - r[last])) : 1
         var knots: [(Double, Double)] = [(0, black)]

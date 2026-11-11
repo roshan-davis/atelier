@@ -41,6 +41,9 @@ final class BuiltInLookReferenceTests: XCTestCase {
             print("BUILT-IN \(reference.name) / \(fixture): palette distance \(start) → \(end)\(drift)")
             XCTAssertLessThan(end, start, reference.name)
             XCTAssertNil(match.subjectMask)
+            // A study gives color only: brightness and the Tone Curve stay the photo's.
+            XCTAssertEqual(match.matched.exposure, 0, reference.name)
+            XCTAssertEqual(match.matched.points(for: .rgb), DevelopSettings.neutral.points(for: .rgb), reference.name)
             XCTAssertEqual(match.settings(strength: 0), .neutral)
             if let skin { XCTAssertTrue(skin.isWithin(result), reference.name) }
 
@@ -58,12 +61,9 @@ final class BuiltInLookReferenceTests: XCTestCase {
         }
     }
 
-    /// Each study is read from its SVG (Rosh's drawing) with a wide tonal range. Its flat tones
-    /// give color only: a study's blacks are not black, but matching one never fades the photo's
-    /// black or white point.
-    func testStudiesLoadFromTheirDrawingsAndKeepBlackAndWhite() throws {
-        let ramp = (0..<256).flatMap { v -> [UInt8] in [UInt8(v), UInt8(v), UInt8(v), 255] }
-        let photo = LookSample(pixels: ramp, width: 16, height: 16)
+    /// Each study is read from its SVG (Rosh's drawing) with a wide tonal range, and is marked as
+    /// a color study.
+    func testStudiesLoadFromTheirDrawings() throws {
         for study in BuiltInLookReference.allCases {
             let drawing = try XCTUnwrap(study.drawing, study.name)
             XCTAssertEqual(drawing.viewBox, CGRect(x: 0, y: 0, width: 280, height: 180), study.name)
@@ -75,9 +75,7 @@ final class BuiltInLookReferenceTests: XCTestCase {
             let range = sample.lumaPercentiles([0.01, 0.99])
             XCTAssertGreaterThan(range[1] - range[0], 0.45, study.name)
             let target = try XCTUnwrap(LookTarget(image: image, areas: .wholePhoto, colorStudy: true))
-            let curve = try XCTUnwrap(LookMatcher.toneCurve(photo: photo, reference: target.whole))
-            XCTAssertEqual(curve.first, 0, study.name)
-            XCTAssertEqual(curve.last, 1, study.name)
+            XCTAssertTrue(target.whole.isColorStudy, study.name)
         }
     }
 

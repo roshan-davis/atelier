@@ -174,8 +174,12 @@ struct MatchLookSheet: View {
                 Text("Match:")
                 Toggle("White Balance", isOn: $match.options.whiteBalance)
                     .help("Temp and Tint")
-                Toggle("Tone", isOn: $match.options.tone)
-                    .help("Exposure and the Tone Curve")
+                // A built-in study gives color only, so Tone shows off for it (the choice is kept
+                // for files and catalog photos).
+                Toggle("Tone", isOn: match.builtInReference == nil ? $match.options.tone : .constant(false))
+                    .disabled(match.builtInReference != nil)
+                    .help(match.builtInReference == nil ? "Exposure and the Tone Curve"
+                          : "Built-in references give color only: they never change Exposure or the Tone Curve")
                 Toggle("Color", isOn: $match.options.color)
                     .help("Saturation, HSL and Color Grading (shadows and highlights)")
                 Divider().frame(height: 16)
