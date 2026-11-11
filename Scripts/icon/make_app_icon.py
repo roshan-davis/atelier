@@ -10,7 +10,8 @@ Apple's macOS icon grid (an 824 px wide body on a 1024 px canvas) so it sits the
 other Dock and Finder icons. Near-invisible stray pixels (alpha 3 or less) around the shape are
 cleared, and the body's 253 alpha is made fully opaque.
 
-Run from the repository root: python3 Scripts/icon/make_app_icon.py  (needs Pillow and numpy)
+Run from the repository root: python3 Scripts/icon/make_app_icon.py  (needs Pillow and numpy).
+For flat art without transparency (a JPEG), run Scripts/icon/cut_out_flat_icon.py first.
 """
 import json
 from pathlib import Path
