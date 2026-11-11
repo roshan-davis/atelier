@@ -107,6 +107,28 @@ final class PeopleSkinTests: XCTestCase {
         XCTAssertEqual(found.values(.init(parts: [])).max() ?? 0, 0)
     }
 
+    /// Entire Face is the whole face in one piece: skin, eyes, brows, lips and the dark mouth
+    /// opening (shaded teeth that are neither Teeth nor Lips), without holes, and nothing outside.
+    func testEntireFaceHasNoHoles() throws {
+        let drawn = portrait()
+        func box(_ x0: CGFloat, _ y0: CGFloat, _ x1: CGFloat, _ y1: CGFloat) -> [CGPoint] {
+            [CGPoint(x: x0, y: y0), CGPoint(x: x1, y: y0), CGPoint(x: x1, y: y1), CGPoint(x: x0, y: y1)]
+        }
+        var face = drawn.face
+        face.eyes = [FaceShape.Eye(outline: box(69, 38, 76, 42), pupil: CGPoint(x: 72.5, y: 40)),
+                     FaceShape.Eye(outline: box(84, 38, 91, 42), pupil: CGPoint(x: 87.5, y: 40))]
+        face.outerLips = box(74, 57, 87, 63)
+        face.innerLips = box(76, 59, 85, 61)
+        let found = try XCTUnwrap(PeopleSkin.build(pixels: drawn.pixels, width: width, height: height,
+                                                   faces: [face], mattes: [drawn.matte]))
+        let whole = found.values(.init(parts: [.entireFace]))
+        XCTAssertGreaterThan(mean(whole, 64..<70, 46..<54), 0.8, "cheek")
+        XCTAssertGreaterThan(mean(whole, 70..<75, 39..<41), 0.8, "eye")
+        XCTAssertGreaterThan(mean(whole, 77..<84, 59..<61), 0.8, "mouth opening")
+        XCTAssertLessThan(mean(whole, 112..<123, 100..<130), 0.05, "arm")
+        XCTAssertLessThan(mean(whole, 5..<40, 5..<40), 0.01, "background")
+    }
+
     func testBodySkinFollowsThePersonOnly() throws {
         let drawn = portrait()
         // The wrist seed stands in for Vision's body pose.

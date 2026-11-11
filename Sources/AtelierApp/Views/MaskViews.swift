@@ -820,13 +820,19 @@ struct MasksPanel: View {
             }
             .help("People are numbered left to right by face")
             // Lightroom's layout: Entire Person, then two columns of parts, ticked in any combination.
-            Toggle(DevelopSettings.PeopleSelection.Part.entirePerson.title, isOn: Binding(
-                get: { selection.includes(.entirePerson) },
-                set: { update(component, .people(selection.setting(.entirePerson, $0))) }))
-                .help(DevelopSettings.PeopleSelection.Part.entirePerson.help)
+            // Entire Face (Atelier's own) sits beside it: the whole face in one piece.
+            HStack(spacing: 16) {
+                ForEach([DevelopSettings.PeopleSelection.Part.entirePerson, .entireFace], id: \.self) { part in
+                    Toggle(part.title, isOn: Binding(
+                        get: { selection.includes(part) },
+                        set: { update(component, .people(selection.setting(part, $0))) }))
+                        .help(part.help)
+                }
+            }
             LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)],
                       alignment: .leading, spacing: 4) {
-                ForEach(DevelopSettings.PeopleSelection.Part.allCases.filter { $0 != .entirePerson }, id: \.self) { part in
+                ForEach(DevelopSettings.PeopleSelection.Part.allCases.filter { $0 != .entirePerson && $0 != .entireFace },
+                        id: \.self) { part in
                     Toggle(part.title, isOn: Binding(get: { selection.includes(part) }, set: { on in
                         update(component, .people(selection.setting(part, on)))
                     }))

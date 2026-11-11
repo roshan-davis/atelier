@@ -184,13 +184,11 @@ public struct LookSkin: Sendable {
     /// in Masking.
     public static let matchSelection = DevelopSettings.PeopleSelection(parts: [.faceSkin], feather: 0)
 
-    /// What the skin masks cover. Face Skin alone leaves holes at the lips (and eyes, brows and
-    /// teeth), so the look stayed on the lips while the skin around them was held or matched:
-    /// Rosh saw a hard, odd-colored lip area. Match Skin Tone also moves the lips with the skin;
-    /// Protect Skin Tones holds every part of the face.
-    static let matchMaskSelection = DevelopSettings.PeopleSelection(parts: [.faceSkin, .lips], feather: 0)
-    static let protectMaskSelection = DevelopSettings.PeopleSelection(
-        parts: [.faceSkin, .lips, .teeth, .eyebrows, .eyeSclera, .iris], feather: 0)
+    /// What the skin masks cover: the Entire Face in one piece, softly edged. Built from Face
+    /// Skin and the feature parts, the masks took some shaded teeth and brow edges and left
+    /// other pockets out, so the face showed disjointed colors (Rosh, Nov 11, 2026). Now one base
+    /// color covers the whole face and the shadow and highlight masks blend in on top of it.
+    static let maskSelection = DevelopSettings.PeopleSelection(parts: [.entireFace], feather: 20)
 
     /// Select People's face skin on an image, at `width` × `height`, with the faces it found; nil
     /// when it finds no one.

@@ -150,7 +150,7 @@
     <div class="pb">
       <div class="gh">Select People</div>
       <div class="row" data-pin="1"><span class="name" style="width:auto">Person</span><span class="popup" style="flex:none;width:130px">All People</span></div>
-      <div class="check" data-pin="2"><i></i>Entire Person</div>
+      <div style="display:flex;gap:16px"><div class="check" data-pin="2"><i></i>Entire Person</div><div class="check"><i></i>Entire Face</div></div>
       <div style="display:grid;grid-template-columns:1fr 1fr">
         <div class="check"><i class="on"></i>Face Skin</div><div class="check"><i class="on"></i>Body Skin</div>
         <div class="check"><i></i>Eyebrows</div><div class="check"><i></i>Eye Sclera</div>
@@ -168,7 +168,7 @@
 </figure>
 <ol class="legend">
   <li><b>Person</b>: everyone, or one person. People are numbered left to right by face.</li>
-  <li>Tick any parts, in any combination. <b>Face Skin</b> is the face without the eyes, brows and lips; tick <b>Lips</b> too to include the mouth (they meet with no gap). <b>Eyebrows</b>, <b>Eye Sclera</b> (the whites of the eyes), <b>Iris and Pupil</b>, <b>Lips</b> and <b>Teeth</b> (only when the mouth is open) come from Vision's outline of the face, so a whitening or iris boost touches only that feature. <b>Body Skin</b> is the neck, arms and hands of the same person; <b>Hair</b> and <b>Clothes</b> (hats and scarves too) are their own parts, and <b>Entire Person</b> is the whole person. New parts start with Face Skin and Body Skin.</li>
+  <li>Tick any parts, in any combination. <b>Face Skin</b> is the face without the eyes, brows and lips; tick <b>Lips</b> too to include the mouth (they meet with no gap). <b>Eyebrows</b>, <b>Eye Sclera</b> (the whites of the eyes), <b>Iris and Pupil</b>, <b>Lips</b> and <b>Teeth</b> (only when the mouth is open) come from Vision's outline of the face, so a whitening or iris boost touches only that feature. <b>Body Skin</b> is the neck, arms and hands of the same person; <b>Hair</b> and <b>Clothes</b> (hats and scarves too) are their own parts, <b>Entire Person</b> is the whole person, and <b>Entire Face</b> is the whole face in one piece (skin, brows, eyes, lips, teeth and the mouth, with no holes), for a change that should cover the face evenly. New parts start with Face Skin and Body Skin.</li>
   <li>The <a href="#edges">edge controls</a>: Grow, Refine Edge and Feather (default 10).</li>
 </ol>
 <p>A missed or extra patch is easiest to fix by subtracting or adding a Brush to the mask.</p>
