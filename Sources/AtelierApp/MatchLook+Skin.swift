@@ -11,7 +11,7 @@ extension MatchLookModel {
         let session = previewSession
         let settings = base
         let reference = referenceCG
-        let authored = builtInReference?.skinToneRegions
+        let study = builtInReference
         let needsPhoto = photoSkinOverlay == nil
         let needsReference = referenceSkinOverlay == nil && reference != nil
         guard needsPhoto || needsReference else { return }
@@ -19,8 +19,9 @@ extension MatchLookModel {
             let photo = needsPhoto ? session?.peopleMask(settings, selection: LookSkin.matchSelection).flatMap { Self.tinted($0) } : nil
             var referenceOverlay: CGImage?
             if needsReference, let reference {
-                if let authored {
-                    referenceOverlay = Self.tinted(boxes: authored, width: reference.width, height: reference.height)
+                if let study {
+                    // A study's skin is drawn, so Show Skin tints exactly the shapes marked skin.
+                    referenceOverlay = study.skinMask(width: reference.width).flatMap { Self.tinted($0) }
                 } else if let found = PeopleSkin.find(in: reference),
                           let mask = found.mask(LookSkin.matchSelection) {
                     referenceOverlay = Self.tinted(mask)
@@ -52,19 +53,6 @@ extension MatchLookModel {
         context.clip(to: rect, mask: mask)
         context.setFillColor(CGColor(srgbRed: 0.95, green: 0.15, blue: 0.1, alpha: 0.55))
         context.fill(rect)
-        return context.makeImage()
-    }
-
-    /// The built-in references' drawn skin swatches (0 to 1 from the top left), tinted.
-    nonisolated static func tinted(boxes: [CGRect], width: Int, height: Int) -> CGImage? {
-        guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
-                                      space: CGColorSpace(name: CGColorSpace.sRGB)!,
-                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
-        context.setFillColor(CGColor(srgbRed: 0.95, green: 0.15, blue: 0.1, alpha: 0.55))
-        for box in boxes {
-            context.fill(CGRect(x: box.minX * CGFloat(width), y: (1 - box.maxY) * CGFloat(height),
-                                width: box.width * CGFloat(width), height: box.height * CGFloat(height)))
-        }
         return context.makeImage()
     }
 }

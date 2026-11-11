@@ -1,0 +1,23 @@
+<!-- Built-in Match Look reference "furyRoadScene": a flat vector color study (drawn for Atelier by Rosh, Nov 10, 2026). data-part marks the person (skin, hair, clothes, features) for Subject & Background and Show Skin. -->
+<svg viewBox="0 0 280 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect width="280" height="180" fill="#6B959E"/>
+    <circle cx="68" cy="35" r="9" fill="#F5F4DE"/>
+    <circle cx="68" cy="35" r="19" fill="#E2F2EE" opacity="0.3"/>
+    <!-- Toxic Storm Clouds -->
+    <path d="M100 40C120 34 150 34 175 42C195 48 235 45 258 52C278 58 280 63 280 68V95H82C82 76 86 45 100 40Z" fill="#3D504E" opacity="0.8"/>
+    <!-- Dunes -->
+    <path d="M0 98C60 82 122 92 175 84C220 77 252 84 280 80V180H0V98Z" fill="#E28C4B"/>
+    <path d="M0 112C78 96 142 118 205 98C250 84 270 98 280 94V180H0V112Z" fill="#C46328"/>
+    <path d="M0 144C55 130 125 148 188 122C236 102 268 126 280 120V180H0V144Z" fill="#8B3B12"/>
+    <!-- Interceptor Vehicle Silhouette -->
+    <g transform="translate(-10, -5)">
+      <ellipse cx="190" cy="138" rx="45" ry="4" fill="#3D1203"/>
+      <circle cx="162" cy="133" r="7" fill="#151210"/>
+      <circle cx="162" cy="133" r="4" fill="#2E2824"/>
+      <circle cx="218" cy="131" r="6" fill="#151210"/>
+      <circle cx="218" cy="131" r="3.5" fill="#2E2824"/>
+      <path d="M148 131L156 122H192L215 125L238 128L242 132L228 134H154L148 131Z" fill="#1D1E22"/>
+      <path d="M172 122L184 112H204L215 122H172Z" fill="#2A2A2E"/>
+      <path d="M202 114L212 122H196L190 114H202Z" fill="#4B6E6F"/>
+    </g>
+  </svg>

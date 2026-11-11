@@ -191,6 +191,9 @@ public struct LookSample: Sendable {
     /// The sample's size in pixels, rows from the top.
     public private(set) var width = 0
     public private(set) var height = 0
+    /// A drawn color study (a built-in reference): its flat tones show color, not how deep its
+    /// blacks or bright its whites are, so the tone curve never fades the photo's ends from it.
+    var keepsBlackAndWhite = false
 
     public init?(image: CGImage, area: CGRect? = nil) {
         guard let data = Self.pixels(of: image) else { return nil }

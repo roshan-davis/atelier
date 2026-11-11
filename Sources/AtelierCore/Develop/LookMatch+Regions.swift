@@ -269,11 +269,13 @@ public struct LookTarget: Sendable {
     let skin: LookSkin?
 
     /// `authoredSkinTones` are a built-in study's drawn skin samples (shadows, midtones,
-    /// highlights); `authoredSkinRegions` drawn samples of a single tone.
+    /// highlights); `authoredSkinRegions` drawn samples of a single tone. `colorStudy` marks a
+    /// built-in study, whose flat tones give color but never fade the photo's blacks or whites.
     public init?(image: CGImage, features: LookReferenceFeatures? = nil, areas: LookAreas,
                  skinMode: LookSkinMode = .off, authoredSkinRegions: [CGRect]? = nil,
-                 authoredSkinTones: [CGRect]? = nil) {
+                 authoredSkinTones: [CGRect]? = nil, colorStudy: Bool = false) {
         guard var plain = LookSample(image: image) else { return nil }
+        plain.keepsBlackAndWhite = colorStudy
         self.areas = areas
         var notices: Set<LookMatchNotice> = []
         let features = features ?? (areas == .subject ? LookReferenceFeatures(image: image) : nil)
@@ -299,6 +301,7 @@ public struct LookTarget: Sendable {
             break
         case .boxes(let reference, _):
             plain = LookSample(image: image, area: reference) ?? plain
+            plain.keepsBlackAndWhite = colorStudy
         case .subject:
             if let mask = features?.subject, mask.count == plain.count {
                 var back = plain, front = plain

@@ -1,0 +1,39 @@
+<!-- Built-in Match Look reference "furyRoadPortrait": a flat vector color study (drawn for Atelier by Rosh, Nov 10, 2026). data-part marks the person (skin, hair, clothes, features) for Subject & Background and Show Skin. -->
+<svg viewBox="0 0 280 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <!-- 1. Ambient Background: Bleached Teal Sky, Sun & Sand Dunes -->
+    <rect width="280" height="180" fill="#6B959E"/>
+    <circle cx="92" cy="40" r="12" fill="#F5F4DE"/>
+    <circle cx="92" cy="40" r="22" fill="#E2F2EE" opacity="0.25"/>
+    <path d="M0 110C40 92 95 82 150 92C210 100 250 86 280 96V180H0V110Z" fill="#D07D48"/>
+    <path d="M0 128C65 114 145 128 215 118C255 114 272 122 280 125V180H0V128Z" fill="#B25A27"/>
+
+    <!-- 2. Clothing / Leather Armor & Dust Rags -->
+    <path data-part="clothes" d="M50 180C65 145 95 138 115 135L125 150L155 150L165 135C185 138 215 145 230 180H50Z" fill="#3E2A20"/>
+    <path data-part="clothes" d="M115 135L128 162L138 150L125 140Z" fill="#545B5C"/>
+    <path data-part="clothes" d="M165 135L152 162L142 150L155 140Z" fill="#3F4749"/>
+    <path data-part="clothes" d="M125 148C132 142 148 142 155 148L147 168C140 171 135 171 133 168L125 148Z" fill="#6B4B38"/>
+
+    <!-- 3. Standard Neck (Warm Copper Midtone & Shadow) -->
+    <path data-part="skin" d="M125 116H155V148H125V116Z" fill="#CF9967"/>
+    <path data-part="skin" d="M139 116H155V148H137L139 116Z" fill="#8F5E37"/>
+
+    <!-- 4. Hair Base (Buzzcut/Leather Warband) -->
+    <path data-part="hair" d="M112 68C112 42 168 42 168 68C168 90 166 106 166 106L114 106Z" fill="#251D18"/>
+
+    <!-- 5. Unified 3-Tone Face Planes -->
+    <!-- Base Midtone -->
+    <path data-part="skin" d="M122 62C122 60 158 60 158 62C162 75 163 98 156 118C150 130 130 130 124 118C117 98 118 75 122 62Z" fill="#CF9967"/>
+    <!-- Highlight Plane (Left) -->
+    <path data-part="skin" d="M123 63C127 61 143 61 143 63C144 78 143 98 139 118C135 125 128 124 125 116C119 98 120 76 123 63Z" fill="#F0C496"/>
+    <!-- Shadow Plane (Right) -->
+    <path data-part="skin" d="M145 63C151 63 157 63 157 65C161 78 161 98 155 117C150 127 141 126 138 119C142 98 144 78 145 63Z" fill="#8F5E37"/>
+
+    <!-- 6. Features / Charcoal War Grease -->
+    <path data-part="features" d="M118 60C140 56 162 56 162 60C140 65 118 65 118 60Z" fill="#251D18"/>
+    <path data-part="features" d="M125 79C131 77 137 77 140 82C138 85 129 86 125 83Z" fill="#221A17"/>
+    <path data-part="features" d="M144 82C147 77 153 77 159 79V83C153 86 146 85 144 82Z" fill="#221A17"/>
+    <circle data-part="features" cx="134" cy="82" r="1" fill="#FFFFFF"/>
+    <circle data-part="features" cx="150" cy="82" r="1" fill="#FFFFFF"/>
+    <path data-part="features" d="M138 82L137 96L141 96Z" fill="#8F5E37"/>
+    <path data-part="features" d="M136 104C140 106 144 106 144 104" stroke="#8F5E37" stroke-width="1.5" stroke-linecap="round"/>
+  </svg>

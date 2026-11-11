@@ -1,0 +1,33 @@
+<!-- Built-in Match Look reference "darkKnightCity": a flat vector color study (drawn for Atelier by Rosh, Nov 10, 2026). data-part marks the person (skin, hair, clothes, features) for Subject & Background and Show Skin. -->
+<svg viewBox="0 0 280 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect width="280" height="180" fill="#121924"/>
+    <circle cx="140" cy="85" r="48" fill="#1D2838" opacity="0.6"/>
+    <!-- Skyscraper Blocks Left -->
+    <polygon points="0,12 75,45 75,158 0,180" fill="#2A3A4D"/>
+    <polygon points="75,45 92,54 92,142 75,158" fill="#3D526C"/>
+    <polygon points="85,42 125,78 125,110 85,132" fill="#1A2432"/>
+    <!-- Skyscraper Blocks Right -->
+    <polygon points="280,12 205,45 205,158 280,180" fill="#243242"/>
+    <polygon points="205,45 188,54 188,142 205,158" fill="#324458"/>
+    <polygon points="195,42 155,78 155,110 195,132" fill="#18202A"/>
+    <!-- Warm Amber Windows -->
+    <polygon points="18,45 62,65 62,72 18,52" fill="#E8A748"/>
+    <polygon points="18,61 62,81 62,88 18,68" fill="#D48B2A"/>
+    <polygon points="18,99 62,119 62,126 18,106" fill="#F7CA75"/>
+    <polygon points="18,115 62,135 62,142 18,122" fill="#E8A748"/>
+    <polygon points="262,45 218,65 218,72 262,52" fill="#E8A748"/>
+    <polygon points="262,61 218,81 218,88 262,68" fill="#D48B2A"/>
+    <polygon points="262,99 218,119 218,126 262,106" fill="#F7CA75"/>
+    <polygon points="262,115 218,135 218,142 262,122" fill="#E8A748"/>
+    <!-- Perspective Asphalt Street -->
+    <polygon points="0,180 128,90 152,90 280,180" fill="#0E141C"/>
+    <!-- Amber & Cool Wet Reflection -->
+    <polygon points="137,90 110,180 170,180 143,90" fill="#1E2836"/>
+    <polygon points="139,90 128,180 152,180 141,90" fill="#473A2B"/>
+    <line x1="140" y1="92" x2="140" y2="180" stroke="#FFD599" stroke-width="1.2" opacity="0.45"/>
+    <!-- Silhouette Car -->
+    <circle cx="140" cy="88" r="3" fill="#FFE6B8"/>
+    <path d="M166 122C164 122 154 124 151 127L145 130V136H180V130L174 127C171 124 168 122 166 122Z" fill="#06090D"/>
+    <circle cx="150" cy="134" r="1.8" fill="#E8A748"/>
+    <circle cx="176" cy="134" r="1.8" fill="#E8A748"/>
+  </svg>

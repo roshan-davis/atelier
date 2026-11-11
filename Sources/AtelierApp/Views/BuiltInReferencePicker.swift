@@ -41,7 +41,8 @@ struct BuiltInReferencePicker: View {
         return Button { pick(reference) } label: {
             VStack(alignment: .leading, spacing: 4) {
                 Color.primary.opacity(0.06)
-                    .frame(width: Self.imageWidth, height: Self.imageWidth / 1.5)
+                    // The studies are drawn 280 × 180.
+                    .frame(width: Self.imageWidth, height: Self.imageWidth * 180 / 280)
                     .overlay {
                         if let image = Self.thumbnails[reference] {
                             Image(decorative: image, scale: 1)

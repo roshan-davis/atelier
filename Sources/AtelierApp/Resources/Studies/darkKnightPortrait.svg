@@ -1,0 +1,43 @@
+<!-- Built-in Match Look reference "darkKnightPortrait": a flat vector color study (drawn for Atelier by Rosh, Nov 10, 2026). data-part marks the person (skin, hair, clothes, features) for Subject & Background and Show Skin. -->
+<svg viewBox="0 0 280 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <!-- 1. Ambient Background: Tumbler Interior & Gotham Blue Steel Night -->
+    <rect width="280" height="180" fill="#243140"/>
+    <path d="M0 0L65 40V180H0V0Z" fill="#141A22"/>
+    <path d="M280 0L215 40V180H280V0Z" fill="#141A22"/>
+    <path d="M65 40L100 70V180H65V40Z" fill="#2A384A"/>
+    <path d="M215 40L180 70V180H215V40Z" fill="#253242"/>
+    <rect x="100" y="58" width="80" height="80" fill="#2D3B4D"/>
+    <!-- Amber Dashboard / Console Indicator Lights -->
+    <circle cx="82" cy="78" r="4.5" fill="#E5A952"/>
+    <circle cx="82" cy="78" r="2.2" fill="#FFE2BA"/>
+    <circle cx="198" cy="78" r="4.5" fill="#E5A952"/>
+    <circle cx="198" cy="78" r="2.2" fill="#FFE2BA"/>
+
+    <!-- 2. Clothing / Tactical Suit Armor -->
+    <path data-part="clothes" d="M50 180C65 145 95 138 115 135L125 150L155 150L165 135C185 138 215 145 230 180H50Z" fill="#1E232B"/>
+    <path data-part="clothes" d="M115 135L128 162L138 150L125 140Z" fill="#2C3542"/>
+    <path data-part="clothes" d="M165 135L152 162L142 150L155 140Z" fill="#242B36"/>
+    <path data-part="clothes" d="M125 148C132 142 148 142 155 148L147 168C140 171 135 171 133 168L125 148Z" fill="#3B4656"/>
+
+    <!-- 3. Standard Neck (Warm Amber Midtone & Deep Shadow) -->
+    <path data-part="skin" d="M125 116H155V148H125V116Z" fill="#C59C72"/>
+    <path data-part="skin" d="M139 116H155V148H137L139 116Z" fill="#6C5139"/>
+
+    <!-- 4. Hair Base (Dark Combed Cut) -->
+    <path data-part="hair" d="M112 68C112 42 168 42 168 68C168 90 166 106 166 106L114 106Z" fill="#1A1A1E"/>
+
+    <!-- 5. Unified 3-Tone Face Planes -->
+    <!-- Base Midtone -->
+    <path data-part="skin" d="M122 62C122 60 158 60 158 62C162 75 163 98 156 118C150 130 130 130 124 118C117 98 118 75 122 62Z" fill="#C59C72"/>
+    <!-- Highlight Plane (Left - Amber Key Light) -->
+    <path data-part="skin" d="M123 63C127 61 143 61 143 63C144 78 143 98 139 118C135 125 128 124 125 116C119 98 120 76 123 63Z" fill="#ECCBA2"/>
+    <!-- Shadow Plane (Right - Gotham Night Shadow) -->
+    <path data-part="skin" d="M145 63C151 63 157 63 157 65C161 78 161 98 155 117C150 127 141 126 138 119C142 98 144 78 145 63Z" fill="#6C5139"/>
+
+    <!-- 6. Features / Brows & Mouth -->
+    <path data-part="features" d="M118 60C140 56 162 56 162 60C140 65 118 65 118 60Z" fill="#1A1A1E"/>
+    <path data-part="features" d="M126 80C130 78 136 78 138 81" stroke="#3D2D23" stroke-width="1.5" stroke-linecap="round"/>
+    <path data-part="features" d="M142 81C144 78 150 78 154 80" stroke="#3D2D23" stroke-width="1.5" stroke-linecap="round"/>
+    <path data-part="features" d="M138 82L137 96L141 96Z" fill="#6C5139"/>
+    <path data-part="features" d="M136 104C140 106 144 106 144 104" stroke="#6C5139" stroke-width="1.5" stroke-linecap="round"/>
+  </svg>
