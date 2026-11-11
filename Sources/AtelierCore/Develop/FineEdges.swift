@@ -140,6 +140,9 @@ public enum FineEdges {
     nonisolated(unsafe) private static var usesCoreML = true
     /// Posted on the main queue whenever `failure` or `lastRun` changes.
     public static let statusChanged = Notification.Name("AtelierFineEdgesStatusChanged")
+    /// Posted on the main queue when a matte found in the background is ready, so the editor
+    /// renders again with it.
+    public static let matteReady = Notification.Name("AtelierFineEdgesMatteReady")
 
     private static func announce() {
         DispatchQueue.main.async { NotificationCenter.default.post(name: statusChanged, object: nil) }
@@ -197,6 +200,9 @@ public enum FineEdges {
         guard let pixels = rgba(image) else { return nil }
         lock.lock()
         defer { lock.unlock(); announce() }
+        lastRun = "Fine Edges is working… (the first time after a download takes longest)"
+        failure = nil
+        announce()
         let started = Date()
         do {
             let session = try loadedSession()

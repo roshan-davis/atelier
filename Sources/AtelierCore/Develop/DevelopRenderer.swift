@@ -494,6 +494,8 @@ public final class DevelopSession: @unchecked Sendable {
     /// Fine Edges' foreground mattes on the corrected photo, by the square each was found in,
     /// for one lens geometry and while the model stays downloaded (nil inside when it failed).
     private var fineMattes: [FineRegion: CIImage?] = [:]
+    /// Squares whose matte is being found in the background (interactive sessions).
+    private var finePending: Set<FineRegion> = []
     private var fineKey: DevelopSettings?
     private var fineInstalled = false
     /// Pipeline step 1's results for the settings they were made from (see `CorrectedKey`), so a
@@ -797,30 +799,55 @@ public final class DevelopSession: @unchecked Sendable {
         let installed = FineEdges.isInstalled
         if fineKey != key || fineInstalled != installed {
             fineMattes = [:]
+            finePending = []
             fineKey = key
             fineInstalled = installed
         }
         guard installed, let region = fineRegion(of: outline, extent: source.extent) else { return nil }
         let regionKey = FineRegion(region)
         if let cached = fineMattes[regionKey] { return cached }
-        var matte: CIImage?
+        // Already being found in the background: render without it for now.
+        if finePending.contains(regionKey) { return nil }
         let side = CGFloat(FineEdges.size)
         let square = source.cropped(to: region)
             .transformed(by: CGAffineTransform(translationX: -region.minX, y: -region.minY))
             .transformed(by: CGAffineTransform(scaleX: side / region.width, y: side / region.height))
-        if let cgImage = renderer.context.createCGImage(square, from: CGRect(x: 0, y: 0, width: side, height: side),
-                                                        format: .RGBA8, colorSpace: DevelopRenderer.sRGB),
-           let values = FineEdges.matte(of: cgImage),
-           let gray = PeopleSkin.grayImage(values, width: FineEdges.size, height: FineEdges.size) {
-            let image = DevelopRenderer.rawMask(gray)
-            matte = image
-                .transformed(by: CGAffineTransform(scaleX: region.width / side, y: region.height / side))
-                .transformed(by: CGAffineTransform(translationX: region.minX, y: region.minY))
-                .cropped(to: region)
+        guard let cgImage = renderer.context.createCGImage(square, from: CGRect(x: 0, y: 0, width: side, height: side),
+                                                           format: .RGBA8, colorSpace: DevelopRenderer.sRGB)
+        else { return nil }
+        guard interactive else {
+            // Export and other one-off renders wait for it.
+            let matte = Self.placedMatte(FineEdges.matte(of: cgImage), in: region)
+            fineMattes[regionKey] = matte
+            return matte
         }
-        if fineMattes.count >= 4 { fineMattes.removeAll() }
-        fineMattes[regionKey] = matte
-        return matte
+        // The model takes seconds (much longer the first time, while Core ML compiles it), so
+        // the editor doesn't wait: the mask shows without Fine Edges, and once the matte is in,
+        // `FineEdges.matteReady` asks for a new render, which picks it up from the cache.
+        finePending.insert(regionKey)
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let matte = Self.placedMatte(FineEdges.matte(of: cgImage), in: region)
+            guard let self else { return }
+            self.lock.lock()
+            if self.fineKey == key, self.finePending.remove(regionKey) != nil {
+                if self.fineMattes.count >= 4 { self.fineMattes.removeAll() }
+                self.fineMattes[regionKey] = matte
+            }
+            self.lock.unlock()
+            DispatchQueue.main.async { NotificationCenter.default.post(name: FineEdges.matteReady, object: nil) }
+        }
+        return nil
+    }
+
+    /// The model's values as a mask over `region` of the photo's frame; nil stays nil.
+    private static func placedMatte(_ values: [Float]?, in region: CGRect) -> CIImage? {
+        let side = CGFloat(FineEdges.size)
+        guard let values, let gray = PeopleSkin.grayImage(values, width: FineEdges.size, height: FineEdges.size)
+        else { return nil }
+        return DevelopRenderer.rawMask(gray)
+            .transformed(by: CGAffineTransform(scaleX: region.width / side, y: region.height / side))
+            .transformed(by: CGAffineTransform(translationX: region.minX, y: region.minY))
+            .cropped(to: region)
     }
 
     /// The square Fine Edges looks at for `outline`: its bounds (where it is above half, found on
