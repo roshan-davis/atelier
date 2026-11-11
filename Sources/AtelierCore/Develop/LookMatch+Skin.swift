@@ -116,6 +116,31 @@ extension LookMatcher {
             return min(min(100, from + limit), max(max(-100, from - limit), value))
         }
 
+        var improved = false
+        // Protect Skin Tones: first the tone's brightness back with the mask's Exposure. Oklab
+        // lightness is about the cube root of luminance, so a ratio r is about 3 log2(r) stops.
+        if let lightnessTarget, !isCancelled() {
+            func lightness(_ candidate: DevelopSettings) -> Double? {
+                measure(candidate).flatMap { LookSkin.meanLightness($0, pixels) }
+            }
+            if var now = lightness(best), now > 0.02, lightnessTarget > 0.02 {
+                for _ in 0..<2 where abs(now - lightnessTarget) >= 0.005 && !isCancelled() {
+                    var trial = best
+                    let exposure = trial.masks[index][.exposure] + 3 * log2(lightnessTarget / now)
+                    trial.masks[index][.exposure] = (min(1.5, max(-1.5, exposure)) * 100).rounded() / 100
+                    guard trial != best, let next = lightness(trial), abs(next - lightnessTarget) < abs(now - lightnessTarget) else { break }
+                    best = trial
+                    now = next
+                    improved = true
+                }
+            }
+            // Brightness moves chroma a little; the color steps below start from here.
+            if improved, let after = color(best) {
+                measured = after
+                error = target - after
+            }
+        }
+
         // Each slider's effect on the color is measured once (three renders) and reused for
         // every step: the response is close to linear over this range, and each render with
         // masks is the slow part of a match.
@@ -131,7 +156,6 @@ extension LookMatcher {
         let determinant = temp.x * tint.y - tint.x * temp.y
         let response = (saturation * saturation).sum()
 
-        var improved = false
         func tryStep(_ changes: [(DevelopSettings.LocalParameter, Double)]) {
             for fraction in [1.0, 0.5] {
                 var trial = best
@@ -158,25 +182,6 @@ extension LookMatcher {
                 tryStep([(.saturation, (error * saturation).sum() / response)])
             }
             if (error * error).sum() < tolerance * tolerance || isCancelled() { break }
-        }
-
-        // Protect Skin Tones: the tone's brightness back with the mask's Exposure. Oklab
-        // lightness is about the cube root of luminance, so a ratio r is about 3 log2(r) stops.
-        if let lightnessTarget, !isCancelled() {
-            func lightness(_ candidate: DevelopSettings) -> Double? {
-                measure(candidate).flatMap { LookSkin.meanLightness($0, pixels) }
-            }
-            if var now = lightness(best), now > 0.02, lightnessTarget > 0.02 {
-                for _ in 0..<2 where abs(now - lightnessTarget) >= 0.005 && !isCancelled() {
-                    var trial = best
-                    let exposure = trial.masks[index][.exposure] + 3 * log2(lightnessTarget / now)
-                    trial.masks[index][.exposure] = (min(1.5, max(-1.5, exposure)) * 100).rounded() / 100
-                    guard trial != best, let next = lightness(trial), abs(next - lightnessTarget) < abs(now - lightnessTarget) else { break }
-                    best = trial
-                    now = next
-                    improved = true
-                }
-            }
         }
 
         if improved { settings = best }
