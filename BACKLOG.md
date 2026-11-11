@@ -695,7 +695,7 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 ## AT-048 — Match Look: one base color over the whole face, skin tones blend seamlessly
 
-**Status:** In review; never compiled (cloud, no macOS toolchain; CI billing-blocked). Needs Rosh's Xcode build and test. **Owner:** Claude. **Chat:** [Improve Match Colors quality](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKF2JPu63ZaHgkVxXXo1FmSC). **Branch:** `claude/match-look-face-base`. **PR:** pending. **Baseline:** `b19a792`. **Dependencies:** AT-047 (merged).
+**Status:** In review; never compiled (cloud, no macOS toolchain; CI billing-blocked). Needs Rosh's Xcode build and test. **Owner:** Claude. **Chat:** [Improve Match Colors quality](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKF2JPu63ZaHgkVxXXo1FmSC). **Branch:** `claude/match-look-face-base`. **PR:** [#108](https://github.com/roshan-davis/atelier/pull/108). **Baseline:** `b19a792`. **Dependencies:** AT-047 (merged).
 
 **Evidence:** Rosh (2026-11-11), after AT-047: the skin masks take some shaded teeth and the eyebrow area for the color change ("we would need a base color and the matching colors on top instead of leaving something unattended"; "overlap has to be gradual and seamless instead of disjointed colors"). Source review: the masks were unions of separate parts (Face Skin minus grown feature holes, Lips, Teeth by a lightness/chroma test, Vision brow bands); shaded teeth fail the Teeth test and fall in the Face Skin hole, misplaced brows likewise, so patches were left out or in. The tone masks' Luminance Range smoothness 30 gave visible steps.
 
