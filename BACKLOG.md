@@ -675,7 +675,15 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 **Not in scope:** part-by-part matching (hair to hair, clothes to clothes) with fast Select People parts; it follows in its own PR.
 
-## AT-046 — Match Look: skin masks cover the lips; Protect Skin Tones holds brightness
+## AT-046 — New app icon (glowing film canister on navy)
+
+**Status:** Merged at Rosh's instruction on November 11, 2026 (PR [#106](https://github.com/roshan-davis/atelier/pull/106)); not yet built or seen on a Mac (CI blocked by the Actions account block). **Owner/chat/branch:** Claude (project thread "Replace Atelier app icon"), branch `claude/project-thread-dda2z7`. **Requested:** Rosh, November 11, 2026, with the icon art attached; replaced the same day by a second design (film canister on sage) and then a third (glowing film canister and door on navy), which is the one in the PR. The third came as a flat JPEG with a drawn checkerboard, so `Scripts/icon/cut_out_flat_icon.py` cuts the shape out (the outer glow onto the checkerboard is dropped). **Dependencies:** none.
+
+**Scope:** replace the app icon everywhere it comes from: the Dock icon set at launch from `Sources/AtelierApp/Resources/AppIcon.icns` (Xcode runs), the same `.icns` copied into Atelier.app and the HDR helper by `Scripts/build_macos_app.py` (`CFBundleIconFile`), the `AppIcon.appiconset` in `Assets.xcassets`, and the icon shown in the Remove Photos and Delete Import sheets (`NSApp.applicationIconImage`). `Scripts/icon/make_app_icon.py` rebuilds all of them from `Scripts/icon/AppIcon-source.png`; the art keeps its own rounded square (no extra mask) and is placed on Apple's 824-on-1024 px grid so it matches other Dock icons.
+
+**Acceptance:** on Rosh's Mac, Product > Run shows the new icon in the Dock and in Remove Photos; a `build_macos_app.py` build shows it in Finder. **Deferred:** none.
+
+## AT-047 — Match Look: skin masks cover the lips; Protect Skin Tones holds brightness
 
 **Status:** PR open, never compiled (cloud has no Swift toolchain); needs a Mac build, tests and Rosh's acceptance. **Owner:** Claude. **Chat:** [Improve Match Colors quality](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKF2JPu63ZaHgkVxXXo1FmSC). **Branch:** `claude/match-look-skin-lips`. **PR:** [#107](https://github.com/roshan-davis/atelier/pull/107). **Baseline:** `2747aea`. **Dependencies:** AT-045 (merged).
 
@@ -684,4 +692,3 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 **Scope:** Match Skin Tone's masks use Face Skin + Lips; Protect's use Face Skin, Lips, Teeth, Eyebrows, Eye Sclera, Iris. Skin is still measured on Face Skin. Protect fits each skin mask's Exposure to hold the tone's Oklab lightness and runs whenever skin drifts visibly (`LookSkin.holds`: 1.5° hue, 4% chroma, 0.015 lightness); the 5°/15% pull-back stays the fallback.
 
 **Acceptance:** Mac build; `LookMatchTests` (holds, mask parts) and existing Match Look tests pass; Rosh: the same portrait with Protect and with Match Skin Tone, lips and skin consistent, skin not pale.
-
