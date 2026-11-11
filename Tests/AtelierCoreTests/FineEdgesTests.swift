@@ -5,10 +5,10 @@ import XCTest
 
 final class FineEdgesTests: XCTestCase {
     func testInputIsNormalizedRGBPlanes() {
-        let size = FineEdges.size
+        let size = FineEdges.Model.fast.size
         var pixels = [UInt8](repeating: 0, count: size * size * 4)
         pixels[0] = 255; pixels[1] = 128; pixels[2] = 0
-        let input = FineEdges.inputTensor(pixels)
+        let input = FineEdges.inputTensor(pixels, size: size)
         XCTAssertEqual(input.count, size * size * 3)
         XCTAssertEqual(input[0], (1 - 0.485) / 0.229, accuracy: 1e-5)
         XCTAssertEqual(input[size * size], (128.0 / 255 - 0.456) / 0.224, accuracy: 1e-5)

@@ -492,12 +492,12 @@ public final class DevelopSession: @unchecked Sendable {
     /// Select People's faces and skin on the corrected photo, found once per lens geometry.
     private var peopleFound: (key: DevelopSettings, skin: PeopleSkin?)?
     /// Fine Edges' foreground mattes on the corrected photo, by the square each was found in,
-    /// for one lens geometry and while the model stays downloaded (nil inside when it failed).
+    /// for one lens geometry and one Fine Edges model (nil inside when it failed).
     private var fineMattes: [FineRegion: CIImage?] = [:]
     /// Squares whose matte is being found in the background (interactive sessions).
     private var finePending: Set<FineRegion> = []
     private var fineKey: DevelopSettings?
-    private var fineInstalled = false
+    private var fineModel: FineEdges.Model?
     /// Pipeline step 1's results for the settings they were made from (see `CorrectedKey`), so a
     /// slider on any later panel doesn't decode the RAW and redo the lens corrections again.
     /// Two are kept, most recent last, so the Before view and the edit don't push each other out.
@@ -790,25 +790,26 @@ public final class DevelopSession: @unchecked Sendable {
     }
 
     /// Fine Edges' foreground matte around `outline` (a Vision selection on the corrected
-    /// photo's frame): the model runs at 1024 × 1024 on a square around the outline's bounds
-    /// with 20% to spare, so a person who fills a third of the frame is seen at three times the
-    /// detail of the whole photo. The result covers only that square. Found once per lens
-    /// geometry and square. Nil when the model isn't downloaded, fails or the outline is empty.
+    /// photo's frame): the active model runs (at its 1024 or 2048 pixel square) on a square
+    /// around the outline's bounds with 20% to spare, so a person who fills a third of the frame
+    /// is seen at three times the detail of the whole photo. The result covers only that square.
+    /// Found once per lens geometry, model and square. Nil when no model is downloaded, the model
+    /// fails or the outline is empty.
     /// Call with the lock held.
     private func fineMatte(of source: CIImage, key: DevelopSettings, outline: CIImage) -> CIImage? {
-        let installed = FineEdges.isInstalled
-        if fineKey != key || fineInstalled != installed {
+        let model = FineEdges.active
+        if fineKey != key || fineModel != model {
             fineMattes = [:]
             finePending = []
             fineKey = key
-            fineInstalled = installed
+            fineModel = model
         }
-        guard installed, let region = fineRegion(of: outline, extent: source.extent) else { return nil }
+        guard let model, let region = fineRegion(of: outline, extent: source.extent) else { return nil }
         let regionKey = FineRegion(region)
         if let cached = fineMattes[regionKey] { return cached }
         // Already being found in the background: render without it for now.
         if finePending.contains(regionKey) { return nil }
-        let side = CGFloat(FineEdges.size)
+        let side = CGFloat(model.size)
         let square = source.cropped(to: region)
             .transformed(by: CGAffineTransform(translationX: -region.minX, y: -region.minY))
             .transformed(by: CGAffineTransform(scaleX: side / region.width, y: side / region.height))
@@ -817,7 +818,7 @@ public final class DevelopSession: @unchecked Sendable {
         else { return nil }
         guard interactive else {
             // Export and other one-off renders wait for it.
-            let matte = Self.placedMatte(FineEdges.matte(of: cgImage), in: region)
+            let matte = Self.placedMatte(FineEdges.matte(of: cgImage, model: model), size: model.size, in: region)
             fineMattes[regionKey] = matte
             return matte
         }
@@ -826,10 +827,10 @@ public final class DevelopSession: @unchecked Sendable {
         // `FineEdges.matteReady` asks for a new render, which picks it up from the cache.
         finePending.insert(regionKey)
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let matte = Self.placedMatte(FineEdges.matte(of: cgImage), in: region)
+            let matte = Self.placedMatte(FineEdges.matte(of: cgImage, model: model), size: model.size, in: region)
             guard let self else { return }
             self.lock.lock()
-            if self.fineKey == key, self.finePending.remove(regionKey) != nil {
+            if self.fineKey == key, self.fineModel == model, self.finePending.remove(regionKey) != nil {
                 if self.fineMattes.count >= 4 { self.fineMattes.removeAll() }
                 self.fineMattes[regionKey] = matte
             }
@@ -840,9 +841,9 @@ public final class DevelopSession: @unchecked Sendable {
     }
 
     /// The model's values as a mask over `region` of the photo's frame; nil stays nil.
-    private static func placedMatte(_ values: [Float]?, in region: CGRect) -> CIImage? {
-        let side = CGFloat(FineEdges.size)
-        guard let values, let gray = PeopleSkin.grayImage(values, width: FineEdges.size, height: FineEdges.size)
+    private static func placedMatte(_ values: [Float]?, size: Int, in region: CGRect) -> CIImage? {
+        let side = CGFloat(size)
+        guard let values, let gray = PeopleSkin.grayImage(values, width: size, height: size)
         else { return nil }
         return DevelopRenderer.rawMask(gray)
             .transformed(by: CGAffineTransform(scaleX: region.width / side, y: region.height / side))
