@@ -491,6 +491,13 @@ public final class DevelopSession: @unchecked Sendable {
     private var subjectKey: DevelopSettings?
     /// Select People's faces and skin on the corrected photo, found once per lens geometry.
     private var peopleFound: (key: DevelopSettings, skin: PeopleSkin?)?
+    /// Fine Edges' foreground mattes on the corrected photo, by the square each was found in,
+    /// for one lens geometry and one Fine Edges model (nil inside when it failed).
+    private var fineMattes: [FineRegion: CIImage?] = [:]
+    /// Squares whose matte is being found in the background (interactive sessions).
+    private var finePending: Set<FineRegion> = []
+    private var fineKey: DevelopSettings?
+    private var fineModel: FineEdges.Model?
     /// Pipeline step 1's results for the settings they were made from (see `CorrectedKey`), so a
     /// slider on any later panel doesn't decode the RAW and redo the lens corrections again.
     /// Two are kept, most recent last, so the Before view and the edit don't push each other out.
@@ -576,6 +583,7 @@ public final class DevelopSession: @unchecked Sendable {
             guard let mask = DevelopRenderer.sourceMask(component, extent: sourceExtent,
                                                         subject: { self.subject(of: source, key: key, box: $0) },
                                                         people: { self.people(of: source, key: key, selection: $0) },
+                                                        fine: { self.fineMatte(of: source, key: key, outline: $0) },
                                                         guide: source, brushCache: brushCache) else { return nil }
             guard let crop else { return mask }
             return DevelopRenderer.applyGeometry(crop, to: mask, cropping: cropping)
@@ -781,6 +789,102 @@ public final class DevelopSession: @unchecked Sendable {
         return skin
     }
 
+    /// Fine Edges' foreground matte around `outline` (a Vision selection on the corrected
+    /// photo's frame): the active model runs (at its 1024 or 2048 pixel square) on a square
+    /// around the outline's bounds with 20% to spare, so a person who fills a third of the frame
+    /// is seen at three times the detail of the whole photo. The result covers only that square.
+    /// Found once per lens geometry, model and square. Nil when no model is downloaded, the model
+    /// fails or the outline is empty.
+    /// Call with the lock held.
+    private func fineMatte(of source: CIImage, key: DevelopSettings, outline: CIImage) -> CIImage? {
+        let model = FineEdges.active
+        if fineKey != key || fineModel != model {
+            fineMattes = [:]
+            finePending = []
+            fineKey = key
+            fineModel = model
+        }
+        guard let model, let region = fineRegion(of: outline, extent: source.extent) else { return nil }
+        let regionKey = FineRegion(region)
+        if let cached = fineMattes[regionKey] { return cached }
+        // Already being found in the background: render without it for now.
+        if finePending.contains(regionKey) { return nil }
+        let side = CGFloat(model.size)
+        let square = source.cropped(to: region)
+            .transformed(by: CGAffineTransform(translationX: -region.minX, y: -region.minY))
+            .transformed(by: CGAffineTransform(scaleX: side / region.width, y: side / region.height))
+        guard let cgImage = renderer.context.createCGImage(square, from: CGRect(x: 0, y: 0, width: side, height: side),
+                                                           format: .RGBA8, colorSpace: DevelopRenderer.sRGB)
+        else { return nil }
+        guard interactive else {
+            // Export and other one-off renders wait for it.
+            let matte = Self.placedMatte(FineEdges.matte(of: cgImage, model: model), size: model.size, in: region)
+            fineMattes[regionKey] = matte
+            return matte
+        }
+        // The model takes seconds (much longer the first time, while Core ML compiles it), so
+        // the editor doesn't wait: the mask shows without Fine Edges, and once the matte is in,
+        // `FineEdges.matteReady` asks for a new render, which picks it up from the cache.
+        finePending.insert(regionKey)
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let matte = Self.placedMatte(FineEdges.matte(of: cgImage, model: model), size: model.size, in: region)
+            guard let self else { return }
+            self.lock.lock()
+            if self.fineKey == key, self.fineModel == model, self.finePending.remove(regionKey) != nil {
+                if self.fineMattes.count >= 4 { self.fineMattes.removeAll() }
+                self.fineMattes[regionKey] = matte
+            }
+            self.lock.unlock()
+            DispatchQueue.main.async { NotificationCenter.default.post(name: FineEdges.matteReady, object: nil) }
+        }
+        return nil
+    }
+
+    /// The model's values as a mask over `region` of the photo's frame; nil stays nil.
+    private static func placedMatte(_ values: [Float]?, size: Int, in region: CGRect) -> CIImage? {
+        let side = CGFloat(size)
+        guard let values, let gray = PeopleSkin.grayImage(values, width: size, height: size)
+        else { return nil }
+        return DevelopRenderer.rawMask(gray)
+            .transformed(by: CGAffineTransform(scaleX: region.width / side, y: region.height / side))
+            .transformed(by: CGAffineTransform(translationX: region.minX, y: region.minY))
+            .cropped(to: region)
+    }
+
+    /// The square Fine Edges looks at for `outline`: its bounds (where it is above half, found on
+    /// a copy 256 pixels long) with 20% more on every side, widened to a square and kept inside
+    /// the photo. Rounded to whole 1/256ths of the photo so it stays the same from render to
+    /// render. Nil when the outline is empty.
+    private func fineRegion(of outline: CIImage, extent: CGRect) -> CGRect? {
+        let factor = min(1, 256 / max(extent.width, extent.height))
+        let w = max(1, Int((extent.width * factor).rounded())), h = max(1, Int((extent.height * factor).rounded()))
+        let small = outline.cropped(to: extent)
+            .transformed(by: CGAffineTransform(translationX: -extent.minX, y: -extent.minY))
+            .transformed(by: CGAffineTransform(scaleX: CGFloat(w) / extent.width, y: CGFloat(h) / extent.height))
+        var bytes = [UInt8](repeating: 0, count: w * h)
+        renderer.context.render(small, toBitmap: &bytes, rowBytes: w, bounds: CGRect(x: 0, y: 0, width: w, height: h),
+                                format: .L8, colorSpace: nil)
+        var minX = w, minY = h, maxX = -1, maxY = -1
+        for y in 0..<h {
+            for x in 0..<w where bytes[y * w + x] > 127 {
+                minX = min(minX, x); maxX = max(maxX, x); minY = min(minY, y); maxY = max(maxY, y)
+            }
+        }
+        guard maxX >= 0 else { return nil }
+        // Bitmap rows run from the top; Core Image's y from the bottom.
+        var box = CGRect(x: CGFloat(minX), y: CGFloat(h - 1 - maxY), width: CGFloat(maxX - minX + 1),
+                         height: CGFloat(maxY - minY + 1))
+        box = box.insetBy(dx: -box.width * 0.2, dy: -box.height * 0.2)
+        let side = max(box.width, box.height)
+        // Whole pixels of the small copy, so the square stays the same from render to render.
+        box = CGRect(x: box.midX - side / 2, y: box.midY - side / 2, width: side, height: side).integral
+            .intersection(CGRect(x: 0, y: 0, width: w, height: h))
+        let region = CGRect(x: extent.minX + box.minX / factor, y: extent.minY + box.minY / factor,
+                            width: box.width / factor, height: box.height / factor)
+            .intersection(extent).integral
+        return region.width >= 16 && region.height >= 16 ? region : nil
+    }
+
     /// Select People's mask on the corrected photo's frame.
     private func people(of source: CIImage, key: DevelopSettings,
                         selection: DevelopSettings.PeopleSelection) -> CIImage? {
@@ -816,6 +920,7 @@ public final class DevelopSession: @unchecked Sendable {
         let component = DevelopSettings.MaskComponent(.people(selection))
         guard var mask = DevelopRenderer.sourceMask(component, extent: source.extent, subject: nil,
                                                     people: { self.people(of: source, key: key, selection: $0) },
+                                                    fine: { self.fineMatte(of: source, key: key, outline: $0) },
                                                     guide: source, brushCache: brushCache) else { return nil }
         if let crop = settings.crop { mask = DevelopRenderer.applyGeometry(crop, to: mask) }
         return renderer.context.createCGImage(mask, from: mask.extent.integral, format: .L8,
@@ -843,6 +948,7 @@ public final class DevelopSession: @unchecked Sendable {
         let component = DevelopSettings.MaskComponent(.subject(DevelopSettings.Selection(feather: feather)))
         guard var mask = DevelopRenderer.sourceMask(component, extent: source.extent,
                                                     subject: { self.subject(of: source, key: key, box: $0) },
+                                                    fine: { self.fineMatte(of: source, key: key, outline: $0) },
                                                     guide: source, brushCache: brushCache) else { return nil }
         if let crop = settings.crop { mask = DevelopRenderer.applyGeometry(crop, to: mask) }
         // Mask values are stored as is, so linear gray keeps them unchanged.
@@ -942,5 +1048,14 @@ public final class DevelopSession: @unchecked Sendable {
                                                                                  kCIInputAspectRatioKey: 1])
         }
         return (shown, renderer.cgImage(small) ?? shown)
+    }
+}
+
+/// A Fine Edges square in whole pixels, as a cache key.
+struct FineRegion: Hashable {
+    let x, y, width, height: Int
+
+    init(_ rect: CGRect) {
+        x = Int(rect.minX); y = Int(rect.minY); width = Int(rect.width); height = Int(rect.height)
     }
 }

@@ -73,10 +73,13 @@ extension DevelopRenderer {
     /// drawn once and kept in `brushCache` when given; `subject` finds Select Subject's mask
     /// (no box) or Select Object's (inside the box) on the photo's frame; `people` finds Select
     /// People's skin there.
-    /// `guide` is the photo on the same frame, which Refine Edge snaps AI selections to.
+    /// `guide` is the photo on the same frame, which Refine Edge snaps AI selections to; `fine`
+    /// gives the Fine Edges model's foreground matte around a selection's outline on that frame
+    /// (covering a square around it; nil when not downloaded).
     static func sourceMask(_ component: DevelopSettings.MaskComponent, extent: CGRect,
                            subject: ((DevelopSettings.MaskRect?) -> CIImage?)?,
                            people: ((DevelopSettings.PeopleSelection) -> CIImage?)? = nil,
+                           fine: ((CIImage) -> CIImage?)? = nil,
                            guide: CIImage? = nil,
                            brushCache: BrushCache?) -> CIImage? {
         let width = extent.width, height = extent.height
@@ -118,15 +121,54 @@ extension DevelopRenderer {
             return image.transformed(by: CGAffineTransform(translationX: extent.minX, y: extent.minY))
         case .subject(let selection):
             guard let mask = subject?(selection.box) else { return nil }
-            return refinedSelection(mask, grow: selection.grow, refine: selection.refine, feather: selection.feather,
-                                    guide: guide, extent: extent)
+            let refined = refinedSelection(mask, grow: selection.grow, refine: selection.refine, feather: selection.feather,
+                                           guide: guide, extent: extent)
+            // Fine Edges last, so Feather and Refine Edge don't blur away the strands it finds.
+            guard selection.fineEdges, let matte = fine?(mask) else { return refined }
+            return fineEdged(refined, outline: mask, matte: matte, extent: extent)
         case .people(let selection):
             guard let mask = people?(selection) else { return nil }
-            return refinedSelection(mask, grow: selection.grow, refine: selection.refine, feather: selection.feather,
-                                    guide: guide, extent: extent)
+            let refined = refinedSelection(mask, grow: selection.grow, refine: selection.refine, feather: selection.feather,
+                                           guide: guide, extent: extent)
+            guard selection.fineEdges else { return refined }
+            // The people's own outline, so parts inside them (face skin next to hair) keep their
+            // edges and only edges onto the background are redrawn.
+            var whole = selection
+            whole.parts = [.entirePerson]
+            let outline = people?(whole) ?? mask
+            guard let matte = fine?(outline) else { return refined }
+            return fineEdged(refined, outline: outline, matte: matte, extent: extent)
         case .luminance:
             return nil
         }
+    }
+
+    /// Fine Edges: the selection's edge redrawn from the Fine Edges model's foreground `matte`,
+    /// within 3% of the long edge of where Vision put it, where the matte was found (it covers a
+    /// square around the selection; outside it nothing changes). Inside the band, pixels inside
+    /// `outline` (Vision's outline of the subject or the people) are kept only where the matte
+    /// is foreground too (the background between strands of hair drops out), and pixels outside
+    /// it are added where the matte is foreground (strands Vision's outline missed). Away from the
+    /// edge the selection is unchanged, so someone the model misses keeps their selection.
+    /// max(shrunk, min(grown, matte, max(mask, 1 − outline))).
+    static func fineEdged(_ mask: CIImage, outline: CIImage, matte: CIImage, extent: CGRect) -> CIImage {
+        let radius = max(1, 0.03 * Double(max(extent.width, extent.height)))
+        func morphology(_ image: CIImage, _ name: String) -> CIImage {
+            image.clampedToExtent().applyingFilter(name, parameters: [kCIInputRadiusKey: radius]).cropped(to: extent)
+        }
+        func lower(_ a: CIImage, _ b: CIImage) -> CIImage {
+            a.applyingFilter("CIMinimumCompositing", parameters: [kCIInputBackgroundImageKey: b])
+        }
+        func higher(_ a: CIImage, _ b: CIImage) -> CIImage {
+            a.applyingFilter("CIMaximumCompositing", parameters: [kCIInputBackgroundImageKey: b])
+        }
+        let base = mask.cropped(to: extent)
+        // Outside the matte's square the matte is the selection itself, which changes nothing.
+        let matte = matte.composited(over: base)
+        let shrunk = morphology(base, "CIMorphologyMinimum")
+        let grown = morphology(base, "CIMorphologyMaximum")
+        let allowed = higher(base, invert(outline.cropped(to: extent)))
+        return higher(shrunk, lower(lower(grown, matte.cropped(to: extent)), allowed)).cropped(to: extent)
     }
 
     /// The edge controls every AI selection shares (Select Subject, Select Object, Select People),
@@ -146,15 +188,11 @@ extension DevelopRenderer {
                                 parameters: [kCIInputRadiusKey: growRadius])
                 .cropped(to: extent)
         }
-        if refine > 0, let guide, let filter = CIFilter(name: "CIGuidedFilter") {
-            filter.setValue(result.clampedToExtent(), forKey: kCIInputImageKey)
-            filter.setValue(guide.clampedToExtent(), forKey: "inputGuideImage")
-            filter.setValue(max(1, refine / 100 * 0.008 * longEdge), forKey: kCIInputRadiusKey)
-            // Smaller is stricter about following the photo's edges.
-            filter.setValue(0.0001 + (1 - refine / 100) * 0.001, forKey: "inputEpsilon")
-            if let output = filter.outputImage {
-                result = output.applyingFilter("CIColorClamp").cropped(to: extent)
-            }
+        if refine > 0, let guide,
+           // Smaller epsilon follows weaker edges in the photo.
+           let refined = MaskGuidedFilter.apply(mask: result, guide: guide, radius: max(1, refine / 100 * 0.008 * longEdge),
+                                                epsilon: 0.0001 + (1 - refine / 100) * 0.001, extent: extent) {
+            result = refined.cropped(to: extent)
         }
         if feather > 0 {
             let sigma = feather / 100 * 0.012 * longEdge

@@ -627,7 +627,14 @@ final class DevelopController: ObservableObject {
         self.previews = previews
         self.isPrimaryButtonPressed = isPrimaryButtonPressed
         presets = presetStore.all()
+        // Fine Edges finds its matte in the background; render again once it is in.
+        fineEdgesObserver = NotificationCenter.default.addObserver(forName: FineEdges.matteReady, object: nil,
+                                                                   queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.scheduleRender() }
+        }
     }
+
+    private var fineEdgesObserver: NSObjectProtocol?
 
     // MARK: Opening
 

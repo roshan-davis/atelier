@@ -631,7 +631,7 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 ## AT-043 — Select People: skin, hair and clothes from a built-in MediaPipe model
 
-**Status:** PR open, never compiled (cloud has no Swift toolchain); needs a Mac build and tests (`PeoplePartsTests` runs the real model), then Rosh's acceptance. **Owner:** Claude. **Chat:** Claude project thread "Improve people and object selection masks". **Branch:** `claude/project-thread-m96qwc` (restarted from main after #100 merged). **PR:** [#101](https://github.com/roshan-davis/atelier/pull/101). **Baseline:** `464d5bf`. **Dependencies:** AT-042 (merged).
+**Status:** Merged in PR #101 (`cdf6530`) at Rosh's ask after Rosh ran `0dac016`: both people found, Clothes works. Was: PR open, never compiled (cloud has no Swift toolchain); needs a Mac build and tests (`PeoplePartsTests` runs the real model), then Rosh's acceptance. **Owner:** Claude. **Chat:** Claude project thread "Improve people and object selection masks". **Branch:** `claude/project-thread-m96qwc` (restarted from main after #100 merged). **PR:** [#101](https://github.com/roshan-davis/atelier/pull/101). **Baseline:** `464d5bf`. **Dependencies:** AT-042 (merged).
 
 **Evidence:** Rosh (2026-11-10): Body Skin takes clothes; wants the AI model built into the app, no download (report `reports/people-object-selection-2026-11-10.md`). Step 2 of 5.
 
@@ -640,3 +640,24 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 **Acceptance:** Mac build; `PeoplePartsTests` (model found in the bundle, loads, class shares on the Help portrait within tolerance of TFLite's) and `PeopleSkinTests` pass; `python3 Scripts/build_macos_app.py` app also finds the model. Rosh: on the Louvre photo, the woman in sunglasses is found; Body Skin no longer takes beige/orange coats or scarves; Hair and Clothes select hair and clothes; Entire Person selects the whole person. Time the first Select People on a Z6 RAW.
 
 **Not in scope:** SAM 2.1 / BiRefNet downloads (steps 3 and 5).
+
+## AT-044 — Masking: Fine Edges (BiRefNet) for Select Subject, Select Object and Select People
+
+**Status:** PR open, never compiled (cloud has no Swift toolchain); needs a Mac build, tests, a first run of the downloaded model, and Rosh's acceptance. **Owner:** Claude. **Chat:** Claude project thread "Improve people and object selection masks". **Branch:** `claude/project-thread-m96qwc` (restarted from main after #101 merged). **PR:** [#102](https://github.com/roshan-davis/atelier/pull/102). **Baseline:** `cdf6530`. **Dependencies:** AT-042, AT-043 (merged).
+
+**Evidence:** Rosh (2026-11-10): asked for the model that is good at hair; chose ONNX Runtime in the app ("try that 30mb approach") over converting BiRefNet to Core ML and hosting it, since nobody publishes a Core ML BiRefNet and the repo is private. Step 5 of the plan, done before SAM (step 3).
+
+**Scope:** `onnxruntime-swift-package-manager` 1.24.2 (MIT, static) linked into AtelierCore. `FineEdges` downloads onnx-community's `BiRefNet_lite-ONNX/onnx/model_fp16.onnx` (MIT, ~115 MB, SHA-256 `d39b897c…f402` checked before install) to Application Support/Atelier/Models, runs it at 1024 × 1024 (ImageNet mean/std, sigmoid on logits) with the Core ML execution provider (ML Program, all compute units) and CPU fallback. `DevelopRenderer` keeps the matte per lens geometry. `MaskRenderer.fineEdged` changes only a band 1.5% of the long edge around Vision's edge, with the model run on a square around the selection (see PRD). New `fineEdges` on `Selection`/`PeopleSelection` (decodes false: old edits unchanged, no `PreviewCache` bump). Fine Edges checkbox (or Get button with progress/Cancel) at the top of the shared edge controls; Settings > AI > Masking Models with Download / Remove.
+
+**Acceptance:** Mac build (the package resolves and links on arm64 and x86_64); `FineEdgesTests` pass; the downloaded model loads and runs (no orange error under the checkbox); time the first matte on a Z6 RAW and with/without Core ML; app size before/after. Rosh: hair against sky and a busy background with Select Subject and Select People Hair/Entire Person, Fine Edges on vs off; Face Skin doesn't creep into Hair; Remove in Settings deletes it.
+
+**Fixes in this PR (Rosh, 2026-11-10, testing 2984f9d):** Refine Edge above 0 emptied every AI selection: `CIGuidedFilter` replaced by `MaskGuidedFilter` (own Metal kernels, fast guided filter at ≤2048 px). Fine Edges showed no change: the panel now shows each run's time and foreground share, or its error (it didn't refresh before), and the log has the model's input/output names; fp16 outputs are read too.
+
+**Model switch (Rosh, 2026-11-11):** BiRefNet lite at 1024 missed loose strands even on the selection's square (tested `ac49561`: "Fine Edges ran in 2.5 s"). Switched to BiRefNet HR-matting (MIT), Pink Pixel's fp16 ONNX export (`PinkPixel/birefnet-hr-matting-onnx` @ `792518b`, `model_fp16.onnx`, ~470 MB, SHA-256 `c0216070…70f0`; input `image` 1×3×2048×2048 float32 ImageNet-normalized, output `alpha` with sigmoid in the graph). Band widened to 3%. Old model files are deleted on install/remove. Core ML session failure falls back to CPU. Rosh's run of `e5241c8`: 32.4 s, no visible strands with Feather 20 / Refine Edge 52; Fine Edges now applies after Grow/Refine/Feather, and Core ML gets a model cache directory (compile once).
+
+**Two models (Rosh, 2026-11-11, after testing `7e6154c` at 200%: some strands near the edge picked up, far loose strands still missed, 34.9 s CPU):** "keeping 115 and 400+ models so user can download whatever they want and select". `FineEdges.Model` (`fast` = BiRefNet lite 1024, `hairDetail` = HR-matting 2048), each downloaded/removed on its own; `FineEdges.chosen` (UserDefaults `fineEdges.model`, set by a download) and `active` (chosen if downloaded, else the other). Mask panel: Get menu with both, and a Fast / Hair Detail menu beside the checkbox when both are in; Settings > AI > Masking Models: a row per model, "Fine Edges uses", Show Last Result. One ONNX session at a time; the renderer's matte cache is keyed by the active model. Rosh's existing HR file is kept (same name). Needs a Mac build and Rosh's test.
+
+**Known risks:** the fp16 model's inputs are assumed float32 (onnx-community's usual keep-IO-types export); if not, the error shows under the checkbox. BiRefNet may contain ops Core ML can't run; those run on the CPU (slower).
+
+**Not in scope:** SAM 2.1 clicks (step 3), Brush Auto Mask (step 4), the full (non-lite) BiRefNet.
+

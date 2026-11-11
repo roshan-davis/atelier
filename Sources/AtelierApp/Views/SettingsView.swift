@@ -516,6 +516,8 @@ struct AISettingsTab: View {
                     .foregroundStyle(.secondary)
             }
 
+            MaskingModelsSection()
+
             Section {
                 LabeledContent("Workflows") {
                     Button("Show Workflows Folder") {
@@ -567,6 +569,70 @@ struct AISettingsTab: View {
                 connected = false
                 status = error.localizedDescription
             }
+        }
+    }
+}
+
+/// Settings > AI > Masking Models: the built-in people model and the two optional Fine Edges models.
+private struct MaskingModelsSection: View {
+    @ObservedObject private var download = FineEdgesDownload.shared
+
+    var body: some View {
+        Section {
+            LabeledContent("People parts") {
+                Text("Built in (MediaPipe, 8 MB)").foregroundStyle(.secondary)
+            }
+            ForEach(FineEdges.Model.allCases) { model in
+                LabeledContent {
+                    if download.installed.contains(model) {
+                        HStack {
+                            Text("Downloaded").foregroundStyle(.secondary)
+                            Button("Remove") { download.remove(model) }
+                        }
+                    } else if download.downloading == model, let progress = download.progress {
+                        HStack {
+                            ProgressView(value: progress).frame(width: 120)
+                            Button("Cancel") { download.cancel() }
+                        }
+                    } else {
+                        Button("Download (\(model.downloadSize))") { download.download(model) }
+                            .disabled(download.downloading != nil)
+                    }
+                } label: {
+                    Text("Fine Edges: \(model.name)")
+                    Text(model.detail)
+                }
+            }
+            if download.anyInstalled {
+                LabeledContent("Fine Edges uses") {
+                    HStack {
+                        if download.installed.count > 1 {
+                            Picker("Fine Edges uses", selection: Binding(get: { download.active ?? download.chosen },
+                                                                         set: { download.choose($0) })) {
+                                ForEach(FineEdges.Model.allCases) { Text($0.name).tag($0) }
+                            }
+                            .labelsHidden()
+                            .fixedSize()
+                        } else if let active = download.active {
+                            Text(active.name).foregroundStyle(.secondary)
+                        }
+                        Button("Show Last Result") {
+                            NSWorkspace.shared.activateFileViewerSelecting([FineEdges.diagnosticsFolder])
+                        }
+                        .help("Opens the folder with what the model saw and found on its last run")
+                    }
+                }
+            }
+            if let error = download.error {
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange).font(.callout).fixedSize(horizontal: false, vertical: true)
+            }
+        } header: {
+            Text("Masking Models")
+        } footer: {
+            Text("Select People's parts come from Google's MediaPipe model, built into Atelier. Fine Edges (BiRefNet, MIT license) redraws the edges of Select Subject, Select Object and Select People down to strands of hair; turn it on in each selection's settings. Download either model or both: Fast takes a few seconds, Hair Detail about half a minute for finer hair. When both are downloaded, choose which one runs here or in the mask panel. All of them run on this Mac; photos are never sent anywhere.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 }
