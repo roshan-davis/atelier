@@ -1,0 +1,44 @@
+<!-- Built-in Match Look reference "matrixPortrait": a flat vector color study (drawn for Atelier by Rosh, Nov 10, 2026). data-part marks the person (skin, hair, clothes, features) for Subject & Background and Show Skin. -->
+<svg viewBox="0 0 280 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <!-- 1. Ambient Background / Matrix Cockpit Interior -->
+    <rect width="280" height="180" fill="#2E3B33"/>
+
+    <!-- Exterior Green Atmosphere through windows -->
+    <polygon points="30,10 108,12 108,140 25,130" fill="#5F7767"/>
+    <polygon points="172,12 250,10 255,130 172,140" fill="#5F7767"/>
+
+    <!-- Slanted Cockpit Struts (Graphite & Moss) -->
+    <path d="M0 0L45 0L20 180H0V0Z" fill="#1C221D"/>
+    <path d="M280 0L235 0L260 180H280V0Z" fill="#1C221D"/>
+    <polygon points="45,0 70,0 48,155 25,155" fill="#425546"/>
+    <polygon points="235,0 210,0 232,155 255,155" fill="#425546"/>
+    <rect x="108" y="0" width="64" height="42" fill="#243028"/>
+
+    <!-- 2. Clothing / Shoulders -->
+    <path data-part="clothes" d="M50 180C65 145 95 138 115 135L125 150L155 150L165 135C185 138 215 145 230 180H50Z" fill="#1C221D"/>
+    <path data-part="clothes" d="M115 135L130 165L140 152L125 140Z" fill="#2A372E"/>
+    <path data-part="clothes" d="M165 135L150 165L140 152L155 140Z" fill="#35453B"/>
+
+    <!-- 3. Standard Neck (Midtone & Cast Shadow) -->
+    <path data-part="skin" d="M125 116H155V148H125V116Z" fill="#A8A37A"/>
+    <path data-part="skin" d="M139 116H155V148H137L139 116Z" fill="#5F5B3F"/>
+
+    <!-- 4. Hair Base -->
+    <path data-part="hair" d="M112 68C112 42 168 42 168 68C168 90 166 106 166 106L114 106Z" fill="#151A17"/>
+
+    <!-- 5. Unified 3-Tone Face Planes -->
+    <!-- Base Midtone -->
+    <path data-part="skin" d="M122 62C122 60 158 60 158 62C162 75 163 98 156 118C150 130 130 130 124 118C117 98 118 75 122 62Z" fill="#A8A37A"/>
+    <!-- Highlight Plane (Left) -->
+    <path data-part="skin" d="M123 63C127 61 143 61 143 63C144 78 143 98 139 118C135 125 128 124 125 116C119 98 120 76 123 63Z" fill="#C7C39E"/>
+    <!-- Shadow Plane (Right) -->
+    <path data-part="skin" d="M145 63C151 63 157 63 157 65C161 78 161 98 155 117C150 127 141 126 138 119C142 98 144 78 145 63Z" fill="#5F5B3F"/>
+
+    <!-- 6. Features / Matrix Specs -->
+    <path data-part="features" d="M118 60C140 56 162 56 162 60C140 65 118 65 118 60Z" fill="#151A17"/>
+    <rect data-part="features" x="125" y="78" width="12" height="6" rx="2" fill="#151A17"/>
+    <rect data-part="features" x="143" y="78" width="12" height="6" rx="2" fill="#151A17"/>
+    <line data-part="features" x1="137" y1="80" x2="143" y2="80" stroke="#151A17" stroke-width="1.5"/>
+    <path data-part="features" d="M138 82L137 96L141 96Z" fill="#5F5B3F"/>
+    <path data-part="features" d="M136 104C140 106 144 106 144 104" stroke="#5F5B3F" stroke-width="1.5" stroke-linecap="round"/>
+  </svg>

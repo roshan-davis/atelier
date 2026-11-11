@@ -10,7 +10,7 @@ extension LookMatcher {
     /// Oklab color plane; lightness is left to the ordinary Tone fit. False when no tone came closer.
     static func fitSkin(_ skin: LookSkin, to reference: LookSkin, in settings: inout DevelopSettings,
                         space: MaskSpace, measure: (DevelopSettings) -> LookSample?,
-                        isCancelled: () -> Bool) -> Bool {
+                        limit: Double = maxSkinShift, isCancelled: () -> Bool) -> Bool {
         // Vision's face box is tight: brows to chin, cheek to cheek, no forehead. The ellipse is
         // larger than the box and moved up over the forehead, with a short feather, so the
         // whole face gets the full effect (inside 70% of the radius) and it fades out past the
@@ -29,7 +29,7 @@ extension LookMatcher {
             // Without tones: one mask, the skin's mean color to the reference's.
             return fitMaskColor(LookMatch.skinMaskName, components: faces,
                                 target: colorVector(hue: reference.hue, chroma: reference.chroma),
-                                in: &settings, measure: measure, isCancelled: isCancelled) { sample in
+                                in: &settings, measure: measure, limit: limit, isCancelled: isCancelled) { sample in
                 LookSkin.hueAndChroma(sample, skin.pixels).map { colorVector(hue: $0.hue, chroma: $0.chroma) }
             }
         }
@@ -54,7 +54,7 @@ extension LookMatcher {
         for tone in [1, 0, 2] where !isCancelled() {
             let pixels = split.groups[tone]
             if fitMaskColor(masks[tone].0, components: masks[tone].1, target: reference.toneColors[tone],
-                            in: &settings, measure: measure, isCancelled: isCancelled,
+                            in: &settings, measure: measure, limit: limit, isCancelled: isCancelled,
                             color: { LookSkin.meanAB($0, pixels) }) {
                 matched = true
             }
@@ -69,7 +69,8 @@ extension LookMatcher {
     /// was already close or came closer.
     private static func fitMaskColor(_ name: String, components: [DevelopSettings.MaskComponent],
                                      target: SIMD2<Double>, in settings: inout DevelopSettings,
-                                     measure: (DevelopSettings) -> LookSample?, isCancelled: () -> Bool,
+                                     measure: (DevelopSettings) -> LookSample?, limit: Double,
+                                     isCancelled: () -> Bool,
                                      color colorOf: (LookSample) -> SIMD2<Double>?) -> Bool {
         func color(_ candidate: DevelopSettings) -> SIMD2<Double>? {
             guard !isCancelled(), let sample = measure(candidate) else { return nil }
@@ -97,7 +98,7 @@ extension LookMatcher {
         }
         func limited(_ parameter: DevelopSettings.LocalParameter, _ value: Double) -> Double {
             let from = start[parameter] ?? 0
-            return min(from + maxSkinShift, max(from - maxSkinShift, value))
+            return min(min(100, from + limit), max(max(-100, from - limit), value))
         }
 
         // Each slider's effect on the color is measured once (three renders) and reused for
@@ -150,6 +151,10 @@ extension LookMatcher {
 
     /// The most Match Skin Tone moves each skin slider (Temp, Tint, Saturation) from where it was.
     static let maxSkinShift = 35.0
+    /// Protect Skin Tones' skin masks undo the look on the face, so they may use the sliders'
+    /// whole range: at 35 they couldn't undo a strong Temp/Tint, and Protect then pulled the
+    /// whole match back.
+    static let protectSkinShift = 100.0
 
     private static func colorVector(hue: Double, chroma: Double) -> SIMD2<Double> {
         let angle = hue * .pi / 180

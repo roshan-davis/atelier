@@ -171,7 +171,7 @@ final class MatchLookModel: ObservableObject, Identifiable {
     /// Subject & Background for a portrait study, Whole Photo alone for a wide study.
     var areaModes: [MatchAreaMode] {
         guard let builtInReference else { return MatchAreaMode.allCases }
-        return builtInReference.head == nil ? [.wholePhoto] : [.wholePhoto, .subject]
+        return builtInReference.isPortrait ? [.wholePhoto, .subject] : [.wholePhoto]
     }
     var areaMode: MatchAreaMode {
         get {
@@ -439,7 +439,7 @@ final class MatchLookModel: ObservableObject, Identifiable {
             // A portrait study's person and face are drawn, so they are known, not looked for.
             let found = needsFeatures ? study?.features(for: referenceCG) ?? features.features(for: referenceCG) : nil
             let target = LookTarget(image: referenceCG, features: found, areas: areas, skinMode: options.skinMode,
-                                    authoredSkinTones: authoredSkinTones)
+                                    authoredSkinTones: authoredSkinTones, colorStudy: study != nil)
             let result = target.flatMap { target in
                 LookMatcher.match(session: fitSession, settings: base, target: target, options: options,
                                   photoFaces: photoFaces, isCancelled: { latest.current != generation })

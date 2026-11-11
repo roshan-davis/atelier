@@ -269,11 +269,13 @@ public struct LookTarget: Sendable {
     let skin: LookSkin?
 
     /// `authoredSkinTones` are a built-in study's drawn skin samples (shadows, midtones,
-    /// highlights); `authoredSkinRegions` drawn samples of a single tone.
+    /// highlights); `authoredSkinRegions` drawn samples of a single tone. `colorStudy` marks a
+    /// built-in study, which gives color only (see `LookSample.isColorStudy`).
     public init?(image: CGImage, features: LookReferenceFeatures? = nil, areas: LookAreas,
                  skinMode: LookSkinMode = .off, authoredSkinRegions: [CGRect]? = nil,
-                 authoredSkinTones: [CGRect]? = nil) {
+                 authoredSkinTones: [CGRect]? = nil, colorStudy: Bool = false) {
         guard var plain = LookSample(image: image) else { return nil }
+        plain.isColorStudy = colorStudy
         self.areas = areas
         var notices: Set<LookMatchNotice> = []
         let features = features ?? (areas == .subject ? LookReferenceFeatures(image: image) : nil)
@@ -299,6 +301,7 @@ public struct LookTarget: Sendable {
             break
         case .boxes(let reference, _):
             plain = LookSample(image: image, area: reference) ?? plain
+            plain.isColorStudy = colorStudy
         case .subject:
             if let mask = features?.subject, mask.count == plain.count {
                 var back = plain, front = plain
@@ -349,6 +352,10 @@ extension LookMatcher {
     public static func match(session: DevelopSession, settings base: DevelopSettings, target: LookTarget,
                              options: LookMatchOptions = LookMatchOptions(), photoFaces: [CGRect]? = nil,
                              isCancelled: () -> Bool = { false }) -> LookMatch? {
+        // A built-in study gives color only: its brightness is the drawing's layout, and
+        // matching it darkened photos and their faces.
+        var options = options
+        if target.whole.isColorStudy { options.tone = false }
         // Every step renders the photo at the fit size; the count and time are logged so slow
         // matches can be measured (Console, subsystem Atelier, category Match Look).
         let started = Date()
@@ -490,7 +497,10 @@ extension LookMatcher {
                 // of the photo keeps the full look. Only if that can't bring it back inside the
                 // limits are the sliders pulled back (which weakens the whole match).
                 if let now = whole(current), !skin.isWithin(now) {
-                    _ = fitSkin(skin, to: skin, in: &current, space: space, measure: whole, isCancelled: isCancelled)
+                    // The masks may move as far as needed: they undo the look on the face,
+                    // rather than paint the face like Match Skin Tone does.
+                    _ = fitSkin(skin, to: skin, in: &current, space: space, measure: whole,
+                                limit: protectSkinShift, isCancelled: isCancelled)
                 }
                 if !isCancelled(), let now = whole(current), !skin.isWithin(now) {
                     protect(skin, in: &current, from: base, asShot: asShot, options: options, measure: whole)
