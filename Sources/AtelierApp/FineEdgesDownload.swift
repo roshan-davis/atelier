@@ -103,7 +103,7 @@ struct FineEdgesControl: View {
                     }
                     .controlSize(.small)
                 }
-                .help("Downloads the Fine Edges model (BiRefNet, MIT license) once; it then runs on this Mac")
+                .help("Downloads the Fine Edges hair matting model (BiRefNet HR matting, MIT license) once; it then runs on this Mac")
                 if let error = download.error {
                     Text(error).font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
                 }

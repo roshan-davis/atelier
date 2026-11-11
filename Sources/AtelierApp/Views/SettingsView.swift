@@ -604,7 +604,7 @@ private struct MaskingModelsSection: View {
         } header: {
             Text("Masking Models")
         } footer: {
-            Text("Select People's parts come from Google's MediaPipe model, built into Atelier. Fine Edges (BiRefNet lite, MIT license) is an optional download that redraws the edges of Select Subject, Select Object and Select People down to single hairs; turn it on in each selection's settings. Both run on this Mac; photos are never sent anywhere.")
+            Text("Select People's parts come from Google's MediaPipe model, built into Atelier. Fine Edges (BiRefNet HR matting, MIT license) is an optional download that redraws the edges of Select Subject, Select Object and Select People down to single strands of hair; turn it on in each selection's settings. Both run on this Mac; photos are never sent anywhere.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

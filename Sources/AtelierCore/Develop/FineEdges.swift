@@ -3,21 +3,24 @@ import CryptoKit
 import Foundation
 import OnnxRuntimeBindings
 
-/// Fine Edges: BiRefNet (Zheng Peng et al., MIT License), the lite model as published in ONNX by
-/// onnx-community on Hugging Face, an optional download (about 115 MB) from Settings > AI or the
-/// mask panel. It finds the photo's foreground at 1024 × 1024 with edges down to single hairs;
+/// Fine Edges: BiRefNet HR-matting (Zheng Peng et al., MIT License), in the ONNX export by Pink
+/// Pixel on Hugging Face (MIT), an optional download (about 470 MB) from Settings > AI or the
+/// mask panel. A matting model: it gives every pixel how much of it is foreground, at
+/// 2048 × 2048, so single strands of hair come through partly see-through (Rosh, Nov 11, 2026:
+/// BiRefNet lite's cut-out at 1024 missed loose strands);
 /// Select Subject, Select Object and Select People use it to redraw their edges. It runs on this
 /// Mac with Microsoft's ONNX Runtime (MIT), built into the app, which hands what it can to Core ML.
 public enum FineEdges {
-    public static let modelName = "BiRefNet lite"
+    public static let modelName = "BiRefNet HR matting"
     /// The file Atelier downloads, pinned to its SHA-256 so a changed file is refused.
     public static let downloadURL =
-        URL(string: "https://huggingface.co/onnx-community/BiRefNet_lite-ONNX/resolve/main/onnx/model_fp16.onnx")!
-    public static let sha256 = "d39b897ceb16ae654c1731f3dba0cf9b368d9cae74b5a57459b455cc8bfec402"
-    /// About how much is downloaded, for the buttons ("115 MB").
-    public static let downloadSize = "115 MB"
+        // Pinned to the repository revision as well as the checksum.
+        URL(string: "https://huggingface.co/PinkPixel/birefnet-hr-matting-onnx/resolve/792518b9d4dfe9793891712677de25e554f948c6/model_fp16.onnx")!
+    public static let sha256 = "c0216070c15542b7197bcf13eb3ea07af0fc5595c591037b7c9766c3cc6470f0"
+    /// About how much is downloaded, for the buttons.
+    public static let downloadSize = "470 MB"
     /// The model's square input size.
-    public static let size = 1024
+    public static let size = 2048
 
     public enum Failure: LocalizedError {
         case checksum, noModel, run(String)
@@ -37,7 +40,7 @@ public enum FineEdges {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
         return support.appendingPathComponent("Atelier/Models", isDirectory: true)
-            .appendingPathComponent("BiRefNet-lite-\(sha256.prefix(12)).onnx")
+            .appendingPathComponent("BiRefNet-HR-matting-\(sha256.prefix(12)).onnx")
     }
 
     public static var isInstalled: Bool { FileManager.default.fileExists(atPath: modelURL.path) }
@@ -82,11 +85,23 @@ public enum FineEdges {
         try? FileManager.default.removeItem(at: modelURL)
         try FileManager.default.moveItem(at: downloaded, to: modelURL)
         forgetSession()
+        removeOldModels()
+    }
+
+    /// Deletes earlier Fine Edges models (the 115 MB BiRefNet lite of the first test build), so
+    /// a switch of model doesn't leave hundreds of MB behind.
+    static func removeOldModels() {
+        let folder = modelURL.deletingLastPathComponent()
+        let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
+        for file in files where file.lastPathComponent.hasPrefix("BiRefNet-") && file != modelURL {
+            try? FileManager.default.removeItem(at: file)
+        }
     }
 
     /// Deletes the downloaded model.
     public static func remove() throws {
         forgetSession()
+        removeOldModels()
         if isInstalled { try FileManager.default.removeItem(at: modelURL) }
     }
 
@@ -137,19 +152,28 @@ public enum FineEdges {
         guard isInstalled else { throw Failure.noModel }
         let env = try environment ?? ORTEnv(loggingLevel: .warning)
         environment = env
-        let options = try ORTSessionOptions()
-        try options.setGraphOptimizationLevel(.all)
-        if (try? options.appendCoreMLExecutionProvider(withOptionsV2: ["ModelFormat": "MLProgram",
-                                                                     "MLComputeUnits": "All"])) == nil {
-            // Without Core ML it still runs, on the CPU.
-            NSLog("Atelier: Fine Edges runs without Core ML")
+        func options(coreML: Bool) throws -> ORTSessionOptions {
+            let options = try ORTSessionOptions()
+            try options.setGraphOptimizationLevel(.all)
+            if coreML, (try? options.appendCoreMLExecutionProvider(withOptionsV2: ["ModelFormat": "MLProgram",
+                                                                                  "MLComputeUnits": "All"])) == nil {
+                NSLog("Atelier: Fine Edges runs without Core ML")
+            }
+            return options
         }
-        let made = try ORTSession(env: env, modelPath: modelURL.path, sessionOptions: options)
+        let made: ORTSession
+        do {
+            made = try ORTSession(env: env, modelPath: modelURL.path, sessionOptions: options(coreML: true))
+        } catch {
+            // Core ML can refuse a model this large; ONNX Runtime's own CPU code still runs it.
+            NSLog("Atelier: Fine Edges with Core ML failed (%@), using the CPU", "\(error)")
+            made = try ORTSession(env: env, modelPath: modelURL.path, sessionOptions: options(coreML: false))
+        }
         session = made
         return made
     }
 
-    /// The foreground matte of `image` (any size: it is stretched to 1024 × 1024 for the model),
+    /// The foreground matte of `image` (any size: it is stretched to `size` × `size` for the model),
     /// 0...1, `size` × `size`, rows from the top. Nil when the model isn't downloaded or fails
     /// (`failure` says why).
     public static func matte(of image: CGImage) -> [Float]? {
@@ -204,7 +228,7 @@ public enum FineEdges {
         return drawn ? pixels : nil
     }
 
-    /// BiRefNet's input: 1 × 3 × 1024 × 1024, RGB planes, scaled to 0...1 and normalized with
+    /// BiRefNet's input: 1 × 3 × `size` × `size`, RGB planes, scaled to 0...1 and normalized with
     /// ImageNet's mean and deviation (the model's preprocessor_config.json).
     static func inputTensor(_ pixels: [UInt8]) -> [Float] {
         let mean: [Float] = [0.485, 0.456, 0.406], deviation: [Float] = [0.229, 0.224, 0.225]

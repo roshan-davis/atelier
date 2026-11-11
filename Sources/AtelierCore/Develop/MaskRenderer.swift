@@ -146,7 +146,7 @@ extension DevelopRenderer {
     }
 
     /// Fine Edges: the selection's edge redrawn from the Fine Edges model's foreground `matte`,
-    /// within 1.5% of the long edge of where Vision put it, where the matte was found (it covers a
+    /// within 3% of the long edge of where Vision put it, where the matte was found (it covers a
     /// square around the selection; outside it nothing changes). Inside the band, pixels inside
     /// `outline` (Vision's outline of the subject or the people) are kept only where the matte
     /// is foreground too (the background between strands of hair drops out), and pixels outside
@@ -154,7 +154,7 @@ extension DevelopRenderer {
     /// edge the selection is unchanged, so someone the model misses keeps their selection.
     /// max(shrunk, min(grown, matte, max(mask, 1 − outline))).
     static func fineEdged(_ mask: CIImage, outline: CIImage, matte: CIImage, extent: CGRect) -> CIImage {
-        let radius = max(1, 0.015 * Double(max(extent.width, extent.height)))
+        let radius = max(1, 0.03 * Double(max(extent.width, extent.height)))
         func morphology(_ image: CIImage, _ name: String) -> CIImage {
             image.clampedToExtent().applyingFilter(name, parameters: [kCIInputRadiusKey: radius]).cropped(to: extent)
         }
