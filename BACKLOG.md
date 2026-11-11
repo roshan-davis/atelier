@@ -663,7 +663,7 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 ## AT-045 — Match Look: Rosh's eight vector color studies as the Built-in References
 
-**Status:** PR open, never compiled (cloud has no Swift toolchain); needs a Mac build, tests and Rosh's acceptance. **Owner:** Claude. **Chat:** [Improve Match Colors quality](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKF2JPu63ZaHgkVxXXo1FmSC). **Branch:** `claude/match-look-svg-studies` (from main `e84c5fd`). **Dependencies:** AT-034, AT-035 (merged).
+**Status:** PR open, never compiled (cloud has no Swift toolchain); needs a Mac build, tests and Rosh's acceptance. **Owner:** Claude. **PR:** [#103](https://github.com/roshan-davis/atelier/pull/103). **Chat:** [Improve Match Colors quality](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKF2JPu63ZaHgkVxXXo1FmSC). **Branch:** `claude/match-look-svg-studies` (from main `e84c5fd`). **Dependencies:** AT-034, AT-035 (merged).
 
 **Evidence:** Rosh (2026-11-10/11) shared a gallery of eight flat SVG studies ("make sure to keep it the way you keep the images, but the color reference and pattern is prominent"; "just keep your organization, but I wanted these images and its color theme while applying"; "use my 8 images to replace those crappy images").
 
