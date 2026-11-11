@@ -43,6 +43,13 @@ public enum FineEdges {
             .appendingPathComponent("BiRefNet-HR-matting-\(sha256.prefix(12)).onnx")
     }
 
+    /// Where Core ML keeps its compiled copy of the model (rebuilt if deleted).
+    static var coreMLCacheURL: URL {
+        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        return caches.appendingPathComponent("Atelier/Models/FineEdges-CoreML-\(sha256.prefix(12))", isDirectory: true)
+    }
+
     public static var isInstalled: Bool { FileManager.default.fileExists(atPath: modelURL.path) }
 
     // MARK: Download
@@ -102,6 +109,7 @@ public enum FineEdges {
     public static func remove() throws {
         forgetSession()
         removeOldModels()
+        try? FileManager.default.removeItem(at: coreMLCacheURL)
         if isInstalled { try FileManager.default.removeItem(at: modelURL) }
     }
 
@@ -129,6 +137,7 @@ public enum FineEdges {
     /// What the last run found, for the mask panel: its time and how much of the photo it saw as
     /// foreground, or nil before a run.
     nonisolated(unsafe) public private(set) static var lastRun: String?
+    nonisolated(unsafe) private static var usesCoreML = true
     /// Posted on the main queue whenever `failure` or `lastRun` changes.
     public static let statusChanged = Notification.Name("AtelierFineEdgesStatusChanged")
 
@@ -155,18 +164,26 @@ public enum FineEdges {
         func options(coreML: Bool) throws -> ORTSessionOptions {
             let options = try ORTSessionOptions()
             try options.setGraphOptimizationLevel(.all)
+            // Core ML compiles the model once and keeps it here; without a cache it compiles it
+            // again every launch, which takes most of the first run's time.
+            let cache = coreMLCacheURL
+            try? FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
             if coreML, (try? options.appendCoreMLExecutionProvider(withOptionsV2: ["ModelFormat": "MLProgram",
-                                                                                  "MLComputeUnits": "All"])) == nil {
+                                                                                  "MLComputeUnits": "All",
+                                                                                  "ModelCacheDirectory": cache.path])) == nil {
                 NSLog("Atelier: Fine Edges runs without Core ML")
+                usesCoreML = false
             }
             return options
         }
         let made: ORTSession
+        usesCoreML = true
         do {
             made = try ORTSession(env: env, modelPath: modelURL.path, sessionOptions: options(coreML: true))
         } catch {
             // Core ML can refuse a model this large; ONNX Runtime's own CPU code still runs it.
             NSLog("Atelier: Fine Edges with Core ML failed (%@), using the CPU", "\(error)")
+            usesCoreML = false
             made = try ORTSession(env: env, modelPath: modelURL.path, sessionOptions: options(coreML: false))
         }
         session = made
@@ -203,7 +220,8 @@ public enum FineEdges {
             let foreground = Double(chances.lazy.filter { $0 > 0.5 }.count) / Double(max(1, chances.count))
             let seconds = Date().timeIntervalSince(started)
             failure = nil
-            lastRun = String(format: "Fine Edges ran in %.1f s; %.0f%% of the photo is foreground", seconds, foreground * 100)
+            lastRun = String(format: "Fine Edges ran in %.1f s (%@); %.0f%% of the photo is foreground", seconds,
+                             usesCoreML ? "Core ML" : "CPU", foreground * 100)
             NSLog("Atelier: %@ (outputs %@, input %@)", lastRun ?? "", try session.outputNames().joined(separator: ", "),
                   inputName)
             return chances

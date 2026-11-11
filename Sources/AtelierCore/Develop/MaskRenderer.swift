@@ -120,26 +120,24 @@ extension DevelopRenderer {
             brushCache?.store(image, for: key)
             return image.transformed(by: CGAffineTransform(translationX: extent.minX, y: extent.minY))
         case .subject(let selection):
-            guard var mask = subject?(selection.box) else { return nil }
-            if selection.fineEdges, let matte = fine?(mask) {
-                mask = fineEdged(mask, outline: mask, matte: matte, extent: extent)
-            }
-            return refinedSelection(mask, grow: selection.grow, refine: selection.refine, feather: selection.feather,
-                                    guide: guide, extent: extent)
+            guard let mask = subject?(selection.box) else { return nil }
+            let refined = refinedSelection(mask, grow: selection.grow, refine: selection.refine, feather: selection.feather,
+                                           guide: guide, extent: extent)
+            // Fine Edges last, so Feather and Refine Edge don't blur away the strands it finds.
+            guard selection.fineEdges, let matte = fine?(mask) else { return refined }
+            return fineEdged(refined, outline: mask, matte: matte, extent: extent)
         case .people(let selection):
-            guard var mask = people?(selection) else { return nil }
-            if selection.fineEdges {
-                // The people's own outline, so parts inside them (face skin next to hair) keep
-                // their edges and only edges onto the background are redrawn.
-                var whole = selection
-                whole.parts = [.entirePerson]
-                let outline = people?(whole) ?? mask
-                if let matte = fine?(outline) {
-                    mask = fineEdged(mask, outline: outline, matte: matte, extent: extent)
-                }
-            }
-            return refinedSelection(mask, grow: selection.grow, refine: selection.refine, feather: selection.feather,
-                                    guide: guide, extent: extent)
+            guard let mask = people?(selection) else { return nil }
+            let refined = refinedSelection(mask, grow: selection.grow, refine: selection.refine, feather: selection.feather,
+                                           guide: guide, extent: extent)
+            guard selection.fineEdges else { return refined }
+            // The people's own outline, so parts inside them (face skin next to hair) keep their
+            // edges and only edges onto the background are redrawn.
+            var whole = selection
+            whole.parts = [.entirePerson]
+            let outline = people?(whole) ?? mask
+            guard let matte = fine?(outline) else { return refined }
+            return fineEdged(refined, outline: outline, matte: matte, extent: extent)
         case .luminance:
             return nil
         }
