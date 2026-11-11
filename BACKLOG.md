@@ -677,7 +677,7 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 ## AT-046 — Match Look: skin masks cover the lips; Protect Skin Tones holds brightness
 
-**Status:** PR open, never compiled (cloud has no Swift toolchain); needs a Mac build, tests and Rosh's acceptance. **Owner:** Claude. **Chat:** [Improve Match Colors quality](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKF2JPu63ZaHgkVxXXo1FmSC). **Branch:** `claude/match-look-skin-lips`. **Baseline:** `2747aea`. **Dependencies:** AT-045 (merged).
+**Status:** PR open, never compiled (cloud has no Swift toolchain); needs a Mac build, tests and Rosh's acceptance. **Owner:** Claude. **Chat:** [Improve Match Colors quality](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKF2JPu63ZaHgkVxXXo1FmSC). **Branch:** `claude/match-look-skin-lips`. **PR:** [#107](https://github.com/roshan-davis/atelier/pull/107). **Baseline:** `2747aea`. **Dependencies:** AT-045 (merged).
 
 **Evidence:** Rosh (2026-11-11), a smiling portrait in the rain: with Match Skin Tone or Protect Skin Tones "the lip area is weird, and the color is making pale". Source review: the skin masks used Select People's Face Skin, which leaves holes at lips, teeth, eyes and brows (AT-042), so the masks held or matched the skin while the lips kept the global look, with a hard edge (feather 0). Protect held only hue and saturation, and only past its 5°/15% limits, so a lighter, slightly greyer face was left alone.
 
