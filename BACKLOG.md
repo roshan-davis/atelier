@@ -674,3 +674,15 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 **Acceptance:** Mac build; `FlatSVGTests` and `BuiltInLookReferenceTests` pass; the picker shows the eight drawings; each study matches a photo toward its palette without lifting blacks; Show Skin tints the drawn skin. Regenerate the Help before/after pictures with `ATELIER_BUILT_IN_LOOK_OUT` and `ATELIER_SKIN_LOOK_OUT` and `Scripts/help/make_help_images.py` (the reference pictures are updated; before/after still show the old studies' result).
 
 **Not in scope:** part-by-part matching (hair to hair, clothes to clothes) with fast Select People parts; it follows in its own PR.
+
+## AT-046 — Develop > Lens Corrections: sliders no longer decode the RAW file on every tick
+
+**Status:** PR open, never compiled (cloud has no Swift toolchain); needs a Mac build, `check_pr.py` and before/after timings, then Rosh's test. **Owner:** Claude. **Chat:** Claude project thread "Speed up Lens Corrections rendering". **Branch:** `claude/project-thread-1arfbl` (from main `2747aea`).
+
+**Evidence:** Rosh (2026-11-11): "lens correction section taking more time on rendering". Code at `2747aea`: every Lens Corrections control (Remove CA, Defringe, Vignetting, Distortion) and the Transform are in pipeline step 1, whose one cache key (`DevelopSession.CorrectedKey`) includes them, so each tick re-ran the RAW decode (`CIRAWFilter`), Camera Matching and everything after it. PR #79's CI timings: step-1 sliders 150–182 ms/tick, unchanged by the step-1 cache; AT-039's warm-up covers no step-1 tool.
+
+**Scope:** (1) Interactive sessions keep the decode alone (`DecodeKey`: Temp, Tint, Exposure, Profile, lens profile corrections) as a second cached intermediate; Lens Corrections and Transform run on top of it (`DevelopRenderer.applyLensCorrections`, new `LensCorrections.swift`). The full step-1 cache is unchanged, so later panels still start from it. (2) The warm-up also renders each idle lens tool (Remove CA, Defringe, Lens Vignetting, the warp) as its own program into an intermediate, as a session does. Same pixels; no `PreviewCache.version` bump.
+
+**Acceptance:** Mac build; `RenderCacheTests` (new: decode key, lens edits match fresh renders over the whole photo) and `PipelineWarmUpTests` pass; `SliderPerformanceTests` "After" column for Distortion, Vignetting, Defringe and Transform clearly lower on this branch than on `2747aea`, other rows unchanged; Rosh drags the Lens Corrections sliders on a NEF and finds them as smooth as Basic's Contrast.
+
+**Limitations:** Exposure, Temp and Tint still re-decode (AT-039 D3b). An interactive session holds one more intermediate while lens tools are on (about 35 MB at the 2560 px proxy, about 190 MB for the full-size session of a 24 MP photo). With a Select Subject, Select People or Fine Edges mask, a Distortion, Lens Vignetting or Transform tick still finds those masks again (they are keyed by `lensGeometryKey`, which also drives the Before view and Auto white balance); deferred to its own design.

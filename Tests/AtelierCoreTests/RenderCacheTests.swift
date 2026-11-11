@@ -79,6 +79,90 @@ final class RenderCacheTests: XCTestCase {
         }
     }
 
+    /// AT-046: the kept decode follows only what the decode reads, so Lens Corrections and
+    /// Transform ticks start from it instead of the RAW file.
+    func testDecodeKeyIgnoresLensCorrectionsAndTransform() {
+        let base = DevelopSettings()
+        let key = DevelopSession.DecodeKey(base)
+        var lens: [(String, (inout DevelopSettings) -> Void)] = [
+            ("remove CA", { $0.removeChromaticAberration = true }),
+            ("distortion", { $0[.lensDistortion] = 20 }),
+            ("lens vignetting", { $0[.lensVignette] = 30 }),
+            ("transform", { $0[.transformVertical] = 10 }),
+            ("later panel", { $0.contrast = 40 }),
+        ]
+        for parameter in DevelopSettings.Parameter.allCases where parameter.isDefringe {
+            lens.append((parameter.rawValue, { $0[parameter] = parameter.defaultValue + 5 }))
+        }
+        for (name, change) in lens {
+            var settings = base
+            change(&settings)
+            XCTAssertEqual(DevelopSession.DecodeKey(settings), key, name)
+        }
+        let decode: [(String, (inout DevelopSettings) -> Void)] = [
+            ("exposure", { $0.exposure = 0.5 }),
+            ("temperature", { $0.temperature = 4800 }),
+            ("tint", { $0.tint = 10 }),
+            ("profile", { $0.profile = .appleNeutral }),
+            ("lens profile", { $0.lensProfileCorrections.toggle() }),
+        ]
+        for (name, change) in decode {
+            var settings = base
+            change(&settings)
+            XCTAssertNotEqual(DevelopSession.DecodeKey(settings), key, name)
+        }
+    }
+
+    /// AT-046: Lens Corrections and Transform edits on the kept decode render the same as a fresh
+    /// session, over the whole photo (vignetting and the warp change the edges), through
+    /// sequences that go back and forth between kept decodes.
+    func testInteractiveLensEditsMatchFreshRenders() throws {
+        let file = workDir.appendingPathComponent("bands.jpg")
+        try Self.makeJPEG(at: file, colors: [0.2, 0.5, 0.8, 0.4])
+        let interactive = try XCTUnwrap(DevelopRenderer.shared.session(for: file, maxPixelSize: 64, interactive: true))
+        var steps: [DevelopSettings] = []
+        var settings = DevelopSettings()
+        steps.append(settings)
+        settings[.lensVignette] = 40
+        steps.append(settings)
+        settings[.lensVignette] = 60
+        steps.append(settings)
+        settings[.lensDistortion] = 30
+        steps.append(settings)
+        settings[.lensDefringePurpleAmount] = 8
+        steps.append(settings)
+        settings.removeChromaticAberration = true
+        steps.append(settings)
+        settings.exposure = 0.7
+        steps.append(settings)
+        settings[.lensDistortion] = -20
+        steps.append(settings)
+        settings[.transformVertical] = 15
+        steps.append(settings)
+        settings.exposure = 0
+        steps.append(settings)
+        settings.contrast = 40
+        steps.append(settings)
+        steps.append(DevelopSettings())
+        for (index, step) in steps.enumerated() {
+            let fresh = try XCTUnwrap(DevelopRenderer.shared.session(for: file, maxPixelSize: 64))
+            let expected = try XCTUnwrap(fresh.render(step))
+            let actual = try XCTUnwrap(interactive.render(step))
+            XCTAssertEqual(actual.width, expected.width, "step \(index)")
+            XCTAssertEqual(actual.height, expected.height, "step \(index)")
+            // Two kept intermediates at the working format's half precision; a stale cache would
+            // be off by far more than two 8-bit steps.
+            var worst = 0
+            for y in stride(from: 0, to: expected.height, by: 3) {
+                for x in stride(from: 0, to: expected.width, by: 3) {
+                    let a = Self.pixel(actual, x: x, y: y), e = Self.pixel(expected, x: x, y: y)
+                    for channel in 0..<3 { worst = max(worst, abs(Int(a[channel]) - Int(e[channel]))) }
+                }
+            }
+            XCTAssertLessThanOrEqual(worst, 2, "step \(index)")
+        }
+    }
+
     func testRenderForDisplayPaintsClippingButKeepsThePlainCopy() throws {
         let file = workDir.appendingPathComponent("clipped.jpg")
         // Left half pure white, right half mid gray.

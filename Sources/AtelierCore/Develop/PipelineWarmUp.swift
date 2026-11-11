@@ -22,10 +22,22 @@ extension DevelopRenderer {
         guard let input = Self.warmUpInput,
               let surface = DisplaySurfaces.make(width: Self.warmUpSize.width, height: Self.warmUpSize.height,
                                                  colorSpace: Self.displaySpace) else { return 0 }
+        // Later panels' tools render on the kept step 1 (an image to sample); the lens tools on
+        // the kept decode, as their own program into a cached intermediate, as in a session.
+        let later: [CIImage] = Self.warmUpVariants(settings).map { variant in
+            Self.applyAdjustments(variant.applyingPanelSwitches(), to: input, scale: scale, cacheStages: true)
+        }
+        let lens: [CIImage] = Self.lensWarmUpVariants(settings).map { variant in
+            let switched = variant.applyingPanelSwitches()
+            let lensed = Self.applyLensCorrections(switched, to: input, scale: scale,
+                                                   lateral: switched.removeChromaticAberration ? Self.warmUpLateralCA : nil,
+                                                   focalLength35: 50)
+            return Self.applyAdjustments(switched, to: lensed.insertingIntermediate(cache: true), scale: scale,
+                                         cacheStages: true)
+        }
         var count = 0
-        for variant in Self.warmUpVariants(settings) {
+        for image in later + lens {
             guard isCurrent() else { break }
-            let image = Self.applyAdjustments(variant.applyingPanelSwitches(), to: input, scale: scale, cacheStages: true)
             let destination = CIRenderDestination(ioSurface: surface)
             destination.colorSpace = Self.displaySpace
             destination.isFlipped = Self.surfaceNeedsFlip
@@ -74,6 +86,29 @@ extension DevelopRenderer {
         on(.grain, 20)
         return variants
     }
+
+    /// The photo's settings without its masks, once for each Lens Corrections tool that is
+    /// off, with that tool on (AT-046). Distortion, Upright and the Transform sliders share one
+    /// warp kernel, so Distortion stands for all of them. Lens profile corrections are part of
+    /// the decode, which the stand-in doesn't go through.
+    static func lensWarmUpVariants(_ settings: DevelopSettings) -> [DevelopSettings] {
+        var base = settings
+        base.masks = []
+        var variants: [DevelopSettings] = []
+        func probe(_ change: (inout DevelopSettings) -> Void) {
+            var variant = base
+            change(&variant)
+            if variant != base { variants.append(variant) }
+        }
+        probe { if !$0.removeChromaticAberration { $0.removeChromaticAberration = true } }
+        probe { if $0[.lensDefringePurpleAmount] == 0 && $0[.lensDefringeGreenAmount] == 0 { $0[.lensDefringePurpleAmount] = 5 } }
+        probe { if $0[.lensVignette] == 0 { $0[.lensVignette] = 20 } }
+        probe { if !$0.hasLensGeometry { $0[.lensDistortion] = 10 } }
+        return variants
+    }
+
+    /// A small aberration, so Remove Chromatic Aberration's kernel is in the warm-up render.
+    static let warmUpLateralCA = LateralCA(red: 0.0005, blue: -0.0005)
 
     static let warmUpSize = (width: 64, height: 48)
 

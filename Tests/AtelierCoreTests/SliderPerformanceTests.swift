@@ -50,6 +50,8 @@ final class SliderPerformanceTests: XCTestCase {
         parameter("Basic > Exposure", .exposure, start: 0.1, step: 0.05, stepOne: true),
         Slider(name: "Basic > Temp", set: { settings, i in settings.temperature = 5000 + Double(i) * 50 }, stepOne: true),
         parameter("Lens Corrections > Distortion", .lensDistortion, start: 5, step: 2, stepOne: true),
+        parameter("Lens Corrections > Vignetting", .lensVignette, start: 10, step: 4, stepOne: true),
+        parameter("Lens Corrections > Defringe Purple Amount", .lensDefringePurpleAmount, start: 2, step: 1, stepOne: true),
         parameter("Transform > Vertical", .transformVertical, start: 5, step: 2, stepOne: true),
     ]
 

@@ -19,8 +19,28 @@ final class PipelineWarmUpTests: XCTestCase {
 
     func testWarmUpRendersEveryVariant() {
         let settings = DevelopSettings()
-        XCTAssertEqual(DevelopRenderer.shared.warmUp(settings, scale: 0.25), DevelopRenderer.warmUpVariants(settings).count)
+        XCTAssertEqual(DevelopRenderer.shared.warmUp(settings, scale: 0.25),
+                       DevelopRenderer.warmUpVariants(settings).count + DevelopRenderer.lensWarmUpVariants(settings).count)
         XCTAssertEqual(DevelopRenderer.shared.warmUp(settings, scale: 0.25, isCurrent: { false }), 0, "stops when told")
+    }
+
+    /// AT-046: each Lens Corrections tool that is off gets a warm-up render; one already on doesn't.
+    func testLensVariantsTurnOnOnlyIdleLensTools() {
+        let idle = DevelopRenderer.lensWarmUpVariants(DevelopSettings())
+        XCTAssertEqual(idle.count, 4)
+        XCTAssertTrue(idle.contains { $0.removeChromaticAberration })
+        XCTAssertTrue(idle.contains { $0[.lensDefringePurpleAmount] != 0 })
+        XCTAssertTrue(idle.contains { $0[.lensVignette] != 0 })
+        XCTAssertTrue(idle.contains { $0[.lensDistortion] != 0 })
+
+        var settings = DevelopSettings()
+        settings[.lensDistortion] = 12
+        settings[.lensVignette] = 25
+        settings.masks = [DevelopSettings.Mask(name: "Radial")]
+        let variants = DevelopRenderer.lensWarmUpVariants(settings)
+        XCTAssertEqual(variants.count, 2, "Remove CA and Defringe only")
+        XCTAssertTrue(variants.allSatisfy(\.masks.isEmpty))
+        XCTAssertTrue(variants.allSatisfy { $0[.lensDistortion] == 12 && $0[.lensVignette] == 25 })
     }
 
     /// Caching Highlights/Shadows' and Clarity/Texture's smoothed base doesn't change the photo

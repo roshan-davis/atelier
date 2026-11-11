@@ -502,7 +502,10 @@ public final class DevelopSession: @unchecked Sendable {
     /// slider on any later panel doesn't decode the RAW and redo the lens corrections again.
     /// Two are kept, most recent last, so the Before view and the edit don't push each other out.
     private var correctedCache: [(key: CorrectedKey, image: CIImage)] = []
-    /// Whether `correctedCache` is used; see `DevelopRenderer.session(for:maxPixelSize:interactive:)`.
+    /// The decode alone (see `DecodeKey`), so a Lens Corrections or Transform tick doesn't
+    /// decode the RAW again. Two are kept, most recent last.
+    private var decodeCache: [(key: DecodeKey, image: CIImage)] = []
+    /// Whether `correctedCache` and `decodeCache` are used; see `DevelopRenderer.session(for:maxPixelSize:interactive:)`.
     private let interactive: Bool
 
     init?(url: URL, maxPixelSize: Int?, renderer: DevelopRenderer, interactive: Bool = false) {
@@ -598,27 +601,74 @@ public final class DevelopSession: @unchecked Sendable {
     /// Pipeline step 1: decode with white balance and exposure, the profile, then the lens
     /// corrections (chromatic aberration, Defringe, vignetting, distortion) and the Transform.
     /// The result starts at the origin. Call with the lock held.
+    ///
+    /// Interactive sessions keep two layers of it: the decode alone (`DecodeKey`), and the
+    /// corrected photo on top (`CorrectedKey`). A Lens Corrections or Transform tick changes only
+    /// the second, so it starts from the kept decode instead of the RAW file; a slider on a later
+    /// panel changes neither and starts from the corrected photo. The pixels are the same as
+    /// without the caches.
     private func corrected(_ settings: DevelopSettings, defringeView: Defringe.View = .photo) -> CIImage? {
         let settings = settings.applyingPanelSwitches()
-        guard interactive else { return decodeAndCorrect(settings, defringeView: defringeView) }
+        guard interactive else {
+            guard let image = decode(settings) else { return nil }
+            return correctLens(image, settings: settings, defringeView: defringeView)
+        }
         let key = CorrectedKey(settings, view: defringeView)
         if let index = correctedCache.firstIndex(where: { $0.key == key }) {
             let cached = correctedCache.remove(at: index)
             correctedCache.append(cached)
             return cached.image
         }
-        guard let image = decodeAndCorrect(settings, defringeView: defringeView) else { return nil }
+        guard let decoded = keptDecode(settings) else { return nil }
+        let image = correctLens(decoded, settings: settings, defringeView: defringeView)
         // Core Image keeps the rendered step 1 in its cache even though the context's
         // intermediates are off, so the next render starts from it instead of the RAW.
-        let kept = image.insertingIntermediate(cache: true)
+        // With no lens corrections the kept decode already is step 1; don't store it twice.
+        let kept = image === decoded ? decoded : image.insertingIntermediate(cache: true)
         correctedCache.append((key, kept))
         if correctedCache.count > 2 { correctedCache.removeFirst() }
         return kept
     }
 
-    /// Everything step 1 (`decodeAndCorrect`) reads, after the panel switches. Add a setting
-    /// here whenever step 1 starts to use it, or edits to it won't show until another step-1
+    /// The decode for `settings` (after the panel switches), kept as a Core Image cached
+    /// intermediate. Two are kept, most recent last, so the Before view and the edit don't push
+    /// each other out. Interactive sessions only; call with the lock held.
+    private func keptDecode(_ settings: DevelopSettings) -> CIImage? {
+        let key = DecodeKey(settings)
+        if let index = decodeCache.firstIndex(where: { $0.key == key }) {
+            let cached = decodeCache.remove(at: index)
+            decodeCache.append(cached)
+            return cached.image
+        }
+        guard let image = decode(settings) else { return nil }
+        let kept = image.insertingIntermediate(cache: true)
+        decodeCache.append((key, kept))
+        if decodeCache.count > 2 { decodeCache.removeFirst() }
+        return kept
+    }
+
+    /// Everything the decode (`decode`) reads, after the panel switches. Add a setting here
+    /// whenever the decode starts to use it, or edits to it won't show until another decode
     /// setting changes.
+    struct DecodeKey: Equatable {
+        let temperature: Double?
+        let tint: Double
+        let exposure: Double
+        let profile: DevelopSettings.Profile
+        let lensProfileCorrections: Bool
+
+        init(_ settings: DevelopSettings) {
+            temperature = settings.temperature
+            tint = settings.tint
+            exposure = settings.exposure
+            profile = settings.profile
+            lensProfileCorrections = settings.lensProfileCorrections
+        }
+    }
+
+    /// Everything step 1 (`decode` and `correctLens`) reads, after the panel switches. Add a
+    /// setting here whenever step 1 starts to use it, or edits to it won't show until another
+    /// step-1 setting changes.
     struct CorrectedKey: Equatable {
         let geometry: DevelopSettings
         let temperature: Double?
@@ -642,7 +692,10 @@ public final class DevelopSession: @unchecked Sendable {
         }
     }
 
-    private func decodeAndCorrect(_ settings: DevelopSettings, defringeView: Defringe.View) -> CIImage? {
+    /// Step 1's first part: the RAW decode (or the decoded file) with white balance, exposure,
+    /// the profile and Apple's lens profile corrections. Reads only what `DecodeKey` holds.
+    /// The result starts at the origin. Call with the lock held.
+    private func decode(_ settings: DevelopSettings) -> CIImage? {
         var image: CIImage
         if let raw = rawFilter {
             raw.neutralTemperature = Float(settings.temperature ?? asShotTemperature)
@@ -679,31 +732,23 @@ public final class DevelopSession: @unchecked Sendable {
         if image.extent.origin != .zero {
             image = image.transformed(by: CGAffineTransform(translationX: -image.extent.minX, y: -image.extent.minY))
         }
-        let extent = image.extent
-        // Remove Chromatic Aberration, measured once per file from a render big enough to see it.
-        if settings.removeChromaticAberration {
-            let profile = settings.lensProfileCorrections
-            let lateral: LateralCA? = max(extent.width, extent.height) >= LateralCA.minimumSize
-                ? renderer.lateralCA(for: url, profileCorrections: profile, image: image)
-                : renderer.cachedLateralCA(for: url, profileCorrections: profile)
-            if let lateral { image = lateral.apply(to: image) }
-        }
-        image = Defringe.apply(image, settings: settings, scale: renderScale, view: defringeView)
-        // Lens vignetting, around the uncropped photo's center, before the warp moves it.
-        if settings[.lensVignette] != 0 {
-            let filter = CIFilter.vignetteEffect()
-            filter.inputImage = image
-            filter.center = CGPoint(x: extent.midX, y: extent.midY)
-            let diagonal = (extent.width * extent.width + extent.height * extent.height).squareRoot() / 2
-            filter.radius = Float(diagonal * (0.35 + settings[.lensVignetteMidpoint] / 100 * 0.6))
-            filter.falloff = 0.6
-            filter.intensity = Float(-settings[.lensVignette] / 100)
-            image = filter.outputImage?.cropped(to: extent) ?? image
-        }
-        if settings.hasLensGeometry {
-            image = LensGeometry(settings: settings, size: extent.size, focalLength35: focalLength35).apply(to: image)
-        }
         return image
+    }
+
+    /// Step 1's second part, on the decode: Remove Chromatic Aberration (measured once per file
+    /// from a render big enough to see it), then the rest in `DevelopRenderer.applyLensCorrections`.
+    /// Returns `decoded` itself when nothing applies. Call with the lock held.
+    private func correctLens(_ decoded: CIImage, settings: DevelopSettings, defringeView: Defringe.View) -> CIImage {
+        var lateral: LateralCA?
+        if settings.removeChromaticAberration {
+            let extent = decoded.extent
+            let profile = settings.lensProfileCorrections
+            lateral = max(extent.width, extent.height) >= LateralCA.minimumSize
+                ? renderer.lateralCA(for: url, profileCorrections: profile, image: decoded)
+                : renderer.cachedLateralCA(for: url, profileCorrections: profile)
+        }
+        return DevelopRenderer.applyLensCorrections(settings, to: decoded, scale: renderScale, lateral: lateral,
+                                                    focalLength35: focalLength35, defringeView: defringeView)
     }
 
     /// Straight edges in the photo after its lens corrections and before the Transform, for
