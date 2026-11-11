@@ -74,11 +74,12 @@ extension DevelopRenderer {
     /// (no box) or Select Object's (inside the box) on the photo's frame; `people` finds Select
     /// People's skin there.
     /// `guide` is the photo on the same frame, which Refine Edge snaps AI selections to; `fine`
-    /// gives the Fine Edges model's foreground matte on that frame (nil when not downloaded).
+    /// gives the Fine Edges model's foreground matte around a selection's outline on that frame
+    /// (covering a square around it; nil when not downloaded).
     static func sourceMask(_ component: DevelopSettings.MaskComponent, extent: CGRect,
                            subject: ((DevelopSettings.MaskRect?) -> CIImage?)?,
                            people: ((DevelopSettings.PeopleSelection) -> CIImage?)? = nil,
-                           fine: (() -> CIImage?)? = nil,
+                           fine: ((CIImage) -> CIImage?)? = nil,
                            guide: CIImage? = nil,
                            brushCache: BrushCache?) -> CIImage? {
         let width = extent.width, height = extent.height
@@ -120,19 +121,22 @@ extension DevelopRenderer {
             return image.transformed(by: CGAffineTransform(translationX: extent.minX, y: extent.minY))
         case .subject(let selection):
             guard var mask = subject?(selection.box) else { return nil }
-            if selection.fineEdges, let matte = fine?() {
+            if selection.fineEdges, let matte = fine?(mask) {
                 mask = fineEdged(mask, outline: mask, matte: matte, extent: extent)
             }
             return refinedSelection(mask, grow: selection.grow, refine: selection.refine, feather: selection.feather,
                                     guide: guide, extent: extent)
         case .people(let selection):
             guard var mask = people?(selection) else { return nil }
-            if selection.fineEdges, let matte = fine?() {
+            if selection.fineEdges {
                 // The people's own outline, so parts inside them (face skin next to hair) keep
                 // their edges and only edges onto the background are redrawn.
                 var whole = selection
                 whole.parts = [.entirePerson]
-                mask = fineEdged(mask, outline: people?(whole) ?? mask, matte: matte, extent: extent)
+                let outline = people?(whole) ?? mask
+                if let matte = fine?(outline) {
+                    mask = fineEdged(mask, outline: outline, matte: matte, extent: extent)
+                }
             }
             return refinedSelection(mask, grow: selection.grow, refine: selection.refine, feather: selection.feather,
                                     guide: guide, extent: extent)
@@ -142,14 +146,15 @@ extension DevelopRenderer {
     }
 
     /// Fine Edges: the selection's edge redrawn from the Fine Edges model's foreground `matte`,
-    /// within 0.8% of the long edge of where Vision put it. Inside the band, pixels inside
+    /// within 1.5% of the long edge of where Vision put it, where the matte was found (it covers a
+    /// square around the selection; outside it nothing changes). Inside the band, pixels inside
     /// `outline` (Vision's outline of the subject or the people) are kept only where the matte
     /// is foreground too (the background between strands of hair drops out), and pixels outside
     /// it are added where the matte is foreground (strands Vision's outline missed). Away from the
     /// edge the selection is unchanged, so someone the model misses keeps their selection.
     /// max(shrunk, min(grown, matte, max(mask, 1 − outline))).
     static func fineEdged(_ mask: CIImage, outline: CIImage, matte: CIImage, extent: CGRect) -> CIImage {
-        let radius = max(1, 0.008 * Double(max(extent.width, extent.height)))
+        let radius = max(1, 0.015 * Double(max(extent.width, extent.height)))
         func morphology(_ image: CIImage, _ name: String) -> CIImage {
             image.clampedToExtent().applyingFilter(name, parameters: [kCIInputRadiusKey: radius]).cropped(to: extent)
         }
@@ -160,6 +165,8 @@ extension DevelopRenderer {
             a.applyingFilter("CIMaximumCompositing", parameters: [kCIInputBackgroundImageKey: b])
         }
         let base = mask.cropped(to: extent)
+        // Outside the matte's square the matte is the selection itself, which changes nothing.
+        let matte = matte.composited(over: base)
         let shrunk = morphology(base, "CIMorphologyMinimum")
         let grown = morphology(base, "CIMorphologyMaximum")
         let allowed = higher(base, invert(outline.cropped(to: extent)))
