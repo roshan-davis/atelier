@@ -1,7 +1,9 @@
 import CoreGraphics
 import CryptoKit
 import Foundation
+import ImageIO
 import OnnxRuntimeBindings
+import UniformTypeIdentifiers
 
 /// Fine Edges: BiRefNet HR-matting (Zheng Peng et al., MIT License), in the ONNX export by Pink
 /// Pixel on Hugging Face (MIT), an optional download (about 470 MB) from Settings > AI or the
@@ -223,6 +225,7 @@ public enum FineEdges {
                 throw Failure.run("unexpected output size \(data.count) bytes")
             }
             let chances = probabilities(raw)
+            saveDiagnostics(input: image, matte: chances)
             let foreground = Double(chances.lazy.filter { $0 > 0.5 }.count) / Double(max(1, chances.count))
             let seconds = Date().timeIntervalSince(started)
             failure = nil
@@ -264,6 +267,27 @@ public enum FineEdges {
             }
         }
         return out
+    }
+
+    /// Where the last run's input and matte are saved as PNGs, so what the model saw and found
+    /// can be looked at (Settings > AI > Masking Models > Show Last Result).
+    public static var diagnosticsFolder: URL {
+        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        return caches.appendingPathComponent("Atelier/Fine Edges Last Run", isDirectory: true)
+    }
+
+    static func saveDiagnostics(input: CGImage, matte: [Float]) {
+        let folder = diagnosticsFolder
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        func write(_ image: CGImage?, _ name: String) {
+            guard let image, let destination = CGImageDestinationCreateWithURL(
+                folder.appendingPathComponent(name) as CFURL, UTType.png.identifier as CFString, 1, nil) else { return }
+            CGImageDestinationAddImage(destination, image, nil)
+            CGImageDestinationFinalize(destination)
+        }
+        write(input, "1 What the model saw.png")
+        write(PeopleSkin.grayImage(matte, width: size, height: size), "2 What it found (white = selected).png")
     }
 
     /// An IEEE half-precision float's bits as a Float (works on Intel too).

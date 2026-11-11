@@ -586,6 +586,10 @@ private struct MaskingModelsSection: View {
                 if download.installed {
                     HStack {
                         Text("Downloaded").foregroundStyle(.secondary)
+                        Button("Show Last Result") {
+                            NSWorkspace.shared.activateFileViewerSelecting([FineEdges.diagnosticsFolder])
+                        }
+                        .help("Opens the folder with what the model saw and found on its last run")
                         Button("Remove") { download.remove() }
                     }
                 } else if let progress = download.progress {
