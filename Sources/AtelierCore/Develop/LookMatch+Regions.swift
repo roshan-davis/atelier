@@ -49,6 +49,8 @@ public struct LookSkin: Sendable {
     /// The mean Oklab a/b of the skin's shadows, midtones and highlights: drawn regions for a
     /// built-in study, otherwise the darkest, middle and brightest thirds of its pixels.
     let toneColors: [SIMD2<Double>]
+    /// The mean Oklab lightness of the same three tones, which Protect Skin Tones also holds.
+    let toneLightness: [Double]
 
     /// Faces Vision finds, 0 to 1 from the top left.
     public static func faces(in image: CGImage) -> [CGRect] {
@@ -101,7 +103,9 @@ public struct LookSkin: Sendable {
         usesPeople = false
         hue = measured.hue
         chroma = measured.chroma
-        toneColors = Self.toneSplit(sample, skin).groups.compactMap { Self.meanAB(sample, $0) }
+        let groups = Self.toneSplit(sample, skin).groups
+        toneColors = groups.compactMap { Self.meanAB(sample, $0) }
+        toneLightness = groups.compactMap { Self.meanLightness(sample, $0) }
     }
 
     /// A built-in study's skin, drawn in flat tones: one region per tone (shadows, midtones,
@@ -117,6 +121,7 @@ public struct LookSkin: Sendable {
         hue = mid.hue
         chroma = mid.chroma
         toneColors = groups.compactMap { Self.meanAB(sample, $0) }
+        toneLightness = groups.compactMap { Self.meanLightness(sample, $0) }
     }
 
     static func pixels(in region: CGRect, of sample: LookSample) -> [Int] {
@@ -136,6 +141,16 @@ public struct LookSkin: Sendable {
         let first = sorted.count / 3, second = sorted.count * 2 / 3
         let groups = [Array(sorted[..<first]), Array(sorted[first..<second]), Array(sorted[second...])]
         return (groups, (Double(sample.luma[sorted[first]]), Double(sample.luma[sorted[second]])))
+    }
+
+    /// Mean Oklab lightness of the pixels.
+    static func meanLightness(_ sample: LookSample, _ pixels: [Int]) -> Double? {
+        var sum = 0.0, n = 0.0
+        for i in pixels where i < sample.count {
+            sum += Double(sample.lightness[i])
+            n += 1
+        }
+        return n > 0 ? sum / n : nil
     }
 
     /// Mean Oklab a/b of the pixels.
@@ -159,13 +174,23 @@ public struct LookSkin: Sendable {
         usesPeople = true
         hue = measured.hue
         chroma = measured.chroma
-        toneColors = Self.toneSplit(sample, picked).groups.compactMap { Self.meanAB(sample, $0) }
+        let groups = Self.toneSplit(sample, picked).groups
+        toneColors = groups.compactMap { Self.meanAB(sample, $0) }
+        toneLightness = groups.compactMap { Self.meanLightness(sample, $0) }
     }
 
     /// What the skin treatments measure and Match Skin Tone adjusts: everyone's Face Skin. Body
     /// Skin is found by color alone, so warm clothes touching skin can join it; it stays a choice
     /// in Masking.
     public static let matchSelection = DevelopSettings.PeopleSelection(parts: [.faceSkin], feather: 0)
+
+    /// What the skin masks cover. Face Skin alone leaves holes at the lips (and eyes, brows and
+    /// teeth), so the look stayed on the lips while the skin around them was held or matched:
+    /// Rosh saw a hard, odd-colored lip area. Match Skin Tone also moves the lips with the skin;
+    /// Protect Skin Tones holds every part of the face.
+    static let matchMaskSelection = DevelopSettings.PeopleSelection(parts: [.faceSkin, .lips], feather: 0)
+    static let protectMaskSelection = DevelopSettings.PeopleSelection(
+        parts: [.faceSkin, .lips, .teeth, .eyebrows, .eyeSclera, .iris], feather: 0)
 
     /// Select People's face skin on an image, at `width` × `height`, with the faces it found; nil
     /// when it finds no one.
@@ -208,6 +233,18 @@ public struct LookSkin: Sendable {
     func drift(_ sample: LookSample) -> (hue: Double, ratio: Double)? {
         guard let now = Self.hueAndChroma(sample, pixels), chroma > 1e-4 else { return nil }
         return (Self.hueDifference(now.hue, hue), now.chroma / chroma)
+    }
+
+    /// Whether a render left the skin where it was, closely: what Protect Skin Tones aims for
+    /// before its looser limits (`isWithin`) are a fallback. Brightness counts too, since a look
+    /// that lifts the face's tones makes the skin pale even when its hue and saturation hold.
+    func holds(_ sample: LookSample) -> Bool {
+        guard !toneLightness.isEmpty, let d = drift(sample), let now = Self.meanLightness(sample, pixels) else {
+            return false
+        }
+        // The tones are equal thirds, so their mean is the skin's mean.
+        let was = toneLightness.reduce(0, +) / Double(toneLightness.count)
+        return abs(d.hue) <= 1.5 && abs(d.ratio - 1) <= 0.04 && abs(now - was) <= 0.015
     }
 
     func isWithin(_ sample: LookSample) -> Bool {
@@ -496,11 +533,13 @@ extension LookMatcher {
                 // Hold the skin at its own colors, tone by tone, with the skin masks, so the rest
                 // of the photo keeps the full look. Only if that can't bring it back inside the
                 // limits are the sliders pulled back (which weakens the whole match).
-                if let now = whole(current), !skin.isWithin(now) {
+                // The masks hold the skin's brightness too and act on any visible drift, not only
+                // past the limits: a face 4% less saturated and a little lighter read as pale.
+                if let now = whole(current), !skin.holds(now) {
                     // The masks may move as far as needed: they undo the look on the face,
                     // rather than paint the face like Match Skin Tone does.
                     _ = fitSkin(skin, to: skin, in: &current, space: space, measure: whole,
-                                limit: protectSkinShift, isCancelled: isCancelled)
+                                limit: protectSkinShift, holdsLightness: true, isCancelled: isCancelled)
                 }
                 if !isCancelled(), let now = whole(current), !skin.isWithin(now) {
                     protect(skin, in: &current, from: base, asShot: asShot, options: options, measure: whole)

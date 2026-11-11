@@ -682,3 +682,13 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 **Scope:** replace the app icon everywhere it comes from: the Dock icon set at launch from `Sources/AtelierApp/Resources/AppIcon.icns` (Xcode runs), the same `.icns` copied into Atelier.app and the HDR helper by `Scripts/build_macos_app.py` (`CFBundleIconFile`), the `AppIcon.appiconset` in `Assets.xcassets`, and the icon shown in the Remove Photos and Delete Import sheets (`NSApp.applicationIconImage`). `Scripts/icon/make_app_icon.py` rebuilds all of them from `Scripts/icon/AppIcon-source.png`; the art keeps its own rounded square (no extra mask) and is placed on Apple's 824-on-1024 px grid so it matches other Dock icons.
 
 **Acceptance:** on Rosh's Mac, Product > Run shows the new icon in the Dock and in Remove Photos; a `build_macos_app.py` build shows it in Finder. **Deferred:** none.
+
+## AT-047 — Match Look: skin masks cover the lips; Protect Skin Tones holds brightness
+
+**Status:** Merged at Rosh's ask on Nov 11, 2026 after Rosh built and ran it in Xcode ("looks good"). XCTest/`check_pr.py` not run (CI billing-blocked). **Owner:** Claude. **Chat:** [Improve Match Colors quality](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKF2JPu63ZaHgkVxXXo1FmSC). **Branch:** `claude/match-look-skin-lips`. **PR:** [#107](https://github.com/roshan-davis/atelier/pull/107). **Baseline:** `2747aea`. **Dependencies:** AT-045 (merged).
+
+**Evidence:** Rosh (2026-11-11), a smiling portrait in the rain: with Match Skin Tone or Protect Skin Tones "the lip area is weird, and the color is making pale". Source review: the skin masks used Select People's Face Skin, which leaves holes at lips, teeth, eyes and brows (AT-042), so the masks held or matched the skin while the lips kept the global look, with a hard edge (feather 0). Protect held only hue and saturation, and only past its 5°/15% limits, so a lighter, slightly greyer face was left alone.
+
+**Scope:** Match Skin Tone's masks use Face Skin + Lips; Protect's use Face Skin, Lips, Teeth, Eyebrows, Eye Sclera, Iris. Skin is still measured on Face Skin. Protect fits each skin mask's Exposure to hold the tone's Oklab lightness and runs whenever skin drifts visibly (`LookSkin.holds`: 1.5° hue, 4% chroma, 0.015 lightness); the 5°/15% pull-back stays the fallback.
+
+**Acceptance:** Mac build; `LookMatchTests` (holds, mask parts) and existing Match Look tests pass; Rosh: the same portrait with Protect and with Match Skin Tone, lips and skin consistent, skin not pale.
