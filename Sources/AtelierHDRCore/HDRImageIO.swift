@@ -73,7 +73,10 @@ public final class HDRImageIO {
 
     /// The same RGBA float bitmap as before, filled row bands at a time on all cores rather
     /// than appended pixel by pixel (it is made for every preview while a slider moves).
-    public func ciImage(_ image: HDRImage) -> CIImage {
+    public func ciImage(_ image: HDRImage) -> CIImage { Self.linearImage(image) }
+
+    /// `image` as a linear sRGB Core Image image, alpha 1 (`ciImage`; the GPU preview's input too).
+    public static func linearImage(_ image: HDRImage) -> CIImage {
         let width = image.width
         var rgba = [Float](repeating: 1, count: image.width * image.height * 4)
         image.rgb.withUnsafeBufferPointer { rgb in

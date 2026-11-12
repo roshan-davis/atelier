@@ -20,19 +20,21 @@ struct HDRImageView: View {
                 if let before = hdr.before {
                     let after = hdr.after ?? before
                     if hdr.showingBefore || hdr.compareMode == .off {
-                        photo(hdr.showingBefore ? before : after)
+                        // Live slider frames are drawn into the After photo (`PhotoFeed`), as in Develop.
+                        photo(hdr.showingBefore ? before : after, feed: hdr.showingBefore ? nil : hdr.photoFeed)
                     } else if hdr.compareMode == .sideBySide {
                         HStack(spacing: 12) {
                             ComparePane(image: before, label: "Before", pixelSize: hdr.pixelSize, zoom: model.zoomState,
                                         onReport: onZoomReport, menu: { model.photoMenu(includeZoom: true) })
                             ComparePane(image: after, label: "After", pixelSize: hdr.pixelSize, zoom: model.zoomState,
-                                        onReport: onZoomReport, menu: { model.photoMenu(includeZoom: true) })
+                                        onReport: onZoomReport, menu: { model.photoMenu(includeZoom: true) },
+                                        feed: hdr.photoFeed)
                         }
                         .padding(.horizontal, 8)
                     } else {
                         SliderCompareView(before: before, after: after, pixelSize: hdr.pixelSize, zoom: model.zoomState,
                                           onReport: onZoomReport, menu: { model.photoMenu(includeZoom: true) },
-                                          position: $hdr.sliderPosition)
+                                          position: $hdr.sliderPosition, feed: hdr.photoFeed)
                     }
                     if hdr.showingBefore { Badge(text: "Before").padding(14) }
                 } else if hdr.isLoading {
@@ -78,9 +80,9 @@ struct HDRImageView: View {
         var busy: Bool
     }
 
-    private func photo(_ image: NSImage) -> some View {
+    private func photo(_ image: NSImage, feed: PhotoFeed?) -> some View {
         ZoomableImageView(image: image, pixelSize: hdr.pixelSize, zoom: model.zoomState,
-                          onReport: onZoomReport, menu: { model.photoMenu(includeZoom: true) })
+                          onReport: onZoomReport, menu: { model.photoMenu(includeZoom: true) }, feed: feed)
     }
 
     private func onZoomReport(_ report: ZoomReport) {

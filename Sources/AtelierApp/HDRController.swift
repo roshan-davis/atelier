@@ -58,12 +58,18 @@ final class HDRController: ObservableObject {
     private var gestureStart: HDRSettings?
     private var savedSettings: HDRSettings?
     private var confirming = false
-    /// The tone mapper's exposure analysis of the image last rendered; see `render()`.
-    private var analysis: HDRToneMapper.Analysis?
+    /// The tone mapper's exposure analysis of the photo shown, and its GPU upload; see `render()`.
+    private let previewCache = HDRPreviewCache()
     /// Changes whenever another photo or project is shown, so an analysis can't outlive it.
     private var inputToken = 0
-    /// One Core Image context for every preview, rather than one per render.
+    /// One Core Image context for every CPU preview, rather than one per render.
     private let previewIO = HDRImageIO()
+    /// Live slider frames go straight onto the After photo (`PhotoFeed`), as in Develop.
+    let photoFeed = PhotoFeed()
+    private lazy var liveFrames = HDRLiveFrames(cache: previewCache, sink: photoFeed.sink,
+                                                onMiss: { [weak self] in self?.liveFrameMissed() })
+    /// Counts live frames and published images together, so neither replaces a newer one.
+    private var renderCount = 0
 
     init(model: LibraryModel) {
         self.model = model
@@ -168,7 +174,8 @@ final class HDRController: ObservableObject {
 
     private func show(input: HDRImage, preview: CGImage, pixelSize: CGSize, settings: HDRSettings,
                       saved: HDRSettings, revision: Int) {
-        self.input = input; detailInput = nil; analysis = nil; inputToken += 1
+        self.input = input; detailInput = nil; previewCache.reset(); inputToken += 1
+        photoFeed.sink.invalidate()
         before = NSImage(cgImage: preview, size: .zero); after = nil
         self.pixelSize = pixelSize
         self.settings = settings; savedSettings = saved; self.revision = revision
@@ -185,7 +192,8 @@ final class HDRController: ObservableObject {
         renderTask?.cancel(); renderTask = nil
         renderRevision += 1
         assetID = nil; resultAssetID = nil; request = nil; store = nil; sourceURL = nil
-        input = nil; detailInput = nil; detailLoading = false; analysis = nil; inputToken += 1
+        input = nil; detailInput = nil; detailLoading = false; previewCache.reset(); inputToken += 1
+        photoFeed.sink.invalidate()
         before = nil; after = nil; pixelSize = nil
         settings = HDRSettings(); savedSettings = nil; revision = 0
         undoStack = []; redoStack = []; updateHistory()
@@ -235,8 +243,9 @@ final class HDRController: ObservableObject {
             gestureStart = nil
             if previous != settings { undoStack.append(previous); redoStack = [] }
             updateHistory()
-            // Zoomed in, the drag showed the proxy: now the full-size render.
-            if case .percent(let percent) = zoom.level, percent >= 100, detailInput != nil { render() }
+            // The drag drew live frames (and, zoomed in, the proxy): now the ordinary image,
+            // at full size when zoomed to 100% or closer.
+            render()
         }
     }
 
@@ -289,33 +298,62 @@ final class HDRController: ObservableObject {
 
     /// One render in flight, with only the latest settings followed up. Old results never flash.
     ///
-    /// Smoothness (Rosh, Nov 12, 2026): the tone mapper's exposure analysis is kept between
-    /// renders (`analysis`), so only Exposure recomputes it; one Core Image context is reused
-    /// for previews; and while a slider is held at 100% or closer the 1600 px proxy is drawn
-    /// (scaled up, like Develop's drafts), with the full-size render once the slider is let go.
+    /// Smoothness (Rosh, Nov 12, 2026): while a slider is held, frames are drawn on the GPU
+    /// straight into the After photo from a queue of their own (`HDRLiveFrames`), from the 1600 px
+    /// proxy even when zoomed in, like Develop's drafts. The exposure analysis is kept between
+    /// renders (`HDRPreviewCache`), so only Exposure recomputes it. When the slider is let go (or
+    /// for a click, a typed value or a key) the ordinary image is published: the proxy from the
+    /// same GPU kernel, or the full-size original from the CPU at 100% and closer.
     private func render() {
         renderRevision += 1
+        guard let proxy = input else { return }
+        if gestureStart != nil, !showingBefore, photoFeed.isAttached, HDRPreviewRenderer.shared != nil {
+            renderCount += 1
+            liveFrames.submit(.init(input: proxy, settings: settings, token: inputToken, count: renderCount,
+                                    epoch: photoFeed.sink.currentEpoch))
+            return
+        }
+        renderImage()
+    }
+
+    /// A live frame couldn't be shown: draw the ordinary image instead.
+    private func liveFrameMissed() {
+        guard input != nil else { return }
+        renderImage()
+    }
+
+    /// The ordinary image, published as `after`.
+    private func renderImage() {
         guard renderTask == nil, let proxy = input else { return }
         let useDetail: Bool
         if case .percent(let percent) = zoom.level { useDetail = percent >= 100 && gestureStart == nil } else { useDetail = false }
         let input = useDetail ? (detailInput ?? proxy) : proxy
+        let isProxy = input.width == proxy.width && input.height == proxy.height
+        renderCount += 1
         let snapshot = settings, revision = renderRevision, io = previewIO, token = inputToken
-        let cached = analysis.flatMap { $0.matches(input, exposure: snapshot.exposure) ? $0 : nil }
-        // Only the proxy's analysis is kept (about 27 MB); a full-size one would be ~400 MB.
-        let keepsAnalysis = input.width == proxy.width && input.height == proxy.height
+        let cache = previewCache, count = renderCount
         renderTask = Task {
             do {
-                let result = try await Task.detached { () -> (CGImage, HDRToneMapper.Analysis?) in
-                    var prepared = cached
-                    if snapshot.toneEnabled, prepared == nil {
-                        prepared = try HDRToneMapper.analyze(input, exposure: snapshot.exposure)
+                let result = try await Task.detached { () -> CGImage in
+                    // The proxy: the same GPU kernel as the live frames, so letting go of a
+                    // slider doesn't change the picture.
+                    if isProxy, let renderer = HDRPreviewRenderer.shared,
+                       let source = try cache.source(input, exposure: snapshot.exposure, token: token),
+                       let image = renderer.image(source, settings: snapshot), let picture = renderer.cgImage(image) {
+                        return picture
+                    }
+                    var prepared: HDRToneMapper.Analysis?
+                    if snapshot.toneEnabled {
+                        prepared = try cache.analysis(input, exposure: snapshot.exposure, token: token, keep: isProxy)
                     }
                     let rendered = try HDRToneMapper.render(input, settings: snapshot, analysis: prepared)
-                    return (try io.preview(rendered), prepared)
+                    return try io.preview(rendered)
                 }.value
-                // Kept only for the image it was made from; a new photo or project clears it.
-                if token == inputToken, keepsAnalysis, let prepared = result.1 { analysis = prepared }
-                if settings == snapshot, revision == renderRevision { after = NSImage(cgImage: result.0, size: .zero) }
+                if token == inputToken, settings == snapshot, revision == renderRevision {
+                    let image = NSImage(cgImage: result, size: .zero)
+                    photoFeed.published(image, count: count)
+                    after = image
+                }
             } catch is CancellationError {
             } catch { self.error = error.localizedDescription }
             guard revision <= renderRevision, self.input != nil else { renderTask = nil; return }

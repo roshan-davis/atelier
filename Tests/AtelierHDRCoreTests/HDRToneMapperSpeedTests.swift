@@ -1,4 +1,5 @@
 import XCTest
+import CoreGraphics
 @testable import AtelierHDRCore
 
 /// The faster tone mapper (kept exposure analysis, work split across cores, Nov 12, 2026) must
@@ -77,6 +78,48 @@ final class HDRToneMapperSpeedTests: XCTestCase {
         let preview = try time { _ = try io.preview(rendered) }
         print(String(format: "HDR 1600x1067 render ms: fresh %.1f, analysis kept %.1f, preview %.1f",
                      fresh, kept, preview))
+        // The GPU path a slider drag takes (`HDRPreviewRenderer`): the upload once per Exposure,
+        // then kernel plus read-back per frame (live frames skip the read-back).
+        if let renderer = HDRPreviewRenderer.shared {
+            var source: HDRPreviewRenderer.Source?
+            let upload = time { source = renderer.source(image, analysis: analysis) }
+            let gpu = try time {
+                let frame = try XCTUnwrap(source.flatMap { renderer.image($0, settings: settings) })
+                _ = try XCTUnwrap(renderer.cgImage(frame))
+            }
+            print(String(format: "HDR 1600x1067 GPU ms: upload %.1f, frame with read-back %.1f", upload, gpu))
+        }
+    }
+
+    /// The GPU preview kernel draws what the CPU tone mapper does, within a step or two of the
+    /// 8-bit preview, the same way up.
+    func testGPUPreviewMatchesTheCPURenderer() throws {
+        guard let renderer = HDRPreviewRenderer.shared else {
+            throw XCTSkip("The HDR preview kernel didn't build on this Mac.")
+        }
+        let image = try sample(), io = HDRImageIO()
+        for settings in settingsToTry {
+            let analysis = try HDRToneMapper.analyze(image, exposure: settings.exposure)
+            let source = try XCTUnwrap(renderer.source(image, analysis: analysis))
+            let frame = try XCTUnwrap(renderer.image(source, settings: settings))
+            let gpu = try bytes(try XCTUnwrap(renderer.cgImage(frame)))
+            let cpu = try bytes(try io.preview(try HDRToneMapper.render(image, settings: settings)))
+            XCTAssertEqual(gpu.count, cpu.count)
+            let worst = zip(gpu, cpu).map { abs(Int($0) - Int($1)) }.max() ?? 0
+            XCTAssertLessThanOrEqual(worst, 2, "\(settings)")
+        }
+    }
+
+    private func bytes(_ image: CGImage) throws -> [UInt8] {
+        var data = [UInt8](repeating: 0, count: image.width * image.height * 4)
+        try data.withUnsafeMutableBytes { buffer in
+            let context = try XCTUnwrap(CGContext(data: buffer.baseAddress, width: image.width, height: image.height,
+                                                  bitsPerComponent: 8, bytesPerRow: image.width * 4,
+                                                  space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+            context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        }
+        return data
     }
 }
 
