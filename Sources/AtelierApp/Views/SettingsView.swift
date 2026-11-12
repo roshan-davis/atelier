@@ -69,18 +69,18 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         }
     }
 
-    /// The pane's icon color, like System Settings' colored tiles.
+    /// The pane's icon color, like System Settings' colored tiles but softer (`SettingsPalette`).
     var tint: Color {
         switch self {
-        case .general: return .gray
-        case .appearance: return .purple
-        case .keyboard: return .indigo
-        case .imports: return .blue
-        case .develop: return .orange
-        case .export: return .green
-        case .metadata: return .teal
-        case .editIn: return .pink
-        case .ai: return .cyan
+        case .general: return SettingsPalette.slate
+        case .appearance: return SettingsPalette.lavender
+        case .keyboard: return SettingsPalette.periwinkle
+        case .imports: return SettingsPalette.sky
+        case .develop: return SettingsPalette.peach
+        case .export: return SettingsPalette.sage
+        case .metadata: return SettingsPalette.seafoam
+        case .editIn: return SettingsPalette.rose
+        case .ai: return SettingsPalette.mist
         }
     }
 

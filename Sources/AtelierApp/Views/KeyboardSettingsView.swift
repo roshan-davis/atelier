@@ -336,7 +336,7 @@ private struct MapKey: View {
 
     private var fill: Color {
         guard let action else { return Color.primary.opacity(0.04) }
-        return action.tint.opacity(hovering ? 0.32 : 0.2)
+        return action.tint.opacity(hovering ? 0.26 : 0.15)
     }
 
     private var border: Color {
@@ -410,18 +410,18 @@ extension KeyAction {
         }
     }
 
-    /// Its color: the label's own color, gold stars, and one color per group.
+    /// Its color, from the soft Settings palette: the label's own color, amber stars, one color per group.
     var tint: Color {
         switch self {
-        case .labelRed: return .red
-        case .labelYellow: return .yellow
-        case .labelGreen: return .green
-        case .labelBlue: return .blue
-        case .rating0, .rating1, .rating2, .rating3, .rating4, .rating5: return .orange
+        case .labelRed: return SettingsPalette.coral
+        case .labelYellow: return SettingsPalette.butter
+        case .labelGreen: return SettingsPalette.sage
+        case .labelBlue: return SettingsPalette.sky
+        case .rating0, .rating1, .rating2, .rating3, .rating4, .rating5: return SettingsPalette.amber
         case .pick, .reject, .unflag: return .primary
-        case .grid, .loupe, .develop, .zoom: return .blue
-        case .nextArea, .previousArea: return .gray
-        default: return .purple
+        case .grid, .loupe, .develop, .zoom: return SettingsPalette.sky
+        case .nextArea, .previousArea: return SettingsPalette.slate
+        default: return SettingsPalette.lavender
         }
     }
 }

@@ -86,11 +86,29 @@ struct SettingsIconTile: View {
     var body: some View {
         Image(systemName: pane.symbol)
             .font(.system(size: size * 0.52, weight: .semibold))
-            .foregroundStyle(.white)
+            .foregroundStyle(Color.white.opacity(0.95))
             .frame(width: size, height: size)
-            .background(pane.tint.gradient, in: RoundedRectangle(cornerRadius: size * 0.25, style: .continuous))
+            .background(pane.tint, in: RoundedRectangle(cornerRadius: size * 0.25, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: size * 0.25, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5))
             .accessibilityHidden(true)
     }
+}
+
+/// Soft, muted colors for Settings' icon tiles and the keyboard map (Rosh, Nov 12, 2026: the
+/// system colors were too bright). Mid-light and low in saturation, so they read on light and
+/// dark themes without glaring, and white symbols stay legible on them.
+enum SettingsPalette {
+    static let slate = Color(red: 0.56, green: 0.59, blue: 0.64)
+    static let lavender = Color(red: 0.62, green: 0.56, blue: 0.78)
+    static let periwinkle = Color(red: 0.52, green: 0.57, blue: 0.80)
+    static let sky = Color(red: 0.47, green: 0.64, blue: 0.82)
+    static let peach = Color(red: 0.86, green: 0.63, blue: 0.47)
+    static let sage = Color(red: 0.52, green: 0.70, blue: 0.56)
+    static let seafoam = Color(red: 0.44, green: 0.68, blue: 0.68)
+    static let rose = Color(red: 0.82, green: 0.54, blue: 0.62)
+    static let mist = Color(red: 0.47, green: 0.69, blue: 0.78)
+    static let coral = Color(red: 0.86, green: 0.48, blue: 0.47)
+    static let butter = Color(red: 0.88, green: 0.77, blue: 0.43)
+    static let amber = Color(red: 0.88, green: 0.70, blue: 0.42)
 }
