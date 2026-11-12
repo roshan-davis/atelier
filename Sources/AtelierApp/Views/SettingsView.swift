@@ -7,8 +7,8 @@ import UniformTypeIdentifiers
 /// macOS System Settings. Values live in user defaults under the same keys the dialogs use,
 /// so a default set here is what the Import and Export dialogs start with.
 struct SettingsView: View {
-    static let size = CGSize(width: 880, height: 620)
-    static let sidebarWidth: CGFloat = 200
+    static let size = CGSize(width: 900, height: 660)
+    static let sidebarWidth: CGFloat = 220
 
     /// The pane last shown, so Settings reopens where it was left.
     @AppStorage(SettingsPane.defaultsKey) private var pane: SettingsPane = .general
@@ -69,6 +69,21 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         }
     }
 
+    /// The pane's icon color, like System Settings' colored tiles.
+    var tint: Color {
+        switch self {
+        case .general: return .gray
+        case .appearance: return .purple
+        case .keyboard: return .indigo
+        case .imports: return .blue
+        case .develop: return .orange
+        case .export: return .green
+        case .metadata: return .teal
+        case .editIn: return .pink
+        case .ai: return .cyan
+        }
+    }
+
     /// One line under the pane's title saying what it holds.
     var summary: String {
         switch self {
@@ -100,7 +115,7 @@ private struct SettingsSidebar: View {
             VStack(alignment: .leading, spacing: 2) {
                 ForEach(SettingsPane.groups, id: \.title) { group in
                     Text(group.title)
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 8)
                         .padding(.top, 14)
@@ -157,19 +172,17 @@ private struct SettingsSidebarRow: View {
     private var onAccent: Bool { isSelected && sidebarFocused }
 
     var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: pane.symbol)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(onAccent ? Color.white : Color.accentColor)
-                .frame(width: 18)
+        HStack(spacing: 10) {
+            SettingsIconTile(pane: pane, size: 24)
+            // A step above the panes' 13 pt text, as in System Settings.
             Text(pane.title)
-                .font(.system(size: 13))
+                .font(.system(size: 14, weight: isSelected ? .semibold : .regular))
                 .foregroundStyle(onAccent ? Color.white : Color.primary)
                 .lineLimit(1)
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 8)
-        .frame(height: 28)
+        .padding(.horizontal, 7)
+        .frame(height: 34)
         .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(fill))
         .contentShape(Rectangle())
         .onTapGesture(perform: select)
@@ -220,12 +233,7 @@ private struct SettingsPaneHeader: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: pane.symbol)
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(.white)
-                .frame(width: 30, height: 30)
-                .background(Color.accentColor.gradient, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-                .accessibilityHidden(true)
+            SettingsIconTile(pane: pane, size: 36)
             VStack(alignment: .leading, spacing: 2) {
                 Text(pane.title)
                     .font(.title2.weight(.semibold))
@@ -254,15 +262,13 @@ struct AppearanceSettings: View {
 
     var body: some View {
         Form {
-            Section {
+            SettingsSection("Theme") {
                 LazyVGrid(columns: columns, spacing: 14) {
                     ForEach(Theme.allCases) { option in
                         ThemeCard(theme: option, isSelected: option == theme) { theme = option }
                     }
                 }
                 .padding(.vertical, 6)
-            } header: {
-                Text("Theme")
             } footer: {
                 Text(theme.summary)
                     .font(.caption)
@@ -353,7 +359,7 @@ struct GeneralSettings: View {
 
     var body: some View {
         Form {
-            Section("Catalog") {
+            SettingsSection("Catalog") {
                 LabeledContent("Location") {
                     HStack {
                         Text(model.catalog.packageURL?.path ?? "In memory")
@@ -370,7 +376,7 @@ struct GeneralSettings: View {
                 LabeledContent("Photos", value: "\(model.sidebar.totalCount)")
             }
 
-            Section {
+            SettingsSection("Backups") {
                 Stepper("Keep the last \(backupsToKeep) backup\(backupsToKeep == 1 ? "" : "s")",
                         value: $backupsToKeep, in: 1...50)
                 HStack {
@@ -379,39 +385,33 @@ struct GeneralSettings: View {
                         Text(backupMessage).foregroundStyle(.secondary)
                     }
                 }
-            } header: {
-                Text("Backups")
             } footer: {
                 Text("The catalog is backed up when Atelier quits. Backups are kept inside the catalog package.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            Section {
+            SettingsSection("Private Photos") {
                 Picker("Hide again after", selection: $hidePrivateAfter) {
                     ForEach(PrivatePhotos.hideAfterChoices, id: \.self) { minutes in
                         Text(minutes == 0 ? "Never" : "\(minutes) minutes without using Atelier").tag(minutes)
                     }
                 }
-            } header: {
-                Text("Private Photos")
             } footer: {
                 Text("Private photos also hide when the Mac sleeps or locks, and every time Atelier opens.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            Section {
+            SettingsSection("Feedback") {
                 Toggle("Play a sound and animation when deleting", isOn: $deleteEffects)
-            } header: {
-                Text("Feedback")
             } footer: {
                 Text("Moving photos to the Trash plays Finder’s Trash sound; removing a mask, preset, guide or catalog entry plays the Dock’s poof. Both show a puff of smoke at the pointer. The sound follows System Settings > Sound > Play user interface sound effects.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            Section {
+            SettingsSection("Splash Screen") {
                 Toggle("Show splash screen at launch", isOn: $showSplash)
                 HStack {
                     Button("Show Splash Folder") {
@@ -420,15 +420,13 @@ struct GeneralSettings: View {
                     }
                     Button("Preview Splash Screen") { SplashController.shared.preview() }
                 }
-            } header: {
-                Text("Splash Screen")
             } footer: {
                 Text("Each launch shows the next image in the Splash folder, in name order. Add JPEG, PNG or HEIC images, ideally 1600 × 1000 px or larger. Each fills the splash, cropped around its subject.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            Section("Previews") {
+            SettingsSection("Previews") {
                 LabeledContent("Preview cache", value: previewsSize ?? "Measuring…")
                 Text("Thumbnails (256 px) and previews (2560 px) are made in the background and include your edits. Originals are never changed.")
                     .font(.caption)
@@ -481,7 +479,7 @@ struct ImportSettings: View {
 
     var body: some View {
         Form {
-            Section {
+            SettingsSection("Default for new imports") {
                 Picker("Files", selection: $copyFiles) {
                     Text("Leave files where they are").tag(false)
                     Text("Copy into my library folder").tag(true)
@@ -497,17 +495,13 @@ struct ImportSettings: View {
                         }
                     }
                 }
-            } header: {
-                Text("Default for new imports")
             } footer: {
                 Text("The Import dialog starts with these choices. Copies go to YYYY/YYYY-MM-DD Name/ and are checked against the original.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            Section {
+            SettingsSection("RAW+JPEG") {
                 Toggle("Show RAW+JPEG pairs as one photo", isOn: $groupPairs)
-            } header: {
-                Text("RAW+JPEG")
             } footer: {
                 Text("When a folder has DSC_0001.NEF and DSC_0001.JPG (or HEIC, TIFF), only the RAW is shown, marked RAW+JPG. Ratings, flags, labels, keywords, collections and import entries apply to both; editing and export use the RAW. Turn this off to see every file as its own photo. Culling always treats a pair as one shot.")
                     .font(.caption)
@@ -529,7 +523,7 @@ private struct DevelopSettingsTab: View {
 
     var body: some View {
         Form {
-            Section("Zoom") {
+            SettingsSection("Zoom") {
                 Picker("Double-click or Z zooms to", selection: $clickPercent) {
                     Text("50%").tag(50.0)
                     Text("100% (1:1)").tag(100.0)
@@ -549,7 +543,7 @@ private struct DevelopSettingsTab: View {
                     }
                 }
             }
-            Section("Panels") {
+            SettingsSection("Panels") {
                 Toggle("Solo mode: opening a panel closes the others", isOn: $soloMode)
                 Toggle("Show how much is clipped next to the histogram's triangles", isOn: $showClipping)
             }
@@ -568,7 +562,7 @@ private struct ExportSettingsTab: View {
 
     var body: some View {
         Form {
-            Section {
+            SettingsSection("Defaults") {
                 LabeledContent("Export folder") {
                     HStack {
                         Text(destinationPath).lineLimit(1).truncationMode(.middle)
@@ -580,8 +574,6 @@ private struct ExportSettingsTab: View {
                     }
                 }
                 Toggle("Show exported files in Finder when done", isOn: $reveal)
-            } header: {
-                Text("Defaults")
             } footer: {
                 Text("Format, size, color, metadata and watermark are chosen in File > Export…, where you can also save them as presets. The last choices are remembered.")
                     .font(.caption)
@@ -600,15 +592,25 @@ struct EditInSettings: View {
 
     var body: some View {
         Form {
-            Section {
+            // One section per app, its settings in the same label-and-control rows as every pane.
+            ForEach($editors) { $editor in
+                SettingsSection(editor.name.isEmpty ? "Untitled" : editor.name, id: "editIn." + editor.id) {
+                    EditorRows(editor: $editor)
+                } trailing: {
+                    Button {
+                        editors.removeAll { $0.id == editor.id }
+                        DeleteFeedback.play(.remove)
+                    } label: {
+                        Image(systemName: "minus.circle")
+                    }
+                    .buttonStyle(SidebarIconButtonStyle())
+                    .help("Remove \(editor.name) from Edit In")
+                }
+            }
+            SettingsSection("Add Editors") {
                 if editors.isEmpty {
                     Text("No photo editors found. Click Add App… to pick one.")
                         .foregroundStyle(.secondary)
-                }
-                ForEach($editors) { $editor in
-                    EditorRow(editor: $editor) {
-                        editors.removeAll { $0.id == editor.id }
-                    }
                 }
                 HStack {
                     Button("Add App…", systemImage: "plus") { addApp() }
@@ -619,8 +621,6 @@ struct EditInSettings: View {
                         }
                     }
                 }
-            } header: {
-                Text("Edit In")
             } footer: {
                 Text("Photo > Edit In saves a copy next to the original (or in Pictures/Atelier/Edits when that folder is read-only), stacks it with the original, and opens it in the app. Saves in the app update Atelier.")
                     .font(.caption)
@@ -643,40 +643,34 @@ struct EditInSettings: View {
     }
 }
 
-private struct EditorRow: View {
+/// An Edit In app's settings as standard Form rows, so labels and controls line up with
+/// every other pane instead of sharing one cramped row (Rosh, Nov 12, 2026: the old row was cut off).
+private struct EditorRows: View {
     @Binding var editor: ExternalEditor
-    let remove: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        LabeledContent("App") {
             HStack(spacing: 8) {
                 Image(nsImage: editor.icon)
                     .resizable()
-                    .frame(width: 24, height: 24)
-                TextField("Name", text: $editor.name)
-                    .textFieldStyle(.plain)
-                    .font(.headline)
+                    .frame(width: 20, height: 20)
+                Text(editor.appURL.deletingPathExtension().lastPathComponent)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(editor.appPath)
                 if !editor.isInstalled {
-                    Text("Not installed").font(.caption).foregroundStyle(.secondary)
+                    Text("Not installed").foregroundStyle(.orange)
                 }
-                Spacer()
-                Button(role: .destructive, action: remove) { Image(systemName: "minus.circle") }
-                    .buttonStyle(.borderless)
-                    .help("Remove from Edit In")
             }
-            HStack(spacing: 12) {
-                Picker("File", selection: $editor.format) {
-                    ForEach(ExternalEditor.FileFormat.allCases, id: \.self) { Text($0.label).tag($0) }
-                }
-                .fixedSize()
-                Picker("Color", selection: $editor.colorSpace) {
-                    ForEach(ExportColorSpace.allCases, id: \.self) { Text($0.label).tag($0) }
-                }
-                .fixedSize()
-            }
-            Toggle("Include develop adjustments", isOn: $editor.applyDevelop)
         }
-        .padding(.vertical, 4)
+        TextField("Name in the menu", text: $editor.name)
+        Picker("File", selection: $editor.format) {
+            ForEach(ExternalEditor.FileFormat.allCases, id: \.self) { Text($0.label).tag($0) }
+        }
+        Picker("Color space", selection: $editor.colorSpace) {
+            ForEach(ExportColorSpace.allCases, id: \.self) { Text($0.label).tag($0) }
+        }
+        Toggle("Include develop adjustments", isOn: $editor.applyDevelop)
     }
 }
 
@@ -695,7 +689,7 @@ struct AISettingsTab: View {
 
     var body: some View {
         Form {
-            Section {
+            SettingsSection("ComfyUI") {
                 LabeledContent("Server") {
                     HStack {
                         TextField("Server", text: $server, prompt: Text(AISettings.defaultServer.absoluteString))
@@ -710,15 +704,13 @@ struct AISettingsTab: View {
                         .font(.callout)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-            } header: {
-                Text("ComfyUI")
             } footer: {
                 Text("Atelier sends photos to a ComfyUI server you run, on this Mac or another one, and never bundles models. The ComfyUI desktop app listens on http://127.0.0.1:8000; ComfyUI started from Terminal uses port 8188.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            Section {
+            SettingsSection("Models") {
                 modelPicker("Edit model", selection: $editModel, choices: editModels)
                 Picker("Generation size", selection: $generationSize) {
                     Text("768 px (faster)").tag(768)
@@ -726,8 +718,6 @@ struct AISettingsTab: View {
                     Text("1536 px (slower)").tag(1536)
                 }
                 modelPicker("Upscale model (4×)", selection: $upscaleModel, choices: upscalers)
-            } header: {
-                Text("Models")
             } footer: {
                 Text("Remove Object and Replace Background use Qwen-Image-Edit-2511 (Apache 2.0) with its 4-step Lightning LoRA; Upscale uses a 4× upscale model. For website and shop images, use only models licensed Apache 2.0 or MIT.")
                     .font(.caption)
@@ -736,8 +726,8 @@ struct AISettingsTab: View {
 
             MaskingModelsSection()
 
-            Section {
-                LabeledContent("Workflows") {
+            SettingsSection("Workflows") {
+                LabeledContent("Folder") {
                     Button("Show Workflows Folder") {
                         try? AIRecipe.installWorkflowTemplates()
                         NSWorkspace.shared.activateFileViewerSelecting([AIRecipe.workflowsFolder])
@@ -796,7 +786,7 @@ private struct MaskingModelsSection: View {
     @ObservedObject private var download = FineEdgesDownload.shared
 
     var body: some View {
-        Section {
+        SettingsSection("Masking Models") {
             LabeledContent("People parts") {
                 Text("Built in (MediaPipe, 8 MB)").foregroundStyle(.secondary)
             }
@@ -845,8 +835,6 @@ private struct MaskingModelsSection: View {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange).font(.callout).fixedSize(horizontal: false, vertical: true)
             }
-        } header: {
-            Text("Masking Models")
         } footer: {
             Text("Select People's parts come from Google's MediaPipe model, built into Atelier. Fine Edges (BiRefNet, MIT license) redraws the edges of Select Subject, Select Object and Select People down to strands of hair; turn it on in each selection's settings. Download either model or both: Fast takes a few seconds, Hair Detail about half a minute for finer hair. When both are downloaded, choose which one runs here or in the mask panel. All of them run on this Mac; photos are never sent anywhere.")
                 .font(.caption)
@@ -862,7 +850,7 @@ struct MetadataSettings: View {
 
     var body: some View {
         Form {
-            Section {
+            SettingsSection("XMP Sidecars") {
                 Toggle("Automatically write changes into XMP sidecars", isOn: $autoWrite)
             } footer: {
                 Text("When on, metadata and current Develop edits, including masks, are written to .xmp files next to the originals as you change them. Other apps can read the metadata; Develop edits are for Atelier recovery. When off, use Library > Write XMP for Selection (⌘S).")
@@ -872,108 +860,6 @@ struct MetadataSettings: View {
             }
         }
         .formStyle(.grouped)
-    }
-}
-
-// MARK: - Keyboard
-
-private struct KeyboardSettings: View {
-    @State private var recording: KeyAction?
-    @State private var monitor: Any?
-    /// Bumped after every change so rows re-read their keys.
-    @State private var revision = 0
-
-    private var sections: [(String, [KeyAction])] {
-        var result: [(String, [KeyAction])] = []
-        for action in KeyAction.allCases {
-            if result.last?.0 == action.section {
-                result[result.count - 1].1.append(action)
-            } else {
-                result.append((action.section, [action]))
-            }
-        }
-        return result
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Form {
-                ForEach(sections, id: \.0) { section in
-                    Section(section.0) {
-                        ForEach(section.1) { action in
-                            LabeledContent(action.title) {
-                                HStack(spacing: 6) {
-                                    Button {
-                                        startRecording(action)
-                                    } label: {
-                                        Text(recording == action ? "Press a key…" : KeyBindings.display(KeyBindings.key(for: action)))
-                                            .monospaced()
-                                            .frame(minWidth: 90)
-                                    }
-                                    .help("Click, then press the new key, with ⌃, ⌥ or ⇧ if you like. Esc cancels, Delete removes it.")
-                                    if KeyBindings.key(for: action) != action.defaultKey {
-                                        Button {
-                                            KeyBindings.set(action.defaultKey, for: action)
-                                            revision += 1
-                                        } label: {
-                                            Image(systemName: "arrow.uturn.backward")
-                                        }
-                                        .buttonStyle(.borderless)
-                                        .help("Back to \(KeyBindings.display(action.defaultKey))")
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            .formStyle(.grouped)
-            .id(revision)
-            HStack {
-                Text("Keys can use ⌃, ⌥ and ⇧. Arrows, Tab, Return, Esc and Delete stay fixed; menu shortcuts like ⌘E are listed in Help > Keyboard Shortcuts (⌘/).")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Button("Restore Defaults") {
-                    KeyBindings.resetAll()
-                    revision += 1
-                }
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
-        }
-        .onDisappear(perform: stopRecording)
-    }
-
-    private func startRecording(_ action: KeyAction) {
-        stopRecording()
-        recording = action
-        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            MainActor.assumeIsolated {
-                guard let action = recording else { return event }
-                switch event.keyCode {
-                case 53:  // Escape cancels
-                    break
-                case 51, 117:  // Delete removes the key
-                    KeyBindings.set("", for: action)
-                default:
-                    guard let combo = KeyBindings.combo(from: event) else {
-                        NSSound.beep()
-                        return nil
-                    }
-                    KeyBindings.set(combo.stored, for: action)
-                }
-                stopRecording()
-                revision += 1
-                return nil
-            }
-        }
-    }
-
-    private func stopRecording() {
-        if let monitor { NSEvent.removeMonitor(monitor) }
-        monitor = nil
-        recording = nil
     }
 }
 
