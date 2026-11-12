@@ -85,22 +85,103 @@ enum SettingsPane: String, CaseIterable, Identifiable {
     }
 }
 
-/// The Settings sidebar: grouped panes with their icons, like System Settings. ↑ and ↓ move between panes.
+/// The Settings sidebar: grouped panes with their icons, like System Settings.
+/// Drawn rows rather than a `List` with selection, whose clicks never changed the pane in the
+/// Settings window (Rosh, Nov 12, 2026). Click a row, or ↑ ↓ (Home, End) once the sidebar has focus;
+/// it takes focus when Settings opens, on a click, or with Tab.
 private struct SettingsSidebar: View {
     @Binding var selection: SettingsPane
+    @FocusState private var focused: Bool
+
+    private static let order = SettingsPane.groups.flatMap { $0.panes }
 
     var body: some View {
-        List(selection: Binding<SettingsPane?>(get: { selection }, set: { if let pane = $0 { selection = pane } })) {
-            ForEach(SettingsPane.groups, id: \.title) { group in
-                Section(group.title) {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(SettingsPane.groups, id: \.title) { group in
+                    Text(group.title)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.top, 14)
+                        .padding(.bottom, 3)
+                        .accessibilityAddTraits(.isHeader)
                     ForEach(group.panes) { pane in
-                        Label(pane.title, systemImage: pane.symbol)
-                            .tag(pane as SettingsPane?)
+                        SettingsSidebarRow(pane: pane, isSelected: pane == selection, sidebarFocused: focused) {
+                            selection = pane
+                            focused = true
+                        }
                     }
                 }
             }
+            .padding(.horizontal, 10)
+            .padding(.bottom, 12)
         }
-        .listStyle(.sidebar)
+        .scrollIndicators(.never)
+        .background(Color.primary.opacity(0.03))
+        // .edit: the sidebar takes the keys whether or not Full Keyboard Access is on.
+        .focusable(interactions: .edit)
+        .focused($focused)
+        .defaultFocus($focused, true)
+        .focusEffectDisabled()
+        .onKeyPress(.upArrow) { move(by: -1) }
+        .onKeyPress(.downArrow) { move(by: 1) }
+        .onKeyPress(.home) { jump(to: Self.order.first) }
+        .onKeyPress(.end) { jump(to: Self.order.last) }
+        .onAppear { focused = true }
+    }
+
+    private func move(by step: Int) -> KeyPress.Result {
+        guard let index = Self.order.firstIndex(of: selection) else { return .ignored }
+        let next = min(max(index + step, 0), Self.order.count - 1)
+        selection = Self.order[next]
+        return .handled
+    }
+
+    private func jump(to pane: SettingsPane?) -> KeyPress.Result {
+        guard let pane else { return .ignored }
+        selection = pane
+        return .handled
+    }
+}
+
+/// One sidebar row: accent fill when chosen and the sidebar has focus, gray when it doesn't
+/// (as in Finder and System Settings), a faint tint on hover.
+private struct SettingsSidebarRow: View {
+    let pane: SettingsPane
+    let isSelected: Bool
+    let sidebarFocused: Bool
+    let select: () -> Void
+    @State private var hovering = false
+
+    private var onAccent: Bool { isSelected && sidebarFocused }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: pane.symbol)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(onAccent ? Color.white : Color.accentColor)
+                .frame(width: 18)
+            Text(pane.title)
+                .font(.system(size: 13))
+                .foregroundStyle(onAccent ? Color.white : Color.primary)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 28)
+        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(fill))
+        .contentShape(Rectangle())
+        .onTapGesture(perform: select)
+        .onHover { hovering = $0 }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+        .accessibilityAction(.default, select)
+    }
+
+    private var fill: Color {
+        if isSelected { return sidebarFocused ? Color.accentColor : Color.primary.opacity(0.12) }
+        return hovering ? Color.primary.opacity(0.06) : Color.clear
     }
 }
 
