@@ -7,6 +7,8 @@ struct InspectorView: View {
     var body: some View {
         if model.mode == .develop {
             DevelopPanel(develop: model.develop)
+        } else if model.mode == .hdr {
+            HDRPanel(hdr: model.hdr)
         } else if let detail = model.detail {
             DetailForm(detail: detail)
                 .id(detail.asset.id)

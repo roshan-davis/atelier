@@ -107,6 +107,7 @@ enum LayoutSnapshots {
         try? await Task.sleep(for: .seconds(2))
         await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
                       to: folder.appendingPathComponent("loupe-1280x800.png"))
+        await snapshotHDR(model: model, into: folder)
         model.mode = .grid
         // Render and catalog an Edit In copy to show the stack without opening Preview.
         model.selection = Set(model.rows.map(\.id))
@@ -163,6 +164,26 @@ enum LayoutSnapshots {
     }
 
     /// The whole Settings window (sidebar and pane) on a few panes, in Light and Graphite.
+    /// HDR mode (Photo > HDR…): the sliders moved a little, then Slider compare in the smallest window.
+    private static func snapshotHDR(model: LibraryModel, into folder: URL) async {
+        model.openHDR()
+        let hdr = model.hdr
+        for _ in 0..<100 where hdr.after == nil { try? await Task.sleep(for: .milliseconds(100)) }
+        if hdr.after == nil { print("SNAPSHOT: HDR has no rendered photo (\(hdr.error ?? "no error"))") }
+        let exposure = hdr.binding(\.exposure), microcontrast = hdr.binding(\.microcontrast)
+        exposure.wrappedValue += 0.3
+        microcontrast.wrappedValue = 0.5
+        try? await Task.sleep(for: .seconds(2))
+        await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
+                      to: folder.appendingPathComponent("hdr-1280x800.png"))
+        hdr.compareMode = .slider
+        try? await Task.sleep(for: .seconds(1))
+        await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1000, height: 584),
+                      to: folder.appendingPathComponent("hdr-slider-1000x584.png"))
+        hdr.compareMode = .off
+        hdr.discardChanges()
+    }
+
     static func snapshotSettingsWindow(model: LibraryModel, into folder: URL) async {
         let savedTheme = UserDefaults.standard.object(forKey: Theme.defaultsKey)
         let savedPane = UserDefaults.standard.object(forKey: SettingsPane.defaultsKey)

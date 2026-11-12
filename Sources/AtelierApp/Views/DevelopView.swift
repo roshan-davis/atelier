@@ -262,7 +262,7 @@ struct PickerButton: View {
     }
 }
 
-private struct Badge: View {
+struct Badge: View {
     let text: String
 
     var body: some View {
@@ -274,7 +274,7 @@ private struct Badge: View {
     }
 }
 
-private struct ComparePane: View {
+struct ComparePane: View {
     let image: NSImage?
     let label: String
     let pixelSize: CGSize?

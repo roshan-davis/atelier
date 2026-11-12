@@ -110,26 +110,20 @@ command; its PR must disclose that and receive a Mac check before validation is 
 See the [Automated testing guide](Docs/Automated-Testing.md) for the full suite, repeatable
 group selectors, suggested checks by change type, and how to read the reports.
 
-## Single-image HDR MVP (work in progress)
+## Single-image HDR (work in progress)
 
-On the HDR task branch, build both products once before running Atelier in Xcode:
-
-~~~sh
-swift build
-~~~
-
-Then choose the **AtelierApp** scheme, **My Mac**, and **Product > Run (⌘R)**.
-Select one photo and choose **Photo > Edit In > HDR App (Original)…**.
-The companion reads original pixels rather than baking Atelier Develop adjustments.
-Use **Reset All** in an older test project to try the revised HDR starting look.
-**Save & Return to Atelier** writes a full-resolution profiled 16-bit sRGB TIFF and
-creates an owned-source HDR project beside it on first Save. Opening and closing without saving leaves no source copy; saves keep only the current and previous generations. Selecting the returned TIFF and choosing
-the HDR menu again reopens that project; ordinary Save updates the same result.
-**File > Save As New…** forks a project and creates a new result.
+HDR is a view of Atelier, next to Grid, Loupe and Develop (there is no separate HDR app
+any more). Run the **AtelierApp** scheme on **My Mac** (**Product > Run (⌘R)**), select one
+photo and choose **Photo > HDR… (⌃H)**. HDR reads the original's pixels rather than baking
+Atelier Develop adjustments. **Save HDR** (⌘S in HDR) writes a full-resolution profiled
+16-bit sRGB TIFF stacked with the original and creates an owned-source HDR project beside
+it on first Save. Leaving without saving asks first; nothing is written before a Save, and
+saves keep only the current and previous generations. **Photo > HDR…** on the HDR TIFF
+reopens its project; **File > Save HDR As New… (⇧⌘S)** forks a new project and result.
 
 This is an implementation under active validation, not an accepted MachineryHDR match.
 Bracket processing, presets and batch are not included. Back up the project package
-and TIFF as well as the catalog. HDR engine tests run without opening either app:
+and TIFF as well as the catalog. HDR engine tests run without opening the app:
 
 ~~~sh
 swift test --filter AtelierHDRCoreTests

@@ -1,1 +1,0 @@
-../../AtelierApp/Views/IconSegmentedControl.swift

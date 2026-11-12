@@ -15,7 +15,7 @@ struct AtelierApp: App {
                         .environmentObject(model)
                         .onAppear {
                             appDelegate.model = model
-                            model.processorSessions.start()
+                            LegacyHDRReceipts.importPending(into: model)
                             PanelHelp.hasTopic = { HelpWindow.topic(forPanel: $0) != nil }
                             PanelHelp.show = { title in
                                 if let topic = HelpWindow.topic(forPanel: title) {
@@ -76,6 +76,14 @@ private struct ReadyLibraryCommands: Commands {
                     .keyboardShortcut("i", modifiers: [.command, .shift])
                 Button("Export…") { model.beginExport() }
                     .keyboardShortcut("e", modifiers: [.command, .shift])
+                Divider()
+                // ⌘S saves in HDR mode; elsewhere it stays Library > Write XMP for Selection.
+                Button("Save HDR") { model.hdr.save() }
+                    .keyboardShortcut(model.mode == .hdr ? KeyboardShortcut("s", modifiers: [.command]) : nil)
+                    .disabled(model.mode != .hdr || !model.hdr.hasPhoto || model.hdr.busy)
+                Button("Save HDR As New…") { model.hdr.save(asNew: true) }
+                    .keyboardShortcut("s", modifiers: [.command, .shift])
+                    .disabled(model.mode != .hdr || !model.hdr.hasPhoto || model.hdr.busy)
             }
             // Undo and redo step through the open photo's develop history; text fields keep
             // their own undo.
@@ -120,6 +128,8 @@ private struct ReadyLibraryCommands: Commands {
                     .keyboardShortcut("e", modifiers: [.command])
                 Button("Develop") { model.openDevelop() }
                     .keyboardShortcut("d", modifiers: [.command])
+                Button("HDR") { model.openHDR() }
+                    .disabled(model.targetIDs.count != 1)
                 Divider()
                 Button("Cull Import…") {
                     if case .importGroup(let id) = model.sidebarSelection { model.beginCull(importGroup: id) }
@@ -127,7 +137,7 @@ private struct ReadyLibraryCommands: Commands {
                 .disabled({ if case .importGroup = model.sidebarSelection { return false } else { return true } }())
                 Divider()
                 Button("Write XMP for Selection") { model.writeXMP(selectionOnly: true) }
-                    .keyboardShortcut("s", modifiers: [.command])
+                    .keyboardShortcut(model.mode == .hdr ? nil : KeyboardShortcut("s", modifiers: [.command]))
                 Button("Write All Unsaved XMP") { model.writeXMP(selectionOnly: false) }
                     .keyboardShortcut("s", modifiers: [.command, .option])
                 Divider()
@@ -148,10 +158,11 @@ private struct ReadyLibraryCommands: Commands {
                     .keyboardShortcut("g", modifiers: [.command, .shift])
                     .disabled(model.focusedCullGroupSize < 2)
                 Divider()
+                // Lightroom's key for Photo Merge > HDR.
+                Button("HDR…") { model.openHDR() }
+                    .keyboardShortcut("h", modifiers: [.control])
+                    .disabled(model.targetIDs.count != 1)
                 Menu("Edit In") {
-                    Button("HDR App (Original)…") { model.editInHDR() }
-                        .disabled(model.targetIDs.count != 1)
-                    Divider()
                     ForEach(Array(model.externalEditors.enumerated()), id: \.element.id) { index, editor in
                         if index == 0 {
                             Button("Edit in \(editor.name)") { model.editIn(editor) }
@@ -248,6 +259,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
+    }
+
+    /// Unsaved HDR changes are asked about before quitting, as in any Mac editor.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        MainActor.assumeIsolated {
+            guard let model else { return .terminateNow }
+            let now = model.shouldTerminateWithHDR { quit in sender.reply(toApplicationShouldTerminate: quit) }
+            return now ? .terminateNow : .terminateLater
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {

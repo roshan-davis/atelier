@@ -31,6 +31,9 @@ extension LibraryModel {
 
         if mode != .loupe { menu.addItem(ClosureMenuItem("Open in Loupe") { self.openLoupe() }) }
         if mode != .develop { menu.addItem(ClosureMenuItem("Edit in Develop") { self.openDevelop() }) }
+        if mode != .hdr || ids.first != hdr.assetID {
+            menu.addItem(ClosureMenuItem("Edit in HDR", enabled: ids.count == 1) { self.openHDR() })
+        }
         menu.addItem(ClosureMenuItem("Create Virtual Copy\(ids.count > 1 ? "\(count)" : "")") { self.createVirtualCopies() })
         if targetsIncludeVirtualCopy {
             menu.addItem(ClosureMenuItem("Remove Virtual Copy…") { self.removeVirtualCopies() })
@@ -157,10 +160,6 @@ extension LibraryModel {
     func editInMenu() -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
-        let hdr = ClosureMenuItem("HDR App (Original)…") { self.editInHDR() }
-        hdr.isEnabled = targetIDs.count == 1
-        menu.addItem(hdr)
-        menu.addItem(.separator())
         for editor in externalEditors {
             let item = ClosureMenuItem("Edit in \(editor.name)") { self.editIn(editor) }
             let icon = editor.icon

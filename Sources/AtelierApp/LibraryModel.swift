@@ -8,6 +8,8 @@ enum ViewMode {
     case grid
     case loupe
     case develop
+    /// Single-image HDR on the focused photo (Photo > HDR…, ⌃H).
+    case hdr
 }
 
 enum SidebarItem: Hashable {
@@ -63,7 +65,10 @@ struct SidebarData: Equatable, Sendable {
 @MainActor
 final class LibraryModel: ObservableObject {
     let catalog: Catalog
-    lazy var processorSessions = ProcessorDesktopSessions(model: self)
+    /// HDR mode's editor; see `HDRController`.
+    lazy var hdr = HDRController(model: self)
+    /// Set while a declined HDR photo change puts the focus back.
+    var hdrRevertingFocus = false
     /// Library > Show/Hide Private Photos and hiding them again when Atelier isn't used.
     lazy var privatePhotos = PrivatePhotos(model: self)
     /// Set when lists were just made private or hidden: the next sidebar data leaves a sidebar
@@ -97,6 +102,7 @@ final class LibraryModel: ObservableObject {
             guard focusedID != oldValue else { return }
             zoomForNextPhoto(leaving: oldValue)
             reloadDetail()
+            if mode == .hdr { hdrFocusChanged(from: oldValue) }
             if mode == .develop {
                 if zoomState.level == .fit, develop.wantsFullResolution { develop.wantsFullResolution = false }
                 develop.open(focusedID)
@@ -108,12 +114,29 @@ final class LibraryModel: ObservableObject {
         }
     }
     @Published var detail: AssetDetail?
-    @Published var mode: ViewMode = .grid {
+    @Published private var storedMode: ViewMode = .grid {
         didSet {
             if mode == .develop { develop.open(focusedID) } else if oldValue == .develop { develop.flushSave() }
+            if mode == .hdr { hdr.open(focusedID) } else if oldValue == .hdr { hdr.close() }
             prefetchNeighbourPreviews()
         }
     }
+    /// Grid, Loupe, Develop or HDR. Leaving HDR with unsaved changes first asks to save them
+    /// (see `LibraryModel+HDR`); until then the mode stays HDR.
+    var mode: ViewMode {
+        get { storedMode }
+        set {
+            guard storedMode == .hdr, newValue != .hdr else {
+                if newValue == .hdr, focusedID == nil { focusedID = selection.first ?? rows.first?.id }
+                if newValue == .hdr, focusedID == nil { objectWillChange.send(); return }
+                storedMode = newValue
+                return
+            }
+            leaveHDR(to: newValue)
+        }
+    }
+    /// Switches mode without the HDR unsaved-changes check, once it has been answered.
+    func setModeConfirmed(_ newValue: ViewMode) { storedMode = newValue }
     @Published var status: String?
     @Published var showingImportSheet = false
     @Published var pendingImportSources: [URL] = []
@@ -347,6 +370,8 @@ final class LibraryModel: ObservableObject {
             textView.undoManager?.undo()
         } else if mode == .develop {
             develop.undo()
+        } else if mode == .hdr {
+            hdr.undo()
         }
     }
 
@@ -355,6 +380,8 @@ final class LibraryModel: ObservableObject {
             textView.undoManager?.redo()
         } else if mode == .develop {
             develop.redo()
+        } else if mode == .hdr {
+            hdr.redo()
         }
     }
 
@@ -926,20 +953,20 @@ final class LibraryModel: ObservableObject {
         guard let window = NSApp.keyWindow, window === mainWindow, window.attachedSheet == nil else { return false }
         // ⌃Tab moves between areas from anywhere in Develop, even from a text field (the Mac's
         // own ⌃Tab leaves a text field), so it never gets stuck.
-        if mode == .develop, let action = KeyBindings.action(for: event),
+        if usesPanelKeys, let action = KeyBindings.action(for: event),
            action == .nextArea || action == .previousArea {
             return perform(action)
         }
         // Tab and ⇧Tab stay in the focused area, text fields included (Search Presets is a stop
         // in Presets), instead of the window's Tab order, which hopped between the Presets and
         // Library search fields (Rosh, Nov 9, 2026).
-        if mode == .develop, event.keyCode == 48, event.modifierFlags.intersection([.control, .option]).isEmpty {
+        if usesPanelKeys, event.keyCode == 48, event.modifierFlags.intersection([.control, .option]).isEmpty {
             KeyboardFocus.shared.step(forward: !event.modifierFlags.contains(.shift))
             return true
         }
         if let text = window.firstResponder as? NSText {
             // A field that is a Tab stop (Search Presets) types; Esc leaves it for the photos.
-            if mode == .develop, KeyboardFocus.shared.currentIsText {
+            if usesPanelKeys, KeyboardFocus.shared.currentIsText {
                 if event.keyCode == 53 {
                     KeyboardFocus.shared.release()
                     return true
@@ -965,7 +992,7 @@ final class LibraryModel: ObservableObject {
         }
         // A focused slider or the Presets list takes the arrows, Return, Space and Esc (Esc then
         // gives them back to the photos).
-        if mode == .develop, KeyboardFocus.shared.current != nil {
+        if usesPanelKeys, KeyboardFocus.shared.current != nil {
             let shift = event.modifierFlags.contains(.shift)
             let key: KeyboardFocus.Key?
             switch event.keyCode {
@@ -1027,9 +1054,10 @@ final class LibraryModel: ObservableObject {
         switch event.keyCode {
         case 123 where mode != .grid: step(-1); return true           // left arrow
         case 124 where mode != .grid: step(1); return true            // right arrow
-        case 36 where mode != .develop, 76 where mode != .develop:     // return, enter
+        case 36 where mode != .develop && mode != .hdr, 76 where mode != .develop && mode != .hdr:  // return, enter
             if mode == .loupe { mode = .grid } else { openLoupe() }
             return true
+        case 53 where mode == .hdr && hdr.busy: hdr.cancel(); return true  // escape stops an HDR save
         case 53 where mode != .grid: mode = .grid; return true        // escape
         default: break
         }
@@ -1081,9 +1109,11 @@ final class LibraryModel: ObservableObject {
         case .develop: openDevelop()
         case .grid: mode = .grid
         case .beforeAfter:
+            if mode == .hdr, hdr.hasPhoto { hdr.showingBefore.toggle(); return true }
             guard mode == .develop else { return false }
             develop.showingBefore.toggle()
         case .compareMode:
+            if mode == .hdr, hdr.hasPhoto { hdr.cycleCompareMode(); return true }
             guard mode == .develop else { return false }
             develop.cycleCompareMode()
         case .zoom: toggleZoom()
@@ -1120,7 +1150,7 @@ final class LibraryModel: ObservableObject {
             guard mode == .develop else { return false }
             if develop.isGuiding { develop.isGuiding = false } else { develop.setUpright(.guided) }
         case .nextArea, .previousArea:
-            guard mode == .develop else { return false }
+            guard usesPanelKeys else { return false }
             KeyboardFocus.shared.cycle(forward: action == .nextArea)
         }
         return true
