@@ -34,6 +34,9 @@ struct AtelierApp: App {
             .task { launch.open() }
         }
         .commands {
+            // Atelier is one library window: File > New Window would open a second copy of the
+            // same library (one shared model, keys and renders tied to the first window).
+            CommandGroup(replacing: .newItem) {}
             LibraryCommands(model: launch.model)
             CommandGroup(replacing: .help) {
                 Button("Atelier Help") { HelpWindow.shared.show() }
@@ -222,7 +225,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     weak var model: LibraryModel?
 
     func applicationWillFinishLaunching(_ notification: Notification) {
-        MainActor.assumeIsolated { SplashController.shared.showAtLaunch() }
+        // No window tabs: removes View > Show Tab Bar / Show All Tabs and the Window menu's tab
+        // items. Set before any window (the splash included) is created.
+        MainActor.assumeIsolated {
+            NSWindow.allowsAutomaticWindowTabbing = false
+            SplashController.shared.showAtLaunch()
+        }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {

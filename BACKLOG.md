@@ -718,3 +718,13 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 **Decisions for Rosh:** approve the direction and A0 + A1 as the first bounded item; remote access later (recommended) or in A1; photo previews for cloud-hosted models off by default with a switch (recommended) or never.
 
 **Acceptance to agree:** per phase. A1 at minimum: Claude Desktop, Codex and one Ollama client each list the Look tools and answer a catalog question; nothing writes to the catalog; Settings > Agents turns access off.
+
+## AT-051 — Menus: no New Window, no window tabs
+
+**Status:** In progress. **Owner:** Claude. **Chat:** [Clean up irrelevant app menu items](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGK8yLyZp2y8uhxZfgWkUGoe1). **Branch:** `claude/project-thread-74eiwt`. **Baseline:** `fa4239b`. **Dependencies:** none.
+
+**Evidence:** Rosh (2026-11-12): "Please review the menus and see if there are any items are not relevant or not implemented? e.g. Writing tools? What is Show tab bar and its usecase". Source audit of `AtelierApp.swift` and `AtelierHDRApp.swift`: every Atelier-defined menu item calls a real action; the stray items come from SwiftUI's `WindowGroup` (File > New Window opens a second window on the same `LibraryModel`, whose key monitor and `mainWindow` assume one window) and AppKit's automatic window tabbing.
+
+**Scope:** `CommandGroup(replacing: .newItem) {}` in Atelier (the HDR editor already replaces it); `NSWindow.allowsAutomaticWindowTabbing = false` in both apps' `applicationWillFinishLaunching`. Kept: Writing Tools, AutoFill, Start Dictation, Emoji & Symbols (useful in text fields), Enter Full Screen, window tiling, View > Hide Sidebar / Toolbar.
+
+**Acceptance:** Mac build; Rosh checks File (no New Window, ⌘N does nothing), View (no Show Tab Bar / Show All Tabs), Window (no Merge All Windows / Move Tab to New Window / tab switching), in Atelier and the HDR editor. **Deferred:** none.

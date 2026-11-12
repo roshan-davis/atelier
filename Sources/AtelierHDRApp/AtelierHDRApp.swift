@@ -43,6 +43,10 @@ struct AtelierHDRApp: App {
 @MainActor final class HDRAppDelegate: NSObject, NSApplicationDelegate {
     weak var editor: HDRController?
     private var keyMonitor: Any?
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        // No window tabs, as in Atelier: removes View > Show Tab Bar / Show All Tabs.
+        NSWindow.allowsAutomaticWindowTabbing = false
+    }
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular); Theme.current.apply(); NSApp.activate(ignoringOtherApps: true)
         PanelHelp.hasTopic = { HelpWindow.topic(forPanel: $0) != nil }
