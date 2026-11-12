@@ -103,7 +103,9 @@ final class HDRToneMapperSpeedTests: XCTestCase {
         var regions = HDRSettings(); regions.shadows = 0.8; regions.highlights = -0.6
         var fusion = regions; fusion.method = .virtualExposureFusion; fusion.shadows = -0.5
         var blend = regions; blend.method = .fusion; blend.fusionSpacing = 1.5
-        for settings in settingsToTry + [regions, fusion, blend] {
+        var tinted = regions; tinted.temperature = 0.4; tinted.vibrance = 0.5; tinted.saturation = -0.3
+        var cool = blend; cool.temperature = -0.7; cool.saturation = 0.6
+        for settings in settingsToTry + [regions, fusion, blend, tinted, cool] {
             let analysis = try HDRToneMapper.analyze(image, exposure: settings.exposure)
             let source = try XCTUnwrap(renderer.source(image, analysis: analysis))
             let frame = try XCTUnwrap(renderer.image(source, settings: settings))

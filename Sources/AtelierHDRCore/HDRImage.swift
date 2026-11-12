@@ -56,11 +56,20 @@ public struct HDRSettings: Codable, Equatable, Sendable {
     public var highlights: Float = 0
     /// Fusion's exposures are this many EV under and over the photo, 1...3. Only Fusion uses it.
     public var fusionSpacing: Float = 2
+    /// Color after tone mapping, -1...1, 0 changes nothing (Rosh, Nov 12, 2026: presets need
+    /// color to differ, as Machinery HDR's and Aurora's do). Temperature warms (+) or cools (−)
+    /// at the same brightness; Vibrance raises muted colors more than saturated ones.
+    public var temperature: Float = 0
+    public var saturation: Float = 0
+    public var vibrance: Float = 0
     public init() {}
+
+    /// Whether any color control is away from 0.
+    public var hasColor: Bool { temperature != 0 || saturation != 0 || vibrance != 0 }
 
     enum CodingKeys: String, CodingKey {
         case method, toneEnabled, artifactsEnabled, exposure, compression, microcontrast, detail, shadowProtection, highlightProtection
-        case shadows, highlights, fusionSpacing
+        case shadows, highlights, fusionSpacing, temperature, saturation, vibrance
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -76,13 +85,17 @@ public struct HDRSettings: Codable, Equatable, Sendable {
         shadows = try c.decodeIfPresent(Float.self, forKey: .shadows) ?? 0
         highlights = try c.decodeIfPresent(Float.self, forKey: .highlights) ?? 0
         fusionSpacing = try c.decodeIfPresent(Float.self, forKey: .fusionSpacing) ?? 2
+        temperature = try c.decodeIfPresent(Float.self, forKey: .temperature) ?? 0
+        saturation = try c.decodeIfPresent(Float.self, forKey: .saturation) ?? 0
+        vibrance = try c.decodeIfPresent(Float.self, forKey: .vibrance) ?? 0
         try validate()
     }
 
     public func validate() throws {
         guard exposure.isFinite, (-5...5).contains(exposure),
               [compression, shadowProtection, highlightProtection].allSatisfy({ $0.isFinite && (0...1).contains($0) }),
-              [microcontrast, detail, shadows, highlights].allSatisfy({ $0.isFinite && (-1...1).contains($0) }),
+              [microcontrast, detail, shadows, highlights, temperature, saturation, vibrance]
+                .allSatisfy({ $0.isFinite && (-1...1).contains($0) }),
               fusionSpacing.isFinite, (1...3).contains(fusionSpacing) else {
             throw HDRError.invalidSettings
         }

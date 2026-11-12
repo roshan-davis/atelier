@@ -72,6 +72,7 @@ public enum HDRToneMapper {
         try cancellation()
         let width = image.width, height = image.height
         let gain = powf(2, settings.exposure)
+        let colored = settings.hasColor
         var output = image.rgb
         image.rgb.withUnsafeBufferPointer { rgb in
             prepared.luminance.withUnsafeBufferPointer { luminance in
@@ -84,7 +85,13 @@ public enum HDRToneMapper {
                                         let i = y * width + x
                                         let scale = pixelScale(l: luminance[i], log: logs[i], small: small[i], large: large[i],
                                                                gain: gain, settings: settings)
-                                        for c in 0..<3 { output[i*3+c] = max(0, rgb[i*3+c] * scale) }
+                                        if colored {
+                                            let c = color(max(0, rgb[i*3] * scale), max(0, rgb[i*3+1] * scale),
+                                                          max(0, rgb[i*3+2] * scale), settings: settings)
+                                            output[i*3] = c.0; output[i*3+1] = c.1; output[i*3+2] = c.2
+                                        } else {
+                                            for c in 0..<3 { output[i*3+c] = max(0, rgb[i*3+c] * scale) }
+                                        }
                                     }
                                 }
                             }
@@ -124,6 +131,27 @@ public enum HDRToneMapper {
         let texture = powf(2, protection * (settings.detail * fine * 2
             + settings.microcontrast * coarse * 3 * boundaryProtection))
         return l > 0.000001 ? mapped / l * gain * texture : gain
+    }
+
+    /// Temperature, Vibrance and Saturation on one tone-mapped linear pixel, in that order, each
+    /// keeping the pixel's luminance. Only called when one of them is away from 0, so photos
+    /// without color changes stay bit-for-bit as before.
+    @inline(__always)
+    static func color(_ r: Float, _ g: Float, _ b: Float, settings: HDRSettings) -> (Float, Float, Float) {
+        var r = r, g = g, b = b
+        let before = r * 0.2126 + g * 0.7152 + b * 0.0722
+        if settings.temperature != 0 {
+            r *= 1 + 0.3 * settings.temperature
+            b *= 1 - 0.3 * settings.temperature
+            let after = r * 0.2126 + g * 0.7152 + b * 0.0722
+            let keep: Float = after > 0.000001 ? before / after : 1
+            r *= keep; g *= keep; b *= keep
+        }
+        let y = before
+        let high = max(r, max(g, b)), low = min(r, min(g, b))
+        let chroma: Float = high > 0.000001 ? (high - low) / high : 0
+        let amount = (1 + settings.vibrance * (1 - chroma)) * (1 + settings.saturation)
+        return (max(0, y + (r - y) * amount), max(0, y + (g - y) * amount), max(0, y + (b - y) * amount))
     }
 
     /// The tone-mapped luminance of a pixel of luminance `l` (log2 `log`) on illumination `large`.
@@ -195,7 +223,19 @@ public enum HDRToneMapper {
     /// Source panel's Exposures strip.
     public static func exposurePlates(_ image: HDRImage, exposure: Float, spacing: Float,
                                       longEdge: Int) throws -> [HDRImage] {
+        let small = try shrink(image, longEdge: longEdge)
+        return try (-1...1).map { index -> HDRImage in
+            let gain = exp2f(exposure + Float(index) * spacing)
+            return try HDRImage(width: small.width, height: small.height, rgb: small.rgb.map { plate($0 * gain) })
+        }
+    }
+
+    /// `image` box-averaged down to at most `longEdge` pixels on its long side (the Exposures
+    /// strip and the preset thumbnails). Spatial scales in the tone mapper are relative to the
+    /// image size, so a small render looks like the large one, only less detailed.
+    public static func shrink(_ image: HDRImage, longEdge: Int) throws -> HDRImage {
         let step = max(1, Int((Float(max(image.width, image.height)) / Float(max(1, longEdge))).rounded(.up)))
+        guard step > 1 else { return image }
         let width = max(1, image.width / step), height = max(1, image.height / step)
         var small = [Float](repeating: 0, count: width * height * 3)
         let area = Float(step * step)
@@ -213,10 +253,7 @@ public enum HDRToneMapper {
                 small[o] = r / area; small[o + 1] = g / area; small[o + 2] = b / area
             }
         }
-        return try (-1...1).map { index -> HDRImage in
-            let gain = exp2f(exposure + Float(index) * spacing)
-            return try HDRImage(width: width, height: height, rgb: small.map { plate($0 * gain) })
-        }
+        return try HDRImage(width: width, height: height, rgb: small)
     }
 
     /// Self-guided filter in log2 luminance. Epsilon is in squared stops; the base

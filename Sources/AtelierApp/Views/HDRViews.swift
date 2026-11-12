@@ -164,6 +164,14 @@ struct HDRPanel: View {
                             GroupHeading(title: "Texture", reset: { hdr.reset(HDRController.textureKeys) })
                             row("Microcontrast", \.microcontrast, -1...1, step: 0.01)
                             row("Detail", \.detail, -1...1, step: 0.01)
+                            GroupHeading(title: "Color", reset: { hdr.reset(HDRController.colorKeys) })
+                            SliderRow(label: "Temperature", value: hdr.binding(\.temperature), range: -1...1, step: 0.01,
+                                      gradient: [Color(red: 0.35, green: 0.55, blue: 0.95), Color(red: 0.95, green: 0.8, blue: 0.3)],
+                                      format: { String(format: "%.2f", $0) }, labelWidth: 94,
+                                      trackHelp: "Cools (left) or warms (right) the HDR result at the same brightness",
+                                      onEditingChanged: hdr.gesture)
+                            row("Vibrance", \.vibrance, -1...1, step: 0.01)
+                            row("Saturation", \.saturation, -1...1, step: 0.01)
                         }
                     }
                 }
@@ -218,7 +226,8 @@ struct HDRPanel: View {
     }
 }
 
-/// The left column in HDR mode: what is being tone-mapped and where its result goes.
+/// The left column in HDR mode: the presets, what is being tone-mapped, its three exposures and
+/// where its result goes.
 struct HDRSidebar: View {
     @ObservedObject var hdr: HDRController
     @AppStorage("hdr.sidebarCollapsed") private var collapsedList = ""
@@ -234,6 +243,7 @@ struct HDRSidebar: View {
     var body: some View {
         ScrollView(.vertical) {
             VStack(spacing: 0) {
+                HDRPresetsSection(hdr: hdr, isExpanded: isExpanded("presets"))
                 SidebarSection(title: "Source", isExpanded: isExpanded("source")) {
                     EmptyView()
                 } content: {

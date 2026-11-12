@@ -6,9 +6,16 @@
 <p class="lede">Shape the tonal range and texture of one original in Atelier's HDR tool, save it as a 16-bit TIFF stacked with the original, then finish its color in Develop.</p>
 <h2 id="start">Open a photo in HDR</h2><ol class="steps">
 <li>Select one photo and choose <span class="path">Photo › HDR…</span> (<kbd>⌃H</kbd>), or right-click the photo › <span class="path">Edit in HDR</span>. HDR opens in the same window; no view button is selected while it is open. Click <b>Done</b> at the foot of the right panel, or press <kbd>Esc</kbd>, to go back to the view you opened it from; or click Grid, Loupe or Develop (<kbd>G</kbd>, <kbd>E</kbd>, <kbd>D</kbd>). With unsaved changes you're asked first.</li>
-<li>HDR shows the photo with the same Before and After views, zoom and Filmstrip as Develop. The left panel names the <b>Source</b>, shows its <b>Exposures</b> and its <b>HDR Result</b>; the right panel has the Method and the sliders.</li>
+<li>HDR shows the photo with the same Before and After views, zoom and Filmstrip as Develop. The left panel has the <b>Presets</b>, the <b>Source</b>, its <b>Exposures</b> and its <b>HDR Result</b>; the right panel has the Method and the sliders.</li>
 <li>HDR works on the original's pixels, so a RAW keeps all its highlight and shadow range. Develop edits are not included; finish the color in Develop after saving. Nothing is written until you save, and the original is never changed.</li></ol>
 <p>This version processes one image. It does not yet align or merge captured brackets or remove moving subjects. The darker and brighter exposures it makes from one photo show what the original already holds; they add no scene information.</p>
+<h2 id="presets">Presets</h2>
+<figure><div class="diagram" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px"><div style="text-align:center"><img src="images/hdr-preset-natural.jpg" alt="Natural preset on the Help photo" style="width:100%;border-radius:3px"><div style="color:var(--text-2, #888);font-size:12px;margin-top:2px">Natural</div></div><div style="text-align:center"><img src="images/hdr-preset-balanced.jpg" alt="Balanced preset on the Help photo" style="width:100%;border-radius:3px"><div style="color:var(--text-2, #888);font-size:12px;margin-top:2px">Balanced</div></div><div style="text-align:center"><img src="images/hdr-preset-dramatic.jpg" alt="Dramatic preset on the Help photo" style="width:100%;border-radius:3px"><div style="color:var(--text-2, #888);font-size:12px;margin-top:2px">Dramatic</div></div><div style="text-align:center"><img src="images/hdr-preset-crisp-lines.jpg" alt="Crisp Lines preset on the Help photo" style="width:100%;border-radius:3px"><div style="color:var(--text-2, #888);font-size:12px;margin-top:2px">Crisp Lines</div></div><div style="text-align:center"><img src="images/hdr-preset-landscape.jpg" alt="Landscape preset on the Help photo" style="width:100%;border-radius:3px;outline:2px solid #0a84ff"><div style="color:var(--text-2, #888);font-size:12px;margin-top:2px">Landscape</div></div><div style="text-align:center"><img src="images/hdr-preset-painterly.jpg" alt="Painterly preset on the Help photo" style="width:100%;border-radius:3px"><div style="color:var(--text-2, #888);font-size:12px;margin-top:2px">Painterly</div></div></div>
+<figcaption>Presets on a shared Help photo, one from each group. The outlined one is applied.</figcaption></figure>
+<p>The <b>Presets</b> section at the top of the left panel shows every preset as a small picture of <em>your</em> photo with that preset applied, in groups: Natural, Realistic, Dramatic, Architecture, Landscape and Fusion. Rest the pointer on a picture to preview it on the big photo, and click it to apply it. Applying is one undo step (<kbd>⌘Z</kbd>). The applied preset is outlined. A preset sets everything except <b>Exposure</b>, which stays with the photo; the pictures follow when you change it.</p>
+<ul><li>Click the star on a picture, or right-click it › <span class="path">Add to Favorites</span>, to collect it in <b>Favorites</b> at the top.</li>
+<li>Click <b>+</b> in the Presets header to save the current look as your own preset, in <b>User Presets</b>. Right-click one of yours to <span class="path">Rename…</span> or <span class="path">Delete…</span> it. Photos already saved with a preset keep their look.</li>
+<li>Click a group's name to open or close it.</li></ul>
 <h2 id="controls">Tone and texture</h2>
 <figure><div class="diagram"><div class="panel" style="--slider-label-width:100px"><div class="ph">Tone Mapping</div>
 <div class="row"><span style="color:var(--app-text-2);width:100px;display:inline-block">Method</span><span>Fusion ⌄</span></div>
@@ -18,8 +25,11 @@
 <div class="gh">Tone</div><div class="sl" data-name="Highlights" data-value="−0.30" data-at="0.35" data-def="0.5"></div>
 <div class="sl" data-name="Shadows" data-value="0.40" data-at="0.7" data-def="0.5"></div>
 <div class="gh">Texture</div><div class="sl" data-name="Microcontrast" data-value="0.60" data-at="0.8" data-def="0.8"></div>
-<div class="sl" data-name="Detail" data-value="0.35" data-at="0.675" data-def="0.675"></div></div></div>
-<figcaption>One Tone Mapping panel: the Method (Spacing shows for Fusion), range compression, then the tone of the bright and dark areas, then texture.</figcaption></figure>
+<div class="sl" data-name="Detail" data-value="0.35" data-at="0.675" data-def="0.675"></div>
+<div class="gh">Color</div><div class="sl" data-name="Temperature" data-value="0.10" data-at="0.55" data-def="0.5"></div>
+<div class="sl" data-name="Vibrance" data-value="0.35" data-at="0.675" data-def="0.5"></div>
+<div class="sl" data-name="Saturation" data-value="0.00" data-at="0.5" data-def="0.5"></div></div></div>
+<figcaption>One Tone Mapping panel: the Method (Spacing shows for Fusion), range compression, then the tone of the bright and dark areas, texture and color.</figcaption></figure>
 <dl class="defs"><dt>Method</dt><dd><b>Natural</b> (the default) compresses the lighting region by region and restores midtone contrast: crisp and close to the original. <b>Fusion</b> blends three exposures of the photo, darker, as shot and brighter (see <a href="#exposures">Exposures</a>), taking each region from the exposures where it is best exposed: more open shadows and softer highlights, like an exposure-fusion HDR. Deep blacks stay black. Double-click the name to go back to Natural.</dd>
 <dt>Spacing</dt><dd>Fusion only: how many stops under and over the photo its darker and brighter exposures are, from ±1 to ±3 EV (default ±2). Wider spacing opens the shadows and holds back the highlights more.</dd>
 <dt>Exposure</dt><dd>Global brightness in stops, from −5 to +5. Start here if the original looks dark.</dd>
@@ -28,6 +38,9 @@
 <dt>Shadows</dt><dd>Brightens (right) or darkens (left) the dark areas, from −1 to +1, as Develop's Shadows does. Each works on whole areas, so texture inside them moves together.</dd>
 <dt>Microcontrast</dt><dd>Raises or softens medium-scale texture. Watch for halos and noise around high-contrast edges.</dd>
 <dt>Detail</dt><dd>Raises or softens finer texture. Judge it at 100%.</dd>
+<dt>Temperature</dt><dd>Cools (left) or warms (right) the HDR result, from −1 to +1, without changing its brightness. For exact white balance, set it in Develop after saving.</dd>
+<dt>Vibrance</dt><dd>Raises (right) or lowers (left) the strength of muted colors more than colors that are already strong.</dd>
+<dt>Saturation</dt><dd>Raises or lowers the strength of every color equally; −1 is black and white.</dd>
 </dl>
 <p>Microcontrast and Detail are automatically held back near black and in the brightest highlights, so they don't raise noise or halos there.</p>
 <p>Double-click a slider name to reset it; click a value to type. Right-click a panel header for Solo Mode, Expand All and Collapse All. Panel switches compare with a group turned off and keep its settings; moving a control turns its panel back on. <kbd>Tab</kbd> and the arrow keys move through the sliders, as in Develop. A drag is one undo step: <span class="path">Edit › Undo</span> (<kbd>⌘Z</kbd>) and <span class="path">Edit › Redo</span> (<kbd>⇧⌘Z</kbd>). <b>Reset All</b> at the foot of the panel puts every slider back.</p>

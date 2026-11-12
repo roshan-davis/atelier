@@ -741,15 +741,17 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 **Acceptance:** Mac build of the exact head (`Scripts/check_pr.py`), new layout snapshots `hdr-1280x800` and `hdr-slider-1000x584` reviewed, then Rosh: open a RAW in HDR, compare/zoom across Develop, Save, re-edit from the TIFF, Save As New, the unsaved-changes prompt on photo/view change and ⌘Q, Esc cancel, an HDR TIFF made by the old app reopening. Not changed: HDR look/engine (AT-021b acceptance still open), brackets (AT-021).
 
-## AT-053 — HDR: Fusion method and an Exposures strip (single photo)
+## AT-053 — HDR: presets with thumbnails, Color, Fusion method and an Exposures strip (single photo)
 
 **Status:** In progress — implementation pushed for review; needs a Mac build and Rosh's acceptance. **Owner:** Claude (Cl). **Chat:** [Improve HDR with bracket merging](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKEokdF8SYAc5BXTVci78c1E). **Branch:** `claude/project-thread-vd6owl`. **Baseline:** `6a9375f`.
 
 **Evidence:** Rosh (2026-11-12) asked whether HDR opens several exposures (no: one photo only), whether HDR should show the photo at three exposures to merge them, and about parity with Machinery HDR. Claude recommended bracket merge (A) or more merge modes (C); Rosh: "I like A and C - is there a way to achieve both?" Plan: one stack-of-exposures design, this PR on single photos first, brackets next.
 
-**Scope:** Tone Mapping gets a Method menu (Natural, Fusion) and a Spacing slider for Fusion; the left panel gets an Exposures strip (−Spacing, 0, +Spacing EV). `HDRMethod.fusion`, `HDRSettings.fusionSpacing` (decodes as 2), `HDRToneMapper.fusion`/`plate`/`exposurePlates`, the same math in the GPU preview kernel. Prototyped in numpy first; an Edge-aware method was dropped (outlines along strong edges). Help page, PRD AT-021 section updated.
+**Evidence, round 2:** Rosh (2026-11-12): "is that all it? look at other famous hdr tools ... Machinery HRD gives great presets on the left panels with thumbnail previews"; then chose color sliders plus toning/LUTs later ("A and B"; Claude recommended A now, toning and LUTs next, WB/curves stay in Develop). Comparison: https://claude.ai/artifact/JrRCLArua9C2XexZXSai1a.
 
-**Acceptance:** Mac build of the exact head (`Scripts/check_pr.py`, incl. `HDRFusionTests`, `HDRToneMapperSpeedTests` CPU/GPU parity for Fusion), the HDR layout snapshots, then Rosh: switch Method on a RAW, drag Spacing and Exposure (strip follows, sliders stay smooth), undo/redo, Reset All, save and reopen a Fusion project. Not in scope: brackets (AT-054, next), presets, batch.
+**Scope:** HDR's left panel gets a Presets section (thumbnails of the open photo per preset, 17 built-ins in six groups, User Presets, Favorites, hover preview, click applies, + saves, right-click rename/delete; `HDRPreset`, `HDRPresetStore`, `HDRController+Presets`, `HDRPresetViews`); Tone Mapping gets a Color group (Temperature, Vibrance, Saturation; `HDRToneMapper.color`, the same in the GPU kernel). Tone Mapping gets a Method menu (Natural, Fusion) and a Spacing slider for Fusion; the left panel gets an Exposures strip (−Spacing, 0, +Spacing EV). `HDRMethod.fusion`, `HDRSettings.fusionSpacing` (decodes as 2), `HDRToneMapper.fusion`/`plate`/`exposurePlates`, the same math in the GPU preview kernel. Prototyped in numpy first; an Edge-aware method was dropped (outlines along strong edges). Help page, PRD AT-021 section updated.
+
+**Acceptance:** Mac build of the exact head (`Scripts/check_pr.py`, incl. `HDRFusionTests`, `HDRToneMapperSpeedTests` CPU/GPU parity for Fusion), the HDR layout snapshots, then Rosh: hover and apply presets (thumbnails follow Exposure), favorites, save/rename/delete a preset, the Color sliders, switch Method on a RAW, drag Spacing and Exposure (strip follows, sliders stay smooth), undo/redo, Reset All, save and reopen a Fusion project. Not in scope: brackets (AT-054), color toning and 3D LUTs, Glow/Blacks/Whites/Smoothing, batch.
 
 ## AT-054 — HDR: merge bracketed photos
 

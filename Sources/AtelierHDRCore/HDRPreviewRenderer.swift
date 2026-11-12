@@ -93,6 +93,7 @@ public final class HDRPreviewRenderer: @unchecked Sendable {
             Double(settings.shadowProtection), Double(settings.highlightProtection),
             Double(settings.shadows), Double(settings.highlights),
             Double(settings.fusionSpacing),
+            Double(settings.temperature), Double(settings.saturation), Double(settings.vibrance),
         ]
         return kernel.apply(extent: source.rgb.extent, roiCallback: { _, rect in rect }, arguments: arguments)
     }
@@ -126,7 +127,7 @@ public final class HDRPreviewRenderer: @unchecked Sendable {
         }
     }
 
-    /// `HDRToneMapper.pixelScale`, `toneCurve` and `fusion`, line for line.
+    /// `HDRToneMapper.pixelScale`, `toneCurve`, `fusion` and `color`, line for line.
     static let kernelSource = """
         #include <CoreImage/CoreImage.h>
         using namespace metal;
@@ -172,6 +173,7 @@ public final class HDRPreviewRenderer: @unchecked Sendable {
                                              float microcontrast, float detail, float artifacts,
                                              float shadowProtection, float highlightProtection,
                                              float shadows, float highlights, float spacing,
+                                             float temperature, float saturation, float vibrance,
                                              coreimage::destination dest) {
             float2 p = dest.coord();
             float4 color = image.sample(image.transform(p));
@@ -199,7 +201,21 @@ public final class HDRPreviewRenderer: @unchecked Sendable {
             float texture = exp2(protection * (detail * fine * 2.0
                 + microcontrast * coarse * 3.0 * boundaryProtection));
             float scale = l > 0.000001 ? mapped / l * gain * texture : gain;
-            return float4(max(color.rgb * scale, float3(0.0)), color.a);
+            float3 rgb = max(color.rgb * scale, float3(0.0));
+            if (temperature != 0.0 || saturation != 0.0 || vibrance != 0.0) {
+                float before = rgb.r * 0.2126 + rgb.g * 0.7152 + rgb.b * 0.0722;
+                if (temperature != 0.0) {
+                    rgb.r *= 1.0 + 0.3 * temperature;
+                    rgb.b *= 1.0 - 0.3 * temperature;
+                    float after = rgb.r * 0.2126 + rgb.g * 0.7152 + rgb.b * 0.0722;
+                    rgb *= after > 0.000001 ? before / after : 1.0;
+                }
+                float high = max(rgb.r, max(rgb.g, rgb.b)), low = min(rgb.r, min(rgb.g, rgb.b));
+                float chroma = high > 0.000001 ? (high - low) / high : 0.0;
+                float amount = (1.0 + vibrance * (1.0 - chroma)) * (1.0 + saturation);
+                rgb = max(float3(before) + (rgb - float3(before)) * amount, float3(0.0));
+            }
+            return float4(rgb, color.a);
         }
         """
 }

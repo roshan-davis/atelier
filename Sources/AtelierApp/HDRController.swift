@@ -41,8 +41,14 @@ final class HDRController: ObservableObject {
     /// The Source panel's Exposures strip: the photo at −spacing, 0 and +spacing EV (Fusion's
     /// three exposures), small. Empty until made.
     @Published private(set) var plates: [NSImage] = []
+    /// The Presets panel: the user's presets, then the built-in ones (`HDRController+Presets`).
+    @Published var presets: [HDRPreset] = []
+    /// Each preset's look on this photo, small, by preset id. Empty until made.
+    @Published var presetThumbnails: [UUID: NSImage] = [:]
+    /// The preset the pointer rests on, previewed on the photo without changing the settings.
+    @Published var previewSettings: HDRSettings?
 
-    private weak var model: LibraryModel?
+    private(set) weak var model: LibraryModel?
     let zoom: ZoomState
     private var input: HDRImage?
     private var detailInput: HDRImage?
@@ -77,11 +83,26 @@ final class HDRController: ObservableObject {
     private struct PlatesKey: Equatable { var token: Int; var exposure: Float; var spacing: Float }
     private var platesTask: Task<Void, Never>?
     private var platesShown: PlatesKey?
+    let presetStore = HDRPresetStore(fileURL: HDRPresetStore.defaultURL)
+    /// The preset thumbnails: what they were made for, and the one being made.
+    struct ThumbnailsKey: Equatable { var token: Int; var exposure: Float; var presets: [HDRPreset] }
+    var thumbnailsTask: Task<Void, Never>?
+    var thumbnailsShown: ThumbnailsKey?
 
     init(model: LibraryModel) {
         self.model = model
         zoom = model.zoomState
+        presets = presetStore.all()
     }
+
+    /// What the photo shows: the preset the pointer rests on, otherwise the settings.
+    var displayedSettings: HDRSettings { previewSettings ?? settings }
+
+    /// The photo open in HDR, at the 1600 px proxy size (the preset thumbnails are made from it).
+    var proxyInput: HDRImage? { input }
+    /// Changes whenever another photo or project is shown.
+    var currentInputToken: Int { inputToken }
+    var thumbnailIO: HDRImageIO { previewIO }
 
     var hasPhoto: Bool { before != nil }
     var projectURL: URL? { request?.projectURL }
@@ -191,6 +212,7 @@ final class HDRController: ObservableObject {
         isLoading = false
         render()
         updatePlates()
+        updatePresetThumbnails()
         if case .percent(let percent) = zoom.level, percent >= 100 { zoomChanged() }
     }
 
@@ -204,6 +226,7 @@ final class HDRController: ObservableObject {
         photoFeed.sink.invalidate()
         before = nil; after = nil; pixelSize = nil
         plates = []; platesShown = nil
+        presetThumbnails = [:]; thumbnailsShown = nil; previewSettings = nil
         settings = HDRSettings(); savedSettings = nil; revision = 0
         undoStack = []; redoStack = []; updateHistory()
         dirty = false; isLoading = false; needsRelink = false; showingBefore = false; error = nil
@@ -258,7 +281,9 @@ final class HDRController: ObservableObject {
     }
 
     static let toneKeys: [WritableKeyPath<HDRSettings, Float>] = [\.exposure, \.compression, \.fusionSpacing,
-                                                                  \.highlights, \.shadows, \.microcontrast, \.detail]
+                                                                  \.highlights, \.shadows, \.microcontrast, \.detail,
+                                                                  \.temperature, \.vibrance, \.saturation]
+    static let colorKeys: [WritableKeyPath<HDRSettings, Float>] = [\.temperature, \.vibrance, \.saturation]
     static let regionKeys: [WritableKeyPath<HDRSettings, Float>] = [\.highlights, \.shadows]
     static let textureKeys: [WritableKeyPath<HDRSettings, Float>] = [\.microcontrast, \.detail]
 
@@ -294,6 +319,12 @@ final class HDRController: ObservableObject {
         })
     }
 
+    /// One undo step from `old` to the current settings (a preset applied).
+    func recordStep(from old: HDRSettings) {
+        guard old != settings else { return }
+        undoStack.append(old); redoStack = []
+    }
+
     func undo() {
         guard !busy, let previous = undoStack.popLast() else { return }
         redoStack.append(settings); settings = previous; changed()
@@ -307,7 +338,9 @@ final class HDRController: ObservableObject {
         compareMode = all[((all.firstIndex(of: compareMode) ?? 0) + 1) % all.count]
     }
     private func updateHistory() { canUndo = !undoStack.isEmpty; canRedo = !redoStack.isEmpty }
-    private func changed() { dirty = settings != savedSettings; updateHistory(); render(); updatePlates() }
+    func changed() {
+        dirty = settings != savedSettings; updateHistory(); render(); updatePlates(); updatePresetThumbnails()
+    }
 
     /// Done: back to the view HDR was opened from (Esc does the same).
     func done() { model?.closeHDR() }
@@ -328,10 +361,10 @@ final class HDRController: ObservableObject {
     /// renders (`HDRPreviewCache`), so only Exposure recomputes it. When the slider is let go (or
     /// for a click, a typed value or a key) the ordinary image is published: the proxy from the
     /// same GPU kernel, or the full-size original from the CPU at 100% and closer.
-    private func render() {
+    func render() {
         renderRevision += 1
         guard let proxy = input else { return }
-        if gestureStart != nil, !showingBefore, photoFeed.isAttached, HDRPreviewRenderer.shared != nil {
+        if gestureStart != nil, previewSettings == nil, !showingBefore, photoFeed.isAttached, HDRPreviewRenderer.shared != nil {
             renderCount += 1
             liveFrames.submit(.init(input: proxy, settings: settings, token: inputToken, count: renderCount,
                                     epoch: photoFeed.sink.currentEpoch))
@@ -375,7 +408,7 @@ final class HDRController: ObservableObject {
         let input = useDetail ? (detailInput ?? proxy) : proxy
         let isProxy = input.width == proxy.width && input.height == proxy.height
         renderCount += 1
-        let snapshot = settings, revision = renderRevision, io = previewIO, token = inputToken
+        let snapshot = displayedSettings, revision = renderRevision, io = previewIO, token = inputToken
         let cache = previewCache, count = renderCount
         renderTask = Task {
             do {
@@ -394,7 +427,7 @@ final class HDRController: ObservableObject {
                     let rendered = try HDRToneMapper.render(input, settings: snapshot, analysis: prepared)
                     return try io.preview(rendered)
                 }.value
-                if token == inputToken, settings == snapshot, revision == renderRevision {
+                if token == inputToken, displayedSettings == snapshot, revision == renderRevision {
                     let image = NSImage(cgImage: result, size: .zero)
                     photoFeed.published(image, count: count)
                     after = image
@@ -403,7 +436,7 @@ final class HDRController: ObservableObject {
             } catch { self.error = error.localizedDescription }
             guard revision <= renderRevision, self.input != nil else { renderTask = nil; return }
             renderTask = nil
-            if settings != snapshot || revision != renderRevision { render() }
+            if displayedSettings != snapshot || revision != renderRevision { render() }
         }
     }
 
