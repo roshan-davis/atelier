@@ -248,7 +248,10 @@ private struct KeyboardMap: View {
     ]
 
     var body: some View {
-        let bindings = KeyAction.allCases.compactMap { action in KeyBindings.combo(for: action).map { ($0, action) } }
+        let bindings: [(KeyCombo, KeyAction)] = KeyAction.allCases.compactMap { action in
+            guard let combo = KeyBindings.combo(for: action) else { return nil }
+            return (combo, action)
+        }
         VStack(alignment: .leading, spacing: 10) {
             Picker("Show keys used with", selection: $layer) {
                 Text("No modifier").tag(KeyCombo.Modifiers())
@@ -262,10 +265,7 @@ private struct KeyboardMap: View {
                 ForEach(Array(Self.rows.enumerated()), id: \.offset) { _, row in
                     HStack(spacing: Self.gap) {
                         ForEach(row.keys, id: \.self) { key in
-                            let combo = KeyCombo(key, modifiers: layer)
-                            let bound = bindings.first(where: { $0.0 == combo })?.1
-                            MapKey(key: key, action: bound, isHighlighted: bound != nil && bound == highlighted,
-                                   combo: combo, select: select)
+                            mapKey(key, bindings: bindings)
                         }
                     }
                     .padding(.leading, row.indent * (Self.keySize + Self.gap))
@@ -277,6 +277,13 @@ private struct KeyboardMap: View {
         .padding(.vertical, 4)
         .id(revision)
     }
+
+    private func mapKey(_ key: String, bindings: [(KeyCombo, KeyAction)]) -> MapKey {
+        let combo = KeyCombo(key, modifiers: layer)
+        let bound: KeyAction? = bindings.first(where: { $0.0 == combo })?.1
+        let isHighlighted = bound != nil && bound == highlighted
+        return MapKey(key: key, action: bound, isHighlighted: isHighlighted, combo: combo, select: select)
+    }
 }
 
 private struct MapKey: View {
@@ -287,32 +294,63 @@ private struct MapKey: View {
     let select: (KeyAction) -> Void
     @State private var hovering = false
 
+    // Split into small typed pieces: as one expression it was too much for the type checker.
     var body: some View {
+        face
+            .padding(4)
+            .frame(width: KeyboardMap.keySize, height: KeyboardMap.keySize)
+            .background(capShape.fill(fill))
+            .overlay(capShape.strokeBorder(border, lineWidth: isHighlighted ? 2 : 1))
+            .shadow(color: Color.black.opacity(action == nil ? 0.08 : 0.2), radius: 0, x: 0, y: 1)
+            .contentShape(Rectangle())
+            .onHover { hovering = $0 }
+            .onTapGesture(perform: tapped)
+            .help(description)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(description)
+    }
+
+    private var face: some View {
         VStack(spacing: 0) {
             Text(KeyCombo(key).display)
                 .font(.system(size: 10, weight: .semibold, design: .rounded))
-                .foregroundStyle(action == nil ? HierarchicalShapeStyle.tertiary : HierarchicalShapeStyle.secondary)
+                .foregroundStyle(labelColor)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Spacer(minLength: 0)
-            if let action {
-                KeyActionGlyph(action: action, size: 13)
-            }
+            glyph
             Spacer(minLength: 0)
         }
-        .padding(4)
-        .frame(width: KeyboardMap.keySize, height: KeyboardMap.keySize)
-        .background(RoundedRectangle(cornerRadius: 6, style: .continuous)
-            .fill(action.map { $0.tint.opacity(hovering ? 0.32 : 0.2) } ?? Color.primary.opacity(0.04)))
-        .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous)
-            .strokeBorder(isHighlighted ? Color.accentColor : Color.primary.opacity(action == nil ? 0.08 : 0.18),
-                          lineWidth: isHighlighted ? 2 : 1))
-        .shadow(color: .black.opacity(action == nil ? 0.08 : 0.2), radius: 0, x: 0, y: 1)
-        .contentShape(Rectangle())
-        .onHover { hovering = $0 }
-        .onTapGesture { if let action { select(action) } }
-        .help(action.map { "\(combo.display): \($0.title)" } ?? "\(combo.display): not used")
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(action.map { "\(combo.display), \($0.title)" } ?? "\(combo.display), not used")
+    }
+
+    @ViewBuilder private var glyph: some View {
+        if let action {
+            KeyActionGlyph(action: action, size: 13)
+        }
+    }
+
+    private var capShape: RoundedRectangle { RoundedRectangle(cornerRadius: 6, style: .continuous) }
+
+    private var labelColor: Color {
+        action == nil ? Color.secondary.opacity(0.6) : Color.secondary
+    }
+
+    private var fill: Color {
+        guard let action else { return Color.primary.opacity(0.04) }
+        return action.tint.opacity(hovering ? 0.32 : 0.2)
+    }
+
+    private var border: Color {
+        if isHighlighted { return Color.accentColor }
+        return Color.primary.opacity(action == nil ? 0.08 : 0.18)
+    }
+
+    private var description: String {
+        guard let action else { return combo.display + ": not used" }
+        return combo.display + ": " + action.title
+    }
+
+    private func tapped() {
+        if let action { select(action) }
     }
 }
 
