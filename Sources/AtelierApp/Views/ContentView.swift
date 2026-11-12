@@ -18,6 +18,9 @@ struct ContentView: View {
                     if model.mode == .develop {
                         DevelopSidebar(develop: model.develop)
                             .areaFocusFlash(.leftPanel)
+                    } else if model.mode == .hdr {
+                        HDRSidebar(hdr: model.hdr)
+                            .areaFocusFlash(.leftPanel)
                     } else {
                         SidebarView()
                     }
@@ -38,6 +41,8 @@ struct ContentView: View {
                                 LoupeView(zoom: model.zoomState)
                             case .develop:
                                 DevelopImageView(develop: model.develop)
+                            case .hdr:
+                                HDRImageView(hdr: model.hdr)
                             }
                             if model.rows.isEmpty {
                                 EmptyLibraryView()
@@ -62,7 +67,7 @@ struct ContentView: View {
                 }
             }
             FilmstripView()
-                .areaFocusFlash(.photo, enabled: model.mode == .develop && filmstripVisible)
+                .areaFocusFlash(.photo, enabled: model.usesPanelKeys && filmstripVisible)
         }
         // Dropping folders or photos anywhere on the window starts an import with them.
         .dropDestination(for: URL.self) { urls, _ in
@@ -88,6 +93,9 @@ struct ContentView: View {
                     Label("Develop", systemImage: "slider.horizontal.3").tag(ViewMode.develop)
                 }
                 .pickerStyle(.segmented)
+                // HDR isn't a button here: it's an occasional tool, opened from Photo > HDR… (⌃H)
+                // or a photo's right-click menu (Rosh, Nov 12, 2026). While HDR is open no
+                // button is selected, and clicking one leaves HDR.
                 .help("Grid (G), loupe (E) or develop (D)")
 
                 CollectionMenu()

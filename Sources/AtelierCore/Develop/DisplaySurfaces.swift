@@ -30,7 +30,7 @@ public final class DisplaySurfaces: @unchecked Sendable {
     }
 
     /// A surface of `width` × `height` that isn't on screen, or nil when all of them are.
-    func checkOut(width: Int, height: Int, onPoolFull: (() -> Void)? = nil) -> IOSurface? {
+    public func checkOut(width: Int, height: Int, onPoolFull: (() -> Void)? = nil) -> IOSurface? {
         lock.lock()
         var full = false
         defer {
@@ -100,7 +100,7 @@ extension DevelopRenderer {
     /// two-row image (red on top) and reading the surface's first row. The answer sets
     /// `CIRenderDestination.isFlipped`, so the photo is never shown upside down whichever way
     /// this macOS version does it.
-    static let surfaceNeedsFlip: Bool = {
+    public static let surfaceNeedsFlip: Bool = {
         let renderer = DevelopRenderer.shared
         let top = CIImage(color: CIColor(red: 1, green: 0, blue: 0)).cropped(to: CGRect(x: 0, y: 1, width: 2, height: 1))
         let bottom = CIImage(color: CIColor(red: 0, green: 0, blue: 1)).cropped(to: CGRect(x: 0, y: 0, width: 2, height: 1))

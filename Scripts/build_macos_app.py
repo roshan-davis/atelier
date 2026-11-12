@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build Atelier and its HDR companion into a local, ad-hoc-signed macOS app.
+"""Build Atelier into a local, ad-hoc-signed macOS app.
 
 --arch picks the processor: native (this Mac, the default), arm64 (Apple Silicon),
 x86_64 (Intel) or universal (one app that runs natively on both). --arch all builds
@@ -48,10 +48,9 @@ def main():
     parser.add_argument("--scratch-path", type=Path, help="Use a separate SwiftPM build directory")
     parser.add_argument("--bundle-id", default="local.atelier.app")
     parser.add_argument("--test-catalog", type=Path, help="Debug only: disposable catalog override")
-    parser.add_argument("--snapshots", type=Path, help="Debug only: HDR layout snapshot folder")
     args = parser.parse_args()
-    if (args.test_catalog or args.snapshots) and args.configuration != "debug":
-        parser.error("Test catalog and snapshots require --configuration debug")
+    if args.test_catalog and args.configuration != "debug":
+        parser.error("A test catalog requires --configuration debug")
     if args.arch == "all" and args.output:
         parser.error("--arch all writes one app per architecture; leave out --output")
     env = os.environ.copy()
@@ -110,8 +109,7 @@ def package(args, arch, products, revision, output):
             if source.is_dir():
                 shutil.copytree(source, path / "Contents/Resources" / resource)
         # Finder and the Dock read the icon from the bundle itself (CFBundleIconFile); the app
-        # setting it at run time only changes the Dock while it runs. The HDR helper uses the same
-        # icon until it has its own.
+        # setting it at run time only changes the Dock while it runs.
         resources = path / "Contents/Resources"
         resources.mkdir(parents=True, exist_ok=True)
         shutil.copy2(APP_ICON, resources / APP_ICON.name)
@@ -122,15 +120,12 @@ def package(args, arch, products, revision, output):
                 "LSMinimumSystemVersion": "15.0", "AtelierSourceRevision": revision}
         if args.test_catalog and executable == "AtelierApp":
             info["AtelierTestCatalogPath"] = str(args.test_catalog.absolute())
-        if executable == "AtelierHDRApp":
-            info["CFBundleDocumentTypes"] = [{"CFBundleTypeName": "Atelier HDR Project",
-                "CFBundleTypeRole": "Editor", "LSItemContentTypes": ["local.atelier.hdr-project"],
-                "LSTypeIsPackage": True}]
+        if executable == "AtelierApp":
+            # HDR projects (.atelierhdr, made in Atelier's HDR mode) are packages: Finder shows
+            # one item, and folder imports never pull in their private source copy.
             info["UTExportedTypeDeclarations"] = [{"UTTypeIdentifier": "local.atelier.hdr-project",
                 "UTTypeDescription": "Atelier HDR Project", "UTTypeConformsTo": ["com.apple.package"],
                 "UTTypeTagSpecification": {"public.filename-extension": ["atelierhdr"]}}]
-            if args.snapshots:
-                info["AtelierHDRSnapshotPath"] = str(args.snapshots.absolute())
         (path / "Contents/Info.plist").write_bytes(plistlib.dumps(info))
 
     scratch = output.parent / ("Atelier-lipo-" + str(uuid.uuid4()))
@@ -141,10 +136,6 @@ def package(args, arch, products, revision, output):
 
     bundle(staging, "AtelierApp", "Atelier", args.bundle_id,
            ["Atelier_AtelierApp.bundle", "GRDB_GRDB.bundle", "Atelier_AtelierCore.bundle"])
-    helper = staging / "Contents/Helpers/Atelier HDR.app"
-    bundle(helper, "AtelierHDRApp", "Atelier HDR", args.bundle_id + ".hdr",
-           ["Atelier_AtelierHDRApp.bundle", "GRDB_GRDB.bundle", "Atelier_AtelierCore.bundle"])
-    subprocess.run(["codesign", "--force", "--sign", "-", str(helper)], check=True)
     subprocess.run(["codesign", "--force", "--sign", "-", str(staging)], check=True)
     if output.exists():
         backup = output.parent / (output.stem + "-previous-" + str(uuid.uuid4()) + ".app")

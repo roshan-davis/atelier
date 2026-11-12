@@ -1,1 +1,0 @@
-Atelier HDR uses the shared Atelier Help resource bundle.

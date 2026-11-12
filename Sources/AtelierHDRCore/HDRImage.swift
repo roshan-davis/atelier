@@ -42,10 +42,15 @@ public struct HDRSettings: Codable, Equatable, Sendable {
     public var detail: Float = 0.35
     public var shadowProtection: Float = 0.5
     public var highlightProtection: Float = 0.5
+    /// Lightroom-style tone of the dark and bright regions after tone mapping, -1...1; 0 changes
+    /// nothing (Rosh, Nov 12, 2026: the texture-protection sliders had no visible effect).
+    public var shadows: Float = 0
+    public var highlights: Float = 0
     public init() {}
 
     enum CodingKeys: String, CodingKey {
         case method, toneEnabled, artifactsEnabled, exposure, compression, microcontrast, detail, shadowProtection, highlightProtection
+        case shadows, highlights
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -58,13 +63,15 @@ public struct HDRSettings: Codable, Equatable, Sendable {
         detail = try c.decodeIfPresent(Float.self, forKey: .detail) ?? 0.35
         shadowProtection = try c.decodeIfPresent(Float.self, forKey: .shadowProtection) ?? 0.5
         highlightProtection = try c.decodeIfPresent(Float.self, forKey: .highlightProtection) ?? 0.5
+        shadows = try c.decodeIfPresent(Float.self, forKey: .shadows) ?? 0
+        highlights = try c.decodeIfPresent(Float.self, forKey: .highlights) ?? 0
         try validate()
     }
 
     public func validate() throws {
         guard exposure.isFinite, (-5...5).contains(exposure),
               [compression, shadowProtection, highlightProtection].allSatisfy({ $0.isFinite && (0...1).contains($0) }),
-              [microcontrast, detail].allSatisfy({ $0.isFinite && (-1...1).contains($0) }) else {
+              [microcontrast, detail, shadows, highlights].allSatisfy({ $0.isFinite && (-1...1).contains($0) }) else {
             throw HDRError.invalidSettings
         }
     }

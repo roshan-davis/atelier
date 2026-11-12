@@ -2,34 +2,40 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Single-image HDR · Atelier Help</title><link rel="stylesheet" href="assets/help.css">
 <script src="assets/toc.js" defer></script><script src="assets/help.js" defer></script></head>
-<body><main class="page"><div class="eyebrow">Share</div><h1>Single-image HDR</h1>
-<p class="lede">Shape the available tonal range and texture of one original in Atelier HDR, then finish its color in Atelier Develop.</p>
-<h2 id="start">Open from Atelier</h2><ol class="steps">
-<li>Select exactly one photo, then choose <span class="path">Photo › Edit In › HDR App (Original)…</span>, or right-click the photo and use <span class="path">Edit In</span>.</li>
-<li>Atelier opens the original read-only. First Save creates the HDR project with a verified private source copy; closing before saving creates no project. The source file stays unchanged. This input uses original pixels; existing Atelier Develop adjustments are not baked into it.</li>
-<li>Adjust tone and texture, compare, then click <b>Save &amp; Return to Atelier</b>. The original and returned TIFF appear together in Atelier; the TIFF opens in Develop.</li></ol>
-<p>This version processes one image. It does not align or merge captured brackets, remove moving subjects, or add scene information by synthesizing exposures.</p>
+<body><main class="page"><div class="eyebrow">Tool</div><h1>Single-image HDR</h1>
+<p class="lede">Shape the tonal range and texture of one original in Atelier's HDR tool, save it as a 16-bit TIFF stacked with the original, then finish its color in Develop.</p>
+<h2 id="start">Open a photo in HDR</h2><ol class="steps">
+<li>Select one photo and choose <span class="path">Photo › HDR…</span> (<kbd>⌃H</kbd>), or right-click the photo › <span class="path">Edit in HDR</span>. HDR opens in the same window; no view button is selected while it is open. Click <b>Done</b> at the foot of the right panel, or press <kbd>Esc</kbd>, to go back to the view you opened it from; or click Grid, Loupe or Develop (<kbd>G</kbd>, <kbd>E</kbd>, <kbd>D</kbd>). With unsaved changes you're asked first.</li>
+<li>HDR shows the photo with the same Before and After views, zoom and Filmstrip as Develop. The left panel names the <b>Source</b> and its <b>HDR Result</b>; the right panel has the sliders.</li>
+<li>HDR works on the original's pixels, so a RAW keeps all its highlight and shadow range. Develop edits are not included; finish the color in Develop after saving. Nothing is written until you save, and the original is never changed.</li></ol>
+<p>This version processes one image. It does not align or merge captured brackets, remove moving subjects, or add scene information by making exposures from one photo.</p>
 <h2 id="controls">Tone and texture</h2>
 <figure><div class="diagram"><div class="panel" style="--slider-label-width:100px"><div class="ph">Tone Mapping</div>
 <div class="sl" data-name="Exposure" data-value="0.50" data-at="0.55" data-def="0.5"></div>
 <div class="sl" data-name="Range" data-value="0.65" data-at="0.65" data-def="0.65"></div>
+<div class="gh">Tone</div><div class="sl" data-name="Highlights" data-value="−0.30" data-at="0.35" data-def="0.5"></div>
+<div class="sl" data-name="Shadows" data-value="0.40" data-at="0.7" data-def="0.5"></div>
 <div class="gh">Texture</div><div class="sl" data-name="Microcontrast" data-value="0.60" data-at="0.8" data-def="0.8"></div>
-<div class="sl" data-name="Detail" data-value="0.35" data-at="0.675" data-def="0.675"></div>
-<div class="ph">Artifacts</div><div class="sl" data-name="Shadows" data-value="0.50" data-at="0.5" data-def="0.5"></div>
-<div class="sl" data-name="Highlights" data-value="0.50" data-at="0.5" data-def="0.5"></div></div></div>
-<figcaption>The first controls focus on tone compression, texture and protection.</figcaption></figure>
+<div class="sl" data-name="Detail" data-value="0.35" data-at="0.675" data-def="0.675"></div></div></div>
+<figcaption>One Tone Mapping panel: range compression, then the tone of the bright and dark areas, then texture.</figcaption></figure>
 <dl class="defs"><dt>Exposure</dt><dd>Global brightness in stops, from −5 to +5. Start here if the original looks dark.</dd>
 <dt>Range</dt><dd>Compresses broad lighting differences from 0 to 1, opening dark structure and holding back bright areas while retaining local detail. Higher values create a stronger HDR effect.</dd>
+<dt>Highlights</dt><dd>Darkens (left) or brightens (right) the bright areas after tone mapping, from −1 to +1, as Develop's Highlights does. Move it left to bring back sky and window detail.</dd>
+<dt>Shadows</dt><dd>Brightens (right) or darkens (left) the dark areas, from −1 to +1, as Develop's Shadows does. Each works on whole areas, so texture inside them moves together.</dd>
 <dt>Microcontrast</dt><dd>Raises or softens medium-scale texture. Watch for halos and noise around high-contrast edges.</dd>
 <dt>Detail</dt><dd>Raises or softens finer texture. Judge it at 100%.</dd>
-<dt>Shadows / Highlights</dt><dd>Protect dark and bright areas from texture enhancement. These are protection amounts, not brightness sliders or noise removal.</dd></dl>
-<p>Double-click a slider name to reset it; click a value to type. Panel switches compare with a group disabled and retain its settings. Moving a control turns its panel back on. A drag is one undo step. Use <kbd>⌘Z</kbd> and <kbd>⇧⌘Z</kbd> for undo and redo.</p>
+</dl>
+<p>Microcontrast and Detail are automatically held back near black and in the brightest highlights, so they don't raise noise or halos there.</p>
+<p>Double-click a slider name to reset it; click a value to type. Right-click a panel header for Solo Mode, Expand All and Collapse All. Panel switches compare with a group turned off and keep its settings; moving a control turns its panel back on. <kbd>Tab</kbd> and the arrow keys move through the sliders, as in Develop. A drag is one undo step: <span class="path">Edit › Undo</span> (<kbd>⌘Z</kbd>) and <span class="path">Edit › Redo</span> (<kbd>⇧⌘Z</kbd>). <b>Reset All</b> at the foot of the panel puts every slider back.</p>
 <figure><div class="frame compare" data-before="hdr-before.jpg" data-after="hdr-after.jpg" data-labels="Before|Tone and texture"></div>
 <figcaption>Illustration of tone and texture adjustments on a shared Help photo. Results depend on the original; no clipped sensor detail is invented.</figcaption></figure>
-<h2 id="compare">Compare and zoom</h2><p>Choose Off, Side by Side or Split below the photo. Drag the split handle to move the divider. Hold <kbd>⌥</kbd> for the original. Use the zoom menu for Fit, Fill, 100% or 200%; pinch, double-click, scroll with a zoom modifier, or drag to pan using the same photo controls as Atelier.</p>
-<h2 id="save">Save, reopen and new versions</h2><p><span class="path">File › Save</span> (<kbd>⌘S</kbd>) saves a full-resolution, profiled 16-bit sRGB TIFF and the durable project beside it. Ordinary saves update the same result in Atelier. The saved project retains its source and settings, plus the current and previous saved generation. Older generations are removed only after successful TIFF publication. A TIFF alone cannot reconstruct HDR adjustments.</p>
-<p>To re-edit, select the returned HDR TIFF in Atelier and choose <span class="path">Photo › Edit In › HDR App (Original)…</span> again. It reopens the associated project. <span class="path">File › Save As New…</span> (<kbd>⇧⌘S</kbd>) creates a separate project and result identity, preserving the earlier result. Color grading remains in Atelier Develop.</p>
-<h2 id="recovery">Cancellation and recovery</h2><p>Cancel (or <kbd>Esc</kbd>) stops a save before its next commit boundary and preserves the last committed generation. Closing with unsaved changes asks before discarding them. Reopening validates the owned source and saved generation. A missing or changed source stops with an explanation; click <b>Relink Source…</b> and select a byte-identical backup of the original. The app checks its saved hash before copying it into the project; a different photo is rejected.</p>
-<p>Interrupted file publication is rebuilt from the committed generation when reopened. Atelier rechecks saved completion receipts after relaunch and rejects mismatched or stale results. Keep the project and its private sources when backing up; the catalog backup alone does not contain them.</p>
-<div class="see-also">See also: <a href="edit-in.html">Edit In</a> · <a href="photos.html#stacks">Stacks</a> · <a href="develop.html">Develop basics</a></div>
+<h2 id="compare">Compare and zoom</h2><p>Below the photo, choose Before and After: Off, Side by Side or Slider, as in Develop (<kbd>Y</kbd> cycles them). Drag the slider's divider to move it. <kbd>\</kbd> shows the original. Zoom works as everywhere in Atelier: double-click, <kbd>Z</kbd>, pinch, the zoom buttons, or <kbd>⌘=</kbd> and <kbd>⌘−</kbd>; drag or scroll to move around. The zoom and the spot in view carry over to and from Loupe and Develop. At 100% and closer the full-size original is used, so judge Detail there.</p>
+<h2 id="save">Save, reopen and new versions</h2>
+<p>Click <b>Save HDR</b> at the foot of the right panel, or choose <span class="path">File › Save HDR</span> (<kbd>⌘S</kbd>). Atelier renders a full-size, profiled 16-bit sRGB TIFF next to the original (or in <code>Pictures/Atelier/Edits</code> if that folder is read-only), with an HDR project (<code>.atelierhdr</code>) beside it. The TIFF appears stacked with the original and becomes the selected photo. Saving again updates the same TIFF; the button reads <b>Save</b> once there is one. In HDR, <kbd>⌘S</kbd> is Save HDR; in the other views it stays <span class="path">Library › Write XMP for Selection</span>.</p>
+<p>To change the HDR later, select the HDR TIFF and choose <span class="path">Photo › HDR…</span> again: its project opens with the sliders where you saved them. Opening the original in HDR again starts a new, separate HDR. <span class="path">File › Save HDR As New…</span> (<kbd>⇧⌘S</kbd>), also in the left panel, makes a separate project and TIFF and keeps the earlier one.</p>
+<p>If you move to another photo, switch to another view or quit with unsaved HDR changes, Atelier asks whether to <b>Save</b>, <b>Cancel</b> or <b>Don't Save</b>. Don't Save keeps the last saved TIFF as it was, or makes nothing if you never saved.</p>
+<h2 id="recovery">Cancellation and recovery</h2><p>While saving, the bar under the photo shows progress and <b>Cancel</b> (or press <kbd>Esc</kbd>); the last saved TIFF and project are kept. Each project keeps its own verified copy of the original and the current and previous saved results. Reopening checks them. If the project's copy of the original is missing or changed, HDR says so; click <b>Relink Source…</b> and choose an identical copy of the original. Its contents are checked first, so a different photo is rejected.</p>
+<p>A save interrupted while the TIFF was being written is put back from the project when it is reopened. Keep the project and its TIFF when backing up; the catalog backup alone does not contain them.</p>
+<p>Before November 2026 HDR was a separate app. HDR TIFFs it saved while Atelier was closed are added the next time Atelier opens, and its projects open in HDR like any other.</p>
+<div class="see-also">See also: <a href="develop.html">Develop basics</a> · <a href="photos.html#stacks">Stacks</a> · <a href="edit-in.html">Edit In other apps</a></div>
 </main></body></html>

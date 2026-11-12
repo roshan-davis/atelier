@@ -58,15 +58,35 @@ public final class HDRImageIO {
         var rgba = [Float](repeating: 0, count: width * height * 4)
         context.render(image, toBitmap: &rgba, rowBytes: width * 16, bounds: bounds,
                        format: .RGBAf, colorSpace: Self.linear)
-        var rgb = [Float](); rgb.reserveCapacity(width * height * 3)
-        for i in 0..<(width * height) { rgb.append(contentsOf: rgba[(i*4)..<(i*4+3)]) }
+        var rgb = [Float](repeating: 0, count: width * height * 3)
+        rgba.withUnsafeBufferPointer { rgba in
+            rgb.withUnsafeMutableBufferPointer { rgb in
+                HDRToneMapper.rows(height) { y in
+                    for i in (y * width)..<((y + 1) * width) {
+                        rgb[i*3] = rgba[i*4]; rgb[i*3+1] = rgba[i*4+1]; rgb[i*3+2] = rgba[i*4+2]
+                    }
+                }
+            }
+        }
         return try HDRImage(width: width, height: height, rgb: rgb)
     }
 
-    public func ciImage(_ image: HDRImage) -> CIImage {
-        var rgba = [Float](); rgba.reserveCapacity(image.width * image.height * 4)
-        for i in 0..<(image.width * image.height) {
-            rgba.append(contentsOf: image.rgb[(i*3)..<(i*3+3)]); rgba.append(1)
+    /// The same RGBA float bitmap as before, filled row bands at a time on all cores rather
+    /// than appended pixel by pixel (it is made for every preview while a slider moves).
+    public func ciImage(_ image: HDRImage) -> CIImage { Self.linearImage(image) }
+
+    /// `image` as a linear sRGB Core Image image, alpha 1 (`ciImage`; the GPU preview's input too).
+    public static func linearImage(_ image: HDRImage) -> CIImage {
+        let width = image.width
+        var rgba = [Float](repeating: 1, count: image.width * image.height * 4)
+        image.rgb.withUnsafeBufferPointer { rgb in
+            rgba.withUnsafeMutableBufferPointer { rgba in
+                HDRToneMapper.rows(image.height) { y in
+                    for i in (y * width)..<((y + 1) * width) {
+                        rgba[i*4] = rgb[i*3]; rgba[i*4+1] = rgb[i*3+1]; rgba[i*4+2] = rgb[i*3+2]
+                    }
+                }
+            }
         }
         return rgba.withUnsafeBytes {
             CIImage(bitmapData: Data($0), bytesPerRow: image.width * 16,

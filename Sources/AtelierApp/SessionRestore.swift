@@ -88,6 +88,9 @@ extension LibraryModel {
         let module: SavedSession.Module = switch mode {
         case .grid: .grid
         case .loupe: .loupe
+        // HDR reopens on the same photo in Loupe: an HDR session is opened by choice, and its
+        // unsaved changes were asked about before quitting.
+        case .hdr: .loupe
         case .develop: .develop
         }
         SavedSession(module: module, filter: filter, selection: selection, focusedID: focusedID,

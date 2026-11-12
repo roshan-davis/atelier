@@ -1,5 +1,7 @@
 # AT-021: standalone HDR app and a focused Atelier round trip
 
+> **Superseded for delivery (Rosh, Nov 12, 2026, AT-052):** HDR is now a view inside Atelier, not a standalone app; there is no job document, receipt or second process for single-image HDR. This record stays for the engine, project and bracket design. See the PRD section "HDR view and grouped Edit In".
+
 **Agreed direction and phased design record, October 30, 2026.** Rosh requested this pivot after discussing Machinery HDR. Source baseline: `8700f853bb9d5d06c906e9d8800b5137b5581a33`. The PRD HDR editor section is authoritative; this record explains the agreed direction and remaining feasibility questions. Algorithms, dependencies and detailed implementation still require bounded scope. No runtime, rendering or catalog schema changes are made here. The existing filename is retained so PR links continue to work.
 
 ## The pivot
