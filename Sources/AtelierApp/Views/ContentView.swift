@@ -91,10 +91,12 @@ struct ContentView: View {
                     Label("Grid", systemImage: "square.grid.3x3").tag(ViewMode.grid)
                     Label("Loupe", systemImage: "photo").tag(ViewMode.loupe)
                     Label("Develop", systemImage: "slider.horizontal.3").tag(ViewMode.develop)
-                    Label("HDR", systemImage: "camera.filters").tag(ViewMode.hdr)
                 }
                 .pickerStyle(.segmented)
-                .help("Grid (G), loupe (E), develop (D) or HDR (⌃H)")
+                // HDR isn't a button here: it's an occasional tool, opened from Photo > HDR… (⌃H)
+                // or a photo's right-click menu (Rosh, Nov 12, 2026). While HDR is open no
+                // button is selected, and clicking one leaves HDR.
+                .help("Grid (G), loupe (E) or develop (D)")
 
                 CollectionMenu()
 

@@ -58,6 +58,12 @@ final class HDRController: ObservableObject {
     private var gestureStart: HDRSettings?
     private var savedSettings: HDRSettings?
     private var confirming = false
+    /// The tone mapper's exposure analysis of the image last rendered; see `render()`.
+    private var analysis: HDRToneMapper.Analysis?
+    /// Changes whenever another photo or project is shown, so an analysis can't outlive it.
+    private var inputToken = 0
+    /// One Core Image context for every preview, rather than one per render.
+    private let previewIO = HDRImageIO()
 
     init(model: LibraryModel) {
         self.model = model
@@ -162,7 +168,7 @@ final class HDRController: ObservableObject {
 
     private func show(input: HDRImage, preview: CGImage, pixelSize: CGSize, settings: HDRSettings,
                       saved: HDRSettings, revision: Int) {
-        self.input = input; detailInput = nil
+        self.input = input; detailInput = nil; analysis = nil; inputToken += 1
         before = NSImage(cgImage: preview, size: .zero); after = nil
         self.pixelSize = pixelSize
         self.settings = settings; savedSettings = saved; self.revision = revision
@@ -179,7 +185,7 @@ final class HDRController: ObservableObject {
         renderTask?.cancel(); renderTask = nil
         renderRevision += 1
         assetID = nil; resultAssetID = nil; request = nil; store = nil; sourceURL = nil
-        input = nil; detailInput = nil; detailLoading = false
+        input = nil; detailInput = nil; detailLoading = false; analysis = nil; inputToken += 1
         before = nil; after = nil; pixelSize = nil
         settings = HDRSettings(); savedSettings = nil; revision = 0
         undoStack = []; redoStack = []; updateHistory()
@@ -229,6 +235,8 @@ final class HDRController: ObservableObject {
             gestureStart = nil
             if previous != settings { undoStack.append(previous); redoStack = [] }
             updateHistory()
+            // Zoomed in, the drag showed the proxy: now the full-size render.
+            if case .percent(let percent) = zoom.level, percent >= 100, detailInput != nil { render() }
         }
     }
 
@@ -280,20 +288,34 @@ final class HDRController: ObservableObject {
     // MARK: Rendering
 
     /// One render in flight, with only the latest settings followed up. Old results never flash.
+    ///
+    /// Smoothness (Rosh, Nov 12, 2026): the tone mapper's exposure analysis is kept between
+    /// renders (`analysis`), so only Exposure recomputes it; one Core Image context is reused
+    /// for previews; and while a slider is held at 100% or closer the 1600 px proxy is drawn
+    /// (scaled up, like Develop's drafts), with the full-size render once the slider is let go.
     private func render() {
         renderRevision += 1
         guard renderTask == nil, let proxy = input else { return }
         let useDetail: Bool
-        if case .percent(let percent) = zoom.level { useDetail = percent >= 100 } else { useDetail = false }
+        if case .percent(let percent) = zoom.level { useDetail = percent >= 100 && gestureStart == nil } else { useDetail = false }
         let input = useDetail ? (detailInput ?? proxy) : proxy
-        let snapshot = settings, revision = renderRevision
+        let snapshot = settings, revision = renderRevision, io = previewIO, token = inputToken
+        let cached = analysis.flatMap { $0.matches(input, exposure: snapshot.exposure) ? $0 : nil }
+        // Only the proxy's analysis is kept (about 27 MB); a full-size one would be ~400 MB.
+        let keepsAnalysis = input.width == proxy.width && input.height == proxy.height
         renderTask = Task {
             do {
-                let cg = try await Task.detached { () -> CGImage in
-                    let rendered = try HDRToneMapper.render(input, settings: snapshot)
-                    return try HDRImageIO().preview(rendered)
+                let result = try await Task.detached { () -> (CGImage, HDRToneMapper.Analysis?) in
+                    var prepared = cached
+                    if snapshot.toneEnabled, prepared == nil {
+                        prepared = try HDRToneMapper.analyze(input, exposure: snapshot.exposure)
+                    }
+                    let rendered = try HDRToneMapper.render(input, settings: snapshot, analysis: prepared)
+                    return (try io.preview(rendered), prepared)
                 }.value
-                if settings == snapshot, revision == renderRevision { after = NSImage(cgImage: cg, size: .zero) }
+                // Kept only for the image it was made from; a new photo or project clears it.
+                if token == inputToken, keepsAnalysis, let prepared = result.1 { analysis = prepared }
+                if settings == snapshot, revision == renderRevision { after = NSImage(cgImage: result.0, size: .zero) }
             } catch is CancellationError {
             } catch { self.error = error.localizedDescription }
             guard revision <= renderRevision, self.input != nil else { renderTask = nil; return }

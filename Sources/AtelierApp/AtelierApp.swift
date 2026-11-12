@@ -128,8 +128,6 @@ private struct ReadyLibraryCommands: Commands {
                     .keyboardShortcut("e", modifiers: [.command])
                 Button("Develop") { model.openDevelop() }
                     .keyboardShortcut("d", modifiers: [.command])
-                Button("HDR") { model.openHDR() }
-                    .disabled(model.targetIDs.count != 1)
                 Divider()
                 Button("Cull Import…") {
                     if case .importGroup(let id) = model.sidebarSelection { model.beginCull(importGroup: id) }

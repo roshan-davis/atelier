@@ -2,10 +2,10 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Single-image HDR · Atelier Help</title><link rel="stylesheet" href="assets/help.css">
 <script src="assets/toc.js" defer></script><script src="assets/help.js" defer></script></head>
-<body><main class="page"><div class="eyebrow">View</div><h1>Single-image HDR</h1>
-<p class="lede">Shape the tonal range and texture of one original in Atelier's HDR view, save it as a 16-bit TIFF stacked with the original, then finish its color in Develop.</p>
+<body><main class="page"><div class="eyebrow">Tool</div><h1>Single-image HDR</h1>
+<p class="lede">Shape the tonal range and texture of one original in Atelier's HDR tool, save it as a 16-bit TIFF stacked with the original, then finish its color in Develop.</p>
 <h2 id="start">Open a photo in HDR</h2><ol class="steps">
-<li>Select one photo and choose <span class="path">Photo › HDR…</span> (<kbd>⌃H</kbd>), click <b>HDR</b> in the toolbar's view buttons, or right-click the photo › <span class="path">Edit in HDR</span>.</li>
+<li>Select one photo and choose <span class="path">Photo › HDR…</span> (<kbd>⌃H</kbd>), or right-click the photo › <span class="path">Edit in HDR</span>. HDR opens in the same window; no view button is selected while it is open. Click Grid, Loupe or Develop (or press <kbd>G</kbd>, <kbd>E</kbd>, <kbd>D</kbd> or <kbd>Esc</kbd>) to leave it.</li>
 <li>HDR shows the photo with the same Before and After views, zoom and Filmstrip as Develop. The left panel names the <b>Source</b> and its <b>HDR Result</b>; the right panel has the sliders.</li>
 <li>HDR works on the original's pixels, so a RAW keeps all its highlight and shadow range. Develop edits are not included; finish the color in Develop after saving. Nothing is written until you save, and the original is never changed.</li></ol>
 <p>This version processes one image. It does not align or merge captured brackets, remove moving subjects, or add scene information by making exposures from one photo.</p>
@@ -33,6 +33,6 @@
 <p>If you move to another photo, switch to another view or quit with unsaved HDR changes, Atelier asks whether to <b>Save</b>, <b>Cancel</b> or <b>Don't Save</b>. Don't Save keeps the last saved TIFF as it was, or makes nothing if you never saved.</p>
 <h2 id="recovery">Cancellation and recovery</h2><p>While saving, the bar under the photo shows progress and <b>Cancel</b> (or press <kbd>Esc</kbd>); the last saved TIFF and project are kept. Each project keeps its own verified copy of the original and the current and previous saved results. Reopening checks them. If the project's copy of the original is missing or changed, HDR says so; click <b>Relink Source…</b> and choose an identical copy of the original. Its contents are checked first, so a different photo is rejected.</p>
 <p>A save interrupted while the TIFF was being written is put back from the project when it is reopened. Keep the project and its TIFF when backing up; the catalog backup alone does not contain them.</p>
-<p>Before November 2026 HDR was a separate app. HDR TIFFs it saved while Atelier was closed are added the next time Atelier opens, and its projects open in the HDR view like any other.</p>
+<p>Before November 2026 HDR was a separate app. HDR TIFFs it saved while Atelier was closed are added the next time Atelier opens, and its projects open in HDR like any other.</p>
 <div class="see-also">See also: <a href="develop.html">Develop basics</a> · <a href="photos.html#stacks">Stacks</a> · <a href="edit-in.html">Edit In other apps</a></div>
 </main></body></html>
