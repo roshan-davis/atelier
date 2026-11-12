@@ -287,19 +287,22 @@ final class HDRController: ObservableObject {
     static let regionKeys: [WritableKeyPath<HDRSettings, Float>] = [\.highlights, \.shadows]
     static let textureKeys: [WritableKeyPath<HDRSettings, Float>] = [\.microcontrast, \.detail]
 
-    /// Reset All, and the Tone Mapping header's reset: every slider and the Method.
+    /// Reset All, and the Tone Mapping header's reset: every slider, the Method and both Exposures back in.
     func reset() { reset(Self.toneKeys, method: true) }
     func reset(_ keys: [WritableKeyPath<HDRSettings, Float>], method: Bool = false) {
         let old = settings, defaults = HDRSettings()
         for key in keys { settings[keyPath: key] = defaults[keyPath: key] }
-        if method { settings.method = defaults.method }
+        if method {
+            settings.method = defaults.method
+            settings.fusionUsesDarker = true; settings.fusionUsesBrighter = true
+        }
         guard old != settings else { return }
         undoStack.append(old); redoStack = []; changed()
     }
 
     func isModified(_ keys: [WritableKeyPath<HDRSettings, Float>], method: Bool = false) -> Bool {
         let defaults = HDRSettings()
-        return (method && settings.method != defaults.method) || keys.contains { settings[keyPath: $0] != defaults[keyPath: $0] }
+        return (method && (settings.method != defaults.method || !settings.fusionUsesDarker || !settings.fusionUsesBrighter)) || keys.contains { settings[keyPath: $0] != defaults[keyPath: $0] }
     }
 
     /// The Method menu (Natural, Fusion): one undo step per choice, and it turns the panel on.

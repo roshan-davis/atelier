@@ -94,6 +94,7 @@ public final class HDRPreviewRenderer: @unchecked Sendable {
             Double(settings.shadows), Double(settings.highlights),
             Double(settings.fusionSpacing),
             Double(settings.temperature), Double(settings.saturation), Double(settings.vibrance),
+            settings.fusionUsesDarker ? 1.0 : 0.0, settings.fusionUsesBrighter ? 1.0 : 0.0,
         ]
         return kernel.apply(extent: source.rgb.extent, roiCallback: { _, rect in rect }, arguments: arguments)
     }
@@ -134,11 +135,13 @@ public final class HDRPreviewRenderer: @unchecked Sendable {
 
         static float atelierHDRPlate(float value) { return 1.0 - exp(-max(0.0, value) * 1.2); }
 
-        static float atelierHDRCurve(float l, float lg, float large, float method, float compression, float spacing) {
+        static float atelierHDRCurve(float l, float lg, float large, float method, float compression, float spacing,
+                                     float darker, float brighter) {
             if (method > 1.5) {
                 float region = exp2(large);
                 float sum = 0.0, weights = 0.0;
                 for (int k = -1; k <= 1; k++) {
+                    if ((k < 0 && darker < 0.5) || (k > 0 && brighter < 0.5)) continue;
                     float gain = exp2(float(k) * spacing);
                     float value = atelierHDRPlate(l * gain);
                     float t = (pow(atelierHDRPlate(region * gain), 1.0 / 2.2) - 0.5) / 0.2;
@@ -174,14 +177,15 @@ public final class HDRPreviewRenderer: @unchecked Sendable {
                                              float shadowProtection, float highlightProtection,
                                              float shadows, float highlights, float spacing,
                                              float temperature, float saturation, float vibrance,
+                                             float darker, float brighter,
                                              coreimage::destination dest) {
             float2 p = dest.coord();
             float4 color = image.sample(image.transform(p));
             float4 a = analysis.sample(analysis.transform(p));
             float l = a.x, lg = a.y, small = a.z, large = a.w;
-            float mapped = atelierHDRCurve(l, lg, large, method, compression, spacing);
+            float mapped = atelierHDRCurve(l, lg, large, method, compression, spacing, darker, brighter);
             if (shadows != 0.0 || highlights != 0.0) {
-                float regionTone = atelierHDRCurve(exp2(large), large, large, method, compression, spacing);
+                float regionTone = atelierHDRCurve(exp2(large), large, large, method, compression, spacing, darker, brighter);
                 float region = min(1.0, max(0.0, pow(max(0.0, regionTone), 1.0 / 2.2)));
                 float shadowWeight = region * pow(1.0 - region, 3.0) / 0.10546875;
                 float highlightWeight = pow(region, 3.0) * (1.0 - region) / 0.10546875;

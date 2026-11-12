@@ -155,6 +155,7 @@ struct HDRPanel: View {
                                           format: { String(format: "±%.1f EV", $0) }, valueWidth: 64, labelWidth: 94,
                                           trackHelp: "How far under and over the photo Fusion's darker and brighter exposures are",
                                           onEditingChanged: hdr.gesture)
+                                HDRExposureStrip(hdr: hdr)
                             }
                             row("Exposure", \.exposure, -5...5, step: 0.05)
                             row("Range", \.compression, 0...1, step: 0.01)
@@ -210,7 +211,7 @@ struct HDRPanel: View {
             }
             .labelsHidden()
             .controlSize(.small)
-            .help("Natural compresses the light region by region. Fusion blends three exposures of the photo (see Exposures on the left), for open shadows and soft highlights.")
+            .help("Natural compresses the light region by region. Fusion blends three exposures of the photo (shown under Spacing), for open shadows and soft highlights.")
         }
         .font(.callout)
     }
@@ -226,8 +227,7 @@ struct HDRPanel: View {
     }
 }
 
-/// The left column in HDR mode: the presets, what is being tone-mapped, its three exposures and
-/// where its result goes.
+/// The left column in HDR mode: the presets, what is being tone-mapped and where its result goes.
 struct HDRSidebar: View {
     @ObservedObject var hdr: HDRController
     @AppStorage("hdr.sidebarCollapsed") private var collapsedList = ""
@@ -254,11 +254,6 @@ struct HDRSidebar: View {
                             .font(.callout).foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                }
-                SidebarSection(title: "Exposures", isExpanded: isExpanded("exposures")) {
-                    EmptyView()
-                } content: {
-                    HDRExposureStrip(hdr: hdr)
                 }
                 SidebarSection(title: "HDR Result", isExpanded: isExpanded("result")) {
                     EmptyView()
@@ -292,36 +287,52 @@ struct HDRSidebar: View {
     }
 }
 
-/// The Source panel's Exposures strip: the photo darker, as shot and brighter, by Fusion's spacing
-/// (Rosh, Nov 12, 2026: "showing the same image in 3 different exposures to merge it"). They
-/// come from the one original, so they show what its shadows and highlights hold, not new detail.
+/// Fusion's three exposures, under Method and Spacing in Tone Mapping (Rosh, Nov 12, 2026: first
+/// "showing the same image in 3 different exposures to merge it", then moved here and made to do
+/// something). Click the darker or the brighter picture to leave it out of the blend (one undo
+/// step); the exposure as shot is always used. They come from the one original, so they show
+/// what its shadows and highlights hold, not new detail. With brackets they will be the frames.
 struct HDRExposureStrip: View {
     @ObservedObject var hdr: HDRController
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .top, spacing: 6) {
-                ForEach(0..<3, id: \.self) { index in
-                    VStack(spacing: 4) {
-                        ZStack {
-                            Color.black.opacity(0.25)
-                            if index < hdr.plates.count {
-                                Image(nsImage: hdr.plates[index]).resizable().scaledToFit()
-                            }
-                        }
-                        .aspectRatio(aspect, contentMode: .fit)
-                        .clipShape(RoundedRectangle(cornerRadius: 3))
-                        Text(label(index)).font(.caption).monospacedDigit().foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity)
-                }
+                plate(0, uses: hdr.switchBinding(\.fusionUsesDarker))
+                plate(1, uses: nil)
+                plate(2, uses: hdr.switchBinding(\.fusionUsesBrighter))
             }
-            Text(hdr.settings.method == .fusion
-                 ? "Fusion blends these three, region by region. They come from this one photo, so they add no detail it doesn't have."
-                 : "The photo darker and brighter. Choose Fusion in Tone Mapping to blend them. They come from this one photo, so they add no detail it doesn't have.")
-                .font(.callout).foregroundStyle(.secondary)
+            Text("Click the darker or brighter picture to leave it out of the blend. All three come from this one photo.")
+                .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
+        .padding(.top, 2)
+    }
+
+    /// One picture; `uses` is nil for the exposure as shot, which can't be left out.
+    private func plate(_ index: Int, uses: Binding<Bool>?) -> some View {
+        let on = uses?.wrappedValue ?? true
+        return VStack(spacing: 3) {
+            ZStack {
+                Color.black.opacity(0.25)
+                if index < hdr.plates.count {
+                    Image(nsImage: hdr.plates[index]).resizable().scaledToFit()
+                }
+                if !on {
+                    Image(systemName: "eye.slash").font(.callout).foregroundStyle(.white).shadow(radius: 1)
+                }
+            }
+            .aspectRatio(aspect, contentMode: .fit)
+            .clipShape(RoundedRectangle(cornerRadius: 3))
+            .opacity(on ? 1 : 0.4)
+            Text(label(index)).font(.caption).monospacedDigit()
+                .foregroundStyle(on ? Color.secondary : Color.secondary.opacity(0.5))
+        }
+        .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
+        .onTapGesture { uses?.wrappedValue.toggle() }
+        .help(uses == nil ? "The photo as shot, always part of the blend"
+              : on ? "In the blend. Click to leave this exposure out." : "Left out of the blend. Click to use it again.")
     }
 
     private var aspect: CGFloat {

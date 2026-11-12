@@ -184,7 +184,8 @@ public enum HDRToneMapper {
             let fused = sum / weights
             return l * (1 - settings.compression) + fused * settings.compression
         case .fusion:
-            return fusion(l: l, large: large, spacing: settings.fusionSpacing, amount: settings.compression)
+            return fusion(l: l, large: large, spacing: settings.fusionSpacing, amount: settings.compression,
+                          darker: settings.fusionUsesDarker, brighter: settings.fusionUsesBrighter)
         }
     }
 
@@ -196,10 +197,13 @@ public enum HDRToneMapper {
     /// Natural, the blend itself never passes white; only Detail and Microcontrast can push
     /// texture a little past it.
     @inline(__always)
-    static func fusion(l: Float, large: Float, spacing: Float, amount: Float) -> Float {
+    static func fusion(l: Float, large: Float, spacing: Float, amount: Float,
+                       darker: Bool = true, brighter: Bool = true) -> Float {
         let region = exp2f(large)
         var sum: Float = 0, weights: Float = 0
         for step in -1...1 {
+            // An exposure left out in the Exposures strip takes no part in the blend.
+            if (step < 0 && !darker) || (step > 0 && !brighter) { continue }
             let gain = exp2f(Float(step) * spacing)
             let value = plate(l * gain)
             // Well-exposedness of the region in this exposure, judged in gamma 2.2 as Mertens'

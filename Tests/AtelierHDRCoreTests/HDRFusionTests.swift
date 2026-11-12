@@ -57,6 +57,24 @@ final class HDRFusionTests: XCTestCase {
         XCTAssertGreaterThan(mean(results[1], columns: dark), mean(natural, columns: dark) * 1.5)
     }
 
+    /// Clicking a picture in the Exposures strip leaves that exposure out of the blend.
+    func testLeavingAnExposureOutChangesItsEnd() throws {
+        let image = try scene()
+        var all = HDRSettings(); all.method = .fusion
+        var noBright = all; noBright.fusionUsesBrighter = false
+        var noDark = all; noDark.fusionUsesDarker = false
+        let both = try HDRToneMapper.render(image, settings: all)
+        let withoutBright = try HDRToneMapper.render(image, settings: noBright)
+        let withoutDark = try HDRToneMapper.render(image, settings: noDark)
+        let dark = 0..<50, bright = 70..<120
+        // Without the brighter exposure the shadows open less; without the darker one the sky is brighter.
+        XCTAssertLessThan(mean(withoutBright, columns: dark), mean(both, columns: dark))
+        XCTAssertGreaterThan(mean(withoutDark, columns: bright), mean(both, columns: bright))
+        // Old projects and presets use all three.
+        let old = try JSONDecoder().decode(HDRSettings.self, from: Data(#"{"method":"fusion"}"#.utf8))
+        XCTAssertTrue(old.fusionUsesDarker && old.fusionUsesBrighter)
+    }
+
     func testTheBlendStaysBelowWhite() {
         for l: Float in [0, 0.001, 0.18, 1, 8, 1000] {
             for large: Float in [-12, -2.5, 0, 3, 10] {

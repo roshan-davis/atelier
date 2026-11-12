@@ -56,6 +56,11 @@ public struct HDRSettings: Codable, Equatable, Sendable {
     public var highlights: Float = 0
     /// Fusion's exposures are this many EV under and over the photo, 1...3. Only Fusion uses it.
     public var fusionSpacing: Float = 2
+    /// Whether Fusion blends in its darker and its brighter exposure (Rosh, Nov 12, 2026: the
+    /// Exposures strip should do something; click a picture to leave it out). The exposure as
+    /// shot is always used.
+    public var fusionUsesDarker = true
+    public var fusionUsesBrighter = true
     /// Color after tone mapping, -1...1, 0 changes nothing (Rosh, Nov 12, 2026: presets need
     /// color to differ, as Machinery HDR's and Aurora's do). Temperature warms (+) or cools (−)
     /// at the same brightness; Vibrance raises muted colors more than saturated ones.
@@ -70,6 +75,7 @@ public struct HDRSettings: Codable, Equatable, Sendable {
     enum CodingKeys: String, CodingKey {
         case method, toneEnabled, artifactsEnabled, exposure, compression, microcontrast, detail, shadowProtection, highlightProtection
         case shadows, highlights, fusionSpacing, temperature, saturation, vibrance
+        case fusionUsesDarker, fusionUsesBrighter
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -85,6 +91,8 @@ public struct HDRSettings: Codable, Equatable, Sendable {
         shadows = try c.decodeIfPresent(Float.self, forKey: .shadows) ?? 0
         highlights = try c.decodeIfPresent(Float.self, forKey: .highlights) ?? 0
         fusionSpacing = try c.decodeIfPresent(Float.self, forKey: .fusionSpacing) ?? 2
+        fusionUsesDarker = try c.decodeIfPresent(Bool.self, forKey: .fusionUsesDarker) ?? true
+        fusionUsesBrighter = try c.decodeIfPresent(Bool.self, forKey: .fusionUsesBrighter) ?? true
         temperature = try c.decodeIfPresent(Float.self, forKey: .temperature) ?? 0
         saturation = try c.decodeIfPresent(Float.self, forKey: .saturation) ?? 0
         vibrance = try c.decodeIfPresent(Float.self, forKey: .vibrance) ?? 0

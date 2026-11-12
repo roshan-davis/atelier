@@ -105,7 +105,9 @@ final class HDRToneMapperSpeedTests: XCTestCase {
         var blend = regions; blend.method = .fusion; blend.fusionSpacing = 1.5
         var tinted = regions; tinted.temperature = 0.4; tinted.vibrance = 0.5; tinted.saturation = -0.3
         var cool = blend; cool.temperature = -0.7; cool.saturation = 0.6
-        for settings in settingsToTry + [regions, fusion, blend, tinted, cool] {
+        var noBright = blend; noBright.fusionUsesBrighter = false
+        var noDark = blend; noDark.fusionUsesDarker = false; noDark.fusionSpacing = 3
+        for settings in settingsToTry + [regions, fusion, blend, tinted, cool, noBright, noDark] {
             let analysis = try HDRToneMapper.analyze(image, exposure: settings.exposure)
             let source = try XCTUnwrap(renderer.source(image, analysis: analysis))
             let frame = try XCTUnwrap(renderer.image(source, settings: settings))
@@ -212,7 +214,8 @@ enum SerialReferenceToneMapper {
                 case .fusion:
                     // Added after the speed work (Nov 12, 2026); the same per-pixel function.
                     mapped = HDRToneMapper.fusion(l: l, large: large[i], spacing: settings.fusionSpacing,
-                                                  amount: settings.compression)
+                                                  amount: settings.compression, darker: settings.fusionUsesDarker,
+                                                  brighter: settings.fusionUsesBrighter)
                 }
                 let shadowMask = min(1, l / 0.08)
                 let highlightMask = 1 / (1 + max(0, l - 0.7) * 4)
