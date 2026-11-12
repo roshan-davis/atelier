@@ -16,7 +16,60 @@
 <h1>Tone Curve</h1>
 <p class="lede">Reshape brightness exactly where you want it. The curve maps each tone of the photo (along the bottom) to a new brightness (up the side).</p>
 
-<div class="chips"><a href="#parametric">Parametric curve</a><a href="#curve">Point curve</a><a href="#shapes">Common shapes</a><a href="#channels">RGB, Red, Green, Blue</a><a href="#refine">Refine Saturation</a><a href="#targeted">Targeted Adjustment</a></div>
+<div class="chips"><a href="#presets">Presets</a><a href="#parametric">Parametric curve</a><a href="#curve">Point curve</a><a href="#shapes">Common shapes</a><a href="#channels">RGB, Red, Green, Blue</a><a href="#refine">Refine Saturation</a><a href="#targeted">Targeted Adjustment</a></div>
+
+<h2 id="presets">Tone Curve presets</h2>
+<p>The <b>Preset</b> menu at the top of the panel sets the whole curve at once: the Parametric regions and splits, the RGB, Red, Green and Blue curves and Refine Saturation. Nothing else on the photo changes, so it works on top of any Basic, HSL or Color Grading setting. The menu shows the name of the preset the curve matches, or <b>Custom</b> once you change it.</p>
+<div class="duo">
+  <figure>
+    <div class="panel" style="max-width:300px">
+      <div class="ph"><span class="chev">›</span>Tone Curve<span class="dot"></span><span class="grow"></span><span class="reset">↺</span><span class="switch"></span></div>
+      <div class="pb">
+      <div class="row"><span class="name">Preset</span><span class="popup">Matte</span></div>
+      </div>
+    </div>
+  </figure>
+  <figure>
+  <div style="background:#2b2b2b;border:1px solid #444;border-radius:7px;padding:5px 0;width:260px;font-size:12px;line-height:1.75;color:#e6e6e6;box-shadow:0 6px 20px rgba(0,0,0,.35)">
+    <div style="padding:0 12px;color:#9a9a9a;font-size:11px;font-weight:600">Contrast</div>
+    <div style="padding:0 12px 0 22px">Linear</div>
+    <div style="padding:0 12px 0 22px">Soft Contrast</div>
+    <div style="padding:0 12px 0 22px">Medium Contrast</div>
+    <div style="padding:0 12px 0 22px">Strong Contrast</div>
+    <div style="padding:0 12px 0 22px">Punchy Midtones</div>
+    <div style="border-top:1px solid #444;margin:4px 0"></div>
+    <div style="padding:0 12px;color:#9a9a9a;font-size:11px;font-weight:600">Brightness</div>
+    <div style="padding:0 12px 0 22px">Lighter</div>
+    <div style="padding:0 12px 0 22px">Darker</div>
+    <div style="padding:0 12px 0 22px">Open Shadows</div>
+    <div style="padding:0 12px 0 22px">Soft Highlights</div>
+    <div style="border-top:1px solid #444;margin:4px 0"></div>
+    <div style="padding:0 12px;color:#9a9a9a;font-size:11px;font-weight:600">Fade</div>
+    <div style="padding:0 12px 0 6px;background:#2f63d1;border-radius:4px;margin:0 5px;color:#fff">✓ Matte</div>
+    <div style="padding:0 12px 0 22px">Faded Film</div>
+    <div style="padding:0 12px 0 22px">Matte Contrast</div>
+    <div style="border-top:1px solid #444;margin:4px 0"></div>
+    <div style="padding:0 12px;color:#9a9a9a;font-size:11px;font-weight:600">Color</div>
+    <div style="padding:0 12px 0 22px">Warm Highlights, Cool Shadows</div>
+    <div style="padding:0 12px 0 22px">Cool Fade</div>
+    <div style="padding:0 12px 0 22px">Warm Fade</div>
+    <div style="padding:0 12px 0 22px">Cross Process</div>
+    <div style="border-top:1px solid #444;margin:4px 0"></div>
+    <div style="padding:0 12px;color:#9a9a9a;font-size:11px;font-weight:600">User Presets</div>
+    <div style="padding:0 12px 0 22px">My Portrait Curve</div>
+    <div style="border-top:1px solid #444;margin:4px 0"></div>
+    <div style="padding:0 12px 0 22px">Save Preset…</div>
+    <div style="padding:0 12px 0 22px">Delete Preset ›</div>
+  </div>
+  </figure>
+</div>
+<ol class="steps">
+  <li><b>Preview:</b> open the menu and rest the pointer on a preset. The Navigator (top left) shows the photo with that curve; the photo itself doesn't change until you click.</li>
+  <li><b>Apply:</b> click it. It is one step in History (“Tone Curve Preset: Matte”), so <kbd>⌘Z</kbd> undoes it.</li>
+  <li><b>Save your own:</b> shape the curve, then <span class="path">Preset › Save Preset…</span> and name it. It is listed under <b>User Presets</b> on every photo and catalog. Saving under a name you already used replaces that preset. <span class="path">Delete Preset</span> removes one.</li>
+</ol>
+<p><b>Linear</b> clears the whole curve. Medium Contrast and Strong Contrast are Lightroom's own points. The <b>Color</b> group uses the Red, Green and Blue curves (warm highlights and cool shadows the way colorists did it before grading wheels). The <span class="path">⋯</span> menu in the Point view still saves and applies a single channel's curve.</p>
+<div class="beyond"><p><span class="label">Beyond Lightroom.</span> Lightroom Classic's Point Curve menu saves the point curve only. Atelier's presets carry the whole panel, and preview in the Navigator before you click. To save a curve together with other settings, use a Develop preset (<a href="presets.html">Presets</a>) and tick only the parts you want.</p></div>
 
 <h2 id="parametric">Parametric curve</h2>
 <p>The quick way to shape tones without placing points. Pick <b>Parametric</b> at the top of the panel.</p>
@@ -25,6 +78,7 @@
   <div class="panel">
     <div class="ph"><span class="chev">›</span>Tone Curve<span class="dot"></span><span class="grow"></span><span class="reset">↺</span><span class="switch"></span></div>
     <div class="pb">
+      <div class="row"><span class="name">Preset</span><span class="popup">Custom</span></div>
       <div class="row" data-pin="1"><span style="color:var(--app-text-2)">◎</span><span class="seg"><span class="sel">Parametric</span><span>Point</span></span></div>
       <div class="canvas" style="aspect-ratio:1" data-pin="2">
         <canvas class="histogram" data-channel="l" style="position:absolute;inset:0;width:100%;height:100%"></canvas>
@@ -64,6 +118,7 @@
   <div class="panel">
     <div class="ph"><span class="chev">›</span>Tone Curve<span class="dot"></span><span class="grow"></span><span class="reset">↺</span><span class="switch"></span></div>
     <div class="pb">
+      <div class="row"><span class="name">Preset</span><span class="popup">Custom</span></div>
       <div class="row" data-pin="1"><span class="seg"><span class="sel">RGB</span><span>Red</span><span>Green</span><span>Blue</span></span><span style="color:var(--app-text-2)">⋯</span></div>
       <div class="canvas" style="aspect-ratio:1" data-pin="2">
         <canvas class="histogram" data-channel="l" style="position:absolute;inset:0;width:100%;height:100%"></canvas>

@@ -5,7 +5,8 @@ import SwiftUI
 /// Color Grading, as in Lightroom: a 3-Way view (Midtones above Shadows and Highlights) or one
 /// large wheel at a time, then Blending and Balance. Beyond Lightroom, each wheel shows where
 /// the photo's colors sit and where the other wheels' tints are, the color picker sets a wheel
-/// to cancel a cast, and a graph shows the tonal ranges Blending and Balance shape.
+/// to cancel a cast, and a graph shows the tonal ranges Blending and Balance shape. The Preset
+/// menu at the top sets every wheel, Blending and Balance (`SectionPresetRow`).
 struct ColorGradingPanel: View {
     typealias Region = DevelopSettings.GradeRegion
 
@@ -18,6 +19,7 @@ struct ColorGradingPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            SectionPresetRow(kind: .colorGrading, develop: develop)
             viewPicker
             Group {
                 if let single {

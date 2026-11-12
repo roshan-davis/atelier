@@ -471,6 +471,10 @@ final class DevelopController: ObservableObject {
     /// Built-in and user presets, shared across catalogs.
     @Published private(set) var presets: [DevelopPreset] = []
     private let presetStore = PresetStore(fileURL: PresetStore.defaultURL)
+    /// The user's own Tone Curve and Color Grading presets, listed in those panels' Preset menus
+    /// (`DevelopController+SectionPresets.swift`).
+    @Published var userSectionPresets: [SectionPresetKind: [DevelopPreset]] = Dictionary(
+        uniqueKeysWithValues: SectionPresetKind.allCases.map { ($0, PresetStore(section: $0).userPresets()) })
     /// Built-in packs hidden with Hide Group or Develop > Manage Presets….
     @Published var hiddenPresetGroups = Set(UserDefaults.standard.stringArray(forKey: "presets.hiddenGroups") ?? []) {
         didSet { UserDefaults.standard.set(hiddenPresetGroups.sorted(), forKey: "presets.hiddenGroups") }
@@ -1762,6 +1766,11 @@ final class DevelopController: ObservableObject {
 
     private func savePresets(_ changed: [DevelopPreset]) {
         presetFileChange { try presetStore.save(changed) }
+    }
+
+    /// Shows `message` in the Develop error banner (for the controller's extensions).
+    func reportError(_ message: String) {
+        errorMessage = message
     }
 
     /// Whether the change was saved.
