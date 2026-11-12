@@ -721,7 +721,7 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 ## AT-051 — Menus: no New Window, no window tabs
 
-**Status:** In progress. **Owner:** Claude. **Chat:** [Clean up irrelevant app menu items](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGK8yLyZp2y8uhxZfgWkUGoe1). **Branch:** `claude/project-thread-74eiwt`. **Baseline:** `fa4239b`. **Dependencies:** none.
+**Status:** Merged at Rosh's ask on Nov 12, 2026 ([PR #111](https://github.com/roshan-davis/atelier/pull/111)) before a Mac build; source-reviewed only, CI blocked by the Actions account. Rosh's menu check (Acceptance) still open. **Owner:** Claude. **Chat:** [Clean up irrelevant app menu items](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGK8yLyZp2y8uhxZfgWkUGoe1). **Branch:** `claude/project-thread-74eiwt`. **Baseline:** `fa4239b`. **Dependencies:** none.
 
 **Evidence:** Rosh (2026-11-12): "Please review the menus and see if there are any items are not relevant or not implemented? e.g. Writing tools? What is Show tab bar and its usecase". Source audit of `AtelierApp.swift` and `AtelierHDRApp.swift`: every Atelier-defined menu item calls a real action; the stray items come from SwiftUI's `WindowGroup` (File > New Window opens a second window on the same `LibraryModel`, whose key monitor and `mainWindow` assume one window) and AppKit's automatic window tabbing.
 
