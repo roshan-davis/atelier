@@ -155,6 +155,67 @@ public enum HDRToneMapper {
             }
             let fused = sum / weights
             return l * (1 - settings.compression) + fused * settings.compression
+        case .fusion:
+            return fusion(l: l, large: large, spacing: settings.fusionSpacing, amount: settings.compression)
+        }
+    }
+
+    /// Fusion's three exposures at −spacing, 0 and +spacing EV, each rolled off softly below
+    /// white (`plate`) so a bright sky keeps its detail in the darker exposure, blended by how
+    /// well exposed each one is in the pixel's region (the edge-aware base, so a whole sky or a
+    /// whole shadow picks the same exposures and texture isn't flattened). Range blends from the
+    /// single exposure (0) to the full blend (1), less in regions darker than about 6%. Unlike
+    /// Natural, the blend itself never passes white; only Detail and Microcontrast can push
+    /// texture a little past it.
+    @inline(__always)
+    static func fusion(l: Float, large: Float, spacing: Float, amount: Float) -> Float {
+        let region = exp2f(large)
+        var sum: Float = 0, weights: Float = 0
+        for step in -1...1 {
+            let gain = exp2f(Float(step) * spacing)
+            let value = plate(l * gain)
+            // Well-exposedness of the region in this exposure, judged in gamma 2.2 as Mertens'
+            // exposure fusion does.
+            let t = (powf(plate(region * gain), 1 / 2.2) - 0.5) / 0.2
+            let weight = expf(-t * t / 2) + 0.0001
+            sum += value * weight; weights += weight
+        }
+        // Deep-black regions keep the single exposure, as Natural's black protection does, so
+        // the blend opens shadows without turning blacks gray (prototype, Nov 12, 2026).
+        let blend = amount * min(1, max(0, region / 0.06))
+        return plate(l) * (1 - blend) + sum / weights * blend
+    }
+
+    /// One of Fusion's exposures: linear light rolled off below white, 0.18 stays about 0.19.
+    @inline(__always)
+    public static func plate(_ value: Float) -> Float { 1 - expf(-max(0, value) * 1.2) }
+
+    /// Fusion's three exposures of `image` (−spacing, 0, +spacing EV around `exposure`), each
+    /// channel rolled off as the blend sees it, shrunk to at most `longEdge` pixels for the
+    /// Source panel's Exposures strip.
+    public static func exposurePlates(_ image: HDRImage, exposure: Float, spacing: Float,
+                                      longEdge: Int) throws -> [HDRImage] {
+        let step = max(1, Int((Float(max(image.width, image.height)) / Float(max(1, longEdge))).rounded(.up)))
+        let width = max(1, image.width / step), height = max(1, image.height / step)
+        var small = [Float](repeating: 0, count: width * height * 3)
+        let area = Float(step * step)
+        for y in 0..<height {
+            for x in 0..<width {
+                var r: Float = 0, g: Float = 0, b: Float = 0
+                for sy in (y * step)..<(y * step + step) {
+                    for sx in (x * step)..<(x * step + step) {
+                        // A very thin photo has fewer rows (or columns) than one block.
+                        let i = (min(sy, image.height - 1) * image.width + min(sx, image.width - 1)) * 3
+                        r += image.rgb[i]; g += image.rgb[i + 1]; b += image.rgb[i + 2]
+                    }
+                }
+                let o = (y * width + x) * 3
+                small[o] = r / area; small[o + 1] = g / area; small[o + 2] = b / area
+            }
+        }
+        return try (-1...1).map { index -> HDRImage in
+            let gain = exp2f(exposure + Float(index) * spacing)
+            return try HDRImage(width: width, height: height, rgb: small.map { plate($0 * gain) })
         }
     }
 

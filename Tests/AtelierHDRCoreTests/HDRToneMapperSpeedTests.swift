@@ -29,6 +29,8 @@ final class HDRToneMapperSpeedTests: XCTestCase {
         s = HDRSettings(); s.exposure = -2; s.compression = 0; s.shadowProtection = 0; s.highlightProtection = 1; list.append(s)
         s = HDRSettings(); s.artifactsEnabled = false; s.microcontrast = 1; list.append(s)
         s = HDRSettings(); s.method = .virtualExposureFusion; s.compression = 0.4; list.append(s)
+        s = HDRSettings(); s.method = .fusion; list.append(s)
+        s = HDRSettings(); s.method = .fusion; s.fusionSpacing = 3; s.compression = 1; list.append(s)
         s = HDRSettings(); s.toneEnabled = false; list.append(s)
         return list
     }
@@ -100,7 +102,8 @@ final class HDRToneMapperSpeedTests: XCTestCase {
         let image = try sample(), io = HDRImageIO()
         var regions = HDRSettings(); regions.shadows = 0.8; regions.highlights = -0.6
         var fusion = regions; fusion.method = .virtualExposureFusion; fusion.shadows = -0.5
-        for settings in settingsToTry + [regions, fusion] {
+        var blend = regions; blend.method = .fusion; blend.fusionSpacing = 1.5
+        for settings in settingsToTry + [regions, fusion, blend] {
             let analysis = try HDRToneMapper.analyze(image, exposure: settings.exposure)
             let source = try XCTUnwrap(renderer.source(image, analysis: analysis))
             let frame = try XCTUnwrap(renderer.image(source, settings: settings))
@@ -204,6 +207,10 @@ enum SerialReferenceToneMapper {
                     }
                     let fused = sum / weights
                     mapped = l * (1 - settings.compression) + fused * settings.compression
+                case .fusion:
+                    // Added after the speed work (Nov 12, 2026); the same per-pixel function.
+                    mapped = HDRToneMapper.fusion(l: l, large: large[i], spacing: settings.fusionSpacing,
+                                                  amount: settings.compression)
                 }
                 let shadowMask = min(1, l / 0.08)
                 let highlightMask = 1 / (1 + max(0, l - 0.7) * 4)

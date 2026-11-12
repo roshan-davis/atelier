@@ -39,11 +39,13 @@ final class HDRToneMapperTests: XCTestCase {
     func testFusionAndTextureRemainFiniteOnConstantAndExtremeInputs() throws {
         for value: Float in [0, 0.000001, 0.18, 1, 16] {
             let image = try HDRImage(width: 7, height: 5, rgb: Array(repeating: value, count: 105))
-            var settings = HDRSettings(); settings.method = .virtualExposureFusion
-            settings.detail = 1; settings.microcontrast = 1
-            let output = try HDRToneMapper.render(image, settings: settings)
-            XCTAssertTrue(output.rgb.allSatisfy { $0.isFinite && $0 >= 0 })
-            XCTAssertLessThan((output.rgb.max() ?? 0) - (output.rgb.min() ?? 0), 0.00001)
+            for method in [HDRMethod.virtualExposureFusion, .fusion] {
+                var settings = HDRSettings(); settings.method = method
+                settings.detail = 1; settings.microcontrast = 1
+                let output = try HDRToneMapper.render(image, settings: settings)
+                XCTAssertTrue(output.rgb.allSatisfy { $0.isFinite && $0 >= 0 })
+                XCTAssertLessThan((output.rgb.max() ?? 0) - (output.rgb.min() ?? 0), 0.00001)
+            }
         }
     }
 

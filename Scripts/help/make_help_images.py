@@ -509,8 +509,29 @@ def make_hdr_images(base):
     texture_gain = 2 ** (protection * (0.35 * fine * 2 + 0.6 * coarse * 3 * boundary))
     hdr_gain = np.where(hdr_luma > 1e-6, mapped / np.maximum(hdr_luma, 1e-6), 1) * texture_gain
     hdr_linear = linear_hdr * hdr_gain[..., None]
-    hdr_encoded = np.where(hdr_linear <= 0.0031308, hdr_linear * 12.92, 1.055 * np.maximum(hdr_linear, 0) ** (1 / 2.4) - 0.055)
+    encode = lambda x: np.where(x <= 0.0031308, x * 12.92, 1.055 * np.maximum(x, 0) ** (1 / 2.4) - 0.055)
+    hdr_encoded = encode(hdr_linear)
     pair("hdr", base.copy(), hdr_encoded)
+
+    # Fusion (HDRToneMapper.fusion): three soft-shouldered exposures at -2, 0 and +2 EV, blended
+    # by how well exposed the region (the guided base) is in each, Range 0.65, less in deep blacks.
+    plate = lambda x: 1 - np.exp(-np.maximum(x, 0) * 1.2)
+    region = 2 ** guided
+    total, weights = 0, 0
+    for ev in (-2, 0, 2):
+        t = (plate(region * 2 ** ev) ** (1 / 2.2) - 0.5) / 0.2
+        weight = np.exp(-t * t / 2) + 0.0001
+        total = total + plate(hdr_luma * 2 ** ev) * weight
+        weights = weights + weight
+    blend = 0.65 * np.clip(region / 0.06, 0, 1)
+    fused = plate(hdr_luma) * (1 - blend) + total / weights * blend
+    fusion_gain = np.where(hdr_luma > 1e-6, fused / np.maximum(hdr_luma, 1e-6), 1) * texture_gain
+    pair("hdr-fusion", hdr_encoded, encode(linear_hdr * fusion_gain[..., None]))
+    # The Exposures strip: the photo at -2, 0 and +2 EV as Fusion sees them.
+    h, w = base.shape[:2]
+    thumb = cv2.resize(linear_hdr.astype(np.float32), (240, round(240 * h / w)), interpolation=cv2.INTER_AREA)
+    for i, ev in enumerate((-2, 0, 2)):
+        save(encode(plate(thumb * 2 ** ev)), f"hdr-plate-{i}.jpg", quality=80)
 
 
 

@@ -143,11 +143,19 @@ struct HDRPanel: View {
             ScrollView {
                 VStack(spacing: 0) {
                     PanelSection(title: "Tone Mapping", isExpanded: isExpanded("tone"), soloMode: $soloMode,
-                                 isModified: hdr.isModified(HDRController.toneKeys),
-                                 reset: { hdr.reset(HDRController.toneKeys) },
+                                 isModified: hdr.isModified(HDRController.toneKeys, method: true),
+                                 reset: { hdr.reset(HDRController.toneKeys, method: true) },
                                  isOn: hdr.switchBinding(\.toneEnabled),
                                  expandAll: expandAll, collapseAll: collapseAll) {
                         VStack(alignment: .leading, spacing: 10) {
+                            methodRow
+                            if hdr.settings.method == .fusion {
+                                SliderRow(label: "Spacing", value: hdr.binding(\.fusionSpacing), range: 1...3, step: 0.1,
+                                          origin: Double(HDRSettings().fusionSpacing),
+                                          format: { String(format: "±%.1f EV", $0) }, valueWidth: 64, labelWidth: 94,
+                                          trackHelp: "How far under and over the photo Fusion's darker and brighter exposures are",
+                                          onEditingChanged: hdr.gesture)
+                            }
                             row("Exposure", \.exposure, -5...5, step: 0.05)
                             row("Range", \.compression, 0...1, step: 0.01)
                             GroupHeading(title: "Tone", reset: { hdr.reset(HDRController.regionKeys) })
@@ -179,6 +187,24 @@ struct HDRPanel: View {
             }
             .padding(10)
         }
+    }
+
+    /// Method, laid out like a slider row (as Effects' Grain Type): double-click the name for Natural.
+    private var methodRow: some View {
+        HStack(spacing: 8) {
+            Text("Method")
+                .frame(width: 94, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) { hdr.methodBinding.wrappedValue = HDRSettings().method }
+            Picker("Method", selection: hdr.methodBinding) {
+                Text("Natural").tag(HDRMethod.direct)
+                Text("Fusion").tag(HDRMethod.fusion)
+            }
+            .labelsHidden()
+            .controlSize(.small)
+            .help("Natural compresses the light region by region. Fusion blends three exposures of the photo (see Exposures on the left), for open shadows and soft highlights.")
+        }
+        .font(.callout)
     }
 
     private func expandAll() { expandedList = Self.panels.joined(separator: ",") }
@@ -219,6 +245,11 @@ struct HDRSidebar: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
+                SidebarSection(title: "Exposures", isExpanded: isExpanded("exposures")) {
+                    EmptyView()
+                } content: {
+                    HDRExposureStrip(hdr: hdr)
+                }
                 SidebarSection(title: "HDR Result", isExpanded: isExpanded("result")) {
                     EmptyView()
                 } content: {
@@ -248,5 +279,52 @@ struct HDRSidebar: View {
 
     private var resultName: String {
         hdr.projectURL?.deletingPathExtension().appendingPathExtension("tif").lastPathComponent ?? "HDR TIFF"
+    }
+}
+
+/// The Source panel's Exposures strip: the photo darker, as shot and brighter, by Fusion's spacing
+/// (Rosh, Nov 12, 2026: "showing the same image in 3 different exposures to merge it"). They
+/// come from the one original, so they show what its shadows and highlights hold, not new detail.
+struct HDRExposureStrip: View {
+    @ObservedObject var hdr: HDRController
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 6) {
+                ForEach(0..<3, id: \.self) { index in
+                    VStack(spacing: 4) {
+                        ZStack {
+                            Color.black.opacity(0.25)
+                            if index < hdr.plates.count {
+                                Image(nsImage: hdr.plates[index]).resizable().scaledToFit()
+                            }
+                        }
+                        .aspectRatio(aspect, contentMode: .fit)
+                        .clipShape(RoundedRectangle(cornerRadius: 3))
+                        Text(label(index)).font(.caption).monospacedDigit().foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            }
+            Text(hdr.settings.method == .fusion
+                 ? "Fusion blends these three, region by region. They come from this one photo, so they add no detail it doesn't have."
+                 : "The photo darker and brighter. Choose Fusion in Tone Mapping to blend them. They come from this one photo, so they add no detail it doesn't have.")
+                .font(.callout).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var aspect: CGFloat {
+        guard let size = hdr.pixelSize, size.height > 0 else { return 1.5 }
+        return size.width / size.height
+    }
+
+    private func label(_ index: Int) -> String {
+        let spacing = hdr.settings.fusionSpacing
+        switch index {
+        case 0: return String(format: "−%.1f EV", spacing)
+        case 1: return "0 EV"
+        default: return String(format: "+%.1f EV", spacing)
+        }
     }
 }
