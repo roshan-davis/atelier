@@ -98,7 +98,9 @@ final class HDRToneMapperSpeedTests: XCTestCase {
             throw XCTSkip("The HDR preview kernel didn't build on this Mac.")
         }
         let image = try sample(), io = HDRImageIO()
-        for settings in settingsToTry {
+        var regions = HDRSettings(); regions.shadows = 0.8; regions.highlights = -0.6
+        var fusion = regions; fusion.method = .virtualExposureFusion; fusion.shadows = -0.5
+        for settings in settingsToTry + [regions, fusion] {
             let analysis = try HDRToneMapper.analyze(image, exposure: settings.exposure)
             let source = try XCTUnwrap(renderer.source(image, analysis: analysis))
             let frame = try XCTUnwrap(renderer.image(source, settings: settings))
@@ -108,6 +110,33 @@ final class HDRToneMapperSpeedTests: XCTestCase {
             let worst = zip(gpu, cpu).map { abs(Int($0) - Int($1)) }.max() ?? 0
             XCTAssertLessThanOrEqual(worst, 2, "\(settings)")
         }
+    }
+
+    /// Highlights and Shadows (Nov 12, 2026) move the bright and dark regions, as Develop's do,
+    /// and at 0 change nothing.
+    func testShadowsAndHighlightsMoveTheirRegions() throws {
+        let image = try sample()
+        let plain = try HDRToneMapper.render(image, settings: HDRSettings()).rgb
+        func mean(_ rgb: [Float], _ include: (Float) -> Bool) -> Float {
+            var sum: Float = 0, count: Float = 0
+            for i in stride(from: 0, to: rgb.count, by: 3) where include(plain[i + 1]) {
+                sum += rgb[i + 1]; count += 1
+            }
+            return sum / max(1, count)
+        }
+        let dark: (Float) -> Bool = { $0 > 0.005 && $0 < 0.05 }
+        let bright: (Float) -> Bool = { $0 > 0.4 }
+        var lifted = HDRSettings(); lifted.shadows = 1
+        let shadowsUp = try HDRToneMapper.render(image, settings: lifted).rgb
+        XCTAssertGreaterThan(mean(shadowsUp, dark), mean(plain, dark) * 1.2)
+        var recovered = HDRSettings(); recovered.highlights = -1
+        let highlightsDown = try HDRToneMapper.render(image, settings: recovered).rgb
+        XCTAssertLessThan(mean(highlightsDown, bright), mean(plain, bright) * 0.95)
+        // Each leaves the other end almost alone.
+        XCTAssertEqual(mean(highlightsDown, dark), mean(plain, dark), accuracy: mean(plain, dark) * 0.2)
+        // Old projects (no Shadows or Highlights) decode to 0.
+        let old = try JSONDecoder().decode(HDRSettings.self, from: Data(#"{"compression":0.5}"#.utf8))
+        XCTAssertEqual(old.shadows, 0); XCTAssertEqual(old.highlights, 0)
     }
 
     private func bytes(_ image: CGImage) throws -> [UInt8] {

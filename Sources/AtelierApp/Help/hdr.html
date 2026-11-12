@@ -13,16 +13,19 @@
 <figure><div class="diagram"><div class="panel" style="--slider-label-width:100px"><div class="ph">Tone Mapping</div>
 <div class="sl" data-name="Exposure" data-value="0.50" data-at="0.55" data-def="0.5"></div>
 <div class="sl" data-name="Range" data-value="0.65" data-at="0.65" data-def="0.65"></div>
+<div class="gh">Tone</div><div class="sl" data-name="Highlights" data-value="−0.30" data-at="0.35" data-def="0.5"></div>
+<div class="sl" data-name="Shadows" data-value="0.40" data-at="0.7" data-def="0.5"></div>
 <div class="gh">Texture</div><div class="sl" data-name="Microcontrast" data-value="0.60" data-at="0.8" data-def="0.8"></div>
-<div class="sl" data-name="Detail" data-value="0.35" data-at="0.675" data-def="0.675"></div>
-<div class="ph">Artifacts</div><div class="sl" data-name="Shadows" data-value="0.50" data-at="0.5" data-def="0.5"></div>
-<div class="sl" data-name="Highlights" data-value="0.50" data-at="0.5" data-def="0.5"></div></div></div>
-<figcaption>The first controls focus on tone compression, texture and protection.</figcaption></figure>
+<div class="sl" data-name="Detail" data-value="0.35" data-at="0.675" data-def="0.675"></div></div></div>
+<figcaption>One Tone Mapping panel: range compression, then the tone of the bright and dark areas, then texture.</figcaption></figure>
 <dl class="defs"><dt>Exposure</dt><dd>Global brightness in stops, from −5 to +5. Start here if the original looks dark.</dd>
 <dt>Range</dt><dd>Compresses broad lighting differences from 0 to 1, opening dark structure and holding back bright areas while retaining local detail. Higher values create a stronger HDR effect.</dd>
+<dt>Highlights</dt><dd>Darkens (left) or brightens (right) the bright areas after tone mapping, from −1 to +1, as Develop's Highlights does. Move it left to bring back sky and window detail.</dd>
+<dt>Shadows</dt><dd>Brightens (right) or darkens (left) the dark areas, from −1 to +1, as Develop's Shadows does. Each works on whole areas, so texture inside them moves together.</dd>
 <dt>Microcontrast</dt><dd>Raises or softens medium-scale texture. Watch for halos and noise around high-contrast edges.</dd>
 <dt>Detail</dt><dd>Raises or softens finer texture. Judge it at 100%.</dd>
-<dt>Shadows / Highlights</dt><dd>Protect dark and bright areas from texture enhancement. These are protection amounts, not brightness sliders or noise removal.</dd></dl>
+</dl>
+<p>Microcontrast and Detail are automatically held back near black and in the brightest highlights, so they don't raise noise or halos there.</p>
 <p>Double-click a slider name to reset it; click a value to type. Right-click a panel header for Solo Mode, Expand All and Collapse All. Panel switches compare with a group turned off and keep its settings; moving a control turns its panel back on. <kbd>Tab</kbd> and the arrow keys move through the sliders, as in Develop. A drag is one undo step: <span class="path">Edit › Undo</span> (<kbd>⌘Z</kbd>) and <span class="path">Edit › Redo</span> (<kbd>⇧⌘Z</kbd>). <b>Reset All</b> at the foot of the panel puts every slider back.</p>
 <figure><div class="frame compare" data-before="hdr-before.jpg" data-after="hdr-after.jpg" data-labels="Before|Tone and texture"></div>
 <figcaption>Illustration of tone and texture adjustments on a shared Help photo. Results depend on the original; no clipped sensor detail is invented.</figcaption></figure>

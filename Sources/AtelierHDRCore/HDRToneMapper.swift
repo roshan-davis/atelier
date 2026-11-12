@@ -101,7 +101,34 @@ public enum HDRToneMapper {
     @inline(__always)
     private static func pixelScale(l: Float, log: Float, small: Float, large: Float,
                                    gain: Float, settings: HDRSettings) -> Float {
-        let mapped: Float
+        var mapped = toneCurve(l: l, log: log, large: large, settings: settings)
+        if settings.shadows != 0 || settings.highlights != 0 {
+            // Shadows and Highlights, as Develop's: shift the dark and bright regions in gamma
+            // 2.2, weighted by the region's tone-mapped brightness (the edge-aware base, so
+            // texture within a region moves together), with bumps peaking at 25% and 75%.
+            let regionTone: Float = toneCurve(l: exp2f(large), log: large, large: large, settings: settings)
+            let region: Float = min(1, max(0, powf(max(0, regionTone), 1 / 2.2)))
+            let shadowWeight: Float = region * powf(1 - region, 3) / 0.10546875
+            let highlightWeight: Float = powf(region, 3) * (1 - region) / 0.10546875
+            let shadowGain: Float = 0.22 * (settings.shadows < 0 ? 0.7 : 1) * settings.shadows
+            let shift: Float = 0.22 * settings.highlights * highlightWeight + shadowGain * shadowWeight
+            mapped = powf(max(0, powf(max(0, mapped), 1 / 2.2) + shift), 2.2)
+        }
+        let shadowMask = min(1, l / 0.08)
+        let highlightMask = 1 / (1 + max(0, l - 0.7) * 4)
+        let protection: Float = settings.artifactsEnabled ? (1 - settings.shadowProtection + settings.shadowProtection * shadowMask)
+            * (1 - settings.highlightProtection + settings.highlightProtection * highlightMask) : 1
+        let fine = max(-0.5, min(0.5, log - small))
+        let coarse = max(-0.5, min(0.5, small - large))
+        let boundaryProtection = 1 / (1 + abs(log - small) * 4)
+        let texture = powf(2, protection * (settings.detail * fine * 2
+            + settings.microcontrast * coarse * 3 * boundaryProtection))
+        return l > 0.000001 ? mapped / l * gain * texture : gain
+    }
+
+    /// The tone-mapped luminance of a pixel of luminance `l` (log2 `log`) on illumination `large`.
+    @inline(__always)
+    private static func toneCurve(l: Float, log: Float, large: Float, settings: HDRSettings) -> Float {
         switch settings.method {
         case .direct:
             // Compress large-scale log illumination around middle gray, retaining
@@ -116,7 +143,7 @@ public enum HDRToneMapper {
             // equating an HDR look with a uniformly lifted, low-contrast image.
             let shaped = settings.compression == 0 ? local : 0.18 * powf(max(0, local / 0.18), 1.25)
             let k = settings.compression
-            mapped = shaped * (1 + k * 0.18) / (1 + k * shaped)
+            return shaped * (1 + k * 0.18) / (1 + k * shaped)
         case .virtualExposureFusion:
             // Explicit -2/0/+2 EV display plates, normalized positive well-exposedness
             // weights. This is a global baseline for comparison, not Mertens pyramids.
@@ -127,18 +154,8 @@ public enum HDRToneMapper {
                 sum += plate * weight; weights += weight
             }
             let fused = sum / weights
-            mapped = l * (1 - settings.compression) + fused * settings.compression
+            return l * (1 - settings.compression) + fused * settings.compression
         }
-        let shadowMask = min(1, l / 0.08)
-        let highlightMask = 1 / (1 + max(0, l - 0.7) * 4)
-        let protection: Float = settings.artifactsEnabled ? (1 - settings.shadowProtection + settings.shadowProtection * shadowMask)
-            * (1 - settings.highlightProtection + settings.highlightProtection * highlightMask) : 1
-        let fine = max(-0.5, min(0.5, log - small))
-        let coarse = max(-0.5, min(0.5, small - large))
-        let boundaryProtection = 1 / (1 + abs(log - small) * 4)
-        let texture = powf(2, protection * (settings.detail * fine * 2
-            + settings.microcontrast * coarse * 3 * boundaryProtection))
-        return l > 0.000001 ? mapped / l * gain * texture : gain
     }
 
     /// Self-guided filter in log2 luminance. Epsilon is in squared stops; the base

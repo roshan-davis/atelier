@@ -91,6 +91,7 @@ public final class HDRPreviewRenderer: @unchecked Sendable {
             Double(settings.compression), Double(settings.microcontrast), Double(settings.detail),
             settings.artifactsEnabled ? 1.0 : 0.0,
             Double(settings.shadowProtection), Double(settings.highlightProtection),
+            Double(settings.shadows), Double(settings.highlights),
         ]
         return kernel.apply(extent: source.rgb.extent, roiCallback: { _, rect in rect }, arguments: arguments)
     }
@@ -115,21 +116,12 @@ public final class HDRPreviewRenderer: @unchecked Sendable {
         context.createCGImage(image, from: image.extent, format: .RGBA8, colorSpace: Self.sRGB)
     }
 
-    /// `HDRToneMapper.pixelScale`, line for line.
+    /// `HDRToneMapper.pixelScale` and `toneCurve`, line for line.
     static let kernelSource = """
         #include <CoreImage/CoreImage.h>
         using namespace metal;
 
-        [[stitchable]] float4 atelierHDRTone(coreimage::sampler image, coreimage::sampler analysis,
-                                             float method, float gain, float compression,
-                                             float microcontrast, float detail, float artifacts,
-                                             float shadowProtection, float highlightProtection,
-                                             coreimage::destination dest) {
-            float2 p = dest.coord();
-            float4 color = image.sample(image.transform(p));
-            float4 a = analysis.sample(analysis.transform(p));
-            float l = a.x, lg = a.y, small = a.z, large = a.w;
-            float mapped;
+        static float atelierHDRCurve(float l, float lg, float large, float method, float compression) {
             if (method < 0.5) {
                 float anchor = log2(0.18);
                 float blackProtection = min(1.0, max(0.0, l / 0.06));
@@ -137,17 +129,38 @@ public final class HDRPreviewRenderer: @unchecked Sendable {
                 float base = anchor + (large - anchor) * (1.0 - amount * 0.85);
                 float local = compression == 0.0 ? l : exp2(base + lg - large);
                 float shaped = compression == 0.0 ? local : 0.18 * pow(max(0.0, local / 0.18), 1.25);
-                mapped = shaped * (1.0 + compression * 0.18) / (1.0 + compression * shaped);
-            } else {
-                float sum = 0.0, weights = 0.0;
-                for (int i = 0; i < 3; i++) {
-                    float ev = float(i * 2 - 2);
-                    float plate = min(1.0, l * exp2(ev));
-                    float t = (plate - 0.5) / 0.24;
-                    float weight = exp(-(t * t) / 2.0) + 0.0001;
-                    sum += plate * weight; weights += weight;
-                }
-                mapped = l * (1.0 - compression) + (sum / weights) * compression;
+                return shaped * (1.0 + compression * 0.18) / (1.0 + compression * shaped);
+            }
+            float sum = 0.0, weights = 0.0;
+            for (int i = 0; i < 3; i++) {
+                float ev = float(i * 2 - 2);
+                float plate = min(1.0, l * exp2(ev));
+                float t = (plate - 0.5) / 0.24;
+                float weight = exp(-(t * t) / 2.0) + 0.0001;
+                sum += plate * weight; weights += weight;
+            }
+            return l * (1.0 - compression) + (sum / weights) * compression;
+        }
+
+        [[stitchable]] float4 atelierHDRTone(coreimage::sampler image, coreimage::sampler analysis,
+                                             float method, float gain, float compression,
+                                             float microcontrast, float detail, float artifacts,
+                                             float shadowProtection, float highlightProtection,
+                                             float shadows, float highlights,
+                                             coreimage::destination dest) {
+            float2 p = dest.coord();
+            float4 color = image.sample(image.transform(p));
+            float4 a = analysis.sample(analysis.transform(p));
+            float l = a.x, lg = a.y, small = a.z, large = a.w;
+            float mapped = atelierHDRCurve(l, lg, large, method, compression);
+            if (shadows != 0.0 || highlights != 0.0) {
+                float regionTone = atelierHDRCurve(exp2(large), large, large, method, compression);
+                float region = min(1.0, max(0.0, pow(max(0.0, regionTone), 1.0 / 2.2)));
+                float shadowWeight = region * pow(1.0 - region, 3.0) / 0.10546875;
+                float highlightWeight = pow(region, 3.0) * (1.0 - region) / 0.10546875;
+                float shadowGain = 0.22 * (shadows < 0.0 ? 0.7 : 1.0) * shadows;
+                float shift = 0.22 * highlights * highlightWeight + shadowGain * shadowWeight;
+                mapped = pow(max(0.0, pow(max(0.0, mapped), 1.0 / 2.2) + shift), 2.2);
             }
             float shadowMask = min(1.0, l / 0.08);
             float highlightMask = 1.0 / (1.0 + max(0.0, l - 0.7) * 4.0);

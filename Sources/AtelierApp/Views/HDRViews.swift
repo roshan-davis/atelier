@@ -115,13 +115,15 @@ struct HDRImageView: View {
     }
 }
 
-/// The right panel in HDR mode: Tone Mapping and Artifacts, with the same panel headers,
-/// switches and sliders as Develop, and Reset All and Save at the foot, as in Lightroom.
+/// The right panel in HDR mode: Tone Mapping, with the same panel header, switch and sliders as
+/// Develop, and Reset All and Save at the foot, as in Lightroom. Texture protection near black
+/// and in bright highlights is built in (the old Artifacts sliders, which Rosh found had no
+/// visible effect, Nov 12, 2026); Highlights and Shadows work like Develop's.
 struct HDRPanel: View {
     @ObservedObject var hdr: HDRController
-    @AppStorage("hdr.expandedPanels") private var expandedList = "tone,artifacts"
+    @AppStorage("hdr.expandedPanels") private var expandedList = "tone"
     @AppStorage("hdr.soloMode") private var soloMode = false
-    private static let panels = ["tone", "artifacts"]
+    private static let panels = ["tone"]
 
     private func isExpanded(_ id: String) -> Binding<Bool> {
         Binding(get: { expandedList.split(separator: ",").contains(Substring(id)) }, set: { open in
@@ -148,21 +150,12 @@ struct HDRPanel: View {
                         VStack(alignment: .leading, spacing: 10) {
                             row("Exposure", \.exposure, -5...5, step: 0.05)
                             row("Range", \.compression, 0...1, step: 0.01)
+                            GroupHeading(title: "Tone", reset: { hdr.reset(HDRController.regionKeys) })
+                            row("Highlights", \.highlights, -1...1, step: 0.01)
+                            row("Shadows", \.shadows, -1...1, step: 0.01)
                             GroupHeading(title: "Texture", reset: { hdr.reset(HDRController.textureKeys) })
                             row("Microcontrast", \.microcontrast, -1...1, step: 0.01)
                             row("Detail", \.detail, -1...1, step: 0.01)
-                        }
-                    }
-                    PanelSection(title: "Artifacts", isExpanded: isExpanded("artifacts"), soloMode: $soloMode,
-                                 isModified: hdr.isModified(HDRController.artifactKeys),
-                                 reset: { hdr.reset(HDRController.artifactKeys) },
-                                 isOn: hdr.switchBinding(\.artifactsEnabled),
-                                 expandAll: expandAll, collapseAll: collapseAll) {
-                        VStack(alignment: .leading, spacing: 10) {
-                            row("Shadows", \.shadowProtection, 0...1, step: 0.01)
-                            row("Highlights", \.highlightProtection, 0...1, step: 0.01)
-                            Text("Limits texture enhancement near black and in bright highlights.")
-                                .font(.caption).foregroundStyle(.secondary)
                         }
                     }
                 }

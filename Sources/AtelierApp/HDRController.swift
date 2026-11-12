@@ -229,8 +229,7 @@ final class HDRController: ObservableObject {
             let old = self.settings
             self.settings[keyPath: key] = Float(value)
             // Moving a control turns its panel back on, as in Develop.
-            if key == \HDRSettings.shadowProtection || key == \HDRSettings.highlightProtection { self.settings.artifactsEnabled = true }
-            else { self.settings.toneEnabled = true }
+            self.settings.toneEnabled = true
             if self.gestureStart == nil, old != self.settings { self.undoStack.append(old); self.redoStack = [] }
             self.changed()
         })
@@ -249,11 +248,12 @@ final class HDRController: ObservableObject {
         }
     }
 
-    static let toneKeys: [WritableKeyPath<HDRSettings, Float>] = [\.exposure, \.compression, \.microcontrast, \.detail]
+    static let toneKeys: [WritableKeyPath<HDRSettings, Float>] = [\.exposure, \.compression, \.highlights, \.shadows,
+                                                                  \.microcontrast, \.detail]
+    static let regionKeys: [WritableKeyPath<HDRSettings, Float>] = [\.highlights, \.shadows]
     static let textureKeys: [WritableKeyPath<HDRSettings, Float>] = [\.microcontrast, \.detail]
-    static let artifactKeys: [WritableKeyPath<HDRSettings, Float>] = [\.shadowProtection, \.highlightProtection]
 
-    func reset() { reset(Self.toneKeys + Self.artifactKeys) }
+    func reset() { reset(Self.toneKeys) }
     func reset(_ keys: [WritableKeyPath<HDRSettings, Float>]) {
         let old = settings, defaults = HDRSettings()
         for key in keys { settings[keyPath: key] = defaults[keyPath: key] }
