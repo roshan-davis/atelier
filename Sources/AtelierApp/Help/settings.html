@@ -14,8 +14,9 @@
 <div class="eyebrow">Set up</div>
 <h1>Settings</h1>
 <p class="lede">Open <span class="path">Atelier › Settings…</span> (<kbd>⌘,</kbd>). Changes take effect at once.</p>
+<p>Pick a pane in the sidebar on the left; its settings show on the right. The sidebar groups the panes: <b>Atelier</b> (General, Appearance, Keyboard), <b>Photos</b> (Import, Develop, Export, Metadata) and <b>Editors &amp; AI</b> (Edit In, AI). The sidebar has the keyboard when Settings opens: <kbd>↑</kbd> <kbd>↓</kbd> move between panes. After you click into a pane, click the sidebar again to get the arrows back (the chosen row turns from gray to blue). Settings reopens on the pane you used last. Click a section's header band to close or open it, as with the panels in the main window; Atelier remembers which are closed.</p>
 
-<div class="chips"><a href="#general">General</a><a href="#appearance">Appearance</a><a href="#import">Import</a><a href="#develop">Develop</a><a href="#export">Export</a><a href="#edit-in">Edit In</a><a href="#ai">AI</a><a href="#metadata">Metadata</a><a href="#keyboard">Keyboard</a></div>
+<div class="chips"><a href="#general">General</a><a href="#appearance">Appearance</a><a href="#keyboard">Keyboard</a><a href="#import">Import</a><a href="#develop">Develop</a><a href="#export">Export</a><a href="#metadata">Metadata</a><a href="#edit-in">Edit In</a><a href="#ai">AI</a></div>
 
 <h2 id="general">General</h2>
 <dl class="defs">
@@ -37,6 +38,10 @@
   <dt>Neutral Gray</dt><dd>A mid-gray surround, for judging color and brightness.</dd>
 </dl>
 
+<h2 id="keyboard">Keyboard</h2>
+<p>The <b>Keyboard Map</b> at the top shows each key with a small picture of its command: stars for ratings, label colors, flags and tool symbols. Choose <b>⇧ Shift</b>, <b>⌃ Control</b> or <b>⌥ Option</b> to see the keys used with them. Hover a key to see its command; click it to jump to that command in the list. <b>Search commands or keys</b> at the bottom finds a command by name, group or key.</p>
+<p>Every keyboard command (ratings, flags, labels, views, tools, Masking, Guided Upright, and <kbd>⌃Tab</kbd> between areas) with its key. Click a key and press a new one, with <kbd>⌃</kbd>, <kbd>⌥</kbd> or <kbd>⇧</kbd> if you like; a key moves from any command that had it. Arrows, <kbd>Tab</kbd>, <kbd>Return</kbd>, <kbd>Esc</kbd>, <kbd>Delete</kbd>, <kbd>F6</kbd> (Show Filmstrip) and <kbd>⌘</kbd> shortcuts stay fixed. <kbd>Delete</kbd> removes a key, <kbd>Esc</kbd> cancels, <b>Restore Defaults</b> goes back to Lightroom's keys. <span class="path">Help › Keyboard Shortcuts</span> (<kbd>⌘/</kbd>) lists them all; its <b>Change Keys…</b> button opens this pane.</p>
+
 <h2 id="import">Import</h2>
 <p>The default for new imports (leave files where they are, or copy into the library folder), the library folder, and <b>Show RAW+JPEG pairs as one photo</b>.</p>
 
@@ -50,17 +55,14 @@
 <h2 id="export">Export</h2>
 <p>The default export folder, and whether to show exported files in Finder. Format, size, color, watermark and presets are in the <a href="export.html">Export dialog</a>.</p>
 
-<h2 id="edit-in">Edit In</h2>
-<p>The external editors and what each one is sent. See <a href="edit-in.html#apps">Edit In</a>.</p>
-
-<h2 id="ai">AI</h2>
-<p>The ComfyUI server and Connect, the edit and upscale models, generation size, and the workflows folder. See <a href="ai.html#setup">AI tools</a>. <b>Masking Models</b> shows the people model built into Atelier and lets you download or remove the two <a href="masking.html#fine-edges">Fine Edges</a> models (Fast, about 115 MB; Hair Detail, about 470 MB) and choose which one runs.</p>
-
 <h2 id="metadata">Metadata</h2>
 <p><b>Automatically write changes into XMP sidecars</b>, including current Develop edits, masks, retained history and snapshots for Atelier recovery. Other apps see the standard metadata, such as ratings, keywords and captions. See <a href="library.html#xmp">XMP sidecars</a>.</p>
 
-<h2 id="keyboard">Keyboard</h2>
-<p>Every keyboard command (ratings, flags, labels, views, tools, Masking, Guided Upright, and <kbd>⌃Tab</kbd> between areas) with its key. Click a key and press a new one, with <kbd>⌃</kbd>, <kbd>⌥</kbd> or <kbd>⇧</kbd> if you like; a key moves from any command that had it. Arrows, <kbd>Tab</kbd>, <kbd>Return</kbd>, <kbd>Esc</kbd>, <kbd>Delete</kbd>, <kbd>F6</kbd> (Show Filmstrip) and <kbd>⌘</kbd> shortcuts stay fixed. <kbd>Delete</kbd> removes a key, <kbd>Esc</kbd> cancels, <b>Restore Defaults</b> goes back to Lightroom's keys. <span class="path">Help › Keyboard Shortcuts</span> (<kbd>⌘/</kbd>) lists them all.</p>
+<h2 id="edit-in">Edit In</h2>
+<p>Each external editor has its own section: the app, its name in the menu, the file it is sent (TIFF or JPEG), the color space and whether develop adjustments are included. The − in a section's header removes that app; <b>Add App…</b> and <b>Find Installed Editors</b> are at the bottom. See <a href="edit-in.html#apps">Edit In</a>.</p>
+
+<h2 id="ai">AI</h2>
+<p>The ComfyUI server and Connect, the edit and upscale models, generation size, and the workflows folder. See <a href="ai.html#setup">AI tools</a>. <b>Masking Models</b> shows the people model built into Atelier and lets you download or remove the two <a href="masking.html#fine-edges">Fine Edges</a> models (Fast, about 115 MB; Hair Detail, about 470 MB) and choose which one runs.</p>
 
 <div class="see-also">See also: <a href="shortcuts.html">Keyboard shortcuts</a></div>
 
