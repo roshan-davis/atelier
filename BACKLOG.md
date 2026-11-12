@@ -761,7 +761,7 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 ## AT-055 — Develop: Tone Curve and Color Grading presets (panel Preset menus)
 
-**Status:** In progress — implementation pushed for review; needs a Mac build and Rosh's acceptance. **Owner:** Claude (Cl). **Chat:** [Add Tone Curve and Color Grading presets](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGK72WTFWffG4o8f2nXFkwkcG). **Branch:** `claude/project-thread-qk0le7`. **Baseline:** `c458544`.
+**Status:** In progress — implementation pushed for review; needs a Mac build and Rosh's acceptance. **Owner:** Claude (Cl). **Chat:** [Add Tone Curve and Color Grading presets](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGK72WTFWffG4o8f2nXFkwkcG). **Branch:** `claude/project-thread-qk0le7`. **PR:** #114. **Baseline:** `c458544`.
 
 **Evidence:** Rosh (2026-11-12) asked whether Tone Curve presets (as in Easel) and Color Grading presets based on color-harmony patterns ("Y", triangle and others) are a good idea and real, and said to go ahead. Research: reports/color-harmony-grading-2026-11-12.md (project files). Easel: Curves has a Photoshop-style Preset menu with Easel's own named curves plus Save/Load .acv (`EaselCore/Adjustments/AdjustmentPresets.swift`).
 
