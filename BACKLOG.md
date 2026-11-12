@@ -695,7 +695,7 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 ## AT-049 — Settings: sidebar navigation, larger window
 
-**Status:** PR open, never compiled (cloud has no Swift toolchain); needs a Mac build, the CI layout snapshots (if Actions runs) and Rosh's acceptance. **Owner:** Claude. **Chat:** [Redesign Settings with sidebar navigation](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGK96vYtiqFFZfdV1x1AhDsuA). **Branch:** `claude/project-thread-u3fvye`. **Baseline:** `b19a792`. **Dependencies:** none.
+**Status:** Merged at Rosh's ask on Nov 12, 2026 after Rosh built and ran `f2e2470` in Xcode ("looks good"). XCTest/`check_pr.py` not run (CI blocked by the Actions account); layout snapshots not seen. **Owner:** Claude. **Chat:** [Redesign Settings with sidebar navigation](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGK96vYtiqFFZfdV1x1AhDsuA). **Branch:** `claude/project-thread-u3fvye`. **Baseline:** `b19a792`. **Dependencies:** none.
 
 **Evidence:** Rosh (2026-11-12): "can the settings dialog be with left navigation and the settings on right side and have bit more real estate and have bit more elegant aligns with our design system?"
 
