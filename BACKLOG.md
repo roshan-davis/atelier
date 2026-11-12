@@ -733,7 +733,7 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 ## AT-052 — HDR as a view of Atelier (fold the standalone HDR app in)
 
-**Status:** In progress — implementation pushed for review; needs a Mac build and Rosh's acceptance. **Owner:** Claude (Cl). **Chat:** [Make HDR a mode inside Atelier](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKFjburLm27Q2zKojcL87QQR). **Branch:** `claude/project-thread-pusioe`. **PR:** to be linked once opened. **Baseline:** `9e1a9b5`.
+**Status:** In progress — implementation pushed for review; needs a Mac build and Rosh's acceptance. **Owner:** Claude (Cl). **Chat:** [Make HDR a mode inside Atelier](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKFjburLm27Q2zKojcL87QQR). **Branch:** `claude/project-thread-pusioe`. **PR:** [#112](https://github.com/roshan-davis/atelier/pull/112). **Baseline:** `9e1a9b5`.
 
 **Evidence:** Rosh (2026-11-12): "i have been thinking the HDR as a separate app was a poor choice, can we make that into atelier as a separate module?" Plan posted in the chat; Rosh chose "Yes, but keep a Save button" (no auto-save; leaving with unsaved changes asks). This reverses AT-021's standalone-app direction; PRD AT-021 section updated.
 
