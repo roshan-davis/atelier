@@ -692,3 +692,13 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 **Scope:** Match Skin Tone's masks use Face Skin + Lips; Protect's use Face Skin, Lips, Teeth, Eyebrows, Eye Sclera, Iris. Skin is still measured on Face Skin. Protect fits each skin mask's Exposure to hold the tone's Oklab lightness and runs whenever skin drifts visibly (`LookSkin.holds`: 1.5° hue, 4% chroma, 0.015 lightness); the 5°/15% pull-back stays the fallback.
 
 **Acceptance:** Mac build; `LookMatchTests` (holds, mask parts) and existing Match Look tests pass; Rosh: the same portrait with Protect and with Match Skin Tone, lips and skin consistent, skin not pale.
+
+## AT-049 — Settings: sidebar navigation, larger window
+
+**Status:** PR open, never compiled (cloud has no Swift toolchain); needs a Mac build, the CI layout snapshots (if Actions runs) and Rosh's acceptance. **Owner:** Claude. **Chat:** [Redesign Settings with sidebar navigation](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGK96vYtiqFFZfdV1x1AhDsuA). **Branch:** `claude/project-thread-u3fvye`. **Baseline:** `b19a792`. **Dependencies:** none.
+
+**Evidence:** Rosh (2026-11-12): "can the settings dialog be with left navigation and the settings on right side and have bit more real estate and have bit more elegant aligns with our design system?"
+
+**Scope:** `SettingsView` replaces the toolbar tabs with a sidebar (`SettingsPane`, grouped Atelier / Photos / Editors & AI) and a pane header (accent icon tile, title, one-line summary) over the existing panes, unchanged. Window 640 pt wide (height varied per tab) → fixed 880 × 620 pt. Appearance moves into the same grouped Form as the other panes; Keyboard drops its fixed 520 pt height. Last pane remembered (`settings.pane`); Help > Keyboard Shortcuts > Change Keys… opens the Keyboard pane. Layout snapshots `settings-window-*.png` added.
+
+**Acceptance:** Mac build; Rosh opens Settings (⌘,), clicks every pane, checks Masking Models download/status lines in AI, key recording in Keyboard, themes in Appearance, and Change Keys… from ⌘/. **Deferred:** a search field in the sidebar (System Settings has one); not asked for.

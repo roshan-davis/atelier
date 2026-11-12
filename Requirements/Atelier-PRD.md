@@ -428,7 +428,7 @@ Develop › Frame Diagnostics is opt-in in the single-photo view and the Before/
 
 ### Settings and keyboard
 
-Atelier > Settings… (⌘,) has these tabs:
+Atelier > Settings… (⌘,) is one window (880 × 620 pt), laid out like macOS System Settings (Rosh, Nov 12, 2026): a sidebar of panes on the left, in three groups (Atelier: General, Appearance, Keyboard; Photos: Import, Develop, Export, Metadata; Editors & AI: Edit In, AI), and the chosen pane on the right under a header with its icon, title and a one-line summary. ↑ ↓ in the sidebar move between panes; the window title follows the pane; Settings reopens on the pane last shown; Help > Keyboard Shortcuts > Change Keys… opens it on Keyboard. Every pane uses the same grouped sections. The panes:
 - **General:** catalog location (Show in Finder), photo count, backups kept on quit (default 10), Back Up Now, splash screen (show at launch, Show Splash Folder, Preview; see Launch splash screen), preview cache size.
 - **Appearance:** theme, picked from small previews: System (follows macOS), Light, Dark, Graphite (charcoal panels and a dark surround, like Lightroom), Darkroom (near black, so only the photo stands out) and Neutral Gray (a mid-gray surround for judging color and brightness). The theme changes every window at once, Settings included.
 - **Import:** default for new imports (leave files or copy into the library folder) and the library folder. The Import dialog starts from these. "Show RAW+JPEG pairs as one photo" (on by default; see RAW+JPEG pairs).

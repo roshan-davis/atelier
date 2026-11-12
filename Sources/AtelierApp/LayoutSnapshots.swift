@@ -143,6 +143,7 @@ enum LayoutSnapshots {
                       to: folder.appendingPathComponent("settings-ai.png"))
         await capture(AnyView(GeneralSettings().environmentObject(model).frame(width: 640)), size: CGSize(width: 640, height: 780),
                       to: folder.appendingPathComponent("settings-general.png"))
+        await snapshotSettingsWindow(model: model, into: folder)
         await snapshotExport(model: model, into: folder)
         // The splash with each built-in image, and with none.
         for url in SplashController.builtInImages {
@@ -159,6 +160,28 @@ enum LayoutSnapshots {
         Theme.system.apply()
         fflush(stdout)
         exit(0)
+    }
+
+    /// The whole Settings window (sidebar and pane) on a few panes, in Light and Graphite.
+    static func snapshotSettingsWindow(model: LibraryModel, into folder: URL) async {
+        let savedTheme = UserDefaults.standard.object(forKey: Theme.defaultsKey)
+        let savedPane = UserDefaults.standard.object(forKey: SettingsPane.defaultsKey)
+        defer {
+            if let savedTheme { UserDefaults.standard.set(savedTheme, forKey: Theme.defaultsKey) }
+            else { UserDefaults.standard.removeObject(forKey: Theme.defaultsKey) }
+            Theme.current.apply()
+            if let savedPane { UserDefaults.standard.set(savedPane, forKey: SettingsPane.defaultsKey) }
+            else { UserDefaults.standard.removeObject(forKey: SettingsPane.defaultsKey) }
+        }
+        let shots: [(Theme, SettingsPane)] = [(.light, .general), (.light, .appearance), (.light, .ai), (.light, .keyboard),
+                                              (.graphite, .general), (.graphite, .editIn)]
+        for (theme, pane) in shots {
+            UserDefaults.standard.set(theme.rawValue, forKey: Theme.defaultsKey)
+            theme.apply()
+            UserDefaults.standard.set(pane.rawValue, forKey: SettingsPane.defaultsKey)
+            await capture(AnyView(SettingsView().environmentObject(model)), size: SettingsView.size,
+                          to: folder.appendingPathComponent("settings-window-\(pane.rawValue)-\(theme.rawValue).png"))
+        }
     }
 
     /// Can run without opening a catalog via ATELIER_METADATA_SNAPSHOTS.

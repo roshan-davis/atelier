@@ -3,31 +3,164 @@ import AtelierCore
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Atelier > Settings… (⌘,). Values live in user defaults under the same keys the dialogs use,
+/// Atelier > Settings… (⌘,): a sidebar of panes on the left, the chosen pane on the right, as in
+/// macOS System Settings. Values live in user defaults under the same keys the dialogs use,
 /// so a default set here is what the Import and Export dialogs start with.
 struct SettingsView: View {
+    static let size = CGSize(width: 880, height: 620)
+    static let sidebarWidth: CGFloat = 200
+
+    /// The pane last shown, so Settings reopens where it was left.
+    @AppStorage(SettingsPane.defaultsKey) private var pane: SettingsPane = .general
+
     var body: some View {
-        TabView {
-            GeneralSettings()
-                .tabItem { Label("General", systemImage: "gearshape") }
-            AppearanceSettings()
-                .tabItem { Label("Appearance", systemImage: "paintpalette") }
-            ImportSettings()
-                .tabItem { Label("Import", systemImage: "square.and.arrow.down") }
-            DevelopSettingsTab()
-                .tabItem { Label("Develop", systemImage: "slider.horizontal.3") }
-            ExportSettingsTab()
-                .tabItem { Label("Export", systemImage: "square.and.arrow.up") }
-            EditInSettings()
-                .tabItem { Label("Edit In", systemImage: "paintbrush") }
-            AISettingsTab()
-                .tabItem { Label("AI", systemImage: "wand.and.stars") }
-            MetadataSettings()
-                .tabItem { Label("Metadata", systemImage: "tag") }
-            KeyboardSettings()
-                .tabItem { Label("Keyboard", systemImage: "keyboard") }
+        HStack(spacing: 0) {
+            SettingsSidebar(selection: $pane)
+                .frame(width: Self.sidebarWidth)
+            Divider()
+            SettingsPaneView(pane: pane)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(width: 640)
+        .frame(width: Self.size.width, height: Self.size.height)
+        .navigationTitle(pane.title)
+    }
+}
+
+/// The panes of the Settings window, in sidebar order.
+enum SettingsPane: String, CaseIterable, Identifiable {
+    case general, appearance, keyboard, imports = "import", develop, export, metadata, editIn, ai
+
+    static let defaultsKey = "settings.pane"
+
+    var id: String { rawValue }
+
+    /// Sidebar groups: the app itself, the photo workflow, then other apps and AI.
+    static let groups: [(title: String, panes: [SettingsPane])] = [
+        ("Atelier", [.general, .appearance, .keyboard]),
+        ("Photos", [.imports, .develop, .export, .metadata]),
+        ("Editors & AI", [.editIn, .ai]),
+    ]
+
+    var title: String {
+        switch self {
+        case .general: return "General"
+        case .appearance: return "Appearance"
+        case .keyboard: return "Keyboard"
+        case .imports: return "Import"
+        case .develop: return "Develop"
+        case .export: return "Export"
+        case .metadata: return "Metadata"
+        case .editIn: return "Edit In"
+        case .ai: return "AI"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .general: return "gearshape"
+        case .appearance: return "paintpalette"
+        case .keyboard: return "keyboard"
+        case .imports: return "square.and.arrow.down"
+        case .develop: return "slider.horizontal.3"
+        case .export: return "square.and.arrow.up"
+        case .metadata: return "tag"
+        case .editIn: return "paintbrush"
+        case .ai: return "wand.and.stars"
+        }
+    }
+
+    /// One line under the pane's title saying what it holds.
+    var summary: String {
+        switch self {
+        case .general: return "Catalog, backups, private photos, splash screen and previews."
+        case .appearance: return "The theme for every window, Settings included."
+        case .keyboard: return "The key for each command. Click a key, then press a new one."
+        case .imports: return "What the Import dialog starts with, and RAW+JPEG pairs."
+        case .develop: return "Zoom and panel behavior in Develop."
+        case .export: return "Where exports go. Formats and presets are in File > Export…"
+        case .metadata: return "Writing ratings, keywords and edits to XMP sidecars."
+        case .editIn: return "The apps under Photo > Edit In, and what each is sent."
+        case .ai: return "The ComfyUI server, AI models and masking models."
+        }
+    }
+}
+
+/// The Settings sidebar: grouped panes with their icons, like System Settings. ↑ and ↓ move between panes.
+private struct SettingsSidebar: View {
+    @Binding var selection: SettingsPane
+
+    var body: some View {
+        List(selection: Binding<SettingsPane?>(get: { selection }, set: { if let pane = $0 { selection = pane } })) {
+            ForEach(SettingsPane.groups, id: \.title) { group in
+                Section(group.title) {
+                    ForEach(group.panes) { pane in
+                        Label(pane.title, systemImage: pane.symbol)
+                            .tag(pane as SettingsPane?)
+                    }
+                }
+            }
+        }
+        .listStyle(.sidebar)
+    }
+}
+
+/// The right side of Settings: the pane's title and summary, then its settings.
+private struct SettingsPaneView: View {
+    let pane: SettingsPane
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            SettingsPaneHeader(pane: pane)
+            content
+                .scrollContentBackground(.hidden)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+        // A fresh view per pane, so each opens scrolled to the top.
+        .id(pane)
+    }
+
+    @ViewBuilder private var content: some View {
+        switch pane {
+        case .general: GeneralSettings()
+        case .appearance: AppearanceSettings()
+        case .keyboard: KeyboardSettings()
+        case .imports: ImportSettings()
+        case .develop: DevelopSettingsTab()
+        case .export: ExportSettingsTab()
+        case .metadata: MetadataSettings()
+        case .editIn: EditInSettings()
+        case .ai: AISettingsTab()
+        }
+    }
+}
+
+private struct SettingsPaneHeader: View {
+    let pane: SettingsPane
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: pane.symbol)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(.white)
+                .frame(width: 30, height: 30)
+                .background(Color.accentColor.gradient, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(pane.title)
+                    .font(.title2.weight(.semibold))
+                Text(pane.summary)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 20)
+        .padding(.bottom, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
     }
 }
 
@@ -39,19 +172,23 @@ struct AppearanceSettings: View {
     private let columns = [GridItem(.adaptive(minimum: 150), spacing: 14)]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Theme")
-                .font(.headline)
-            LazyVGrid(columns: columns, spacing: 14) {
-                ForEach(Theme.allCases) { option in
-                    ThemeCard(theme: option, isSelected: option == theme) { theme = option }
+        Form {
+            Section {
+                LazyVGrid(columns: columns, spacing: 14) {
+                    ForEach(Theme.allCases) { option in
+                        ThemeCard(theme: option, isSelected: option == theme) { theme = option }
+                    }
                 }
+                .padding(.vertical, 6)
+            } header: {
+                Text("Theme")
+            } footer: {
+                Text(theme.summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
-            Text(theme.summary)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(20)
+        .formStyle(.grouped)
         .onChange(of: theme) { _, newTheme in newTheme.apply() }
     }
 }
@@ -721,9 +858,9 @@ private struct KeyboardSettings: View {
                     revision += 1
                 }
             }
-            .padding(12)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
         }
-        .frame(height: 520)
         .onDisappear(perform: stopRecording)
     }
 
@@ -764,6 +901,7 @@ private struct KeyboardSettings: View {
 /// Help > Keyboard Shortcuts (⌘/): every shortcut on one page, like Lightroom's.
 struct ShortcutsSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openSettings) private var openSettings
 
     private let menuShortcuts: [(String, [(String, String)])] = [
         ("Library", [("⇧⌘I", "Import photos"), ("⇧⌘E", "Export"), ("⌘S", "Write XMP for selection"),
@@ -794,7 +932,11 @@ struct ShortcutsSheet: View {
             HStack {
                 Text("Keyboard Shortcuts").font(.title2.bold())
                 Spacer()
-                SettingsLink { Text("Change Keys…") }
+                Button("Change Keys…") {
+                    // Open Settings on its Keyboard pane.
+                    UserDefaults.standard.set(SettingsPane.keyboard.rawValue, forKey: SettingsPane.defaultsKey)
+                    openSettings()
+                }
             }
             .padding(20)
             ScrollView {
