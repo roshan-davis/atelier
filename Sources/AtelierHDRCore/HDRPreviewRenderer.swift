@@ -86,12 +86,15 @@ public final class HDRPreviewRenderer: @unchecked Sendable {
         guard settings.toneEnabled else { return source.rgb }
         let arguments: [Any] = [
             source.rgb, source.analysis,
-            settings.method == .direct ? 0.0 : 1.0,
+            Self.methodCode(settings.method),
             Double(powf(2, settings.exposure)),
             Double(settings.compression), Double(settings.microcontrast), Double(settings.detail),
             settings.artifactsEnabled ? 1.0 : 0.0,
             Double(settings.shadowProtection), Double(settings.highlightProtection),
             Double(settings.shadows), Double(settings.highlights),
+            Double(settings.fusionSpacing),
+            Double(settings.temperature), Double(settings.saturation), Double(settings.vibrance),
+            settings.fusionUsesDarker ? 1.0 : 0.0, settings.fusionUsesBrighter ? 1.0 : 0.0,
         ]
         return kernel.apply(extent: source.rgb.extent, roiCallback: { _, rect in rect }, arguments: arguments)
     }
@@ -116,12 +119,38 @@ public final class HDRPreviewRenderer: @unchecked Sendable {
         context.createCGImage(image, from: image.extent, format: .RGBA8, colorSpace: Self.sRGB)
     }
 
-    /// `HDRToneMapper.pixelScale` and `toneCurve`, line for line.
+    /// The kernel's `method` argument.
+    static func methodCode(_ method: HDRMethod) -> Double {
+        switch method {
+        case .direct: return 0
+        case .virtualExposureFusion: return 1
+        case .fusion: return 2
+        }
+    }
+
+    /// `HDRToneMapper.pixelScale`, `toneCurve`, `fusion` and `color`, line for line.
     static let kernelSource = """
         #include <CoreImage/CoreImage.h>
         using namespace metal;
 
-        static float atelierHDRCurve(float l, float lg, float large, float method, float compression) {
+        static float atelierHDRPlate(float value) { return 1.0 - exp(-max(0.0, value) * 1.2); }
+
+        static float atelierHDRCurve(float l, float lg, float large, float method, float compression, float spacing,
+                                     float darker, float brighter) {
+            if (method > 1.5) {
+                float region = exp2(large);
+                float sum = 0.0, weights = 0.0;
+                for (int k = -1; k <= 1; k++) {
+                    if ((k < 0 && darker < 0.5) || (k > 0 && brighter < 0.5)) continue;
+                    float gain = exp2(float(k) * spacing);
+                    float value = atelierHDRPlate(l * gain);
+                    float t = (pow(atelierHDRPlate(region * gain), 1.0 / 2.2) - 0.5) / 0.2;
+                    float weight = exp(-t * t / 2.0) + 0.0001;
+                    sum += value * weight; weights += weight;
+                }
+                float blend = compression * min(1.0, max(0.0, region / 0.06));
+                return atelierHDRPlate(l) * (1.0 - blend) + sum / weights * blend;
+            }
             if (method < 0.5) {
                 float anchor = log2(0.18);
                 float blackProtection = min(1.0, max(0.0, l / 0.06));
@@ -146,15 +175,17 @@ public final class HDRPreviewRenderer: @unchecked Sendable {
                                              float method, float gain, float compression,
                                              float microcontrast, float detail, float artifacts,
                                              float shadowProtection, float highlightProtection,
-                                             float shadows, float highlights,
+                                             float shadows, float highlights, float spacing,
+                                             float temperature, float saturation, float vibrance,
+                                             float darker, float brighter,
                                              coreimage::destination dest) {
             float2 p = dest.coord();
             float4 color = image.sample(image.transform(p));
             float4 a = analysis.sample(analysis.transform(p));
             float l = a.x, lg = a.y, small = a.z, large = a.w;
-            float mapped = atelierHDRCurve(l, lg, large, method, compression);
+            float mapped = atelierHDRCurve(l, lg, large, method, compression, spacing, darker, brighter);
             if (shadows != 0.0 || highlights != 0.0) {
-                float regionTone = atelierHDRCurve(exp2(large), large, large, method, compression);
+                float regionTone = atelierHDRCurve(exp2(large), large, large, method, compression, spacing, darker, brighter);
                 float region = min(1.0, max(0.0, pow(max(0.0, regionTone), 1.0 / 2.2)));
                 float shadowWeight = region * pow(1.0 - region, 3.0) / 0.10546875;
                 float highlightWeight = pow(region, 3.0) * (1.0 - region) / 0.10546875;
@@ -174,7 +205,21 @@ public final class HDRPreviewRenderer: @unchecked Sendable {
             float texture = exp2(protection * (detail * fine * 2.0
                 + microcontrast * coarse * 3.0 * boundaryProtection));
             float scale = l > 0.000001 ? mapped / l * gain * texture : gain;
-            return float4(max(color.rgb * scale, float3(0.0)), color.a);
+            float3 rgb = max(color.rgb * scale, float3(0.0));
+            if (temperature != 0.0 || saturation != 0.0 || vibrance != 0.0) {
+                float before = rgb.r * 0.2126 + rgb.g * 0.7152 + rgb.b * 0.0722;
+                if (temperature != 0.0) {
+                    rgb.r *= 1.0 + 0.3 * temperature;
+                    rgb.b *= 1.0 - 0.3 * temperature;
+                    float after = rgb.r * 0.2126 + rgb.g * 0.7152 + rgb.b * 0.0722;
+                    rgb *= after > 0.000001 ? before / after : 1.0;
+                }
+                float high = max(rgb.r, max(rgb.g, rgb.b)), low = min(rgb.r, min(rgb.g, rgb.b));
+                float chroma = high > 0.000001 ? (high - low) / high : 0.0;
+                float amount = (1.0 + vibrance * (1.0 - chroma)) * (1.0 + saturation);
+                rgb = max(float3(before) + (rgb - float3(before)) * amount, float3(0.0));
+            }
+            return float4(rgb, color.a);
         }
         """
 }

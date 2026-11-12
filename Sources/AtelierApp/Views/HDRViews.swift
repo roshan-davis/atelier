@@ -143,11 +143,20 @@ struct HDRPanel: View {
             ScrollView {
                 VStack(spacing: 0) {
                     PanelSection(title: "Tone Mapping", isExpanded: isExpanded("tone"), soloMode: $soloMode,
-                                 isModified: hdr.isModified(HDRController.toneKeys),
-                                 reset: { hdr.reset(HDRController.toneKeys) },
+                                 isModified: hdr.isModified(HDRController.toneKeys, method: true),
+                                 reset: { hdr.reset(HDRController.toneKeys, method: true) },
                                  isOn: hdr.switchBinding(\.toneEnabled),
                                  expandAll: expandAll, collapseAll: collapseAll) {
                         VStack(alignment: .leading, spacing: 10) {
+                            methodRow
+                            if hdr.settings.method == .fusion {
+                                SliderRow(label: "Spacing", value: hdr.binding(\.fusionSpacing), range: 1...3, step: 0.1,
+                                          origin: Double(HDRSettings().fusionSpacing),
+                                          format: { String(format: "±%.1f EV", $0) }, valueWidth: 64, labelWidth: 94,
+                                          trackHelp: "How far under and over the photo Fusion's darker and brighter exposures are",
+                                          onEditingChanged: hdr.gesture)
+                                HDRExposureStrip(hdr: hdr)
+                            }
                             row("Exposure", \.exposure, -5...5, step: 0.05)
                             row("Range", \.compression, 0...1, step: 0.01)
                             GroupHeading(title: "Tone", reset: { hdr.reset(HDRController.regionKeys) })
@@ -156,6 +165,14 @@ struct HDRPanel: View {
                             GroupHeading(title: "Texture", reset: { hdr.reset(HDRController.textureKeys) })
                             row("Microcontrast", \.microcontrast, -1...1, step: 0.01)
                             row("Detail", \.detail, -1...1, step: 0.01)
+                            GroupHeading(title: "Color", reset: { hdr.reset(HDRController.colorKeys) })
+                            SliderRow(label: "Temperature", value: hdr.binding(\.temperature), range: -1...1, step: 0.01,
+                                      gradient: [Color(red: 0.35, green: 0.55, blue: 0.95), Color(red: 0.95, green: 0.8, blue: 0.3)],
+                                      format: { String(format: "%.2f", $0) }, labelWidth: 94,
+                                      trackHelp: "Cools (left) or warms (right) the HDR result at the same brightness",
+                                      onEditingChanged: hdr.gesture)
+                            row("Vibrance", \.vibrance, -1...1, step: 0.01)
+                            row("Saturation", \.saturation, -1...1, step: 0.01)
                         }
                     }
                 }
@@ -181,6 +198,24 @@ struct HDRPanel: View {
         }
     }
 
+    /// Method, laid out like a slider row (as Effects' Grain Type): double-click the name for Natural.
+    private var methodRow: some View {
+        HStack(spacing: 8) {
+            Text("Method")
+                .frame(width: 94, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) { hdr.methodBinding.wrappedValue = HDRSettings().method }
+            Picker("Method", selection: hdr.methodBinding) {
+                Text("Natural").tag(HDRMethod.direct)
+                Text("Fusion").tag(HDRMethod.fusion)
+            }
+            .labelsHidden()
+            .controlSize(.small)
+            .help("Natural compresses the light region by region. Fusion blends three exposures of the photo (shown under Spacing), for open shadows and soft highlights.")
+        }
+        .font(.callout)
+    }
+
     private func expandAll() { expandedList = Self.panels.joined(separator: ",") }
     private func collapseAll() { expandedList = "" }
 
@@ -192,7 +227,7 @@ struct HDRPanel: View {
     }
 }
 
-/// The left column in HDR mode: what is being tone-mapped and where its result goes.
+/// The left column in HDR mode: the presets, what is being tone-mapped and where its result goes.
 struct HDRSidebar: View {
     @ObservedObject var hdr: HDRController
     @AppStorage("hdr.sidebarCollapsed") private var collapsedList = ""
@@ -208,6 +243,7 @@ struct HDRSidebar: View {
     var body: some View {
         ScrollView(.vertical) {
             VStack(spacing: 0) {
+                HDRPresetsSection(hdr: hdr, isExpanded: isExpanded("presets"))
                 SidebarSection(title: "Source", isExpanded: isExpanded("source")) {
                     EmptyView()
                 } content: {
@@ -248,5 +284,68 @@ struct HDRSidebar: View {
 
     private var resultName: String {
         hdr.projectURL?.deletingPathExtension().appendingPathExtension("tif").lastPathComponent ?? "HDR TIFF"
+    }
+}
+
+/// Fusion's three exposures, under Method and Spacing in Tone Mapping (Rosh, Nov 12, 2026: first
+/// "showing the same image in 3 different exposures to merge it", then moved here and made to do
+/// something). Click the darker or the brighter picture to leave it out of the blend (one undo
+/// step); the exposure as shot is always used. They come from the one original, so they show
+/// what its shadows and highlights hold, not new detail. With brackets they will be the frames.
+struct HDRExposureStrip: View {
+    @ObservedObject var hdr: HDRController
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top, spacing: 6) {
+                plate(0, uses: hdr.switchBinding(\.fusionUsesDarker))
+                plate(1, uses: nil)
+                plate(2, uses: hdr.switchBinding(\.fusionUsesBrighter))
+            }
+            Text("Click the darker or brighter picture to leave it out of the blend. All three come from this one photo.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.top, 2)
+    }
+
+    /// One picture; `uses` is nil for the exposure as shot, which can't be left out.
+    private func plate(_ index: Int, uses: Binding<Bool>?) -> some View {
+        let on = uses?.wrappedValue ?? true
+        return VStack(spacing: 3) {
+            ZStack {
+                Color.black.opacity(0.25)
+                if index < hdr.plates.count {
+                    Image(nsImage: hdr.plates[index]).resizable().scaledToFit()
+                }
+                if !on {
+                    Image(systemName: "eye.slash").font(.callout).foregroundStyle(.white).shadow(radius: 1)
+                }
+            }
+            .aspectRatio(aspect, contentMode: .fit)
+            .clipShape(RoundedRectangle(cornerRadius: 3))
+            .opacity(on ? 1 : 0.4)
+            Text(label(index)).font(.caption).monospacedDigit()
+                .foregroundStyle(on ? Color.secondary : Color.secondary.opacity(0.5))
+        }
+        .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
+        .onTapGesture { uses?.wrappedValue.toggle() }
+        .help(uses == nil ? "The photo as shot, always part of the blend"
+              : on ? "In the blend. Click to leave this exposure out." : "Left out of the blend. Click to use it again.")
+    }
+
+    private var aspect: CGFloat {
+        guard let size = hdr.pixelSize, size.height > 0 else { return 1.5 }
+        return size.width / size.height
+    }
+
+    private func label(_ index: Int) -> String {
+        let spacing = hdr.settings.fusionSpacing
+        switch index {
+        case 0: return String(format: "−%.1f EV", spacing)
+        case 1: return "0 EV"
+        default: return String(format: "+%.1f EV", spacing)
+        }
     }
 }

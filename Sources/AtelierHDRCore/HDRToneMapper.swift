@@ -72,6 +72,7 @@ public enum HDRToneMapper {
         try cancellation()
         let width = image.width, height = image.height
         let gain = powf(2, settings.exposure)
+        let colored = settings.hasColor
         var output = image.rgb
         image.rgb.withUnsafeBufferPointer { rgb in
             prepared.luminance.withUnsafeBufferPointer { luminance in
@@ -84,7 +85,13 @@ public enum HDRToneMapper {
                                         let i = y * width + x
                                         let scale = pixelScale(l: luminance[i], log: logs[i], small: small[i], large: large[i],
                                                                gain: gain, settings: settings)
-                                        for c in 0..<3 { output[i*3+c] = max(0, rgb[i*3+c] * scale) }
+                                        if colored {
+                                            let c = color(max(0, rgb[i*3] * scale), max(0, rgb[i*3+1] * scale),
+                                                          max(0, rgb[i*3+2] * scale), settings: settings)
+                                            output[i*3] = c.0; output[i*3+1] = c.1; output[i*3+2] = c.2
+                                        } else {
+                                            for c in 0..<3 { output[i*3+c] = max(0, rgb[i*3+c] * scale) }
+                                        }
                                     }
                                 }
                             }
@@ -126,6 +133,27 @@ public enum HDRToneMapper {
         return l > 0.000001 ? mapped / l * gain * texture : gain
     }
 
+    /// Temperature, Vibrance and Saturation on one tone-mapped linear pixel, in that order, each
+    /// keeping the pixel's luminance. Only called when one of them is away from 0, so photos
+    /// without color changes stay bit-for-bit as before.
+    @inline(__always)
+    static func color(_ r: Float, _ g: Float, _ b: Float, settings: HDRSettings) -> (Float, Float, Float) {
+        var r = r, g = g, b = b
+        let before = r * 0.2126 + g * 0.7152 + b * 0.0722
+        if settings.temperature != 0 {
+            r *= 1 + 0.3 * settings.temperature
+            b *= 1 - 0.3 * settings.temperature
+            let after = r * 0.2126 + g * 0.7152 + b * 0.0722
+            let keep: Float = after > 0.000001 ? before / after : 1
+            r *= keep; g *= keep; b *= keep
+        }
+        let y = before
+        let high = max(r, max(g, b)), low = min(r, min(g, b))
+        let chroma: Float = high > 0.000001 ? (high - low) / high : 0
+        let amount = (1 + settings.vibrance * (1 - chroma)) * (1 + settings.saturation)
+        return (max(0, y + (r - y) * amount), max(0, y + (g - y) * amount), max(0, y + (b - y) * amount))
+    }
+
     /// The tone-mapped luminance of a pixel of luminance `l` (log2 `log`) on illumination `large`.
     @inline(__always)
     private static func toneCurve(l: Float, log: Float, large: Float, settings: HDRSettings) -> Float {
@@ -155,7 +183,81 @@ public enum HDRToneMapper {
             }
             let fused = sum / weights
             return l * (1 - settings.compression) + fused * settings.compression
+        case .fusion:
+            return fusion(l: l, large: large, spacing: settings.fusionSpacing, amount: settings.compression,
+                          darker: settings.fusionUsesDarker, brighter: settings.fusionUsesBrighter)
         }
+    }
+
+    /// Fusion's three exposures at −spacing, 0 and +spacing EV, each rolled off softly below
+    /// white (`plate`) so a bright sky keeps its detail in the darker exposure, blended by how
+    /// well exposed each one is in the pixel's region (the edge-aware base, so a whole sky or a
+    /// whole shadow picks the same exposures and texture isn't flattened). Range blends from the
+    /// single exposure (0) to the full blend (1), less in regions darker than about 6%. Unlike
+    /// Natural, the blend itself never passes white; only Detail and Microcontrast can push
+    /// texture a little past it.
+    @inline(__always)
+    static func fusion(l: Float, large: Float, spacing: Float, amount: Float,
+                       darker: Bool = true, brighter: Bool = true) -> Float {
+        let region = exp2f(large)
+        var sum: Float = 0, weights: Float = 0
+        for step in -1...1 {
+            // An exposure left out in the Exposures strip takes no part in the blend.
+            if (step < 0 && !darker) || (step > 0 && !brighter) { continue }
+            let gain = exp2f(Float(step) * spacing)
+            let value = plate(l * gain)
+            // Well-exposedness of the region in this exposure, judged in gamma 2.2 as Mertens'
+            // exposure fusion does.
+            let t = (powf(plate(region * gain), 1 / 2.2) - 0.5) / 0.2
+            let weight = expf(-t * t / 2) + 0.0001
+            sum += value * weight; weights += weight
+        }
+        // Deep-black regions keep the single exposure, as Natural's black protection does, so
+        // the blend opens shadows without turning blacks gray (prototype, Nov 12, 2026).
+        let blend = amount * min(1, max(0, region / 0.06))
+        return plate(l) * (1 - blend) + sum / weights * blend
+    }
+
+    /// One of Fusion's exposures: linear light rolled off below white, 0.18 stays about 0.19.
+    @inline(__always)
+    public static func plate(_ value: Float) -> Float { 1 - expf(-max(0, value) * 1.2) }
+
+    /// Fusion's three exposures of `image` (−spacing, 0, +spacing EV around `exposure`), each
+    /// channel rolled off as the blend sees it, shrunk to at most `longEdge` pixels for the
+    /// Source panel's Exposures strip.
+    public static func exposurePlates(_ image: HDRImage, exposure: Float, spacing: Float,
+                                      longEdge: Int) throws -> [HDRImage] {
+        let small = try shrink(image, longEdge: longEdge)
+        return try (-1...1).map { index -> HDRImage in
+            let gain = exp2f(exposure + Float(index) * spacing)
+            return try HDRImage(width: small.width, height: small.height, rgb: small.rgb.map { plate($0 * gain) })
+        }
+    }
+
+    /// `image` box-averaged down to at most `longEdge` pixels on its long side (the Exposures
+    /// strip and the preset thumbnails). Spatial scales in the tone mapper are relative to the
+    /// image size, so a small render looks like the large one, only less detailed.
+    public static func shrink(_ image: HDRImage, longEdge: Int) throws -> HDRImage {
+        let step = max(1, Int((Float(max(image.width, image.height)) / Float(max(1, longEdge))).rounded(.up)))
+        guard step > 1 else { return image }
+        let width = max(1, image.width / step), height = max(1, image.height / step)
+        var small = [Float](repeating: 0, count: width * height * 3)
+        let area = Float(step * step)
+        for y in 0..<height {
+            for x in 0..<width {
+                var r: Float = 0, g: Float = 0, b: Float = 0
+                for sy in (y * step)..<(y * step + step) {
+                    for sx in (x * step)..<(x * step + step) {
+                        // A very thin photo has fewer rows (or columns) than one block.
+                        let i = (min(sy, image.height - 1) * image.width + min(sx, image.width - 1)) * 3
+                        r += image.rgb[i]; g += image.rgb[i + 1]; b += image.rgb[i + 2]
+                    }
+                }
+                let o = (y * width + x) * 3
+                small[o] = r / area; small[o + 1] = g / area; small[o + 2] = b / area
+            }
+        }
+        return try HDRImage(width: width, height: height, rgb: small)
     }
 
     /// Self-guided filter in log2 luminance. Epsilon is in squared stops; the base

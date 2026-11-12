@@ -483,6 +483,82 @@ def thumbnails(red, eagle, paint):
         save(small, f"thumbs/{name}.jpg", quality=74)
 
 
+def hdr_render(linear, method="direct", range_=0.65, spacing=2.0, micro=0.6, detail=0.35, shadows=0.0,
+               highlights=0.0, temperature=0.0, vibrance=0.0, saturation=0.0):
+    """HDRToneMapper.render (Natural or Fusion, Highlights/Shadows, texture, Color) at Exposure 0."""
+    weights = np.array([0.2126, 0.7152, 0.0722])
+    l = np.maximum(0, linear @ weights)
+    lg = np.log2(np.maximum(l, 1e-6))
+    size = max(linear.shape[:2])
+    box = lambda x, r: cv2.boxFilter(x, -1, (2 * r + 1, 2 * r + 1), borderType=cv2.BORDER_REPLICATE)
+    small = box(lg, max(1, int(size * 0.002)))
+    r = max(1, int(size * 0.02))
+    m = box(lg, r)
+    a = np.maximum(0, box(lg * lg, r) - m * m)
+    a = a / (a + 0.12)
+    large = box(a, r) * lg + box((1 - a) * m, r)
+    plate = lambda x: 1 - np.exp(-np.maximum(x, 0) * 1.2)
+
+    def curve(l, lg, large):
+        if method == "fusion":
+            region = 2 ** large
+            total, wsum = 0, 0
+            for ev in (-spacing, 0, spacing):
+                t = (plate(region * 2 ** ev) ** (1 / 2.2) - 0.5) / 0.2
+                w = np.exp(-t * t / 2) + 0.0001
+                total, wsum = total + plate(l * 2 ** ev) * w, wsum + w
+            blend = range_ * np.clip(region / 0.06, 0, 1)
+            return plate(l) * (1 - blend) + total / wsum * blend
+        anchor = np.log2(0.18)
+        amount = range_ * np.where(large < anchor, np.clip(l / 0.06, 0, 1), 1)
+        base = anchor + (large - anchor) * (1 - amount * 0.85)
+        local = 2 ** (base + lg - large)
+        shaped = 0.18 * np.maximum(0, local / 0.18) ** 1.25
+        return shaped * (1 + range_ * 0.18) / (1 + range_ * shaped)
+
+    mapped = curve(l, lg, large)
+    if shadows or highlights:
+        region = np.clip(np.maximum(0, curve(2 ** large, large, large)) ** (1 / 2.2), 0, 1)
+        shift = (0.22 * highlights * region ** 3 * (1 - region)
+                 + 0.22 * (0.7 if shadows < 0 else 1) * shadows * region * (1 - region) ** 3) / 0.10546875
+        mapped = np.maximum(0, np.maximum(0, mapped) ** (1 / 2.2) + shift) ** 2.2
+    protect = (0.5 + 0.5 * np.minimum(1, l / 0.08)) * (0.5 + 0.5 / (1 + np.maximum(0, l - 0.7) * 4))
+    fine = np.clip(lg - small, -0.5, 0.5)
+    coarse = np.clip(small - large, -0.5, 0.5)
+    texture = 2 ** (protect * (detail * fine * 2 + micro * coarse * 3 / (1 + np.abs(lg - small) * 4)))
+    out = np.maximum(0, linear * np.where(l > 1e-6, mapped / np.maximum(l, 1e-12) * texture, 1)[..., None])
+    if temperature or vibrance or saturation:
+        before = out @ weights
+        if temperature:
+            out = out * np.array([1 + 0.3 * temperature, 1, 1 - 0.3 * temperature])
+            after = out @ weights
+            out = out * np.where(after > 1e-6, before / np.maximum(after, 1e-12), 1)[..., None]
+        high, low = out.max(-1), out.min(-1)
+        chroma = np.where(high > 1e-6, (high - low) / np.maximum(high, 1e-12), 0)
+        amount = (1 + vibrance * (1 - chroma)) * (1 + saturation)
+        out = np.maximum(0, before[..., None] + (out - before[..., None]) * amount[..., None])
+    return out
+
+
+# A few of HDRPreset.builtIn, one per group, for the Presets panel drawing.
+HDR_PRESET_PICTURES = [
+    ("natural", {}),
+    ("balanced", dict(range_=0.8, micro=0.45, detail=0.3, highlights=-0.3, shadows=0.2, vibrance=0.1)),
+    ("dramatic", dict(range_=1, micro=1, detail=0.7, highlights=-0.4, shadows=0.3, saturation=-0.25)),
+    ("crisp-lines", dict(range_=0.85, micro=0.7, detail=0.6, highlights=-0.4, shadows=0.2)),
+    ("landscape", dict(range_=0.8, micro=0.7, detail=0.45, highlights=-0.5, shadows=0.25, vibrance=0.35)),
+    ("painterly", dict(method="fusion", spacing=3, range_=1, micro=1, detail=1, vibrance=0.3, saturation=0.3)),
+]
+
+
+def make_hdr_preset_images(linear):
+    h, w = linear.shape[:2]
+    thumb = cv2.resize(linear.astype(np.float32), (200, round(200 * h / w)), interpolation=cv2.INTER_AREA)
+    encode = lambda x: np.where(x <= 0.0031308, x * 12.92, 1.055 * np.maximum(x, 0) ** (1 / 2.4) - 0.055)
+    for name, settings in HDR_PRESET_PICTURES:
+        save(encode(hdr_render(thumb, **settings)), f"hdr-preset-{name}.jpg", quality=80)
+
+
 def make_hdr_images(base):
     # HDR: illustrative linear luminance shoulder plus bounded texture, matching the
     # single-image engine's controls; not a claim of extra captured scene detail.
@@ -509,8 +585,30 @@ def make_hdr_images(base):
     texture_gain = 2 ** (protection * (0.35 * fine * 2 + 0.6 * coarse * 3 * boundary))
     hdr_gain = np.where(hdr_luma > 1e-6, mapped / np.maximum(hdr_luma, 1e-6), 1) * texture_gain
     hdr_linear = linear_hdr * hdr_gain[..., None]
-    hdr_encoded = np.where(hdr_linear <= 0.0031308, hdr_linear * 12.92, 1.055 * np.maximum(hdr_linear, 0) ** (1 / 2.4) - 0.055)
+    encode = lambda x: np.where(x <= 0.0031308, x * 12.92, 1.055 * np.maximum(x, 0) ** (1 / 2.4) - 0.055)
+    hdr_encoded = encode(hdr_linear)
     pair("hdr", base.copy(), hdr_encoded)
+
+    # Fusion (HDRToneMapper.fusion): three soft-shouldered exposures at -2, 0 and +2 EV, blended
+    # by how well exposed the region (the guided base) is in each, Range 0.65, less in deep blacks.
+    plate = lambda x: 1 - np.exp(-np.maximum(x, 0) * 1.2)
+    region = 2 ** guided
+    total, weights = 0, 0
+    for ev in (-2, 0, 2):
+        t = (plate(region * 2 ** ev) ** (1 / 2.2) - 0.5) / 0.2
+        weight = np.exp(-t * t / 2) + 0.0001
+        total = total + plate(hdr_luma * 2 ** ev) * weight
+        weights = weights + weight
+    blend = 0.65 * np.clip(region / 0.06, 0, 1)
+    fused = plate(hdr_luma) * (1 - blend) + total / weights * blend
+    fusion_gain = np.where(hdr_luma > 1e-6, fused / np.maximum(hdr_luma, 1e-6), 1) * texture_gain
+    pair("hdr-fusion", hdr_encoded, encode(linear_hdr * fusion_gain[..., None]))
+    # The Exposures strip: the photo at -2, 0 and +2 EV as Fusion sees them.
+    h, w = base.shape[:2]
+    thumb = cv2.resize(linear_hdr.astype(np.float32), (240, round(240 * h / w)), interpolation=cv2.INTER_AREA)
+    for i, ev in enumerate((-2, 0, 2)):
+        save(encode(plate(thumb * 2 ** ev)), f"hdr-plate-{i}.jpg", quality=80)
+    make_hdr_preset_images(linear_hdr)
 
 
 
