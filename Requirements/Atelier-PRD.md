@@ -450,6 +450,8 @@ Rosh asked for keyboard control in Develop; each point was checked against macOS
 
 The bars under the photo show **icons with tooltips at every width**: Before and After (Off, Side by Side, Slider) and Fit / Fill (100% and 200% stay as text), each tooltip naming the button and its key. One shared `IconSegmentedControl` (per-segment tooltips) draws them in Develop, Loupe and the HDR editor.
 
+Menus (Rosh, Nov 12, 2026): Atelier is one library window, so File has no New Window, and window tabs are off (no View > Show Tab Bar / Show All Tabs, no tab items in the Window menu), in Atelier and the HDR editor. The menu items macOS adds for typing (Edit > Writing Tools, AutoFill, Start Dictation, Emoji & Symbols) stay: they work in the Title, Caption, Keywords and AI prompt fields. View > Enter Full Screen and the Window menu's tiling items stay.
+
 Help > Keyboard Shortcuts (⌘/) lists all single-key commands with their current keys plus the menu shortcuts, with a link to change keys. Help > Atelier Help (⌘?) opens the help pages (see Atelier Help).
 
 ### Export dialog
