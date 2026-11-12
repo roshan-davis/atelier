@@ -288,6 +288,9 @@ final class HDRController: ObservableObject {
     private func updateHistory() { canUndo = !undoStack.isEmpty; canRedo = !redoStack.isEmpty }
     private func changed() { dirty = settings != savedSettings; updateHistory(); render() }
 
+    /// Done: back to the view HDR was opened from (Esc does the same).
+    func done() { model?.closeHDR() }
+
     /// Puts the sliders back to the last Save (or the defaults, before one).
     func discardChanges() {
         guard dirty else { return }

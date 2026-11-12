@@ -16,6 +16,12 @@ extension LibraryModel {
         if mode != .hdr { mode = .hdr }
     }
 
+    /// Done (and Esc): back to the view HDR was opened from, asking first about unsaved changes.
+    func closeHDR() {
+        guard mode == .hdr else { return }
+        mode = hdrReturnMode == .hdr ? .grid : hdrReturnMode
+    }
+
     /// Asks before leaving unsaved HDR changes for another mode.
     func leaveHDR(to newValue: ViewMode) {
         hdr.confirmLeaving(proceed: { [weak self] in

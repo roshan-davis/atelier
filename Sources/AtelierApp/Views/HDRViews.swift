@@ -167,6 +167,10 @@ struct HDRPanel: View {
                     .disabled(!hdr.hasPhoto || hdr.busy)
                     .help("Put every HDR slider back to its default (one undo step)")
                 Spacer()
+                // A visible way out besides Esc (Rosh, Nov 12, 2026), like Lightroom's Done in its tools.
+                Button("Done", action: hdr.done)
+                    .disabled(hdr.busy)
+                    .help("Close HDR and go back to the view you came from (Esc). Unsaved changes are asked about first.")
                 Button(hdr.revision > 0 ? "Save" : "Save HDR") { hdr.save() }
                     .buttonStyle(.borderedProminent)
                     .disabled(!hdr.hasPhoto || hdr.busy || (!hdr.dirty && hdr.revision > 0))
