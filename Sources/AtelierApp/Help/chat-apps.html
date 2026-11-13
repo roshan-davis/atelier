@@ -13,9 +13,9 @@
 
 <div class="eyebrow">Set up</div>
 <h1>Connect a chat app</h1>
-<p class="lede">Ask a chat app to work in Atelier for you: “how many photos did I pick from the last import?”, “add the five-star ones to Website”, “warm this one up a bit”. Atelier speaks MCP, the standard way chat apps reach other apps, so any chat app that supports MCP servers can connect, with a free, local or hosted model.</p>
+<p class="lede">Ask a chat app about your library: “how many photos did I pick from the last import?”, “which photos from Iceland have five stars?”, “what Develop settings does this one use?”. Atelier speaks MCP, the standard way chat apps reach other apps, so any chat app that supports MCP servers can connect, with a free, local or hosted model.</p>
 
-<div class="note"><p><span class="label">Coming soon.</span> This works once Atelier's chat server is merged (backlog item AT-050b, in review). Until then there is nothing to connect to, and Settings has no Agents pane yet. The menus, keys and photo menu are already built from the same commands chat apps will use, so every menu command will be available to them without extra work. The steps below are checked again against each app when the server ships.</p></div>
+<div class="note"><p><span class="label">Read only, for now.</span> In this version chat apps can only read: search photos, look at their details, Develop settings and cull groups, and list the menu commands. Nothing they do changes a photo. Organizing, editing and exporting from a chat come in later versions; every menu command is already built so it can reach chat apps without extra work.</p></div>
 
 <div class="chips"><a href="#how">How it works</a><a href="#opencode">OpenCode</a><a href="#cherry">Cherry Studio</a><a href="#ollama">Ollama (ollmcp)</a><a href="#lmstudio">LM Studio</a><a href="#openwebui">Open WebUI</a><a href="#claude-desktop">Claude Desktop</a><a href="#claude-code">Claude Code</a><a href="#codex">Codex</a><a href="#models">Which model</a><a href="#privacy">Privacy</a><a href="#trouble">If it doesn't work</a></div>
 
@@ -24,24 +24,24 @@
 <pre><code>/Applications/Atelier.app/Contents/MacOS/atelier-mcp</code></pre>
 <ul>
   <li><b>Atelier must be open.</b> The helper passes messages to the Atelier window; it never opens the catalog itself.</li>
-  <li><b>Atelier asks first.</b> The first time an app connects, Atelier asks in its own window whether to allow it, and what it may do: <b>Look</b> (read only), <b>Organize</b> (ratings, flags, labels, keywords, collections), <b>Edit</b> (Develop settings, masks, presets) or <b>Everything</b> (also export, Edit In and AI, each of which still asks you in Atelier before it runs). Change or revoke this later in <span class="path">Atelier › Settings… › Agents</span>.</li>
-  <li><b>Undo works.</b> Each change from a chat is one step in the photo's history, with a plain name, and you can undo it with <kbd>⌘Z</kbd> like your own edits.</li>
+  <li><b>Atelier asks first.</b> The first time an app connects, Atelier asks in its own window whether to allow it, and what it may do: <b>Don't Allow</b>, <b>Look</b>, <b>Organize</b>, <b>Edit</b> or <b>Everything</b>. Today every level can only read (see the note above); the higher ones are for organizing, editing and, with a second question in Atelier, exporting, as those arrive. Change it later in <span class="path">Atelier › Settings… › Agents</span>.</li>
+  <li><b>Undo will work.</b> When chat apps can make changes, each one will be one step in the photo's history, with a plain name, that <kbd>⌘Z</kbd> undoes like your own edits.</li>
   <li><b>Nothing is deleted.</b> Chat apps can't remove photos or move files to the Trash; they tell you to use <span class="path">Photo › Remove Photo…</span> yourself.</li>
 </ul>
 <h3 id="settings-agents">Settings › Agents</h3>
-<p><span class="path">Atelier › Settings… › Agents</span> is where you manage this:</p>
+<p><span class="path">Atelier › Settings… › Agents</span> is where you manage this (details in <a href="settings.html#agents">Settings › Agents</a>):</p>
 <dl class="defs">
-  <dt>Access</dt><dd>Switches that turn chat apps on or off, and what they may see.</dd>
-  <dt>Apps</dt><dd>Every app that has asked to connect, each with a menu to change or revoke what it may do.</dd>
-  <dt>Connect an App</dt><dd>The helper's path with <b>Copy</b>, and <b>Copy Setup</b> for each chat app, ready to paste into its settings.</dd>
-  <dt>Activity</dt><dd>What chat apps have done in Atelier.</dd>
+  <dt>Access</dt><dd><b>Allow chat apps to use Atelier</b> (on; turning it off disconnects every app), <b>Let agents see photo previews</b> (off) and <b>Include location in photo details</b> (off).</dd>
+  <dt>Apps</dt><dd>Every app that has connected, with a green dot while it's connected and a menu of what it may do. Changing it reconnects the app; − forgets the app, so Atelier asks again. Apps started from Terminal are listed as Terminal.</dd>
+  <dt>Connect an App</dt><dd>The helper's path with <b>Copy</b>. Choose an app in <b>Setup for</b> and click <b>Copy Setup</b>; the line under it says where to paste.</dd>
+  <dt>Activity</dt><dd>What each app did, newest first. Select lines and click the copy button, or right-click for Copy and Copy All, to paste into a bug report.</dd>
 </dl>
-<div class="tip"><p>Running Atelier from Xcode instead of <code>/Applications</code>? Build the <b>atelier-mcp</b> scheme once (choose it in the toolbar's scheme menu, then <span class="path">Product › Build</span>, <kbd>⌘B</kbd>), then use the path that <span class="path">Connect an App</span> shows.</p></div>
+<div class="tip"><p>Running Atelier from Xcode instead of <code>/Applications</code>? Build the helper once: <span class="path">Product › Scheme › atelier-mcp</span>, then <span class="path">Product › Build</span> (<kbd>⌘B</kbd>). Then use the path and setup that <span class="path">Connect an App</span> shows.</p></div>
 
 <h2 id="opencode">OpenCode (free models)</h2>
 <p>OpenCode is a free chat app for Terminal with free hosted models, and it can use your Ollama models too.</p>
 <ol class="steps">
-  <li>Add Atelier to <code>~/.config/opencode/opencode.json</code>. The easy way: <span class="path">Settings › Agents › Connect an App</span>, click <b>Copy Setup</b> next to OpenCode, paste it into Terminal and press Return. It adds Atelier and keeps what's already in the file. Or add it yourself, directly under <code>"mcp"</code>:
+  <li>Add Atelier to <code>~/.config/opencode/opencode.json</code>. The easy way: <span class="path">Settings › Agents › Connect an App</span>, choose OpenCode in <b>Setup for</b>, click <b>Copy Setup</b>, paste it into Terminal and press Return. It runs a short script that adds Atelier and keeps what's already in the file. Or add it yourself, directly under <code>"mcp"</code>:
 <pre><code>{
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -126,13 +126,13 @@ args = []</code></pre>
 <h2 id="privacy">Privacy</h2>
 <ul>
   <li>The helper talks to Atelier on your Mac only; Atelier makes no network calls for this.</li>
-  <li>With Ollama, nothing leaves your Mac. With a hosted model (Claude, Codex, OpenCode's free models), what Atelier answers goes to that provider as part of the chat. So photo previews and GPS locations are off by default, with switches in <span class="path">Settings › Agents</span>.</li>
+  <li>With Ollama, nothing leaves your Mac. With a hosted model (Claude, Codex, OpenCode's free models), what Atelier answers goes to that provider as part of the chat. So photo previews and locations are off by default, with switches in <span class="path">Settings › Agents</span>. Private photos are never shared.</li>
 </ul>
 
 <h2 id="trouble">If it doesn't work</h2>
 <dl class="defs">
-  <dt>“Atelier isn't running”</dt><dd>Open Atelier and ask again.</dd>
-  <dt>The app isn't allowed</dt><dd><span class="path">Settings › Agents</span> lists every app that asked. Allow it, or give it a higher level.</dd>
+  <dt>“Atelier isn't running”</dt><dd>Open Atelier, then ask again.</dd>
+  <dt>The app isn't allowed</dt><dd><span class="path">Settings › Agents › Apps</span> lists every app that connected. Change <b>Don't Allow</b> to Look or higher. Check <b>Activity</b> for the error, and copy it if you need help.</dd>
   <dt>The model never uses Atelier</dt><dd>Small free or local models often answer without calling tools. Ask directly (“use the Atelier tools to list my collections”), or pick a model that supports tool use.</dd>
   <dt>Wrong path</dt><dd>If Atelier isn't in <code>/Applications</code>, copy the helper's path from <span class="path">Settings › Agents › Connect an App</span>.</dd>
 </dl>

@@ -16,7 +16,7 @@
 <p class="lede">Open <span class="path">Atelier › Settings…</span> (<kbd>⌘,</kbd>). Changes take effect at once.</p>
 <p>Pick a pane in the sidebar on the left; its settings show on the right. The sidebar groups the panes: <b>Atelier</b> (General, Appearance, Keyboard), <b>Photos</b> (Import, Develop, Export, Metadata) and <b>Editors &amp; AI</b> (Edit In, AI). The sidebar has the keyboard when Settings opens: <kbd>↑</kbd> <kbd>↓</kbd> move between panes. After you click into a pane, click the sidebar again to get the arrows back (the chosen row turns from gray to blue). Settings reopens on the pane you used last. Click a section's header band to close or open it, as with the panels in the main window; Atelier remembers which are closed.</p>
 
-<div class="chips"><a href="#general">General</a><a href="#appearance">Appearance</a><a href="#keyboard">Keyboard</a><a href="#import">Import</a><a href="#develop">Develop</a><a href="#export">Export</a><a href="#metadata">Metadata</a><a href="#edit-in">Edit In</a><a href="#ai">AI</a></div>
+<div class="chips"><a href="#general">General</a><a href="#appearance">Appearance</a><a href="#keyboard">Keyboard</a><a href="#import">Import</a><a href="#develop">Develop</a><a href="#export">Export</a><a href="#metadata">Metadata</a><a href="#edit-in">Edit In</a><a href="#ai">AI</a><a href="#agents">Agents</a></div>
 
 <h2 id="general">General</h2>
 <dl class="defs">
@@ -63,6 +63,15 @@
 
 <h2 id="ai">AI</h2>
 <p>The ComfyUI server and Connect, the edit and upscale models, generation size, and the workflows folder. See <a href="ai.html#setup">AI tools</a>. <b>Masking Models</b> shows the people model built into Atelier and lets you download or remove the two <a href="masking.html#fine-edges">Fine Edges</a> models (Fast, about 115 MB; Hair Detail, about 470 MB) and choose which one runs.</p>
+
+<h2 id="agents">Agents</h2>
+<p>Chat apps (OpenCode, Cherry Studio, Ollama with ollmcp, LM Studio, Claude, Codex) can read your library through Atelier's agent connection (MCP). In this version they can only read: search photos, look at details, Develop settings and cull groups, and list the menu commands. Nothing they do changes a photo.</p>
+<dl class="defs">
+  <dt>Access</dt><dd><b>Allow chat apps to use Atelier</b> (on by default; turning it off disconnects every app). <b>Let agents see photo previews</b> (off): when on, an app can look at a photo as a JPEG up to 1024 px. <b>Include location in photo details</b> (off). Private photos are never shared, whatever <span class="path">View › Show Private Photos</span> says.</dd>
+  <dt>Apps</dt><dd>Every app that has connected, with a green dot while it is connected and the menu of what it may do: <b>Don't Allow</b>, <b>Look</b>, <b>Organize</b>, <b>Edit</b> or <b>Everything</b>. The first time an app connects, Atelier asks in its own window and you pick one there. Changing it disconnects the app, which reconnects with the new access. The − forgets the app, so Atelier asks again next time. Apps started from Terminal are listed as Terminal.</dd>
+  <dt>Connect an App</dt><dd>The helper's path with <b>Copy</b>, and <b>Copy Setup</b> for the app chosen in <b>Setup for</b>, ready to paste where the line under it says. When Atelier runs from Xcode, the helper appears after you build the atelier-mcp scheme once (<span class="path">Product › Scheme › atelier-mcp</span>, then <span class="path">Product › Build</span>).</dd>
+  <dt>Activity</dt><dd>What each app did, newest first: connected, allowed, each tool it called and any error. Click a line to select it (<kbd>⌘</kbd>-click adds lines, <kbd>⇧</kbd>-click selects a range); the copy button copies the selected lines, or the whole log when none is selected, oldest first with date and time. Right-click a line for Copy and Copy All. The trash button clears the log.</dd>
+</dl>
 
 <div class="see-also">See also: <a href="shortcuts.html">Keyboard shortcuts</a> · <a href="chat-apps.html">Connect a chat app</a></div>
 

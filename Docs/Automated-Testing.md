@@ -36,7 +36,7 @@ uses existing fixtures from that folder and never downloads them.
 | --- | --- |
 | `checks` | PR whitespace, Python script tests, and Help links and index validation |
 | `build` | Swift package build |
-| `swift` | All Swift tests: AtelierCore, AtelierApp, AtelierHDRCore, AgentActions and AtelierActions. Swift also builds the test targets. AtelierActionsTests fails when `Docs/agent-actions-catalog.json` is stale or a menu item isn't built from the action registry |
+| `swift` | All Swift tests: AtelierCore, AtelierApp, AtelierHDRCore, AgentActions, AtelierActions and AgentMCP. Swift also builds the test targets. AtelierActionsTests fails when `Docs/agent-actions-catalog.json` is stale or a menu item isn't built from the action registry |
 | `smoke` | XCUITest opens a fixture photo in Develop, enters an Exposure value, and verifies that ⌘Z restores it |
 | `visual` | Captures layouts at the base revision and current checkout on the same Mac and compares the PNGs |
 | `all` | Every group above |
