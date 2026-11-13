@@ -827,7 +827,7 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 ### AT-050i — Photo carousel for chat apps (MCP App)
 
-**Status:** In review: approved by Rosh on Nov 13, 2026 ("do the photo carosel and edit commands"), after AT-050d's first part. Source, Linux tests and a browser check with a pretend host; needs a Mac build and a try in Docent once Docent shows MCP Apps views. **Owner:** Claude. **Chat:** [Design an MCP server for Atelier actions](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKLw4mNvV9wQDgMyFLnzx5sL). **Branch:** `claude/project-thread-eecdru`. **PR:** pending. **Baseline:** `11e5783`. **Depends on:** AT-050b (Look tools); Docent's MCP Apps host for the full view.
+**Status:** In review: approved by Rosh on Nov 13, 2026 ("do the photo carosel and edit commands"), after AT-050d's first part. Source, Linux tests and a browser check with a pretend host; needs a Mac build and a try in Docent once Docent shows MCP Apps views. **Owner:** Claude. **Chat:** [Design an MCP server for Atelier actions](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKLw4mNvV9wQDgMyFLnzx5sL). **Branch:** `claude/project-thread-eecdru`. **PR:** [#124](https://github.com/roshan-davis/atelier/pull/124). **Baseline:** `11e5783`. **Depends on:** AT-050b (Look tools); Docent's MCP Apps host for the full view.
 
 **Evidence:** The Docent proposal (Nov 12–13) planned `ui://atelier/photos` after the read-only server so search results show as photos in Docent; it was missing from AT-050a–h. Rosh (Nov 13): "something missing in the priority order in mcp", then confirmed the carousel.
 
