@@ -772,10 +772,10 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 - The PRD: move the MCP server out of Later, and add the Privacy and Sandboxing lines.
 
 **Acceptance:**
-- Claude Desktop, Codex and one Ollama client (ollmcp or Open WebUI) each connect after Rosh's Allow, list tools and answer a catalog question. The PR records the protocol version each one used.
+- Claude Desktop, Codex, OpenCode (with a free model; Rosh wants to try this first), Cherry Studio and one Ollama client (ollmcp) each connect after Rosh's Allow, list tools and answer a catalog question. The PR records the protocol version each one used.
 - Nothing writes to the catalog.
 - Changing helper arguments can't raise a grant. Turning access off drops connections.
-- Help "Agents" page.
+- Help "Agents" page with the setup steps from the design doc's "Connect a chat app" (OpenCode, Cherry Studio, ollmcp, LM Studio, Open WebUI, Claude Desktop, Claude Code, Codex), re-checked against each app.
 
 ### AT-050c — Organize: library and cull writes (A2)
 
