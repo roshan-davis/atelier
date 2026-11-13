@@ -124,15 +124,21 @@ public final class MCPSocketServer: @unchecked Sendable {
         guard registered else { close(fd); return }
         onConnect?(client)
 
-        let session = MCPSession(client: client, host: host)
+        // Replies and notifications (docking) share the socket, one whole line at a time.
+        let writeLock = NSLock()
+        let send: @Sendable (String) -> Bool = { line in
+            writeLock.withLock { UnixSocket.write(fd, Data((line + "\n").utf8)) }
+        }
+        let session = MCPSession(client: client, host: host, output: send)
         let (lines, continuation) = AsyncStream<Data>.makeStream()
         let done = DispatchSemaphore(value: 0)
         Task.detached {
             for await line in lines {
                 if let reply = await session.handle(line) {
-                    if !UnixSocket.write(fd, Data((reply + "\n").utf8)) { break }
+                    if !send(reply) { break }
                 }
             }
+            await session.close()
             done.signal()
         }
         for line in pending { continuation.yield(line) }

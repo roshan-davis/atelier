@@ -339,6 +339,38 @@ Open WebUI connects only to MCP servers over HTTP (Streamable HTTP, v0.6.31 and 
 - **The app isn't allowed.** Settings > Agents lists every app that connected. Allow it, or raise its profile.
 - **The model never calls a tool.** Small free or local models often answer without calling tools. Ask directly ("use the Atelier tools to list my collections"), or pick a model marked for tool use.
 
+## Docking beside a chat app
+
+Docent (Rosh's own MCP chat app) docks the app it's working with on its right (AT-050h; Docent's side is DO-007 in the Docent repo). The protocol lives in the shared module (`Sources/AgentMCP/Docking.swift`), so Easel adopts it unchanged with AT-050g. This is the reference for both sides, **version 1**.
+
+- **Advertised.** A server with docking returns `capabilities.experimental.docking` in `initialize`: `{"version": 1, "requests": [...], "notifications": [...]}`. Docent docks only servers that advertise it.
+- **Client-only, never a tool.** The methods below are JSON-RPC requests outside `tools/list`. They are not registry actions and never appear in `command_list` or the catalog, so no model can call them (`tools/call` with their names is "Unknown tool"). Only Docent's window code sends them.
+- **Grant.** Each request passes the same grant check as every other request. Any profile may dock, Look included. Revoking or changing the grant closes the connection, and a closed connection lets go of its window where it is.
+- **Frames** are in points, in AppKit's global screen coordinates (origin at the bottom-left of the main screen, y up), exactly as `NSWindow.frame` reads: `{"x", "y", "width", "height"}`, with width and height above 0.
+
+| Request | Params | Result |
+| --- | --- | --- |
+| `docking/dock` | `frame`; `window` (`"front"`, the default, or a document id in Easel); `screen` (the display's `NSScreenNumber`, informational) | `{"window", "frame", "minWidth"}`: the frame the window actually took (it may be shortened to fit the screen) |
+| `docking/update` | the same, while Docent moves or resizes. Docent coalesces: one in flight plus one follow-up | the same |
+| `docking/undock` | `window`; `restore` (false by default: the window stays where it is; true puts back the size and place it had before docking) | `{}` |
+
+| Error | Code | When |
+| --- | --- | --- |
+| Too narrow | -32010 | the frame is narrower than the window's layout works at; `error.data.minWidth` says how wide |
+| Unavailable | -32011 | no such window, or it can't dock now (full screen); the message says why |
+| Not docked | -32012 | `docking/update` from a client that doesn't hold the window (never docked it, or lost it) |
+| Bad params | -32602 | no frame, or a zero or negative size |
+
+| Notification (app to Docent) | Params | When |
+| --- | --- | --- |
+| `docking/moved` | `window`, `reason`: `user` or `anotherClient` | the person dragged or resized the window away, or another chat app docked it. Docent undocks |
+| `docking/closed` | `window`, `reason`: `windowClosed` or `quit` | the window closed, or the app is quitting |
+| `docking/minWidth` | `window`, `minWidth` | the layout's narrowest width changed |
+
+- **One holder per window.** The newest `docking/dock` wins; the previous holder gets `docking/moved` (`anotherClient`) first, and its updates are refused from then on.
+- **Atelier's side** (`Sources/AtelierApp/Agents/AgentDocking.swift`, layout rule `DockLayout` in AtelierCore): `front` is the main window. Atelier docks at 520 points or more (the photo keeps 480); narrower, the left panel collapses first, then the right one, and they come back as soon as they fit, including after undocking where the window stays narrow. Only a drag or resize by hand counts as moved; Atelier's own layout passes don't. Settings > Agents shows the docked app with Undock (sent as `moved`, `user`). Atelier never sends `docking/minWidth` today: its minimum is the same in every mode.
+- **Left out:** docking apps that don't speak the protocol (Docent's own later item, through Accessibility), and full screen.
+
 ## Privacy and reach
 
 - **Local by default.** The stdio helper and Unix socket never touch the network. Atelier makes no outgoing calls for this.

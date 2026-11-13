@@ -43,6 +43,8 @@ final class AgentServer: ObservableObject {
     var changes = PhotoChangeLog()
 
     private(set) weak var model: LibraryModel?
+    /// Docking beside a chat app (AT-050h, Agents/AgentDocking.swift).
+    private(set) lazy var dock = AgentDock(server: self)
     private var server: MCPSocketServer?
     /// One approval question per client at a time, however many requests are waiting on it.
     private var questions: [String: Task<AgentProfile?, Never>] = [:]
@@ -68,7 +70,8 @@ final class AgentServer: ObservableObject {
 
     func start() {
         guard server == nil, let model else { return }
-        let host = AtelierMCPHost(server: self, tools: AgentLookTools(catalog: model.catalog, previews: model.previews))
+        let host = AtelierMCPHost(server: self, tools: AgentLookTools(catalog: model.catalog, previews: model.previews),
+                                  docking: dock.coordinator)
         let socket = MCPSocketServer(path: socketPath, host: host)
         socket.onConnect = { [weak self] client in
             Task { @MainActor in self?.clientConnected(client) }
@@ -90,8 +93,10 @@ final class AgentServer: ObservableObject {
         }
     }
 
-    /// Closes the socket and every connection (turning access off, quitting).
-    func stop() {
+    /// Closes the socket and every connection (turning access off, quitting). A chat app that
+    /// docked Atelier's window is told first when Atelier quits.
+    func stop(quitting: Bool = false) {
+        if quitting { dock.quitting() }
         server?.stop()
         server = nil
         isRunning = false
@@ -284,13 +289,16 @@ final class AgentServer: ObservableObject {
 
 /// The bridge from the socket's sessions (background threads) to `AgentServer` (main thread).
 /// Catalog reads run off the main thread; only the window's state is read on it.
-final class AtelierMCPHost: MCPHost, @unchecked Sendable {
+final class AtelierMCPHost: MCPDockingHost, @unchecked Sendable {
     private weak var server: AgentServer?
     private let lookTools: AgentLookTools
+    /// The docking protocol: only a chat app's window code sends it, never a model.
+    let docking: DockingCoordinator?
 
-    init(server: AgentServer, tools: AgentLookTools) {
+    init(server: AgentServer, tools: AgentLookTools, docking: DockingCoordinator) {
         self.server = server
         self.lookTools = tools
+        self.docking = docking
     }
 
     var serverInfo: MCPServerInfo {
