@@ -41,22 +41,18 @@
 <h2 id="opencode">OpenCode (free models)</h2>
 <p>OpenCode is a free chat app for Terminal with free hosted models, and it can use your Ollama models too.</p>
 <ol class="steps">
-  <li>Add Atelier from Terminal. <code>--global</code> makes it available in every folder you start OpenCode in:
-<pre><code>opencode mcp add atelier --global -- /Applications/Atelier.app/Contents/MacOS/atelier-mcp
-opencode mcp list</code></pre>
-  Or add it to <code>opencode.jsonc</code> yourself. Servers go under <code>mcp.servers</code>:
+  <li>Add Atelier to <code>~/.config/opencode/opencode.json</code>. The easy way: <span class="path">Settings › Agents › Connect an App</span>, click <b>Copy Setup</b> next to OpenCode, paste it into Terminal and press Return. It adds Atelier and keeps what's already in the file. Or add it yourself, directly under <code>"mcp"</code>:
 <pre><code>{
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "servers": {
-      "atelier": {
-        "type": "local",
-        "command": ["/Applications/Atelier.app/Contents/MacOS/atelier-mcp"]
-      }
+    "atelier": {
+      "type": "local",
+      "command": ["/Applications/Atelier.app/Contents/MacOS/atelier-mcp"],
+      "enabled": true
     }
   }
 }</code></pre>
-  To turn it off without deleting it, add <code>"disabled": true</code>.</li>
+  Check it with <code>opencode mcp list</code>. <code>"enabled": false</code> turns it off without deleting it. (<code>opencode mcp add</code> didn't save anything when we tried it, so use the file.)</li>
   <li>Pick a model: type <code>/connect</code> to sign in to the OpenCode provider, then <code>/models</code> and choose one with no price (free models are free for a limited time and change often), or one of your Ollama models.</li>
   <li>Ask: “Use Atelier to list my collections.”</li>
 </ol>
