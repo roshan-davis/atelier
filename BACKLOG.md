@@ -707,7 +707,7 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 ## AT-050 — Agent Actions: MCP server for chat clients (Atelier and Easel)
 
-**Status:** Direction approved by Rosh on Nov 13, 2026 ("add one section in the backlog for mcp … so the next PRs can pick one by one"). The design is done. Implementation is split into AT-050a to AT-050g below, one PR each, taken in order. AT-050a is ready to start. **Design owner:** Claude. **Design chat:** [Design an MCP server for Atelier actions](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKLw4mNvV9wQDgMyFLnzx5sL). **Design PRs:** [#110](https://github.com/roshan-davis/atelier/pull/110) (merged `fa4239b`), [#115](https://github.com/roshan-davis/atelier/pull/115).
+**Status:** Direction approved by Rosh on Nov 13, 2026 ("add one section in the backlog for mcp … so the next PRs can pick one by one"). The design is done. Implementation is split into AT-050a to AT-050g below (plus AT-050h, docking beside Docent, added Nov 13), one PR each, taken in order. AT-050a is ready to start. **Design owner:** Claude. **Design chat:** [Design an MCP server for Atelier actions](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKLw4mNvV9wQDgMyFLnzx5sL). **Design PRs:** [#110](https://github.com/roshan-davis/atelier/pull/110) (merged `fa4239b`), [#115](https://github.com/roshan-davis/atelier/pull/115).
 
 **Evidence:**
 - Rosh (Nov 11, 2026): "Can my app setup an MCP and many of the menu function there as actions that can be conversationally execute from the chat that connect to this MCP?"
@@ -850,6 +850,23 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 - Easel's AGENTS.md gets the same "Agent Actions" rules (Easel's repo, not this one).
 
 **Acceptance:** one client config pattern works for both apps; Atelier unchanged after the extraction.
+
+### AT-050h — Docking protocol: Atelier docks beside Docent
+
+**Status:** Proposed / discuss (Rosh asked for the backlog item on Nov 13, 2026; scope and timing still to discuss). **Owner/chat/branch/PR:** unassigned. **Depends on:** AT-050b (the MCP connection it rides on). **Docent side:** [Docent PRD, Docking](https://github.com/roshan-davis/docent/blob/main/Requirements/Docent-PRD.md#docking) ([docent#2](https://github.com/roshan-davis/docent/pull/2)), Docent's DO-007.
+
+**Evidence:** Rosh (Nov 13, 2026, Docent project thread): Docent "can stay on the left side and the other apps which is selected from the mcp list in the chat aligns correctly on the right", through "some docking protocol with our apps"; "add it to atelier only, easel don't have any mcp work yet".
+
+**Scope:**
+- In the app-neutral `Sources/AgentMCP`: advertise `capabilities.experimental.docking` (with a version) in the `initialize` result, and handle the client-only requests `docking/dock` (a frame: screen, x, y, width, height in points; answers with the frame taken, or refuses below the minimum width and names it), `docking/update` (a new frame while Docent moves or resizes) and `docking/undock`. Send the notifications `docking/moved` (Rosh dragged the window away), `docking/closed` (the window closed or Atelier quit) and `docking/minWidth`.
+- These are JSON-RPC methods outside `tools/list`: not registry actions, never in the MCP catalog or `command_list`, so no model can call them. This keeps "No driving the window" for agents.
+- Only a granted client can dock (any profile, Look included); revoking the grant undocks.
+- Atelier's side: place the main window at the frame, beside Docent; while docked, keep the photo and collapse side panels first when the width is narrow; restore Atelier's own size, place and panels on undock.
+- Tests in `AgentMCPTests` with the Easel-shaped host: the capability, the requests, refusal below the minimum width, and no docking method showing in `tools/list`.
+
+**Left out:** Easel (it has no MCP work yet; it gets the protocol with AT-050g). Accessibility-based docking for other apps (Docent's own later item).
+
+**Acceptance:** with Docent's DO-007 on a Mac, switching Atelier on in a Docent chat docks Atelier's window on Docent's right; moving or resizing Docent keeps it aligned; dragging Atelier away undocks; undocking restores Atelier's layout.
 
 ## AT-051 — Menus: no New Window, no window tabs
 
