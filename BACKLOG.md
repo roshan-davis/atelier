@@ -812,7 +812,7 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 - Each call is one Develop history step per photo, named "<change> (<app>)"; `undo_change` and the notice's Undo restore the settings as an "Undo …" step only while nothing changed them since (`PhotoState` in the change log).
 - Agent Develop edits wait up to 10 s for a drag in progress (`DevelopController.isEditingByHand`).
 
-**Still to do in AT-050d:** `crop`, `add_mask`, `match_look`, Auto (needs the photo's pixels), `command_batch` with `atomic`, and the timed render check below.
+**Still to do in AT-050d:** `crop`, `add_mask`, `match_look`, Auto (needs the photo's pixels), and the timed render check below; Rosh asked on Nov 13, 2026 for these to run in parallel in the separate thread "Add typed Edit tools to Atelier MCP". `command_batch` moved to AT-050j.
 
 **Scope:**
 - Typed `adjust`, `auto`, `apply_preset`, `sync`, `reset`, `crop`, `add_mask` (Brush stays manual) and `match_look`.
@@ -824,6 +824,24 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 - Renders stay coalesced during agent edits (timed, numbers in the PR).
 - An atomic batch is one undo step and rolls back fully on failure.
 - A non-atomic batch reports each step.
+
+### AT-050j — Batches: command_batch, all or nothing with one Undo
+
+**Status:** In progress. Rosh asked for it on Nov 13, 2026 ("how about batching things and its commands? … If atelier don't have it in the backlog then add it and start working"); it was AT-050d's `command_batch` item, split out so the rest of AT-050d runs in parallel. **Owner:** Claude. **Chat:** [Design an MCP server for Atelier actions](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKLw4mNvV9wQDgMyFLnzx5sL). **Branch:** `claude/project-thread-eecdru`. **PR:** pending. **Baseline:** `0fd59e6`. **Depends on:** AT-050c, AT-050d's first part (merged).
+
+**Scope:**
+- Shared `command_batch` in `AgentMCP` (`CommandBatchTool`: steps as write tools or `command_run` shorthand, `atomic`, `label`, `keep_going`, at most 50 steps, no nesting), so Easel gets the same tool with AT-050g.
+- Atelier: which tools a batch takes per profile and which steps can be atomic (`AtelierActions/AtelierBatchTool.swift`); running it (`Agents/AgentBatch.swift`): without `atomic`, each step its own change; with it, one change in the change log (`PhotoState` now holds library fields, Develop settings or both), one notice and Undo, Develop steps held by `DevelopController.beginStaging` and saved as one history step per photo, library steps put back on failure, asking counted across the batch.
+
+**Acceptance:**
+- An atomic batch of `set_metadata` + `adjust` on 3 photos: one notice with Undo; History shows one step "<label> (<app>)" per photo; Undo (or `undo_change`) puts back both rating and sliders.
+- A failing step in an atomic batch (an unknown id in step 2) leaves ratings and sliders as they were, and the reply names step 2.
+- A non-atomic batch reports each step and stops at the first failure (or continues with `keep_going`).
+- A batch over the ask limit asks once.
+
+**Validation so far:** Linux (Swift 6.1, cloud): 88 tests pass, including `CommandBatchTests` (shared, Easel-shaped tools) and `AtelierBatchToolTests`. The app target was not built in the cloud.
+
+**Left out:** reads inside a batch; Develop menu commands and virtual copies in atomic batches (they can't be put back with the rest); export and other apps in batches (AT-050e).
 
 ### AT-050i — Photo carousel for chat apps (MCP App)
 

@@ -9,15 +9,21 @@ import Foundation
 /// (Organize tools) or its Develop settings (Edit tools).
 typealias PhotoChangeLog = AgentChangeLog<Int64, PhotoState>
 
-/// What a change changed on one photo, so undo can tell whether it's still the latest.
-enum PhotoState: Equatable, Sendable {
-    case library(LibraryState)
-    case develop(DevelopSettings)
+/// What a change changed on one photo, so undo can tell whether it's still the latest: its
+/// library fields, its Develop settings, or both (an atomic batch can change both).
+struct PhotoState: Equatable, Sendable {
+    var library: LibraryState?
+    var develop: DevelopSettings?
 
     enum Kind { case library, develop }
 
-    var library: LibraryState? { if case .library(let state) = self { return state } else { return nil } }
-    var develop: DevelopSettings? { if case .develop(let settings) = self { return settings } else { return nil } }
+    static func library(_ state: LibraryState) -> PhotoState { PhotoState(library: state) }
+    static func develop(_ settings: DevelopSettings) -> PhotoState { PhotoState(develop: settings) }
+
+    /// These fields, plus any of `other`'s this one doesn't have yet.
+    func filling(from other: PhotoState) -> PhotoState {
+        PhotoState(library: library ?? other.library, develop: develop ?? other.develop)
+    }
 }
 
 /// The line Atelier shows at the bottom of the photo after an agent changed something, with
@@ -44,6 +50,9 @@ extension AgentServer {
                    profile: AgentProfile) -> MCPToolResult? {
         if AtelierAgentTools.editTools.contains(where: { $0.name == tool }) {
             return callDevelop(tool, arguments, client: client, profile: profile)
+        }
+        if tool == AtelierAgentTools.commandBatch.name {
+            return callBatch(arguments, client: client, profile: profile)
         }
         guard AtelierAgentTools.organizeTools.contains(where: { $0.name == tool }) else { return nil }
         guard profile >= .organize else {
@@ -234,21 +243,20 @@ extension AgentServer {
     /// Undoes a change for an agent (`clientID`) or for the person (nil, the notice's Undo).
     private func undo(_ id: String, by clientID: String?, _ model: LibraryModel) -> Result<PhotoChangeLog.Change, AgentUndoRefusal> {
         guard let change = changes.change(id) else { return .failure(.unknown(id)) }
-        let kind: PhotoState.Kind = change.after.values.first?.develop != nil ? .develop : .library
-        let current = (try? states(kind, Array(change.after.keys), model)) ?? [:]
+        let current = (try? states(shapedLike: change.after, model)) ?? [:]
         switch changes.undoPlan(id, clientID: clientID, current: current) {
         case .failure(let refusal):
             return .failure(refusal)
         case .success(let states):
-            let restored: Bool
-            switch kind {
-            case .library:
-                let library = states.compactMapValues(\.library)
-                restored = model.performEdit(on: Array(states.keys)) { try $0.restoreLibraryStates(library) }
-            case .develop:
+            var restored = true
+            let library = states.compactMapValues(\.library)
+            if !library.isEmpty {
+                restored = model.performEdit(on: Array(library.keys)) { try $0.restoreLibraryStates(library) }
+            }
+            let develop = states.compactMapValues(\.develop)
+            if restored, !develop.isEmpty {
                 do {
-                    try model.develop.apply(each: states.compactMapValues(\.develop), step: "Undo \(change.title) (\(change.clientName))")
-                    restored = true
+                    try model.develop.apply(each: develop, step: "Undo \(change.title) (\(change.clientName))")
                 } catch {
                     model.status = error.localizedDescription
                     restored = false
@@ -368,11 +376,15 @@ extension AgentServer {
         // A RAW's hidden JPEG follows it in the library; Develop settings are each photo's own.
         let affected = kind == .library ? unique(model.pairIDs(named)) : named
         let limit = AgentSettings.confirmAbove
-        if limit > 0, affected.count > limit {
+        // In an atomic batch, asking counts the whole batch's photos, and asks once.
+        let batch = batchRun?.atomic == true ? batchRun : nil
+        let counted = batch.map { $0.photos.union(affected).count } ?? affected.count
+        if limit > 0, counted > limit, batch?.confirmed != true {
             let looked = try states(kind, affected, model)
-            guard AgentConfirm.ask(client: client.name, title: title, count: affected.count) else {
-                return .error("The person said no in Atelier: \(title) for \(Self.count(affected.count)) wasn't made.")
+            guard AgentConfirm.ask(client: client.name, title: batch?.label ?? title, count: counted) else {
+                return .error("The person said no in Atelier: \(batch?.label ?? title) for \(Self.count(counted)) wasn't made.")
             }
+            batch?.confirmed = true
             // Asking took time: the photos must be as they were when the person was asked.
             let now = try states(kind, affected, model)
             let stillPublic = try model.catalog.privatePhotoIDs(among: affected).isEmpty
@@ -382,6 +394,7 @@ extension AgentServer {
             }
         }
         let before = try states(kind, affected, model)
+        batch?.remember(before, named: named)
         switch kind {
         case .library:
             var failure: Error?
@@ -394,6 +407,13 @@ extension AgentServer {
             try apply(named, affected)
             // A command's own edit becomes its history step now, so its state after is what's saved.
             model.develop.flushSave()
+        }
+        if batch != nil {
+            // Recorded once, for the whole batch, when it ends.
+            var reply: [String: JSONValue] = ["did": .string(title), "photos": .int(named.count),
+                                              "ids": .array(named.prefix(200).map { .int(Int($0)) })]
+            for (key, value) in extra { reply[key] = value }
+            return .json(.object(reply))
         }
         let after = try states(kind, affected, model)
         let change = changes.record(clientID: client.id, clientName: client.name, title: title, targets: named,
@@ -422,6 +442,23 @@ extension AgentServer {
         case .library: return try model.catalog.libraryStates(for: ids).mapValues { .library($0) }
         case .develop: return try model.develop.currentSettings(for: ids).mapValues { .develop($0) }
         }
+    }
+
+    /// Each photo's state with the same fields as `shape` (a change's after states), for undo.
+    func states(shapedLike shape: [Int64: PhotoState], _ model: LibraryModel) throws -> [Int64: PhotoState] {
+        let libraryIDs = shape.filter { $0.value.library != nil }.map(\.key)
+        let developIDs = shape.filter { $0.value.develop != nil }.map(\.key)
+        let library = libraryIDs.isEmpty ? [:] : try model.catalog.libraryStates(for: libraryIDs)
+        let develop = developIDs.isEmpty ? [:] : try model.develop.currentSettings(for: developIDs)
+        var result: [Int64: PhotoState] = [:]
+        for id in shape.keys {
+            let state = PhotoState(library: library[id], develop: develop[id])
+            // A photo whose state can't be read is left out, so undo reports it gone.
+            if (shape[id]?.library == nil || state.library != nil) && (shape[id]?.develop == nil || state.develop != nil) {
+                result[id] = state
+            }
+        }
+        return result
     }
 
     /// The photos a call names, resolved once: they exist, aren't private, and come from the open

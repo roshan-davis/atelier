@@ -41,6 +41,8 @@ final class AgentServer: ObservableObject {
     @Published var notice: AgentNotice?
     /// Agents' changes while Atelier runs, for undo_change and the notice's Undo.
     var changes = PhotoChangeLog()
+    /// The batch running now (AT-050j), so its steps record into it instead of one change each.
+    var batchRun: AgentBatchRun?
 
     private(set) weak var model: LibraryModel?
     /// Docking beside a chat app (AT-050h, Agents/AgentDocking.swift).
@@ -162,7 +164,7 @@ final class AgentServer: ObservableObject {
 
     func tools(profile: AgentProfile) -> [MCPTool] {
         var tools = AgentLookTools.tools(options: AgentSettings.options) + [CommandListTool.tool]
-        if profile >= .organize { tools += AtelierAgentTools.organizeTools }
+        if profile >= .organize { tools += AtelierAgentTools.organizeTools + [AtelierAgentTools.commandBatch] }
         if profile >= .edit { tools += AtelierAgentTools.editTools }
         return tools
     }
@@ -316,7 +318,8 @@ final class AtelierMCPHost: MCPDockingHost, MCPResourceHost, @unchecked Sendable
                 set_metadata rates, flags, labels and adds keywords, organize adds to collections, and command_run \
                 runs library commands. With the Edit profile, adjust sets or nudges Develop sliders, apply_preset applies \
                 a Develop preset, sync copies settings from one photo to others, reset resets them, and command_run \
-                also runs Develop commands; each is one step in the photo's Develop history. Each change returns a change id; undo_change undoes your own change while it \
+                also runs Develop commands; each is one step in the photo's Develop history. command_batch runs several of \
+                these changes in one call; with atomic: true they are all or nothing, with one Undo. Each change returns a change id; undo_change undoes your own change while it \
                 is still the latest on those photos. Name photos by id when you can. Private photos are never shown \
                 to agents, and nothing an agent calls deletes anything.
                 """)
@@ -354,6 +357,8 @@ final class AtelierMCPHost: MCPDockingHost, MCPResourceHost, @unchecked Sendable
     /// Develop edits wait for a drag in progress to end (AT-050d).
     static func editsDevelop(_ tool: String, _ arguments: [String: JSONValue]) -> Bool {
         if AtelierAgentTools.editTools.contains(where: { $0.name == tool }) { return true }
+        // A batch may hold Develop steps: it waits too, so no step lands inside a drag.
+        if tool == AtelierAgentTools.commandBatch.name { return true }
         guard tool == AtelierAgentTools.commandRun.name, let id = arguments["id"]?.stringValue,
               let action = AtelierAction.catalog.actions.first(where: { $0.id.rawValue == id }) else { return false }
         return action.kind == .edit && AtelierAgentTools.editProfile(action) == .edit
