@@ -60,6 +60,7 @@ GROUPS = [
     ]),
     ("Set up", [
         ("settings.html", "Settings"),
+        ("chat-apps.html", "Connect a chat app"),
     ]),
 ]
 
