@@ -73,3 +73,118 @@ public indirect enum JSONValue: Hashable, Sendable {
         return out + "\""
     }
 }
+
+// MARK: - Codable and one-line text (MCP messages are one JSON object per line)
+
+extension JSONValue: Codable {
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if container.decodeNil() {
+            self = .null
+        } else if let value = try? container.decode(Bool.self) {
+            self = .bool(value)
+        } else if let value = try? container.decode(Int.self) {
+            self = .int(value)
+        } else if let value = try? container.decode(Double.self) {
+            self = .number(value)
+        } else if let value = try? container.decode(String.self) {
+            self = .string(value)
+        } else if let value = try? container.decode([JSONValue].self) {
+            self = .array(value)
+        } else if let value = try? container.decode([String: JSONValue].self) {
+            self = .object(value)
+        } else {
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Not a JSON value")
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .null: try container.encodeNil()
+        case .bool(let value): try container.encode(value)
+        case .int(let value): try container.encode(value)
+        case .number(let value): try container.encode(value)
+        case .string(let value): try container.encode(value)
+        case .array(let value): try container.encode(value)
+        case .object(let value): try container.encode(value)
+        }
+    }
+
+    /// Parses JSON text; nil when it isn't JSON.
+    public init?(parsing data: Data) {
+        guard let value = try? JSONDecoder().decode(JSONValue.self, from: data) else { return nil }
+        self = value
+    }
+
+    /// One line, no spaces, keys sorted: the MCP wire form.
+    public var compactText: String {
+        var out = ""
+        writeCompact(into: &out)
+        return out
+    }
+
+    private func writeCompact(into out: inout String) {
+        switch self {
+        case .array(let values):
+            out += "["
+            for (index, value) in values.enumerated() {
+                if index > 0 { out += "," }
+                value.writeCompact(into: &out)
+            }
+            out += "]"
+        case .object(let members):
+            out += "{"
+            for (index, key) in members.keys.sorted().enumerated() {
+                if index > 0 { out += "," }
+                out += JSONValue.string(key).text.dropLast() + ":"
+                members[key]!.writeCompact(into: &out)
+            }
+            out += "}"
+        default:
+            out += text.dropLast()
+        }
+    }
+
+    // Convenience readers for parsing requests.
+    public subscript(key: String) -> JSONValue? {
+        if case .object(let members) = self { return members[key] }
+        return nil
+    }
+
+    public var stringValue: String? {
+        if case .string(let value) = self { return value }
+        return nil
+    }
+
+    public var intValue: Int? {
+        switch self {
+        case .int(let value): return value
+        case .number(let value) where value.rounded() == value && abs(value) < 9e15: return Int(value)
+        default: return nil
+        }
+    }
+
+    public var doubleValue: Double? {
+        switch self {
+        case .int(let value): return Double(value)
+        case .number(let value): return value
+        default: return nil
+        }
+    }
+
+    public var boolValue: Bool? {
+        if case .bool(let value) = self { return value }
+        return nil
+    }
+
+    public var arrayValue: [JSONValue]? {
+        if case .array(let value) = self { return value }
+        return nil
+    }
+
+    public var objectValue: [String: JSONValue]? {
+        if case .object(let value) = self { return value }
+        return nil
+    }
+}
