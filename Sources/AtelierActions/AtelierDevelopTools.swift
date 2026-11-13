@@ -189,7 +189,7 @@ public struct ResetParameters: ActionParameters, Hashable, PhotoTargeting {
 }
 
 /// A slider an agent may set, as the app describes it.
-public struct DevelopSlider: Hashable, Sendable {
+public struct AgentSlider: Hashable, Sendable {
     public var name: String
     public var range: ClosedRange<Double>
     public init(name: String, range: ClosedRange<Double>) {
@@ -217,9 +217,9 @@ public enum AdjustRules {
     /// The changes a call asks for, checked against the sliders the app has. A name that's given
     /// twice, isn't a slider, or a value that isn't a number refuses the whole call.
     public static func changes(_ parameters: AdjustParameters,
-                               sliders: [String: DevelopSlider]) -> Result<[(DevelopSlider, Double)], ParameterCheck.Problems> {
+                               sliders: [String: AgentSlider]) -> Result<[(AgentSlider, Double)], ParameterCheck.Problems> {
         var problems: [String] = []
-        var result: [(DevelopSlider, Double)] = []
+        var result: [(AgentSlider, Double)] = []
         var seen: Set<String> = []
         var asked = parameters.named
         for entry in parameters.other ?? [] {
@@ -267,7 +267,7 @@ public enum AdjustRules {
     }
 
     /// "Exposure +0.50, Contrast +20": the change's name in the notice, history and log.
-    public static func title(_ changes: [(DevelopSlider, Double)], mode: AdjustMode) -> String {
+    public static func title(_ changes: [(AgentSlider, Double)], mode: AdjustMode) -> String {
         let parts = changes.prefix(3).map { slider, value -> String in
             let label = slider.name.split(separator: "_").map { $0.prefix(1).uppercased() + $0.dropFirst() }
                 .joined(separator: " ")

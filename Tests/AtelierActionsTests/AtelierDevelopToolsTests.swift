@@ -5,10 +5,10 @@ import XCTest
 
 /// The Develop tools' rules: slider names, set and add, clamping and refusals.
 final class AtelierDevelopToolsTests: XCTestCase {
-    let sliders: [String: DevelopSlider] = Dictionary(uniqueKeysWithValues: [
+    let sliders: [String: AgentSlider] = Dictionary(uniqueKeysWithValues: [
         ("exposure", -5.0...5.0), ("contrast", -100.0...100.0), ("temperature", 2000.0...50000.0),
         ("hue_red", -100.0...100.0), ("grade_shadows_hue", 0.0...360.0), ("point_1_hue", 0.0...360.0),
-    ].map { ($0.0, DevelopSlider(name: $0.0, range: $0.1)) })
+    ].map { ($0.0, AgentSlider(name: $0.0, range: $0.1)) })
 
     func testSchemasReadCleanlyAndNeedEdit() {
         for (name, schema) in AtelierAgentTools.developParameterSchemas {
@@ -69,7 +69,7 @@ final class AtelierDevelopToolsTests: XCTestCase {
         XCTAssertEqual(clamped.value, 5)
         XCTAssertTrue(clamped.clamped)
         XCTAssertFalse(AdjustRules.value(current: 0, asked: -100, mode: .set, range: -100...100).clamped)
-        let slider = DevelopSlider(name: "temperature", range: 2000...50000)
+        let slider = AgentSlider(name: "temperature", range: 2000...50000)
         XCTAssertEqual(AdjustRules.title([(slider, 6500)], mode: .set), "Temperature to 6500 K")
     }
 

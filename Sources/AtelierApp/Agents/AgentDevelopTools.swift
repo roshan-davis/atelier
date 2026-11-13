@@ -36,11 +36,11 @@ extension AgentServer {
     }
 
     /// Every Develop slider by its agent name ("hue_red").
-    static let developSliders: [String: (DevelopSettings.Parameter, DevelopSlider)] = {
-        var sliders: [String: (DevelopSettings.Parameter, DevelopSlider)] = [:]
+    static let developSliders: [String: (DevelopSettings.Parameter, AgentSlider)] = {
+        var sliders: [String: (DevelopSettings.Parameter, AgentSlider)] = [:]
         for parameter in DevelopSettings.Parameter.allCases {
             let name = AdjustRules.snakeName(parameter.rawValue)
-            sliders[name] = (parameter, DevelopSlider(name: name, range: parameter.range))
+            sliders[name] = (parameter, AgentSlider(name: name, range: parameter.range))
         }
         return sliders
     }()
@@ -48,7 +48,7 @@ extension AgentServer {
     // MARK: adjust
 
     private func adjust(_ parameters: AdjustParameters, _ client: AgentClient, _ model: LibraryModel) throws -> MCPToolResult {
-        let changes: [(DevelopSlider, Double)]
+        let changes: [(AgentSlider, Double)]
         switch AdjustRules.changes(parameters, sliders: Self.developSliders.mapValues { $0.1 }) {
         case .failure(let problems): throw ArgumentProblem(problems.text)
         case .success(let value): changes = value
