@@ -50,6 +50,8 @@ public enum ParameterCheck {
     public struct Problems: Error, Hashable, Sendable {
         public var messages: [String]
         public var text: String { messages.joined(separator: " ") }
+
+        public init(messages: [String]) { self.messages = messages }
     }
 
     private static func check(_ value: JSONValue, _ type: ParameterSchema.FieldType, name: String, note: FieldNote?) -> String? {

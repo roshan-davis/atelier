@@ -163,6 +163,7 @@ final class AgentServer: ObservableObject {
     func tools(profile: AgentProfile) -> [MCPTool] {
         var tools = AgentLookTools.tools(options: AgentSettings.options) + [CommandListTool.tool]
         if profile >= .organize { tools += AtelierAgentTools.organizeTools }
+        if profile >= .edit { tools += AtelierAgentTools.editTools }
         return tools
     }
 
@@ -180,8 +181,11 @@ final class AgentServer: ObservableObject {
                                               editProfile: Self.editProfile,
                                               isEnabled: { registry.isEnabled($0) },
                                               note: runs
-                                                ? "Run a command with command_run. Develop edits, exports and other apps "
-                                                    + "arrive in a later version."
+                                                ? (profile >= .edit
+                                                    ? "Run a command with command_run. Exports and other apps arrive in a "
+                                                        + "later version."
+                                                    : "Run a command with command_run. Develop commands need the Edit "
+                                                        + "profile; exports and other apps arrive in a later version.")
                                                 : "This app is allowed Look, so these are for reading. The person can "
                                                     + "allow more in Atelier > Settings… > Agents."))
         case AgentLookTools.getContext.name:
@@ -310,7 +314,9 @@ final class AtelierMCPHost: MCPDockingHost, @unchecked Sendable {
                 person is looking at, search_photos and get_photo to answer questions about the library, and \
                 command_list to see the menu commands. With the Organize profile, show selects photos in Atelier, \
                 set_metadata rates, flags, labels and adds keywords, organize adds to collections, and command_run \
-                runs library commands. Each change returns a change id; undo_change undoes your own change while it \
+                runs library commands. With the Edit profile, adjust sets or nudges Develop sliders, apply_preset applies \
+                a Develop preset, sync copies settings from one photo to others, reset resets them, and command_run \
+                also runs Develop commands; each is one step in the photo's Develop history. Each change returns a change id; undo_change undoes your own change while it \
                 is still the latest on those photos. Name photos by id when you can. Private photos are never shown \
                 to agents, and nothing an agent calls deletes anything.
                 """)
@@ -329,12 +335,22 @@ final class AtelierMCPHost: MCPDockingHost, @unchecked Sendable {
     func call(_ tool: String, arguments: [String: JSONValue], client: AgentClient, profile: AgentProfile) async -> MCPToolResult {
         guard let server else { return .error("Atelier is closing.") }
         let result: MCPToolResult
-        if let onMain = await server.callOnMain(tool, arguments, client: client, profile: profile) {
+        if Self.editsDevelop(tool, arguments), !(await server.waitForDevelopIdle()) {
+            result = .error("The person is still dragging in Develop. Nothing was changed; try again in a moment.")
+        } else if let onMain = await server.callOnMain(tool, arguments, client: client, profile: profile) {
             result = onMain
         } else {
             result = lookTools.call(tool, arguments, options: AgentSettings.options)
         }
         await server.logCall(client, tool, result)
         return result
+    }
+
+    /// Develop edits wait for a drag in progress to end (AT-050d).
+    static func editsDevelop(_ tool: String, _ arguments: [String: JSONValue]) -> Bool {
+        if AtelierAgentTools.editTools.contains(where: { $0.name == tool }) { return true }
+        guard tool == AtelierAgentTools.commandRun.name, let id = arguments["id"]?.stringValue,
+              let action = AtelierAction.catalog.actions.first(where: { $0.id.rawValue == id }) else { return false }
+        return action.kind == .edit && AtelierAgentTools.editProfile(action) == .edit
     }
 }

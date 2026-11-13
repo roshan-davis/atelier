@@ -5,8 +5,20 @@ import AtelierActions
 import AtelierCore
 import Foundation
 
-/// An agent change to photos' library fields, with each photo's state before and after.
-typealias PhotoChangeLog = AgentChangeLog<Int64, LibraryState>
+/// An agent change to photos, with each photo's state before and after: its library fields
+/// (Organize tools) or its Develop settings (Edit tools).
+typealias PhotoChangeLog = AgentChangeLog<Int64, PhotoState>
+
+/// What a change changed on one photo, so undo can tell whether it's still the latest.
+enum PhotoState: Equatable, Sendable {
+    case library(LibraryState)
+    case develop(DevelopSettings)
+
+    enum Kind { case library, develop }
+
+    var library: LibraryState? { if case .library(let state) = self { return state } else { return nil } }
+    var develop: DevelopSettings? { if case .develop(let settings) = self { return settings } else { return nil } }
+}
 
 /// The line Atelier shows at the bottom of the photo after an agent changed something, with
 /// Undo while the change can still be undone.
@@ -30,6 +42,9 @@ extension AgentServer {
     /// Runs a write tool, or returns nil when `tool` isn't one.
     func callWrite(_ tool: String, _ arguments: [String: JSONValue], client: AgentClient,
                    profile: AgentProfile) -> MCPToolResult? {
+        if AtelierAgentTools.editTools.contains(where: { $0.name == tool }) {
+            return callDevelop(tool, arguments, client: client, profile: profile)
+        }
         guard AtelierAgentTools.organizeTools.contains(where: { $0.name == tool }) else { return nil }
         guard profile >= .organize else {
             return .error("\(tool) needs the Organize profile. The person can change that in Atelier > Settings… > Agents.")
@@ -57,7 +72,7 @@ extension AgentServer {
         }
     }
 
-    private func decode<P: ActionParameters>(_ type: P.Type, _ arguments: [String: JSONValue]) throws -> P {
+    func decode<P: ActionParameters>(_ type: P.Type, _ arguments: [String: JSONValue]) throws -> P {
         switch ParameterCheck.decode(P.self, from: arguments) {
         case .failure(let problems): throw ArgumentProblem(problems.text)
         case .success(let parameters): return parameters
@@ -219,12 +234,26 @@ extension AgentServer {
     /// Undoes a change for an agent (`clientID`) or for the person (nil, the notice's Undo).
     private func undo(_ id: String, by clientID: String?, _ model: LibraryModel) -> Result<PhotoChangeLog.Change, AgentUndoRefusal> {
         guard let change = changes.change(id) else { return .failure(.unknown(id)) }
-        let current = (try? model.catalog.libraryStates(for: Array(change.after.keys))) ?? [:]
+        let kind: PhotoState.Kind = change.after.values.first?.develop != nil ? .develop : .library
+        let current = (try? states(kind, Array(change.after.keys), model)) ?? [:]
         switch changes.undoPlan(id, clientID: clientID, current: current) {
         case .failure(let refusal):
             return .failure(refusal)
         case .success(let states):
-            let restored = model.performEdit(on: Array(states.keys)) { try $0.restoreLibraryStates(states) }
+            let restored: Bool
+            switch kind {
+            case .library:
+                let library = states.compactMapValues(\.library)
+                restored = model.performEdit(on: Array(states.keys)) { try $0.restoreLibraryStates(library) }
+            case .develop:
+                do {
+                    try model.develop.apply(each: states.compactMapValues(\.develop), step: "Undo \(change.title) (\(change.clientName))")
+                    restored = true
+                } catch {
+                    model.status = error.localizedDescription
+                    restored = false
+                }
+            }
             guard restored else { return .failure(.cantUndo(id, reason: model.status ?? "the catalog refused the change.")) }
             changes.markUndone(id)
             let who = clientID == nil ? "" : "\(change.clientName) "
@@ -288,13 +317,26 @@ extension AgentServer {
             }
         }
 
-        if action.kind == .edit, action.targets == .photos {
+        // Develop commands change Develop settings: recorded as such, so undo_change restores them.
+        let developEdit = action.kind == .edit && AtelierAgentTools.editProfile(action) == .edit
+        if developEdit, action.targets != .photos {
+            // Commands of the Develop menu act on the photo open in Develop.
+            guard !targets.given else {
+                throw ArgumentProblem("\(action.id) acts on the photo open in Develop; leave out ids, selection and current.")
+            }
+            guard model.mode == .develop, let open = model.develop.assetID else {
+                throw ArgumentProblem("\(action.title) works on the photo open in Develop. Open one first with show "
+                                      + "(mode: develop).")
+            }
+            targets.ids = [open]
+        }
+        if action.kind == .edit, action.targets == .photos || developEdit {
             var applied = true
             let isCopy = action.id == AtelierAction.createVirtualCopy.id
-            return try write(targets, title: action.title, client, model,
+            return try write(targets, title: action.title, client, model, kind: developEdit ? .develop : .library,
                              cantUndo: isCopy ? "it made new photos. The person removes them with Photo > Remove Virtual Copy…." : nil,
                              extra: ["command": .string(action.id.rawValue)]) { named, _ in
-                applied = try run(named)
+                applied = try run(action.targets == .photos ? named : nil)
                 if !applied { throw ArgumentProblem("\(action.title) doesn't apply right now (\(action.place)).") }
             }
         }
@@ -319,33 +361,41 @@ extension AgentServer {
     /// again after asking, makes the change, records it with each photo's state before and after,
     /// and shows the notice. `apply` gets the named photos and the ones that change with them
     /// (a RAW's hidden JPEG).
-    private func write(_ targets: PhotoTargeting, title: String, _ client: AgentClient, _ model: LibraryModel,
-                       cantUndo: String? = nil, extra: [String: JSONValue] = [:],
-                       apply: (_ named: [Int64], _ affected: [Int64]) throws -> Void) throws -> MCPToolResult {
+    func write(_ targets: PhotoTargeting, title: String, _ client: AgentClient, _ model: LibraryModel,
+               kind: PhotoState.Kind = .library, cantUndo: String? = nil, extra: [String: JSONValue] = [:],
+               apply: (_ named: [Int64], _ affected: [Int64]) throws -> Void) throws -> MCPToolResult {
         let named = try resolve(targets, model)
-        let affected = unique(model.pairIDs(named))
+        // A RAW's hidden JPEG follows it in the library; Develop settings are each photo's own.
+        let affected = kind == .library ? unique(model.pairIDs(named)) : named
         let limit = AgentSettings.confirmAbove
         if limit > 0, affected.count > limit {
-            let looked = try model.catalog.libraryStates(for: affected)
+            let looked = try states(kind, affected, model)
             guard AgentConfirm.ask(client: client.name, title: title, count: affected.count) else {
                 return .error("The person said no in Atelier: \(title) for \(Self.count(affected.count)) wasn't made.")
             }
             // Asking took time: the photos must be as they were when the person was asked.
-            let now = try model.catalog.libraryStates(for: affected)
+            let now = try states(kind, affected, model)
             let stillPublic = try model.catalog.privatePhotoIDs(among: affected).isEmpty
             guard now == looked, now.count == affected.count, stillPublic else {
                 return .error("Target changed: some of these photos were edited or removed while Atelier asked. Nothing "
                               + "was changed. Look again with search_photos and try again.")
             }
         }
-        let before = try model.catalog.libraryStates(for: affected)
-        var failure: Error?
-        let made = model.performEdit(on: affected) { _ in
-            do { try apply(named, affected) } catch { failure = error; throw error }
+        let before = try states(kind, affected, model)
+        switch kind {
+        case .library:
+            var failure: Error?
+            let made = model.performEdit(on: affected) { _ in
+                do { try apply(named, affected) } catch { failure = error; throw error }
+            }
+            if let failure { throw failure }
+            guard made else { return .error("Atelier couldn't make the change: \(model.status ?? "the catalog refused it").") }
+        case .develop:
+            try apply(named, affected)
+            // A command's own edit becomes its history step now, so its state after is what's saved.
+            model.develop.flushSave()
         }
-        if let failure { throw failure }
-        guard made else { return .error("Atelier couldn't make the change: \(model.status ?? "the catalog refused it").") }
-        let after = try model.catalog.libraryStates(for: affected)
+        let after = try states(kind, affected, model)
         let change = changes.record(clientID: client.id, clientName: client.name, title: title, targets: named,
                                     before: before, after: after, cantUndo: cantUndo)
         let unchanged = affected.filter { before[$0] == after[$0] }.count
@@ -366,9 +416,17 @@ extension AgentServer {
         return .json(.object(reply))
     }
 
+    /// Each photo's state of the kind a change touches.
+    func states(_ kind: PhotoState.Kind, _ ids: [Int64], _ model: LibraryModel) throws -> [Int64: PhotoState] {
+        switch kind {
+        case .library: return try model.catalog.libraryStates(for: ids).mapValues { .library($0) }
+        case .develop: return try model.develop.currentSettings(for: ids).mapValues { .develop($0) }
+        }
+    }
+
     /// The photos a call names, resolved once: they exist, aren't private, and come from the open
     /// catalog. The selection is read now, so a later change of selection can't change the call.
-    private func resolve(_ targets: PhotoTargeting, _ model: LibraryModel) throws -> [Int64] {
+    func resolve(_ targets: PhotoTargeting, _ model: LibraryModel) throws -> [Int64] {
         try checkCatalog(targets.catalog)
         let ways = [targets.ids != nil, targets.selection == true, targets.current == true].filter { $0 }.count
         guard ways == 1 else {
@@ -399,7 +457,7 @@ extension AgentServer {
         return ids.filter { !missing.contains($0) }
     }
 
-    private func checkCatalog(_ name: String?) throws {
+    func checkCatalog(_ name: String?) throws {
         guard let name, name != catalogName else { return }
         throw ArgumentProblem("These ids are for the catalog “\(name)”, but Atelier has “\(catalogName)” open. "
                               + "Nothing was changed; search again in this catalog.")
@@ -410,7 +468,7 @@ extension AgentServer {
         return ids.filter { seen.insert($0).inserted }
     }
 
-    private func modeName(_ mode: ViewMode) -> String {
+    func modeName(_ mode: ViewMode) -> String {
         switch mode {
         case .grid: return "grid"
         case .loupe: return "loupe"

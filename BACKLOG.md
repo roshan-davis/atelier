@@ -707,7 +707,7 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 ## AT-050 — Agent Actions: MCP server for chat clients (Atelier and Easel)
 
-**Status:** Direction approved by Rosh on Nov 13, 2026 ("add one section in the backlog for mcp … so the next PRs can pick one by one"). The design is done. Implementation is split into AT-050a to AT-050g below (plus AT-050h, docking beside Docent, added Nov 13), one PR each, taken in order. AT-050a is ready to start. **Design owner:** Claude. **Design chat:** [Design an MCP server for Atelier actions](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKLw4mNvV9wQDgMyFLnzx5sL). **Design PRs:** [#110](https://github.com/roshan-davis/atelier/pull/110) (merged `fa4239b`), [#115](https://github.com/roshan-davis/atelier/pull/115).
+**Status:** Direction approved by Rosh on Nov 13, 2026 ("add one section in the backlog for mcp … so the next PRs can pick one by one"). The design is done. Implementation is split into AT-050a to AT-050g below (plus AT-050h, docking beside Docent, and AT-050i, the photo carousel for chat apps, both added Nov 13), one PR each, taken in order. AT-050a is ready to start. **Design owner:** Claude. **Design chat:** [Design an MCP server for Atelier actions](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKLw4mNvV9wQDgMyFLnzx5sL). **Design PRs:** [#110](https://github.com/roshan-davis/atelier/pull/110) (merged `fa4239b`), [#115](https://github.com/roshan-davis/atelier/pull/115).
 
 **Evidence:**
 - Rosh (Nov 11, 2026): "Can my app setup an MCP and many of the menu function there as actions that can be conversationally execute from the chat that connect to this MCP?"
@@ -804,7 +804,15 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 ### AT-050d — Edit: Develop, presets, masks, Match Look and batches (A3)
 
-**Status:** Approved, waits for AT-050c. **Owner/chat/branch/PR:** unassigned. **Depends on:** AT-050c.
+**Status:** In progress, first part in review: Rosh asked for it on Nov 13, 2026 ("can you continue on the mcp work here - wanted to see develop works"). Source and Linux tests only; needs a Mac build, `check_pr.py` and Rosh's test. **Owner:** Claude. **Chat:** [Design an MCP server for Atelier actions](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKLw4mNvV9wQDgMyFLnzx5sL). **Branch:** `claude/project-thread-eecdru`. **PR:** to be linked. **Baseline:** `80ee453`. **Depends on:** AT-050c (merged).
+
+**Built in the first part:**
+- Typed `adjust` (Basic sliders by name plus any slider in `other`, `mode` set or add, clamped at the slider's ends, panels turned on as by hand), `apply_preset` (id or name, did-you-mean), `sync` (from one photo, by part; Lightroom's default parts) and `reset` (all or by part), for the Edit profile.
+- `command_run` reaches Develop commands (ceiling raised to Edit); Develop-menu commands act on the photo open in Develop.
+- Each call is one Develop history step per photo, named "<change> (<app>)"; `undo_change` and the notice's Undo restore the settings as an "Undo …" step only while nothing changed them since (`PhotoState` in the change log).
+- Agent Develop edits wait up to 10 s for a drag in progress (`DevelopController.isEditingByHand`).
+
+**Still to do in AT-050d:** `crop`, `add_mask`, `match_look`, Auto (needs the photo's pixels), `command_batch` with `atomic`, and the timed render check below.
 
 **Scope:**
 - Typed `adjust`, `auto`, `apply_preset`, `sync`, `reset`, `crop`, `add_mask` (Brush stays manual) and `match_look`.
@@ -816,6 +824,19 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 - Renders stay coalesced during agent edits (timed, numbers in the PR).
 - An atomic batch is one undo step and rolls back fully on failure.
 - A non-atomic batch reports each step.
+
+### AT-050i — Photo carousel for chat apps (MCP App)
+
+**Status:** Approved by Rosh on Nov 13, 2026 ("do the photo carosel and edit commands"), after AT-050d's first part. **Owner:** Claude. **Depends on:** AT-050b (Look tools); Docent's MCP Apps host for the full view.
+
+**Evidence:** The Docent proposal (Nov 12–13) planned `ui://atelier/photos` after the read-only server so search results show as photos in Docent; it was missing from AT-050a–h. Rosh (Nov 13): "something missing in the priority order in mcp", then confirmed the carousel.
+
+**Scope:**
+- An MCP App resource (`ui://atelier/photos`, the MCP Apps extension) that shows `search_photos` and `show` results as a carousel of thumbnails with rating, flag and label, linked from those tools' results.
+- Thumbnails from Atelier's previews, private photos never included, previews obeying Settings > Agents > Let agents see photo previews.
+- Clients without MCP Apps get the same results as today.
+
+**Acceptance:** in Docent, a search shows a carousel of the found photos; Cherry Studio and OpenCode still get the plain result.
 
 ### AT-050e — Everything: export, Edit In and AI recipes with Allow (A4)
 
@@ -859,7 +880,7 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 ### AT-050h — Docking protocol: Atelier docks beside Docent
 
-**Status:** In progress: Rosh asked for it on Nov 13, 2026 ("can you take up the work of docking backlog item that docent added next?"). Source and Linux tests of the shared module only; needs a Mac build and Docent's DO-007 to accept. **Owner:** Claude. **Chat:** [Design an MCP server for Atelier actions](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKLw4mNvV9wQDgMyFLnzx5sL). **Branch:** `claude/project-thread-eecdru`. **PR:** [#122](https://github.com/roshan-davis/atelier/pull/122). **Baseline:** `dd2381f`. **Depends on:** AT-050b (the MCP connection it rides on). **Docent side:** [Docent PRD, Docking](https://github.com/roshan-davis/docent/blob/main/Requirements/Docent-PRD.md#docking) ([docent#2](https://github.com/roshan-davis/docent/pull/2)), Docent's DO-007.
+**Status:** Merged at Rosh's ask on Nov 13, 2026 (`80ee453`) before a Mac build; a Mac build and acceptance with Docent's DO-007 are still open. Rosh asked for it on Nov 13, 2026 ("can you take up the work of docking backlog item that docent added next?"). **Owner:** Claude. **Chat:** [Design an MCP server for Atelier actions](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKLw4mNvV9wQDgMyFLnzx5sL). **Branch:** `claude/project-thread-eecdru`. **PR:** [#122](https://github.com/roshan-davis/atelier/pull/122). **Baseline:** `dd2381f`. **Depends on:** AT-050b (the MCP connection it rides on). **Docent side:** [Docent PRD, Docking](https://github.com/roshan-davis/docent/blob/main/Requirements/Docent-PRD.md#docking) ([docent#2](https://github.com/roshan-davis/docent/pull/2)), Docent's DO-007.
 
 **Evidence:** Rosh (Nov 13, 2026, Docent project thread): Docent "can stay on the left side and the other apps which is selected from the mcp list in the chat aligns correctly on the right", through "some docking protocol with our apps"; "add it to atelier only, easel don't have any mcp work yet".
 

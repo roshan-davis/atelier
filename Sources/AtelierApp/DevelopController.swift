@@ -1579,6 +1579,37 @@ final class DevelopController: ObservableObject {
         }
     }
 
+    /// Each photo's own new settings as one history step named `step` (agents, AT-050d). The
+    /// open photo's change in progress becomes its own step first, so this step never swallows it.
+    func apply(each newSettings: [Int64: DevelopSettings], step: String) throws {
+        if let assetID, newSettings[assetID] != nil { flushSave() }
+        for (id, settings) in newSettings.sorted(by: { $0.key < $1.key }) where id != assetID {
+            try catalog.saveDevelopSettings(settings, for: id, step: step)
+            onSettingsSaved?(id)
+            refreshPreviews(for: id, settings: settings)
+        }
+        if let assetID, let open = newSettings[assetID] {
+            settings = open
+            validateMaskSelection()
+            beforeImage = nil
+            changed(step: step, replacing: true)
+            flushSave()
+        }
+    }
+
+    /// Settings as they stand: the open photo's as on screen (an edit in progress included),
+    /// the others' as saved.
+    func currentSettings(for ids: [Int64]) throws -> [Int64: DevelopSettings] {
+        var result: [Int64: DevelopSettings] = [:]
+        for id in ids {
+            result[id] = id == assetID ? settings : try catalog.developSettings(for: id)
+        }
+        return result
+    }
+
+    /// The person is dragging a slider, handle or the photo: agent edits wait for it to end.
+    var isEditingByHand: Bool { pointerEditInProgress || targetDrag != nil }
+
     /// An edit to the open photo. `step` names it in the history; nil (undo, redo, jumping
     /// in the history) saves without adding a step. `replacing` is for whole settings put in
     /// place (a preset, a snapshot, Paste), whose panel switches stand as they come.

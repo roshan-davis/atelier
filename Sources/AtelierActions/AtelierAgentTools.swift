@@ -167,9 +167,9 @@ public struct UndoChangeParameters: ActionParameters, Hashable {
 
 /// The typed tools and the rules for which profile Atelier's commands need.
 public enum AtelierAgentTools {
-    /// The highest profile whose commands agents can run in this version (AT-050c: Organize).
-    /// AT-050d raises it to Edit, AT-050e to Everything.
-    public static let runCeiling = AgentProfile.organize
+    /// The highest profile whose commands agents can run in this version (AT-050d: Edit).
+    /// AT-050e raises it to Everything.
+    public static let runCeiling = AgentProfile.edit
 
     /// Which profile an Atelier edit command needs: Develop changes need Edit, library changes
     /// (ratings, flags, labels, collections, virtual copies) need Organize.
@@ -209,7 +209,8 @@ public enum AtelierAgentTools {
     public static let commandRun = CommandRunTool.tool(
         targetProperties: PhotoTargetNotes.properties,
         description: "Commands that act on photos take ids, selection or current; without them they use the selection. "
-            + "Develop edits, exports and other apps arrive in a later version.")
+            + "Develop commands without photos act on the photo open in Develop. Exports and other apps arrive in a later "
+            + "version.")
 
     /// The write tools the Organize profile adds.
     public static let organizeTools = [show, setMetadata, organize, undoChange, commandRun]
@@ -220,5 +221,5 @@ public enum AtelierAgentTools {
         setMetadata.name: .of(SetMetadataParameters.self),
         organize.name: .of(OrganizeParameters.self),
         undoChange.name: .of(UndoChangeParameters.self),
-    ]
+    ].merging(developParameterSchemas) { $1 }
 }
