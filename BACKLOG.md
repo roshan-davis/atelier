@@ -827,7 +827,7 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 ### AT-050j — Batches: command_batch, all or nothing with one Undo
 
-**Status:** In progress. Rosh asked for it on Nov 13, 2026 ("how about batching things and its commands? … If atelier don't have it in the backlog then add it and start working"); it was AT-050d's `command_batch` item, split out so the rest of AT-050d runs in parallel. **Owner:** Claude. **Chat:** [Design an MCP server for Atelier actions](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKLw4mNvV9wQDgMyFLnzx5sL). **Branch:** `claude/project-thread-eecdru`. **PR:** pending. **Baseline:** `0fd59e6`. **Depends on:** AT-050c, AT-050d's first part (merged).
+**Status:** In progress. Rosh asked for it on Nov 13, 2026 ("how about batching things and its commands? … If atelier don't have it in the backlog then add it and start working"); it was AT-050d's `command_batch` item, split out so the rest of AT-050d runs in parallel. **Owner:** Claude. **Chat:** [Design an MCP server for Atelier actions](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKLw4mNvV9wQDgMyFLnzx5sL). **Branch:** `claude/project-thread-eecdru`. **PR:** [#125](https://github.com/roshan-davis/atelier/pull/125). **Baseline:** `0fd59e6`. **Depends on:** AT-050c, AT-050d's first part (merged).
 
 **Scope:**
 - Shared `command_batch` in `AgentMCP` (`CommandBatchTool`: steps as write tools or `command_run` shorthand, `atomic`, `label`, `keep_going`, at most 50 steps, no nesting), so Easel gets the same tool with AT-050g.
