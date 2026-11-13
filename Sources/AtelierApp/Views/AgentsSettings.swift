@@ -90,6 +90,9 @@ private struct AgentsSettingsForm: View {
     @AppStorage(AgentSettings.locationKey) private var location = false
     @AppStorage("agents.setupClient") private var client: AgentHelper.Client = .openCode
     @State private var copied: String?
+    @State private var selectedActivity: Set<UUID> = []
+    /// The line a ⇧-click range starts from.
+    @State private var activityAnchor: UUID?
 
     var body: some View {
         Form {
@@ -165,18 +168,43 @@ private struct AgentsSettingsForm: View {
                     Text("Nothing yet.")
                         .foregroundStyle(.secondary)
                 }
-                ForEach(server.activity.entries.prefix(100)) { entry in
-                    ActivityRow(entry: entry)
+                ForEach(shownActivity) { entry in
+                    ActivityRow(entry: entry, isSelected: selectedActivity.contains(entry.id))
+                        .contentShape(Rectangle())
+                        .onTapGesture { selectActivity(entry) }
+                        .contextMenu {
+                            Button(copyTitle(for: entry)) {  // not an action: a Settings list, not a command
+                                copyActivity(selectedActivity.contains(entry.id) ? nil : [entry.id])
+                            }
+                            Button("Copy All") { copyActivity(Set(shownActivity.map(\.id))) }  // not an action: a Settings list, not a command
+                        }
+                }
+            } footer: {
+                if !server.activity.entries.isEmpty {
+                    Text("Click a line to select it; ⌘-click adds lines, ⇧-click selects a range. Copy copies the selected lines, or all of them when none is selected.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             } trailing: {
-                Button {
-                    server.clearActivity()
-                } label: {
-                    Image(systemName: "trash")
+                HStack(spacing: 2) {
+                    Button {
+                        copyActivity(nil)
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                    }
+                    .buttonStyle(SidebarIconButtonStyle())
+                    .help(selectedActivity.isEmpty ? "Copy the activity log" : "Copy the selected lines")
+                    .disabled(server.activity.entries.isEmpty)
+                    Button {
+                        selectedActivity = []
+                        server.clearActivity()
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(SidebarIconButtonStyle())
+                    .help("Clear the activity log")
+                    .disabled(server.activity.entries.isEmpty)
                 }
-                .buttonStyle(SidebarIconButtonStyle())
-                .help("Clear the activity log")
-                .disabled(server.activity.entries.isEmpty)
             }
         }
         .formStyle(.grouped)
@@ -197,6 +225,48 @@ private struct AgentsSettingsForm: View {
                 .font(.callout)
         }
     }
+
+    private func copyTitle(for entry: AgentActivity) -> String {
+        selectedActivity.contains(entry.id) && selectedActivity.count > 1 ? "Copy \(selectedActivity.count) Lines" : "Copy"
+    }
+
+    private var shownActivity: [AgentActivity] { Array(server.activity.entries.prefix(100)) }
+
+    /// Click selects one line (or clears it), ⌘-click adds or removes one, ⇧-click a range, as in Finder.
+    private func selectActivity(_ entry: AgentActivity) {
+        let modifiers = NSEvent.modifierFlags
+        if modifiers.contains(.shift), let anchor = activityAnchor,
+           let from = shownActivity.firstIndex(where: { $0.id == anchor }),
+           let to = shownActivity.firstIndex(where: { $0.id == entry.id }) {
+            selectedActivity = Set(shownActivity[min(from, to)...max(from, to)].map(\.id))
+            return
+        }
+        if modifiers.contains(.command) {
+            if selectedActivity.contains(entry.id) { selectedActivity.remove(entry.id) } else { selectedActivity.insert(entry.id) }
+        } else {
+            selectedActivity = selectedActivity == [entry.id] ? [] : [entry.id]
+        }
+        activityAnchor = entry.id
+    }
+
+    /// Copies `ids` (nil: the selection, or every line when nothing is selected), oldest first,
+    /// one line each: "2026-11-12 21:41:33  Cherry Studio  get_preview".
+    private func copyActivity(_ ids: Set<UUID>?) {
+        let chosen = ids ?? (selectedActivity.isEmpty ? Set(shownActivity.map(\.id)) : selectedActivity)
+        let lines = shownActivity.filter { chosen.contains($0.id) }.reversed().map { entry in
+            "\(Self.logTime.string(from: entry.date))  \(entry.clientName)  \(entry.text)"
+        }
+        guard !lines.isEmpty else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(lines.joined(separator: "\n"), forType: .string)
+    }
+
+    private static let logTime: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return formatter
+    }()
 
     private func copy(_ text: String, as name: String) {
         NSPasteboard.general.clearContents()
@@ -259,6 +329,7 @@ private struct GrantRow: View {
 
 private struct ActivityRow: View {
     let entry: AgentActivity
+    var isSelected = false
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -276,7 +347,12 @@ private struct ActivityRow: View {
             Spacer(minLength: 0)
         }
         .font(.callout)
+        .padding(.vertical, 2)
+        .padding(.horizontal, 4)
+        .background(RoundedRectangle(cornerRadius: 5, style: .continuous)
+            .fill(isSelected ? Color.accentColor.opacity(0.22) : Color.clear))
         .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 
     private var symbol: String {
