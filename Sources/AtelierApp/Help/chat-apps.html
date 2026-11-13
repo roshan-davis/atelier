@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connect a chat app · Atelier Help</title>
+<link rel="stylesheet" href="assets/help.css">
+<script src="assets/toc.js" defer></script>
+<script src="assets/help.js" defer></script>
+</head>
+<body>
+<main class="page">
+
+<div class="eyebrow">Set up</div>
+<h1>Connect a chat app</h1>
+<p class="lede">Ask a chat app about your library: “how many photos did I pick from the last import?”, “which photos from Iceland have five stars?”, “what Develop settings does this one use?”. Atelier speaks MCP, the standard way chat apps reach other apps, so any chat app that supports MCP servers can connect, with a free, local or hosted model.</p>
+
+<div class="note"><p><span class="label">What chat apps can do.</span> With <b>Look</b>, chat apps read: search photos, look at their details, Develop settings and cull groups, and list the menu commands. With <b>Organize</b> they can also select photos in Atelier, rate, flag, label, add keywords and add to collections, each with Undo (see <a href="settings.html#agent-changes">When an app changes photos</a>). Editing in Develop and exporting from a chat come in later versions; every menu command is already built so it can reach chat apps without extra work.</p></div>
+
+<div class="chips"><a href="#how">How it works</a><a href="#opencode">OpenCode</a><a href="#cherry">Cherry Studio</a><a href="#ollama">Ollama (ollmcp)</a><a href="#lmstudio">LM Studio</a><a href="#openwebui">Open WebUI</a><a href="#claude-desktop">Claude Desktop</a><a href="#claude-code">Claude Code</a><a href="#codex">Codex</a><a href="#models">Which model</a><a href="#privacy">Privacy</a><a href="#trouble">If it doesn't work</a></div>
+
+<h2 id="how">How it works</h2>
+<p>Every chat app below starts the same small helper, which is inside Atelier, with no arguments:</p>
+<pre><code>/Applications/Atelier.app/Contents/MacOS/atelier-mcp</code></pre>
+<ul>
+  <li><b>Atelier must be open.</b> The helper passes messages to the Atelier window; it never opens the catalog itself.</li>
+  <li><b>Atelier asks first.</b> The first time an app connects, Atelier asks in its own window whether to allow it, and what it may do: <b>Don't Allow</b>, <b>Look</b>, <b>Organize</b>, <b>Edit</b> or <b>Everything</b>. Today every level can only read (see the note above); the higher ones are for organizing, editing and, with a second question in Atelier, exporting, as those arrive. Change it later in <span class="path">Atelier › Settings… › Agents</span>.</li>
+  <li><b>Undo will work.</b> When chat apps can make changes, each one will be one step in the photo's history, with a plain name, that <kbd>⌘Z</kbd> undoes like your own edits.</li>
+  <li><b>Nothing is deleted.</b> Chat apps can't remove photos or move files to the Trash; they tell you to use <span class="path">Photo › Remove Photo…</span> yourself.</li>
+</ul>
+<h3 id="settings-agents">Settings › Agents</h3>
+<p><span class="path">Atelier › Settings… › Agents</span> is where you manage this (details in <a href="settings.html#agents">Settings › Agents</a>):</p>
+<dl class="defs">
+  <dt>Access</dt><dd><b>Allow chat apps to use Atelier</b> (on; turning it off disconnects every app), <b>Let agents see photo previews</b> (off) and <b>Include location in photo details</b> (off).</dd>
+  <dt>Apps</dt><dd>Every app that has connected, with a green dot while it's connected and a menu of what it may do. Changing it reconnects the app; − forgets the app, so Atelier asks again. Apps started from Terminal are listed as Terminal.</dd>
+  <dt>Connect an App</dt><dd>The helper's path with <b>Copy</b>. Choose an app in <b>Setup for</b> and click <b>Copy Setup</b>; the line under it says where to paste.</dd>
+  <dt>Activity</dt><dd>What each app did, newest first. Select lines and click the copy button, or right-click for Copy and Copy All, to paste into a bug report.</dd>
+</dl>
+<div class="tip"><p>Running Atelier from Xcode instead of <code>/Applications</code>? Build the helper once: <span class="path">Product › Scheme › atelier-mcp</span>, then <span class="path">Product › Build</span> (<kbd>⌘B</kbd>). Then use the path and setup that <span class="path">Connect an App</span> shows.</p></div>
+
+<h2 id="opencode">OpenCode (free models)</h2>
+<p>OpenCode is a free chat app for Terminal with free hosted models, and it can use your Ollama models too.</p>
+<ol class="steps">
+  <li>Add Atelier to <code>~/.config/opencode/opencode.json</code>. The easy way: <span class="path">Settings › Agents › Connect an App</span>, choose OpenCode in <b>Setup for</b>, click <b>Copy Setup</b>, paste it into Terminal and press Return. It runs a short script that adds Atelier and keeps what's already in the file. Or add it yourself, directly under <code>"mcp"</code>:
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "atelier": {
+      "type": "local",
+      "command": ["/Applications/Atelier.app/Contents/MacOS/atelier-mcp"],
+      "enabled": true
+    }
+  }
+}</code></pre>
+  Check it with <code>opencode mcp list</code>. <code>"enabled": false</code> turns it off without deleting it. (<code>opencode mcp add</code> didn't save anything when we tried it, so use the file.)</li>
+  <li>Pick a model: type <code>/connect</code> to sign in to the OpenCode provider, then <code>/models</code> and choose one with no price (free models are free for a limited time and change often), or one of your Ollama models.</li>
+  <li>Ask: “Use Atelier to list my collections.”</li>
+</ol>
+
+<h2 id="cherry">Cherry Studio</h2>
+<p>A desktop chat app that works with Ollama models and hosted ones.</p>
+<ol class="steps">
+  <li>Open Cherry Studio's settings and choose <span class="path">MCP Server</span>, then <b>Add server</b>.</li>
+  <li>Name <code>Atelier</code>, Type <b>STDIO</b>, Command <code>/Applications/Atelier.app/Contents/MacOS/atelier-mcp</code>, Arguments left empty. Click <b>Save</b>.</li>
+  <li>In a chat, turn on MCP in the chat box and select Atelier. Pick a model that can call tools, such as Gemma 4 or Qwen 3.6 from Ollama.</li>
+</ol>
+
+<h2 id="ollama">Ollama, with ollmcp (Terminal)</h2>
+<p>Ollama runs the model but doesn't connect to MCP servers itself, so a chat app sits in between. Any app on this page can use Ollama models; <code>ollmcp</code> (mcp-client-for-ollama) is the simplest one in Terminal. It needs Python 3.11 or later, with Ollama running.</p>
+<pre><code>uv tool install --upgrade ollmcp        # or: pip install --upgrade ollmcp
+ollmcp mcp add atelier --scope user -- /Applications/Atelier.app/Contents/MacOS/atelier-mcp
+ollmcp mcp list
+ollmcp                                  # then pick qwen3.6 or gemma4 and chat</code></pre>
+<p><code>--scope user</code> saves it in <code>~/.config/ollmcp/mcp.json</code> for every folder. Without it, it's saved only for the current folder.</p>
+
+<h2 id="lmstudio">LM Studio</h2>
+<ol class="steps">
+  <li>In the right sidebar, open the <b>Program</b> tab and click <span class="path">Install › Edit mcp.json</span> (LM Studio 0.3.17 or later).</li>
+  <li>Inside <code>"mcpServers": { … }</code>, add:
+<pre><code>"atelier": {
+  "command": "/Applications/Atelier.app/Contents/MacOS/atelier-mcp",
+  "args": []
+}</code></pre></li>
+  <li>Save, load a model that supports tool use, and turn on the Atelier tools in the chat.</li>
+</ol>
+
+<h2 id="openwebui">Open WebUI</h2>
+<p>Open WebUI connects to MCP servers over the network (Streamable HTTP, v0.6.31 and later), not to a helper it starts itself. Until Atelier has its own network listener (planned, AT-050f), put the helper behind <code>mcpo</code>, which serves it to Open WebUI as a tool server:</p>
+<pre><code>uvx mcpo --port 8000 --api-key "pick-a-secret" -- /Applications/Atelier.app/Contents/MacOS/atelier-mcp</code></pre>
+<p>Then add <code>http://localhost:8000</code> in Open WebUI as an OpenAPI tool server, with the same key. Leave the Terminal window open while you chat. Once Atelier's listener ships, add it under <span class="path">Admin Settings › External Tools › +</span> with Type <b>MCP (Streamable HTTP)</b> instead.</p>
+
+<h2 id="claude-desktop">Claude Desktop</h2>
+<ol class="steps">
+  <li>Choose <span class="path">Claude › Settings…</span>, then <b>Developer</b> in the sidebar, and click <b>Edit Config</b>. It opens <code>~/Library/Application Support/Claude/claude_desktop_config.json</code>.</li>
+  <li>Add Atelier (if the file already has <code>"mcpServers"</code>, add only the <code>"atelier"</code> part inside it):
+<pre><code>{
+  "mcpServers": {
+    "atelier": {
+      "command": "/Applications/Atelier.app/Contents/MacOS/atelier-mcp",
+      "args": []
+    }
+  }
+}</code></pre></li>
+  <li>Quit Claude completely (<kbd>⌘Q</kbd>) and open it again. If Atelier doesn't show up, the log is <code>~/Library/Logs/Claude/mcp-server-atelier.log</code>.</li>
+</ol>
+
+<h2 id="claude-code">Claude Code</h2>
+<pre><code>claude mcp add --transport stdio --scope user atelier -- /Applications/Atelier.app/Contents/MacOS/atelier-mcp
+claude mcp get atelier</code></pre>
+<p>Then type <code>/mcp</code> in Claude Code to see that Atelier is connected.</p>
+
+<h2 id="codex">Codex</h2>
+<p>Add this to <code>~/.codex/config.toml</code> (create the file if it isn't there), then start Codex again:</p>
+<pre><code>[mcp_servers.atelier]
+command = "/Applications/Atelier.app/Contents/MacOS/atelier-mcp"
+args = []</code></pre>
+<p>To turn it off without deleting it, add <code>enabled = false</code>. The Codex desktop app reads the same file.</p>
+
+<h2 id="models">Which model</h2>
+<ul>
+  <li><b>Claude and Codex</b> are the most reliable at choosing the right command among many.</li>
+  <li><b>Local models</b> (Gemma 4, Qwen 3.6 in Ollama) can call tools but miss more often. Atelier keeps their command lists short, and anything risky is confirmed in Atelier's window, not in the chat.</li>
+  <li><b>Free hosted models</b> in OpenCode vary. Pick one marked for tool use.</li>
+</ul>
+
+<h2 id="privacy">Privacy</h2>
+<ul>
+  <li>The helper talks to Atelier on your Mac only; Atelier makes no network calls for this.</li>
+  <li>With Ollama, nothing leaves your Mac. With a hosted model (Claude, Codex, OpenCode's free models), what Atelier answers goes to that provider as part of the chat. So photo previews and locations are off by default, with switches in <span class="path">Settings › Agents</span>. Private photos are never shared.</li>
+</ul>
+
+<h2 id="trouble">If it doesn't work</h2>
+<dl class="defs">
+  <dt>“Atelier isn't running”</dt><dd>Open Atelier, then ask again.</dd>
+  <dt>The app isn't allowed</dt><dd><span class="path">Settings › Agents › Apps</span> lists every app that connected. Change <b>Don't Allow</b> to Look or higher. Check <b>Activity</b> for the error, and copy it if you need help.</dd>
+  <dt>The model never uses Atelier</dt><dd>Small free or local models often answer without calling tools. Ask directly (“use the Atelier tools to list my collections”), or pick a model that supports tool use.</dd>
+  <dt>Wrong path</dt><dd>If Atelier isn't in <code>/Applications</code>, copy the helper's path from <span class="path">Settings › Agents › Connect an App</span>.</dd>
+</dl>
+
+<div class="see-also">See also: <a href="settings.html">Settings</a> · <a href="shortcuts.html">Keyboard shortcuts</a> · <a href="ai.html">AI tools</a></div>
+
+</main>
+</body>
+</html>
