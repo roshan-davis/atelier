@@ -1,6 +1,6 @@
 # MCP and Atelier Agent Actions
 
-**Design proposal, November 11, 2026; revised November 12 after comparing VectorCraft and other apps, and November 13 after Codex's review.** Not yet approved and not yet in the PRD. Backlog item: [AT-050](../BACKLOG.md#at-050--mcp-server-agent-actions-for-chat-clients). Published page with the same content: [Atelier Agent Actions](https://claude.ai/artifact/1zAwwGsuc14v3yZbxBfrB2) (private to Rosh).
+**Design proposal, November 11, 2026; revised November 12 after comparing VectorCraft and other apps, and November 13 after Codex's review.** Direction approved by Rosh on November 13, 2026; not yet in the PRD (AT-050b adds it). Backlog: [AT-050](../BACKLOG.md#at-050--agent-actions-mcp-server-for-chat-clients-atelier-and-easel), with one work item per phase: AT-050a (A0) to AT-050f (A5), and AT-050g for Easel. Published page with the same content: [Atelier Agent Actions](https://claude.ai/artifact/1zAwwGsuc14v3yZbxBfrB2) (private to Rosh).
 
 This proposal lets Claude, Codex or a local Ollama model run Atelier's commands from a chat, through an MCP server that lives inside the app.
 
