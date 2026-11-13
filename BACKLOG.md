@@ -705,21 +705,143 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 **Acceptance:** Mac build; Rosh opens Settings (⌘,), clicks every pane, checks Masking Models download/status lines in AI, key recording in Keyboard, themes in Appearance, and Change Keys… from ⌘/. **Deferred:** a search field in the sidebar (System Settings has one); not asked for.
 
-## AT-050 — MCP server: agent actions for chat clients
+## AT-050 — Agent Actions: MCP server for chat clients (Atelier and Easel)
 
-**Status:** Proposed / discuss. Design only; no implementation approved. **Owner:** Claude (design). **Chat:** [Design an MCP server for Atelier actions](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKLw4mNvV9wQDgMyFLnzx5sL). **Branch:** `claude/project-thread-eecdru` (design doc). **Baseline:** `8436d93`. **Dependencies:** none for A0; A4 uses the Processor host (AT-021) and export presets (AT-022).
+**Status:** Direction approved by Rosh on Nov 13, 2026 ("add one section in the backlog for mcp … so the next PRs can pick one by one"). The design is done. Implementation is split into AT-050a to AT-050g below, one PR each, taken in order. AT-050a is ready to start. **Design owner:** Claude. **Design chat:** [Design an MCP server for Atelier actions](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKLw4mNvV9wQDgMyFLnzx5sL). **Design PRs:** [#110](https://github.com/roshan-davis/atelier/pull/110) (merged `fa4239b`), [#115](https://github.com/roshan-davis/atelier/pull/115).
 
-**Evidence:** Rosh (2026-11-11): "Can my app setup an MCP and many of the menu function there as actions that can be conversationally execute from the chat that connect to this MCP?" The PRD lists an MCP server for agents under AI, Later ("Agent access (later)").
+**Evidence:**
+- Rosh (Nov 11, 2026): "Can my app setup an MCP and many of the menu function there as actions that can be conversationally execute from the chat that connect to this MCP?"
+- Rosh (Nov 12): compare with tools that already do it, especially VectorCraft.
+- Rosh (Nov 13): Easel must take the exact same approach.
+- Rosh (Nov 13): new or removed menu commands must update the MCP lists automatically, and new features must be available by default under the rules, with no porting.
+- The PRD lists the MCP server under AI, Later ("Agent access (later)").
 
-**Design:** [Docs/Atelier-Agent-Actions.md](Docs/Atelier-Agent-Actions.md). The MCP server is hosted inside Atelier.app (one catalog writer). A bundled stdio helper `atelier-mcp` relays to the app over a Unix socket, for Claude Desktop, Claude Code, Codex and Ollama clients (ollmcp, Open WebUI). One action registry in AtelierCore feeds menus, `KeyBindings`, `PhotoMenu` and MCP. About 20 task-sized tools in profiles (Look, Organize, Edit, Everything). Risk tiers: reads run freely; undoable edits run with one named undo step and a toast; export, AI, Edit In and XMP writes confirm in Atelier's own sheet; deletes are never callable. Optional HTTP listener over Tailscale with a token comes later.
+**Design:** [Docs/Atelier-Agent-Actions.md](Docs/Atelier-Agent-Actions.md) is the reference for every sub-item. The working rules are in AGENTS.md under "Agent Actions". In short:
+- The MCP server lives inside Atelier.app (one catalog writer). A bundled stdio helper, `atelier-mcp`, relays to it over a private Unix socket.
+- One action registry builds the menus, keys, the right-click photo menu and the MCP catalog.
+- Every action declares a kind, which sets its tier: reads run; undoable edits run as one named undo step; file writes, jobs and launching another app ask first in Atelier's window; deletes are never exposed.
+- Two tool layers go through one policy check: typed front-door tools, and `command_list` / `command_run` / `command_batch` over the whole registry.
+- The app grants each client a profile (Look, Organize, Edit, Everything), and profiles are ceilings.
+- The plumbing is an app-neutral module that Easel reuses.
+- Codex's review rules ([PR #115 comment](https://github.com/roshan-davis/atelier/pull/115#issuecomment-6842233533)) are part of the design, with the counters recorded in the doc. Rosh's exposed-by-default rule overrides Codex's review-before-expose suggestion.
 
-**Proposed phases (one PR each):** A0 action registry (no visible change); A1 read-only MCP + Settings > Agents; A2 Organize (ratings, flags, keywords, collections, cull groups); A3 Edit (Develop, presets, sync, crop, masks, Match Look); A4 Export, Edit In, AI recipes with confirmation and jobs; A5 optional HTTP/Tailscale, App Intents, MCP prompts.
+**Defaults until Rosh says otherwise:**
+- Remote access waits for AT-050f.
+- Photo previews and location are off by default, with a switch.
+- The shared module is built inside Atelier and extracted when Easel starts (AT-050g).
 
-**PRD changes needed on approval:** move the MCP server out of Later and widen its scope; add a Privacy line for the optional HTTP listener (off by default, loopback or tailnet, token); note the App Group and network-server entitlement under Sandboxing.
+**Every sub-item:**
+- Updates the PRD, Help (an "Agents" page from AT-050b on), this backlog entry and, if a rule changes, AGENTS.md.
+- Regenerates `Docs/agent-actions-catalog.json` once it exists.
+- Is checked on a Mac with `python3 Scripts/check_pr.py` at the PR head.
+- Cloud agents follow AGENTS.md "Cloud review when macOS is unavailable".
 
-**Decisions for Rosh:** approve the direction and A0 + A1 as the first bounded item; remote access later (recommended) or in A1; photo previews for cloud-hosted models off by default with a switch (recommended) or never.
+### AT-050a — Action registry, kinds and catalog check (A0)
 
-**Acceptance to agree:** per phase. A1 at minimum: Claude Desktop, Codex and one Ollama client each list the Look tools and answer a catalog question; nothing writes to the catalog; Settings > Agents turns access off.
+**Status:** Approved / ready. **Owner/chat/branch/PR:** unassigned. **Depends on:** nothing.
+
+**Scope:**
+- An app-neutral Swift target (no imports from AtelierApp or Atelier's catalog types). It holds the action type: id, title, kind, a parameter type, target kinds, opt-out reason and version. It also holds the kind-to-tier rules and menu, key and context-menu builders.
+- Move every command in `AtelierApp.swift` menus, `KeyBindings`/`KeyAction` and `PhotoMenu.swift` onto registry actions whose handlers take resolved ids. Keep `KeyBindings` as the key layer that maps to action ids.
+- Generate parameter schemas from the Swift parameter types.
+- A script writes `Docs/agent-actions-catalog.json`, and `check_pr.py` fails when it is stale.
+- A tiny in-memory test host with Easel-shaped targets (documents, layers).
+
+**Not in scope:** no MCP server, socket, helper or Settings pane; no visible change.
+
+**Acceptance:**
+- Menus, keys and right-click items behave exactly as before. Rosh re-tests the menus he uses most, with click paths given in the PR.
+- Tests fail if a menu item has no action, an action has no kind, or two actions share an id.
+- The shared target builds without Atelier.
+- Catalog file committed.
+- A0 size and risky commands (view-state toggles, tool modes) listed in the PR.
+
+### AT-050b — Read-only MCP, client grants and Settings > Agents (A1)
+
+**Status:** Approved, waits for AT-050a. **Owner/chat/branch/PR:** unassigned. **Depends on:** AT-050a.
+
+**Scope:**
+- The MCP server (2025-06-18 protocol, plus 2026-07-28 response shapes when a client asks for them), the `atelier-mcp` helper in the app bundle and the private socket.
+- First-connect approval in Atelier: grants per client, identified by the launching app's code signature (Terminal clients are per launcher). Grants are checked on every request.
+- Look tools (`get_context`, `search_photos`, `get_photo`, `get_preview` off by default, `list_items`, `cull_groups`, `get_develop`) and a profile-filtered `command_list`.
+- Settings > Agents: on/off (closes connections), grants, preview and location switches, Copy config for Claude Desktop, Claude Code, Codex and ollmcp, and the activity log.
+- The PRD: move the MCP server out of Later, and add the Privacy and Sandboxing lines.
+
+**Acceptance:**
+- Claude Desktop, Codex and one Ollama client (ollmcp or Open WebUI) each connect after Rosh's Allow, list tools and answer a catalog question. The PR records the protocol version each one used.
+- Nothing writes to the catalog.
+- Changing helper arguments can't raise a grant. Turning access off drops connections.
+- Help "Agents" page.
+
+### AT-050c — Organize: library and cull writes (A2)
+
+**Status:** Approved, waits for AT-050b. **Owner/chat/branch/PR:** unassigned. **Depends on:** AT-050b.
+
+**Scope:**
+- Typed `show`, `set_metadata` and `organize`, plus `command_run` for exposed library and cull commands.
+- The guard: one named undo step per call ("Rate 3 stars (Claude)"), an Undo toast, and "ask before more than N photos" counted across a whole batch.
+- Catalog-bound ids. Implicit targets are resolved once and echoed.
+- "Did you mean" parameter errors.
+- `undo_change`, which works only while the agent's change is the latest on those photos.
+
+**Acceptance:**
+- Multi-photo and RAW+JPEG pair edits undo in one step.
+- A photo removed mid-call returns "target changed".
+- A later manual edit blocks `undo_change`.
+- Both tool layers agree on every exposed action.
+
+### AT-050d — Edit: Develop, presets, masks, Match Look and batches (A3)
+
+**Status:** Approved, waits for AT-050c. **Owner/chat/branch/PR:** unassigned. **Depends on:** AT-050c.
+
+**Scope:**
+- Typed `adjust`, `auto`, `apply_preset`, `sync`, `reset`, `crop`, `add_mask` (Brush stays manual) and `match_look`.
+- `command_batch`, with `atomic: true` allowed only for catalog and Develop changes that roll back in one transaction.
+- Agent edits wait for an active slider drag to end, then recheck targets.
+- Develop history names carry the client.
+
+**Acceptance:**
+- Renders stay coalesced during agent edits (timed, numbers in the PR).
+- An atomic batch is one undo step and rolls back fully on failure.
+- A non-atomic batch reports each step.
+
+### AT-050e — Everything: export, Edit In and AI recipes with Allow (A4)
+
+**Status:** Approved, waits for AT-050d. **Owner/chat/branch/PR:** unassigned. **Depends on:** AT-050d; AT-022 export presets; the Processor host (AT-021) for AI recipes.
+
+**Scope:**
+- Typed `export`, `edit_in` and `run_recipe` (Upscale, Replace Background; Remove Object opens the tool), plus `command_run` for exposed "asks first" commands.
+- An Allow sheet bound to the exact operation (client, photos, preset or recipe, destination, options), with a fresh Allow for any change.
+- Folder roots for writes. Destination, overwrite and license gate rechecked at run time.
+- Jobs with progress, Cancel and a list of files written so far.
+- None of these may be in an atomic batch.
+
+**Acceptance:**
+- No agent tool can approve its own Allow.
+- A changed destination or preset needs a new Allow.
+- Cancel mid-export reports partial output.
+- Provenance and the license gate are unchanged from the AI panel.
+
+### AT-050f — Optional reach: HTTP over Tailscale, App Intents, prompts (A5)
+
+**Status:** Proposed / discuss (Rosh decides remote access). **Owner/chat/branch/PR:** unassigned. **Depends on:** AT-050e.
+
+**Scope candidates:**
+- A Streamable HTTP listener (off by default, loopback or tailnet, token), with request keys so retries don't run twice.
+- App Intents for Shortcuts from the same registry.
+- MCP prompts ("Cull this import", "Export the picks for the website", "Match these to a reference").
+- A claude.ai connector would need public HTTPS with OAuth and is not planned.
+
+### AT-050g — Easel adopts the shared module
+
+**Status:** Proposed / discuss (timing is Rosh's call). **Owner/chat/branch/PR:** unassigned. **Depends on:** AT-050b at least.
+
+**Scope:**
+- Move the app-neutral target into its own Swift package, which both apps depend on.
+- Easel supplies its own actions, targets, typed tools, `easel-mcp` helper and Allow presentation, under the same tool names, profiles, tiers and catalog check.
+- Easel's AGENTS.md gets the same "Agent Actions" rules (Easel's repo, not this one).
+
+**Acceptance:** one client config pattern works for both apps; Atelier unchanged after the extraction.
 
 ## AT-051 — Menus: no New Window, no window tabs
 

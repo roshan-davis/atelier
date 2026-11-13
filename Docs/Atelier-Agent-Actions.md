@@ -1,18 +1,53 @@
 # MCP and Atelier Agent Actions
 
-**Design proposal, November 11, 2026.** Not yet approved and not yet in the PRD. Backlog item: [AT-050](../BACKLOG.md#at-050--mcp-server-agent-actions-for-chat-clients). Published page with the same content: [Atelier Agent Actions](https://claude.ai/artifact/1zAwwGsuc14v3yZbxBfrB2) (private to Rosh).
+**Design proposal, November 11, 2026; revised November 12 after comparing VectorCraft and other apps, and November 13 after Codex's review.** Direction approved by Rosh on November 13, 2026; not yet in the PRD (AT-050b adds it). Backlog: [AT-050](../BACKLOG.md#at-050--agent-actions-mcp-server-for-chat-clients-atelier-and-easel), with one work item per phase: AT-050a (A0) to AT-050f (A5), and AT-050g for Easel. Published page with the same content: [Atelier Agent Actions](https://claude.ai/artifact/1zAwwGsuc14v3yZbxBfrB2) (private to Rosh).
 
 This proposal lets Claude, Codex or a local Ollama model run Atelier's commands from a chat, through an MCP server that lives inside the app.
 
 ## Recommendation
 
-Build it, but not as "every menu item becomes a tool." The PRD already plans an MCP server for agents (AI row, "Later"). It fits Atelier because the app is local, keyboard-driven and has clean commands. It's also the right way to give an agent control without anyone driving the screen.
+Build it, and make every command reachable, as VectorCraft does. Rosh's idea is quickly becoming the standard for creative apps. VectorCraft, from the LightCraft and ArtCraft team, hands every menu item, tool, panel and dialog to an agent over MCP. Blender, Photoshop, GIMP and Lightroom Classic have community MCP bridges, and Figma ships an official one. Comparing them changed one of the three choices below and added several details worth copying. The PRD already plans an MCP server for agents (AI row, "Later").
 
-Three choices make or break it:
+- **One command table.** Unchanged. Menus, keys, the right-click menu and MCP all read the same list of actions. VectorCraft works the same way: its menus, shortcuts and MCP catalog come from one table, and its CI fails if they drift apart.
+- **Every command reachable, in two layers.** Changed. The first draft offered only about 20 hand-made tools. VectorCraft shows the better pattern. A short set of typed tools (`set_metadata`, `adjust`, `export`…) is the front door, and `command_list` / `command_run` reach every command in the registry. Gemma and Qwen do well with the front door, and Claude can reach everything.
+- **Atelier owns the safety.** Unchanged, and stricter than VectorCraft. VectorCraft lets the agent answer its dialogs. Atelier can't, because it touches originals, the Trash, the NAS and the shop license gate. Reads run freely and edits are undoable. Export, AI jobs and Edit In ask in Atelier's own window. Deletes can't be called.
 
-- **One action registry.** Menus, keys, the right-click menu and MCP all read the same list of actions. Otherwise the agent ends up with its own copy of each command, which is the "same bug tool by tool" problem AGENTS.md warns about.
-- **About 20 task-sized tools, not 150 menu clicks.** For example `set_metadata(photos, rating: 3)` instead of "press 3". Small local models choose well from a short list.
-- **Atelier owns the safety.** Reads run freely and edits are undoable. Exports, AI jobs and Edit In ask in Atelier's own window. Deletes are never callable. This works the same whichever chat client or model is asking.
+## How other apps do it
+
+Most of these are community bridges: a plug-in inside the app opens a local socket, and a separate MCP server talks to it. VectorCraft and Figma build the server into the product themselves, which is what Atelier would do.
+
+| App | Built by | How the agent reaches the app | Tools | Safety |
+| --- | --- | --- | --- | --- |
+| **VectorCraft** | The app's own developers, open source (app still "in development") | `vectorcraft-cli mcp` (stdio) relays to the app's control port on 127.0.0.1:7979, opened by launching with `--control`; or a headless engine with no window | About 30 tools. `command_list`, `command_run` and `command_batch` reach roughly 450 menu commands plus engine commands. Typed `draw_path`, `export` and `render_preview`. UI driving: `invoke_menu`, `answer_dialog`, clicks, keys, screenshots | Read and write folder roots. Hints on every tool. Batches undo as one step. Plug-in installs need a person, and the agent can't confirm them. The control port has no authentication. |
+| **Blender** | Community (blender-mcp), not the Blender Foundation | Add-on runs a socket server on localhost:9876; a Python MCP server relays | A few scene tools plus `execute_blender_code`, which runs any Python | "Anyone who can reach that port can run Python inside Blender." Optional safe mode |
+| **Figma** | Figma, official | The desktop app serves HTTP at 127.0.0.1:3845/mcp; also a remote server at mcp.figma.com | Read tools (design context, screenshot, variables). Writing to the canvas only through the remote server, in beta | Paid seat. The desktop server is read-only |
+| **Photoshop, Premiere** | Community (adb-mcp, "not endorsed by Adobe", proof of concept) | MCP server, then a Node proxy on ws://localhost:3001, then a UXP plug-in (UXP can't listen on a socket) | Lower-level typed tools per app | No direct file access by default |
+| **Lightroom Classic** | Community (lightroom-mcp, lightroom-classic-mcp) | A Lua plug-in opens localhost sockets | Mostly catalog reads, some collection tools | Read-mostly |
+| **GIMP** | Community (gimp-mcp) | GIMP plug-in | Script-Fu | — |
+
+### What to adopt from VectorCraft
+
+- **The catalog tools, by the same names.** Use `command_list` (filter, menu path, enabled only), `command_run` (id, params) and `command_batch` (steps, `atomic`, `label`). VectorCraft says these names follow a convention it shares with FilmCraft, so prompts and habits carry over between apps.
+- **A batch as one undo step.** With `atomic: true`, a batch becomes one named undo step, which fits the one-edit-one-step rule.
+- **A catalog that can't drift.** VectorCraft generates its MCP list from the menu table and checks it in CI. Atelier can go one step further: menus are built *from* the registry, so there's nothing to mirror.
+- **Ids instead of the selection, never mixed.** Explicit ids replace the selection. A bad id is refused under the command's name, never quietly replaced by the selection. This design already did that, and VectorCraft confirms it.
+- **"Did you mean" errors.** An unknown parameter is an error that names the nearest real key ("unknown parameter `widht`; did you mean `width`?"), instead of running with a default. This matters a lot for small local models.
+- **Folder roots.** Their `--automation-read-root` and `--automation-write-root` map well to Atelier. Export and Edit In write only into folders Rosh allows (the export presets' folders by default), and the agent never names a path outside them.
+- **Long calls.** Progress notifications, cancellation, and a "busy" error after two seconds instead of a silent queue.
+- **Prompts.** VectorCraft ships eight ready workflows (poster, recolor, export set…). Atelier's would be "Cull this import", "Export the picks for the website" and "Match these to a reference".
+- **Approval only a person can give.** VectorCraft's plug-in install dialog ignores the agent's `answer_dialog` and injected input, and OK only works after the question has been on screen for half a second. Atelier's Allow sheets should use the same hardening.
+
+### Where Atelier differs, on purpose
+
+- **No driving the window.** No clicks, keys or `answer_dialog`. Atelier's commands mean something on their own (rate these, export those), and driving the window is the computer-use pattern Rosh has ruled out. An agent that can answer dialogs could also click Allow on its own export.
+- **Stricter safety tiers.** VectorCraft relies on undo and folder roots, which suits a vector document. Atelier also guards originals, the Trash, the NAS and the license gate, so it keeps "Asks first" and "Never".
+- **Private socket, not an open port.** VectorCraft opens an unauthenticated TCP port, and only when launched with `--control`. Atelier listens on a Unix socket that only Rosh's user account can open, so a web page or another account on the Mac can't reach it. It's turned on with a switch in Settings, not a launch flag.
+- **No headless mode at first.** VectorCraft can run its engine without the window. Atelier's catalog has one writer, so the helper launches Atelier instead. A read-only headless search could come later.
+- **No "run any code" tool.** Blender's `execute_blender_code` shows why: it bypasses every tier.
+
+![Two layers: Gemma and Qwen (profile Organize) use the ~20 typed front-door tools; Claude and Codex (profile Edit or Everything) also get command_list, command_run and command_batch. Both layers reach the action registry and the same guard, so command_run on Export still asks first and delete commands stay out of the list.](images/agent-actions/two-layers.png)
+
+*Both layers land on the same registry and the same guard. A profile is a ceiling. Every profile gets both layers, but the list and the commands it can run stop at that profile's level (see the matrix under "Rules added after the Codex review").*
 
 ## How it fits together
 
@@ -41,6 +76,8 @@ Config for any of them is one entry pointing at the helper. Settings would offer
 }
 ```
 
+The profile in the config is only a request. Atelier decides what each client may do (see "Who may connect" below).
+
 ### Which clients can connect
 
 - **Claude Desktop and Claude Code:** add Atelier as a local MCP server in their config.
@@ -67,9 +104,20 @@ Today commands live in three places. There are SwiftUI menus in `AtelierApp.swif
 
 Apple was reported in 2025 to be testing MCP support through App Intents in macOS 26.1 betas. Built on a registry, Atelier could later publish the same actions as App Intents (Shortcuts, Spotlight) at little cost. Don't count on Apple's MCP bridge until it ships and is documented.
 
+### Always in sync: new commands need no porting
+
+Rosh's rule (Nov 13, 2026): adding or removing a menu command must update everything agents see, with nothing to port by hand and nothing that breaks to be fixed later. New features are available to agents by default under the same rules. The same holds in Easel.
+
+- **One source.** A menu item, key command or right-click item can only be made from a registry action, never from a bare button that calls the model. A new feature that shows up in a menu is in the MCP catalog in the same commit, and a removed one leaves both. There's no second list to keep up to date.
+- **Exposed by default, safely.** Every action must say what it does (its kind): reads, changes the catalog or Develop settings (undoable), writes files or starts a job, opens another app, or deletes. The code won't compile without a kind. The tier follows from the kind by fixed rules: edits run with one undo step, file writes and jobs ask first in Atelier's window, and deletes are never exposed. A new feature is usable by agents at once under those rules. An action opts out only with a stated reason (for example Show Before, which means nothing to an agent).
+- **Parameters come from the code.** Each action's parameters are a Swift type, and the schema `command_list` shows is generated from it. A new or renamed parameter appears without hand edits.
+- **Typed tools can't go stale.** Typed tools call registry actions by their Swift ids, so removing or renaming an action they use is a build error, not a broken tool discovered later.
+- **Checks.** Tests fail if a menu item has no action, an action has no kind, or two actions share an id. A script writes the agent catalog to `Docs/agent-actions-catalog.json`, and `check_pr.py` fails if that file is out of date, so every PR's diff shows which agent commands it added, removed or changed. This is VectorCraft's `ui-commands --check`, except the menus come from the registry, so nothing has to be mirrored.
+- **The same in Easel.** The shared module provides the action type, the kind-to-tier rules, the menu builders and the catalog check, so Easel gets the same behavior by adopting it.
+
 ## Tool catalog
 
-About 20 tools grouped by task. Each takes a `photos` target and returns what it changed. The client picks a profile, which decides how many tools the model sees:
+About 20 typed tools grouped by task, plus the three catalog tools that reach every command. Each takes a `photos` target and returns what it changed. Atelier grants each client a profile (the client can ask for one), which decides how many tools the model sees:
 
 - **Look:** read only.
 - **Organize:** adds library and cull.
@@ -100,7 +148,9 @@ For Gemma or Qwen, start with Organize or Edit.
 | Export | `export` | Export with a preset to a folder; license gate applies | Asks first |
 | Edit In | `edit_in` | Open in an editor from Settings > Edit In | Asks first |
 | Safety | `undo_change`, `job_status` | Undo one of the agent's own changes by id; check or cancel a running job | Undoable |
-| Not exposed | — | Remove or delete photos, delete imports or collections, change Settings or keys. A request opens Atelier's own Remove sheet for Rosh to click. | Never |
+| Every command | `command_list` | Commands in the registry: id, title, menu path, key, parameters, tier, and whether it's enabled now | Reads |
+| | `command_run`, `command_batch` | Run any listed command, or several as one named undo step. Each command keeps its own tier. | Its own tier |
+| Not exposed | — | Remove or delete photos, delete imports or collections, change Settings or keys. Not listed and can't be run in any way; the agent points Rosh to Photo > Remove Photo… | Never |
 
 ### What a conversation looks like
 
@@ -126,7 +176,7 @@ Chat clients handle approval differently. Some ask before each tool call, and so
 | **Reads** | Runs freely | Search, metadata, settings, cull groups. Previews only if turned on. |
 | **Undoable** | Runs, then tells you | One undo step per call, named with the client: "Rate 3 stars (Claude)". A toast in the window offers Undo. More than 50 photos asks first (the number can be changed). |
 | **Asks first** | Confirm in Atelier | Export, AI jobs, Edit In and XMP writes make files or launch apps. Atelier shows a sheet with what, how many and where, plus Allow and Cancel. |
-| **Never** | Not a tool | Remove, Trash, delete import. If asked, Atelier opens its Remove sheet, and only Rosh's click deletes (with `DeleteFeedback`). |
+| **Never** | Not a tool | Remove, Trash, delete import. Not listed and can't be run by id or in a batch. Only Rosh deletes, from the menus (with `DeleteFeedback`). |
 
 ![Sequence: Rosh asks the chat to export the picks; the model calls search_photos, then export; Atelier's guard shows a confirmation sheet in the Atelier window; Rosh clicks Allow; the export runs as a job with progress and returns the folder path.](images/agent-actions/export-sequence.png)
 
@@ -144,6 +194,62 @@ Chat clients handle approval differently. Some ask before each tool call, and so
 - Every write names its photos. `{"selection": true}` and `{"current": true}` are resolved when the call runs, and the result echoes the count and ids, so a selection changed mid-chat is never a silent surprise.
 - Ids are catalog ids. Virtual copies have their own ids, and RAW+JPEG pairs follow the pair rule the menus already use.
 
+## Rules added after the Codex review
+
+Codex reviewed this design on November 13, 2026 ([review on PR #115](https://github.com/roshan-davis/atelier/pull/115#issuecomment-6842233533)). It agreed with the architecture and the A0 + read-only A1 start, and asked for these rules before the affected phases. They are part of the design now.
+
+### Who may connect (A1)
+
+- **Atelier decides, not the helper.** `--profile` in a client config is only a request. The first time a client connects, Atelier asks in its own window ("Claude Desktop wants to use Atelier. Requested: Edit." with Allow as Look, Allow as Edit and Don't Allow). The grant is stored per client and shown in Settings > Agents, where Rosh can change or revoke it.
+- **A name Atelier checks.** Atelier reads the helper's process from the socket and the code signature of the app that launched it (Claude, Codex, or Terminal for ollmcp). Grants and the activity log use that checked name, not the name the client gives itself. For clients started from Terminal (Claude Code, ollmcp) the check can only say "Terminal", so those grants are per launcher, not per model.
+- **Checked on every request.** Listing, running, job status, cancel and undo all go through the grant. Turning access off, or revoking a grant, closes that client's open connections at once.
+- **Threat model.** The socket accepts only Rosh's user account. Any program running as Rosh can still ask to connect, which is why the first connection needs Rosh's click. Malware already running as Rosh is out of scope, since it could edit the catalog file directly.
+- **Tests.** Changing the helper's arguments can't raise a grant. Turning access off drops existing connections.
+
+### Which commands an agent can see (A0, A1)
+
+- **Exposed by default, by rule.** Codex suggested hiding new actions until someone reviews them. Rosh chose the opposite: new actions are exposed by default, and safety comes from each action's required kind, which sets its tier (see "Always in sync" under The action registry).
+- **Profiles are ceilings, and both layers obey them.** The typed tools and `command_run` go through the same check, so they always agree:
+
+|  | Look | Organize | Edit | Everything |
+| --- | --- | --- | --- | --- |
+| Typed read tools, `command_list` | Yes | Yes | Yes | Yes |
+| Typed library and cull tools | — | Yes | Yes | Yes |
+| Typed Develop, mask and Match Look tools | — | — | Yes | Yes |
+| Typed export, Edit In and AI tools | — | — | — | Yes |
+| `command_run`, `command_batch` | Read commands | Plus exposed library and cull commands | Plus exposed Develop commands | Plus exposed "asks first" commands |
+| Never actions | No | No | No | No |
+
+- **The list matches the grant.** `command_list` shows only what this client may run, so a small model on Organize sees a short list.
+- **Never means never.** Never actions aren't listed and can't run by id, in a batch or through another command. This replaces the earlier idea of opening the Remove sheet: the agent tells Rosh to use Photo > Remove Photo… instead.
+- **Enabled is not allowed.** Whether a menu item is usable right now is separate from whether the agent may use it. Both are checked again against the resolved photos when the command runs.
+- **Tests.** The two layers agree on every action. Actions that aren't exposed still work from the menus.
+
+### Targets, waiting and undo (A2, A3)
+
+- **Ids belong to a catalog.** Replies name the open catalog, and a call made for another catalog is refused. `selection` and `current` are resolved once, at the start, and echoed back.
+- **Check again after waiting.** After a wait (for a slider drag to end, or for Allow), Atelier checks the photos again. If one is gone or the fields the call changes were edited meanwhile, the call returns "target changed" and does nothing.
+- **Undo doesn't overwrite later work.** `undo_change` works only while the agent's change is still the latest change on those photos. Otherwise it refuses and says which edit is in the way. Develop history saves whole settings snapshots, so this is simpler than checking field by field, and just as safe.
+- **Atomic only where it can roll back.** `atomic: true` is allowed only for catalog and Develop setting changes that run in one database transaction and roll back fully. File writes, AI jobs and Edit In can't be in an atomic batch. A non-atomic batch returns a result for each step.
+- **Limits count the whole batch.** "Ask before more than 50 photos" applies to the batch total.
+- **Retries (later, with A5).** Local stdio clients don't retry calls on their own. When the HTTP path arrives, calls get a request key, and repeating the key returns the first result, so a retried "Exposure +0.3" or "New collection" can't run twice.
+- **Tests.** Multi-photo edits in Atelier and document or layer edits in Easel, including a photo removed mid-call and a manual edit after an agent edit.
+
+### Approving an export, AI job or Edit In (A4)
+
+- **One Allow, one exact operation.** An Allow covers the client, the resolved photos, the preset or recipe, the destination and the options. Any change needs a new Allow.
+- **Checked again at run time.** Atelier rechecks the resolved destination (inside the allowed folders), overwrite behavior (never overwrite unless the preset says so) and the license gate.
+- **Cancel reports what was written.** Cancel stops at the next file, and the reply lists the files already written.
+- **The delay isn't proof.** The half-second delay on Allow only prevents accidental clicks. What protects the sheet is that no agent tool can click or type in Atelier's window.
+
+### The shared module (A0, A1)
+
+- **Shared versus per app.** The module shares protocol handling, grants and profile checks, the command envelope, errors and activity events. Each app supplies target resolution, availability, the change and its undo, policy details and how its confirmations look.
+- **Versioned.** Command ids and argument schemas carry a version.
+- **Shared ceilings.** Profile names are shared. Each app decides which of its actions fit under each one.
+- **A small test host shaped like Easel.** A tiny in-memory host with a few open documents and layers checks that the module assumes neither photo ids nor a single catalog.
+- **Tested protocol, not assumed.** Build on the 2025-06-18 protocol that today's clients speak, and add the 2026-07-28 response shapes for clients that ask for them, as VectorCraft does. A1 records the version actually tested with Claude, Codex and an Ollama client. Check the Swift SDK against this before choosing it.
+
 ## Privacy and reach
 
 - **Local by default.** The stdio helper and Unix socket never touch the network. Atelier makes no outgoing calls for this.
@@ -157,18 +263,27 @@ A new pane, Atelier > Settings… > Agents (under Editors & AI), would hold thes
 
 ## Building it
 
-Protocol: the official Swift SDK (`modelcontextprotocol/swift-sdk`) if it supports the 2026-07-28 spec by the time work starts. Otherwise a small JSON-RPC layer in AtelierCore, since a server with tools, a few resources and prompts doesn't need much. That spec drops the old initialize handshake and session ids, which helps for a stateless local server. The server code goes in Core with tests, and the app only adds the socket and the sheets.
+Protocol: build on 2025-06-18 with the 2026-07-28 response shapes added (see the shared module rules). Use the official Swift SDK (`modelcontextprotocol/swift-sdk`) if it fits that. Otherwise a small JSON-RPC layer in AtelierCore, since a server with tools, a few resources and prompts doesn't need much. That spec drops the old initialize handshake and session ids, which helps for a stateless local server. The server code goes in Core with tests, and the app only adds the socket and the sheets.
 
 | Phase | Scope |
 | --- | --- |
-| **A0. Action registry** | Move the menu, key and right-click commands onto one registry, with handlers that take resolved ids. No visible change. Tests in AtelierCoreTests. |
-| **A1. Read-only MCP** | Helper, socket and the Look tools. Settings > Agents with on/off, Copy config and the activity log. Lets Rosh try Claude, Codex and Ollama safely. |
-| **A2. Organize** | Ratings, flags, labels, keywords, collections, cull groups. Guard, toast and named undo steps. |
-| **A3. Edit** | Develop adjust, auto, presets, sync, crop, masks, Match Look. Wait for an active drag. |
-| **A4. Everything** | Export, Edit In and AI recipes with the confirmation sheet, background jobs, progress and Cancel. |
-| **A5. Optional** | HTTP listener with Tailscale and a token, App Intents for Shortcuts, MCP prompts such as "Cull this import". |
+| **A0. Action registry** | Move the menu, key and right-click commands onto one registry, with handlers that take resolved ids. Menus are built from it. Required kind per action, generated parameter schemas, the catalog file and its check in `check_pr.py`, and the AGENTS.md rules. No visible change. Tests in AtelierCoreTests. |
+| **A1. Read-only MCP** | Helper, socket, the Look tools and `command_list`. Client approval and grants checked by the app, exposure review per action. Settings > Agents with on/off, client grants, Copy config and the activity log. Lets Rosh try Claude, Codex and Ollama safely. |
+| **A2. Organize** | Ratings, flags, labels, keywords, collections, cull groups. Guard, toast and named undo steps, "did you mean" errors, recheck after waiting. |
+| **A3. Edit** | Develop adjust, auto, presets, sync, crop, masks, Match Look. `command_run` and atomic `command_batch`. Wait for an active drag. |
+| **A4. Everything** | Export, Edit In and AI recipes with an Allow bound to the exact operation, rechecks at run time, folder roots, background jobs, progress and Cancel. |
+| **A5. Optional** | HTTP listener with Tailscale and a token, request keys for retries, App Intents for Shortcuts, MCP prompts such as "Cull this import". |
 
 Each phase is one PR, updating the PRD, Help (a new Agents page) and BACKLOG.md. A1 is the cheapest real test of whether this gets used day to day.
+
+## The same approach in Easel
+
+Rosh wants Easel to work the same way once this is implemented, so one chat setup and the same habits work in both apps. VectorCraft does this across the Craft apps: the same tool names and flags, so one client config fits the suite.
+
+- **Shared plumbing, app-specific actions.** The parts that don't know about photos go in one app-neutral Swift module: the action and risk-tier types, the MCP server, `command_list` / `command_run` / `command_batch`, the guard and its Allow sheet, the socket, the helper, the activity log and the Settings > Agents pane. Each app supplies its own actions, typed tools and targets (photos in Atelier; documents, layers and selections in Easel) and assigns their tiers.
+- **Same names everywhere.** Same tool names, profiles (Look, Organize, Edit, Everything), error style, tiers and config shape. Each app has its own helper (`atelier-mcp`, `easel-mcp`) and its own private socket.
+- **What exactly is shared** is listed under "The shared module" in the review rules above.
+- **Build once, extract when Easel starts.** Build the module inside Atelier as its own target that imports nothing from Atelier, so A0 and A1 aren't slowed by a second repo. Move it into its own package, which both apps depend on, when Easel's work begins. A test that the module builds without Atelier keeps that move cheap.
 
 ## PRD check
 
@@ -185,6 +300,7 @@ Nothing here contradicts the PRD, but these points need a PRD change once approv
 - Approve the direction, and whether A0 + A1 are the first bounded item.
 - Remote access: leave it for later (recommended), or Tailscale in A1.
 - Previews for cloud-hosted models (Claude, Codex): off by default with a switch (recommended), or never.
+- Easel: shared module built inside Atelier and extracted when Easel starts (recommended), or a separate package from day one.
 
 ## Sources
 
@@ -196,10 +312,17 @@ Nothing here contradicts the PRD, but these points need a PRD change once approv
 - MCP transports (draft): https://modelcontextprotocol.net/specification/draft/basic/transports
 - Official Swift SDK: https://swiftpackageregistry.com/modelcontextprotocol/swift-sdk
 - mcp-client-for-ollama (ollmcp): https://pypi.org/project/mcp-client-for-ollama/0.24.1/
+- Codex design review of this document, Nov 13, 2026: https://github.com/roshan-davis/atelier/pull/115#issuecomment-6842233533
+- VectorCraft MCP docs, `docs/mcp.md` and `docs/control-protocol.md` at `f7a03f7`: https://github.com/storytold/vectorcraft
+- VectorCraft product page: https://getartcraft.com/apps/vectorcraft
+- Blender MCP: https://github.com/ahujasid/blender-mcp
+- Figma MCP server: https://developers.figma.com/docs/figma-mcp-server/ and https://developers.figma.com/docs/figma-mcp-server/local-server-installation
+- adb-mcp (Photoshop, Premiere): https://github.com/mikechambers/adb-mcp
 - Atelier source at `8436d93`: `Requirements/Atelier-PRD.md`, `Sources/AtelierApp/KeyBindings.swift`, `AtelierApp.swift`, `PhotoMenu.swift`, `LibraryModel.swift`, `Sources/AtelierCore/Processors`
 
 **Secondary**
 
+- Photography MCP servers (Lightroom, GIMP) review: https://dev.to/grove_chatforest/photography-mcp-servers-lightroom-photoshop-gimp-stock-photos-image-optimization-camera-13ih
 - 9to5Mac, macOS Tahoe 26.1 beta and MCP in App Intents (Sept 2025): https://9to5mac.com/2025/09/22/macos-tahoe-26-1-beta-1-mcp-integration/
 - Using MCP servers with Ollama and local LLMs: https://dev.to/hola_gus/how-to-use-mcp-servers-with-ollama-and-local-llms-f3
 - Best local models for tool calling, 2026: https://www.promptquorum.com/power-local-llm/best-local-models-tool-calling-2026
