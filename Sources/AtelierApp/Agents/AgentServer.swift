@@ -293,7 +293,7 @@ final class AgentServer: ObservableObject {
 
 /// The bridge from the socket's sessions (background threads) to `AgentServer` (main thread).
 /// Catalog reads run off the main thread; only the window's state is read on it.
-final class AtelierMCPHost: MCPDockingHost, @unchecked Sendable {
+final class AtelierMCPHost: MCPDockingHost, MCPResourceHost, @unchecked Sendable {
     private weak var server: AgentServer?
     private let lookTools: AgentLookTools
     /// The docking protocol: only a chat app's window code sends it, never a model.
@@ -330,6 +330,11 @@ final class AtelierMCPHost: MCPDockingHost, @unchecked Sendable {
     func tools(for client: AgentClient, profile: AgentProfile) async -> [MCPTool] {
         guard let server else { return [] }
         return await server.tools(profile: profile)
+    }
+
+    /// The photo carousel (AT-050i), for chat apps that show MCP Apps views.
+    func resources(for client: AgentClient, profile: AgentProfile) async -> [MCPResource] {
+        [AtelierPhotoCarousel.resource]
     }
 
     func call(_ tool: String, arguments: [String: JSONValue], client: AgentClient, profile: AgentProfile) async -> MCPToolResult {
