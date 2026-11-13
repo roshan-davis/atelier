@@ -1,26 +1,12 @@
+import AgentActions
 import AppKit
+import AtelierActions
 import AtelierCore
-
-/// An NSMenuItem that runs a closure.
-final class ClosureMenuItem: NSMenuItem {
-    private let handler: () -> Void
-
-    init(_ title: String, checked: Bool = false, enabled: Bool = true, handler: @escaping () -> Void) {
-        self.handler = handler
-        super.init(title: title, action: #selector(run), keyEquivalent: "")
-        target = self
-        state = checked ? .on : .off
-        isEnabled = enabled
-    }
-
-    required init(coder: NSCoder) { fatalError("init(coder:) is not used") }
-
-    @objc private func run() { handler() }
-}
 
 extension LibraryModel {
     /// The right-click menu for photos, shared by the grid, loupe and develop views. It acts on
-    /// `targetIDs`, so callers select the clicked photo first.
+    /// `targetIDs`, so callers select the clicked photo first. Every item is a registry action
+    /// (see LibraryModel+Actions.swift) run on the photos the menu was built for.
     func photoMenu(includeZoom: Bool) -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
@@ -28,76 +14,87 @@ extension LibraryModel {
         guard !ids.isEmpty else { return menu }
         let detail = ids.count == 1 ? self.detail : nil
         let count = ids.count > 1 ? " (\(ids.count) Photos)" : ""
-
-        if mode != .loupe { menu.addItem(ClosureMenuItem("Open in Loupe") { self.openLoupe() }) }
-        if mode != .develop { menu.addItem(ClosureMenuItem("Edit in Develop") { self.openDevelop() }) }
-        if mode != .hdr || ids.first != hdr.assetID {
-            menu.addItem(ClosureMenuItem("Edit in HDR", enabled: ids.count == 1) { self.openHDR() })
+        func item(_ action: Action<NoParameters>, _ title: String? = nil, enabled: Bool = true) -> NSMenuItem {
+            actions.menuItem(action, title: title, enabled: enabled, targets: ids)
         }
-        menu.addItem(ClosureMenuItem("Create Virtual Copy\(ids.count > 1 ? "\(count)" : "")") { self.createVirtualCopies() })
+
+        if mode != .loupe { menu.addItem(item(AtelierAction.loupe, "Open in Loupe")) }
+        if mode != .develop { menu.addItem(item(AtelierAction.develop, "Edit in Develop")) }
+        if mode != .hdr || ids.first != hdr.assetID {
+            menu.addItem(item(AtelierAction.hdr, "Edit in HDR", enabled: ids.count == 1))
+        }
+        menu.addItem(item(AtelierAction.createVirtualCopy, "Create Virtual Copy\(ids.count > 1 ? "\(count)" : "")"))
         if targetsIncludeVirtualCopy {
-            menu.addItem(ClosureMenuItem("Remove Virtual Copy…") { self.removeVirtualCopies() })
+            menu.addItem(item(AtelierAction.removeVirtualCopy))
         }
         if ids.count == 1, let size = rows.first(where: { $0.id == ids[0] })?.cullGroupSize, size > 1 {
-            menu.addItem(ClosureMenuItem("Show Cull Group (\(size) Shots)") { self.showCullGroup() })
+            menu.addItem(item(AtelierAction.showCullGroup, "Show Cull Group (\(size) Shots)"))
         }
-        menu.addItem(submenu("Edit In", editInMenu()))
+        menu.addItem(submenu("Edit In", editInMenu(targets: ids)))
         let ai = NSMenu()
         for recipe in AIRecipe.allCases {
-            ai.addItem(ClosureMenuItem("\(recipe.title)…", enabled: ids.count == 1) { self.openAI(recipe) })
+            ai.addItem(actions.menuItem(AtelierAction.ai, RecipeParameters(recipe: recipe.rawValue),
+                                        title: "\(recipe.title)…", enabled: ids.count == 1, targets: ids))
         }
         menu.addItem(submenu("AI", ai))
 
         if includeZoom {
             menu.addItem(.separator())
-            for level in ZoomLevel.presets {
+            for choice in ZoomChoice.allCases {
+                let level = ZoomLevel(choice)
                 let title = level == .fit ? "Zoom to Fit" : level == .fill ? "Zoom to Fill" : "Zoom to \(level.label)"
-                menu.addItem(ClosureMenuItem(title, checked: zoom == level) { self.zoom = level })
+                menu.addItem(actions.menuItem(AtelierAction.setZoom, ZoomParameters(level: choice), title: title,
+                                              checked: zoom == level, targets: ids))
             }
         }
 
         menu.addItem(.separator())
-        menu.addItem(ClosureMenuItem("Show in Finder") { self.showInFinder() })
+        menu.addItem(item(AtelierAction.showInFinder))
 
         menu.addItem(.separator())
         let rating = NSMenu()
         for stars in 0...5 {
             let title = stars == 0 ? "None" : String(repeating: "★", count: stars)
-            rating.addItem(ClosureMenuItem(title, checked: detail?.metadata.rating == stars) { self.setRating(stars) })
+            rating.addItem(actions.menuItem(AtelierAction.setRating, RatingParameters(stars: stars), title: title,
+                                            checked: detail?.metadata.rating == stars, targets: ids))
         }
         menu.addItem(submenu("Set Rating", rating))
 
         let flag = NSMenu()
-        for (title, value) in [("Picked", Flag.picked), ("Rejected", Flag.rejected), ("Unflagged", Flag.none)] {
-            flag.addItem(ClosureMenuItem(title, checked: detail?.metadata.flag == value) { self.setFlag(value) })
+        let flags: [(String, Flag, FlagChoice)] = [("Picked", .picked, .picked), ("Rejected", .rejected, .rejected),
+                                                   ("Unflagged", .none, .unflagged)]
+        for (title, value, choice) in flags {
+            flag.addItem(actions.menuItem(AtelierAction.setFlag, FlagParameters(flag: choice), title: title,
+                                          checked: detail?.metadata.flag == value, targets: ids))
         }
         menu.addItem(submenu("Set Flag", flag))
 
         let label = NSMenu()
         for value in ColorLabel.allCases {
-            label.addItem(ClosureMenuItem(value.rawValue, checked: detail?.metadata.colorLabel == value) {
-                self.toggleLabel(value)
-            })
+            label.addItem(actions.menuItem(AtelierAction.toggleLabel, LabelParameters(label: value.choice),
+                                           title: value.rawValue, checked: detail?.metadata.colorLabel == value,
+                                           targets: ids))
         }
         menu.addItem(submenu("Set Color Label", label))
 
         menu.addItem(.separator())
         let develop = NSMenu()
-        develop.addItem(ClosureMenuItem("Copy Settings", enabled: ids.count == 1) { self.copyDevelopSettings() })
-        develop.addItem(ClosureMenuItem("Paste Settings\(count)", enabled: self.develop.clipboard != nil) {
-            self.pasteDevelopSettings()
-        })
+        develop.addItem(item(AtelierAction.copySettings, enabled: ids.count == 1))
+        develop.addItem(item(AtelierAction.pasteSettings, "Paste Settings\(count)", enabled: self.develop.clipboard != nil))
         develop.addItem(.separator())
-        develop.addItem(ClosureMenuItem("Reset All Settings\(count)") { self.resetDevelopSettings() })
+        develop.addItem(item(AtelierAction.resetSettings, "Reset All Settings\(count)"))
         menu.addItem(submenu("Develop Settings", develop))
 
         // Recent, then one submenu per group, the user's groups first, as in the Presets panel.
         let presets = NSMenu()
+        func presetItem(_ preset: DevelopPreset) -> NSMenuItem {
+            actions.menuItem(AtelierAction.applyPreset, PresetParameters(preset: preset.id), title: preset.name, targets: ids)
+        }
         let recent = self.develop.recentPresets
         if !recent.isEmpty {
             let menu = NSMenu()
             for preset in recent {
-                menu.addItem(ClosureMenuItem(preset.name) { self.develop.applyPreset(preset, onto: ids) })
+                menu.addItem(presetItem(preset))
             }
             presets.addItem(submenu("Recent", menu))
             presets.addItem(.separator())
@@ -112,36 +109,33 @@ extension LibraryModel {
                 groupMenu = menu
                 lastGroup = (preset.group, preset.isBuiltIn)
             }
-            groupMenu?.addItem(ClosureMenuItem(preset.name) { self.develop.applyPreset(preset, onto: ids) })
+            groupMenu?.addItem(presetItem(preset))
         }
         menu.addItem(submenu("Apply Develop Preset\(count)", presets))
-        menu.addItem(ClosureMenuItem("Match Look to Reference…", enabled: matchProgress == nil) {
-            self.beginMatchLook(for: ids)
-        })
+        menu.addItem(item(AtelierAction.matchLook, enabled: matchProgress == nil))
 
         if !sidebar.collections.isEmpty {
             let collections = NSMenu()
             for collection in sidebar.collections {
                 guard let id = collection.id else { continue }
-                collections.addItem(ClosureMenuItem(collection.name) { self.addSelection(toCollection: id) })
+                collections.addItem(actions.menuItem(AtelierAction.addToCollection, CollectionParameters(collection: id),
+                                                     title: collection.name, targets: ids))
             }
             menu.addItem(submenu("Add to Collection", collections))
         }
         if case .collection = sidebarSelection {
-            menu.addItem(ClosureMenuItem("Remove from This Collection") { self.removeSelectionFromCurrentCollection() })
+            menu.addItem(item(AtelierAction.removeFromCollection))
         }
         if case .importGroup = sidebarSelection {
-            menu.addItem(ClosureMenuItem("Remove from This Import") { self.removeSelectionFromCurrentImport() })
+            menu.addItem(item(AtelierAction.removeFromImport))
         }
 
         menu.addItem(.separator())
-        menu.addItem(ClosureMenuItem("Write XMP Metadata") { self.writeXMP(selectionOnly: true) })
-        menu.addItem(ClosureMenuItem("Export\(count)…") { self.beginExport() })
+        menu.addItem(item(AtelierAction.writeXMP, "Write XMP Metadata"))
+        menu.addItem(item(AtelierAction.export, "Export\(count)…"))
 
         menu.addItem(.separator())
-        menu.addItem(ClosureMenuItem(ids.count > 1 ? "Remove \(ids.count) Photos…" : "Remove Photo…") {
-            self.beginRemovePhotos()
-        })
+        menu.addItem(item(AtelierAction.removePhoto, ids.count > 1 ? "Remove \(ids.count) Photos…" : "Remove Photo…"))
         return menu
     }
 
@@ -157,23 +151,24 @@ extension LibraryModel {
     }
 
     /// The installed editors, then Other Application… and the Edit In settings.
-    func editInMenu() -> NSMenu {
+    func editInMenu(targets ids: [Int64]? = nil) -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
         for editor in externalEditors {
-            let item = ClosureMenuItem("Edit in \(editor.name)") { self.editIn(editor) }
+            let item = actions.menuItem(AtelierAction.editIn, EditorParameters(editor: editor.appPath),
+                                        title: "Edit in \(editor.name)", targets: ids)
             let icon = editor.icon
             icon.size = NSSize(width: 16, height: 16)
             item.image = icon
             menu.addItem(item)
         }
         if !externalEditors.isEmpty { menu.addItem(.separator()) }
-        menu.addItem(ClosureMenuItem("Other Application…") { self.editInOtherApp() })
+        menu.addItem(actions.menuItem(AtelierAction.editInOther, targets: ids))
         return menu
     }
 
     private func submenu(_ title: String, _ menu: NSMenu) -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")  // not an action: a submenu heading
         item.submenu = menu
         return item
     }

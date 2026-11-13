@@ -738,7 +738,11 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 ### AT-050a — Action registry, kinds and catalog check (A0)
 
-**Status:** Approved / ready. **Owner/chat/branch/PR:** unassigned. **Depends on:** nothing.
+**Status:** In review; needs a Mac build and Rosh's re-test. **Owner:** Claude. **Chat:** [Design an MCP server for Atelier actions](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKLw4mNvV9wQDgMyFLnzx5sL). **Branch:** `claude/project-thread-eecdru`. **PR:** pending. **Depends on:** nothing.
+
+**Done so far (not yet accepted):** `Sources/AgentActions` (app-neutral: `ActionKind` → `AgentTier`, `Action<P>`/`ActionDescriptor`, schemas read from `ActionParameters` types, `ActionCatalog` with its problems check and JSON, `ActionRegistry` with resolved targets, and the menu builders `button`/`toggle`/`menuItem`); `Sources/AtelierActions` (64 actions, catalog without handlers); `LibraryModel+Actions.swift` (every handler); the menu bar, `KeyAction` keys and the photo menu now run through the registry; `Docs/agent-actions-catalog.json` and `Scripts/agent_catalog.py`. Validation: `AgentActionsTests` (Easel-shaped host) and `AtelierActionsTests` pass on Linux with Swift 6.1 (cloud). The app target, `ActionMenus.swift` and `AtelierAppTests/ActionRegistryTests` were not built in the cloud; they need a Mac `check_pr.py` run and Rosh's menu re-test.
+
+**Left out:** panel menus that aren't commands (Filmstrip source, filter and sort menus; Tone Curve and Color Grading preset menus) keep `ClosureMenuItem`; the Help > Atelier Help item stays outside the registry because it must work before a catalog opens. Some handlers still read `targetIDs` and are run under `withTargets(ids)`, which changes nothing for menus and keys; AT-050c to e convert them as each tool is exposed.
 
 **Scope:**
 - An app-neutral Swift target (no imports from AtelierApp or Atelier's catalog types). It holds the action type: id, title, kind, a parameter type, target kinds, opt-out reason and version. It also holds the kind-to-tier rules and menu, key and context-menu builders.

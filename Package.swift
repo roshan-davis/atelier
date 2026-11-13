@@ -7,6 +7,8 @@ let package = Package(
     products: [
         .library(name: "AtelierCore", targets: ["AtelierCore"]),
         .library(name: "AtelierHDRCore", targets: ["AtelierHDRCore"]),
+        // The app-neutral agent action registry (AT-050), shared with Easel.
+        .library(name: "AgentActions", targets: ["AgentActions"]),
         .executable(name: "AtelierApp", targets: ["AtelierApp"]),
     ],
     dependencies: [
@@ -15,6 +17,14 @@ let package = Package(
         .package(url: "https://github.com/microsoft/onnxruntime-swift-package-manager", exact: "1.24.2"),
     ],
     targets: [
+        // App-neutral: actions, kinds and tiers, parameter schemas, the registry and menu
+        // builders. Foundation only (plus AppKit/SwiftUI for the builders), so Easel can use it
+        // and its tests run anywhere. Nothing about photos or catalogs goes in it.
+        .target(name: "AgentActions"),
+        .testTarget(name: "AgentActionsTests", dependencies: ["AgentActions"]),
+        // Atelier's action catalog (ids, kinds, parameter types), without handlers.
+        .target(name: "AtelierActions", dependencies: ["AgentActions"]),
+        .testTarget(name: "AtelierActionsTests", dependencies: ["AgentActions", "AtelierActions"]),
         .target(name: "AtelierHDRCore", swiftSettings: [.unsafeFlags(["-O"], .when(configuration: .debug))]),
         .executableTarget(name: "PresetQualification", dependencies: ["AtelierCore"]),
         .executableTarget(name: "HDRQualification", dependencies: ["AtelierHDRCore", "AtelierCore"]),
@@ -32,12 +42,13 @@ let package = Package(
         ),
         .executableTarget(
             name: "AtelierApp",
-            dependencies: ["AtelierCore", "AtelierHDRCore", .product(name: "GRDB", package: "GRDB.swift")],
+            dependencies: ["AtelierCore", "AtelierHDRCore", "AgentActions", "AtelierActions",
+                           .product(name: "GRDB", package: "GRDB.swift")],
             resources: [.process("Resources"), .copy("Help")]
         ),
         .testTarget(
             name: "AtelierAppTests",
-            dependencies: ["AtelierApp"]
+            dependencies: ["AtelierApp", "AgentActions", "AtelierActions"]
         ),
         .testTarget(
             name: "AtelierCoreTests",
