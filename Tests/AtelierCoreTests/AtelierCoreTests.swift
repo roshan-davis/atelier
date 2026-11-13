@@ -227,6 +227,52 @@ final class AtelierCoreTests: XCTestCase {
         XCTAssertEqual(try catalog.assetRows(filter: LibraryFilter(scope: .collection(collection.id!))).map(\.id), [ids[2]])
     }
 
+    /// What an agent's undo (AT-050c) reads and puts back: rating, flag, label, title, caption,
+    /// keywords and collections, all in one transaction.
+    func testLibraryStatesSnapshotAndRestore() async throws {
+        let shoot = try makeShoot(count: 2)
+        let catalog = try Catalog()
+        _ = await Importer(catalog: catalog, previews: nil)
+            .run(sources: [shoot], options: ImportOptions(buildPreviews: false))
+        let ids = try catalog.assetRows(filter: LibraryFilter()).map(\.id)
+        let portfolio = try catalog.createCollection(named: "Portfolio").id!
+        try catalog.setRating(2, for: [ids[0]])
+        try catalog.setKeywords(["fog", "Barn"], for: [ids[0]])
+        try catalog.addAssets([ids[0]], toCollection: portfolio)
+        try catalog.setTitle("Morning", caption: "First light", for: ids[0])
+
+        let before = try catalog.libraryStates(for: ids + [999_999])
+        XCTAssertEqual(before.count, 2, "a photo that doesn't exist is left out")
+        XCTAssertEqual(before[ids[0]], LibraryState(rating: 2, title: "Morning", caption: "First light",
+                                                    keywords: ["Barn", "fog"], collectionIDs: [portfolio]))
+
+        // An agent's change: every field at once.
+        let best = try catalog.createCollection(named: "Best").id!
+        try catalog.setRating(5, for: ids)
+        try catalog.setFlag(.picked, for: ids)
+        try catalog.setColorLabel(.green, for: ids)
+        try catalog.addKeywords(["Sunset"], to: ids)
+        try catalog.removeKeywords(["FOG"], from: ids)
+        try catalog.setTitle("Evening", orCaption: nil, for: ids)
+        try catalog.addAssets(ids, toCollection: best)
+        let after = try catalog.libraryStates(for: ids)
+        XCTAssertEqual(after[ids[0]], LibraryState(rating: 5, flag: .picked, colorLabel: .green, title: "Evening",
+                                                   caption: "First light", keywords: ["Barn", "Sunset"],
+                                                   collectionIDs: [portfolio, best]))
+        XCTAssertEqual(after[ids[1]]?.caption, nil, "orCaption nil leaves the caption alone")
+
+        try catalog.restoreLibraryStates(before)
+        XCTAssertEqual(try catalog.libraryStates(for: ids), before)
+        XCTAssertEqual(try catalog.assetRows(filter: LibraryFilter(scope: .collection(best))).count, 0)
+        try catalog.setColorLabel(nil, for: ids)
+        XCTAssertTrue(try catalog.assetRows(filter: LibraryFilter(colorLabel: .green)).isEmpty)
+
+        // A collection deleted since is skipped, not an error.
+        try catalog.deleteCollection(portfolio)
+        try catalog.restoreLibraryStates(before)
+        XCTAssertEqual(try catalog.libraryStates(for: [ids[0]])[ids[0]]?.collectionIDs, [])
+    }
+
     // MARK: XMP
 
     func testXMPSidecarRoundTripKeepsForeignTags() throws {

@@ -664,6 +664,21 @@ final class LibraryModel: ObservableObject {
         if perform({ try $0.deleteCollection(id) }) { DeleteFeedback.play(.remove) }
     }
 
+    /// An edit on named photos (agents, AT-050c): like `perform`, but when Settings > Metadata
+    /// writes sidecars automatically it writes these photos' sidecars, not the selection's.
+    @discardableResult
+    func performEdit(on ids: [Int64], _ edit: (Catalog) throws -> Void) -> Bool {
+        do {
+            try edit(catalog)
+            reloadDetail()
+            if UserDefaults.standard.bool(forKey: "xmp.autoWrite") { autoWriteXMP(ids) }
+            return true
+        } catch {
+            status = error.localizedDescription
+            return false
+        }
+    }
+
     /// Whether the edit was made.
     @discardableResult
     private func perform(_ edit: (Catalog) throws -> Void) -> Bool {
