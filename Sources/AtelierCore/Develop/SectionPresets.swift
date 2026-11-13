@@ -82,6 +82,13 @@ public enum SectionPresetKind: String, CaseIterable, Sendable {
         presets.first { matches($0, settings) }
     }
 
+    /// The point-curve channels `preset` bends, RGB first, so the Tone Curve panel can show them.
+    public static func bentChannels(of preset: DevelopPreset) -> [DevelopSettings.CurveChannel] {
+        DevelopSettings.CurveChannel.allCases.filter {
+            preset.settings.points(for: $0) != DevelopSettings.CurvePoint.identity
+        }
+    }
+
     /// Fixed IDs for the built-ins: panel number, group number (its place in `builtInGroups`,
     /// so new groups go at the end) and the look's index in its group. Never reuse an index for
     /// another look.
@@ -125,11 +132,6 @@ enum ToneCurvePresets {
     /// Points given in Lightroom's 0 to 255 units.
     private static func curve(_ points: (Double, Double)...) -> [DevelopSettings.CurvePoint] {
         points.map { DevelopSettings.CurvePoint(x: $0.0 / 255, y: $0.1 / 255) }
-    }
-
-    /// Each of red, green and blue on the same curve.
-    private static func allChannels(_ s: inout DevelopSettings, _ points: [DevelopSettings.CurvePoint]) {
-        for channel in [DevelopSettings.CurveChannel.red, .green, .blue] { s.setPoints(points, for: channel) }
     }
 
     static let all: [DevelopPreset] = [
@@ -214,8 +216,11 @@ enum ToneCurvePresets {
             s.setPoints(curve((0, 14), (255, 255)), for: .red)
             s.setPoints(curve((0, 0), (255, 210)), for: .blue)
         },
+        // On the RGB curve, so the panel shows it as the falling line it is. The RGB curve
+        // keeps each channel's place between the brightest and darkest, so a falling straight
+        // line inverts every channel exactly, the same as inverting Red, Green and Blue.
         kind.look("Effects", 0, "Negative") { s in
-            allChannels(&s, curve((0, 255), (255, 0)))
+            s.setPoints(curve((0, 255), (255, 0)), for: .rgb)
         },
         // A negative as if printed without the orange film base taken out.
         kind.look("Effects", 1, "Color Negative") { s in
@@ -225,7 +230,7 @@ enum ToneCurvePresets {
         },
         // The Sabattier effect: tones rise to a peak, then the brightest turn back toward dark.
         kind.look("Effects", 2, "Solarize") { s in
-            allChannels(&s, curve((0, 0), (150, 230), (255, 40)))
+            s.setPoints(curve((0, 0), (150, 230), (255, 40)), for: .rgb)
         },
     ]
 }

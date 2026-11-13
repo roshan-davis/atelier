@@ -13,7 +13,7 @@ struct ToneCurvePanel: View {
     @AppStorage(DevelopController.curveModeKey) private var mode = "parametric"
     @AppStorage(DevelopController.curveChannelKey) private var channelName = "rgb"
     @AppStorage("develop.curveSnapToGrid") private var snapToGrid = false
-    @AppStorage("develop.curveShowAll") private var showAllCurves = false
+    @AppStorage(DevelopController.curveShowAllKey) private var showAllCurves = false
     @State private var selected: Int?
     @State private var naming = false
     @State private var curveName = ""

@@ -92,6 +92,16 @@ final class SectionPresetTests: XCTestCase {
         XCTAssertNil(kind.matching(graded, in: kind.builtIn))
     }
 
+    func testNegativeIsOnTheRGBCurveSoThePanelShowsIt() throws {
+        let presets = SectionPresetKind.toneCurve.builtIn
+        let negative = try XCTUnwrap(presets.first { $0.name == "Negative" })
+        XCTAssertEqual(SectionPresetKind.bentChannels(of: negative), [.rgb])
+        XCTAssertEqual(DevelopRenderer.pointCurveValue(negative.settings.points(for: .rgb), at: 0.25), 0.75, accuracy: 1e-9)
+        let cross = try XCTUnwrap(presets.first { $0.name == "Cross Process" })
+        XCTAssertEqual(SectionPresetKind.bentChannels(of: cross), [.red, .green, .blue])
+        XCTAssertEqual(SectionPresetKind.bentChannels(of: presets[0]), [])
+    }
+
     func testApplyingTurnsAnOffPanelOn() throws {
         var photo = DevelopSettings()
         photo.setPanel(.toneCurve, on: false)

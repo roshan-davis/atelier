@@ -26,6 +26,21 @@ extension DevelopController {
         apply(preset.applied(to: settings), onto: nil, step: "\(kind.title) Preset: \(preset.name)")
         // Saved and in the history at once, as a Develop preset is.
         flushSave()
+        if kind == .toneCurve { showCurves(of: preset) }
+    }
+
+    /// After a Tone Curve preset, the panel shows what it did (Rosh, Nov 13, 2026: Negative,
+    /// made with the Red, Green and Blue curves, left the RGB view a straight line): the Point
+    /// view on the RGB curve if the preset bends it, else on its first color channel, with Show
+    /// All Curves on when it bends more than one channel. A preset of region sliders alone, or
+    /// Linear, leaves the view as it is.
+    private func showCurves(of preset: DevelopPreset) {
+        let bent = SectionPresetKind.bentChannels(of: preset)
+        guard let first = bent.first else { return }
+        let defaults = UserDefaults.standard
+        defaults.set("point", forKey: Self.curveModeKey)
+        defaults.set(first.rawValue, forKey: Self.curveChannelKey)
+        if bent.count > 1 { defaults.set(true, forKey: Self.curveShowAllKey) }
     }
 
     /// Saves the panel's current settings as a preset; a preset of the same name is replaced.
