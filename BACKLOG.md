@@ -804,7 +804,7 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 ### AT-050d — Edit: Develop, presets, masks, Match Look and batches (A3)
 
-**Status:** In progress, first part in review: Rosh asked for it on Nov 13, 2026 ("can you continue on the mcp work here - wanted to see develop works"). Source and Linux tests only; needs a Mac build, `check_pr.py` and Rosh's test. **Owner:** Claude. **Chat:** [Design an MCP server for Atelier actions](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKLw4mNvV9wQDgMyFLnzx5sL). **Branch:** `claude/project-thread-eecdru`. **PR:** to be linked. **Baseline:** `80ee453`. **Depends on:** AT-050c (merged).
+**Status:** In progress, first part in review: Rosh asked for it on Nov 13, 2026 ("can you continue on the mcp work here - wanted to see develop works"). Source and Linux tests only; needs a Mac build, `check_pr.py` and Rosh's test. **Owner:** Claude. **Chat:** [Design an MCP server for Atelier actions](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKLw4mNvV9wQDgMyFLnzx5sL). **Branch:** `claude/project-thread-eecdru`. **PR:** [#123](https://github.com/roshan-davis/atelier/pull/123). **Baseline:** `80ee453`. **Depends on:** AT-050c (merged).
 
 **Built in the first part:**
 - Typed `adjust` (Basic sliders by name plus any slider in `other`, `mode` set or add, clamped at the slider's ends, panels turned on as by hand), `apply_preset` (id or name, did-you-mean), `sync` (from one photo, by part; Lightroom's default parts) and `reset` (all or by part), for the Edit profile.
