@@ -4,10 +4,10 @@ Atelier's checks write a short summary and keep detailed logs on disk. Agents ca
 checks once, read the summary, and open the relevant artifacts when a test fails or a
 screenshot changes.
 
-## Run from App
+## Run from the repository folder
 
-Run these commands from the `App` folder after checking out the branch you want to test.
-That branch must include the automation runner.
+Run these commands from the repository folder (Rosh's checkout is `~/RoshProjects/Atelier/App`;
+agents use their own task worktree) after checking out the branch you want to test.
 
 | What to run | Command |
 | --- | --- |
@@ -36,7 +36,7 @@ uses existing fixtures from that folder and never downloads them.
 | --- | --- |
 | `checks` | PR whitespace, Python script tests, and Help links and index validation |
 | `build` | Swift package build |
-| `swift` | All Swift tests across Atelier Core, App, and HDR. Swift also builds the test targets |
+| `swift` | All Swift tests: AtelierCore, AtelierApp, AtelierHDRCore, AgentActions, AtelierActions and AgentMCP. Swift also builds the test targets. AtelierActionsTests fails when `Docs/agent-actions-catalog.json` is stale or a menu item isn't built from the action registry |
 | `smoke` | XCUITest opens a fixture photo in Develop, enters an Exposure value, and verifies that ⌘Z restores it |
 | `visual` | Captures layouts at the base revision and current checkout on the same Mac and compares the PNGs |
 | `all` | Every group above |
@@ -50,6 +50,7 @@ uses existing fixtures from that folder and never downloads them.
 | Catalog, import, export, rendering, or HDR logic | `checks`, `build`, and `swift` | `visual` if a rendered preview or layout can change. Supply RAW fixtures for camera or RAW work |
 | Layout, panels, themes, or Help illustrations that reflect changed controls | `checks`, `build`, and `visual` | `swift` for logic changes. `smoke` for shared controls or Develop changes |
 | Develop controls, undo, keyboard focus, or gestures | `all` | Check the specific interaction manually or add a native test when it is outside the current Exposure and Undo coverage |
+| Menu items, keys, the photo menu or agent actions | `checks`, `build` and `swift` | Regenerate the catalog first with `python3 Scripts/agent_catalog.py` |
 | Cross-cutting changes or an uncertain impact | `all` | Review affected screens and any uncovered workflows |
 
 For example, to check a layout change while iterating:
