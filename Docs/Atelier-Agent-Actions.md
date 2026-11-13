@@ -80,9 +80,9 @@ The profile in the config is only a request. Atelier decides what each client ma
 
 ### Which clients can connect
 
-- **Claude Desktop and Claude Code:** add Atelier as a local MCP server in their config.
-- **Codex:** its config takes MCP servers too, both local and HTTP ones.
-- **Ollama:** Ollama only runs the model, so a chat app in front of it has to speak MCP, such as `ollmcp` (mcp-client-for-ollama) in Terminal or Open WebUI. Gemma 4 and Qwen 3.6 can call tools but are less reliable than Claude at choosing among many, which is why the default tool lists are short and the risky steps are confirmed in Atelier.
+Any chat app that can run a local MCP server works. Atelier ships the helper `atelier-mcp` inside the app. A client starts that helper, and the helper talks to the running Atelier window, so **Atelier has to be open**. Setup steps for each client are under [Connect a chat app](#connect-a-chat-app).
+
+Ollama only runs the model; it doesn't connect to MCP servers itself (nothing on its blog or GitHub through Oct 2026). Use an Ollama model from a chat app that does, such as OpenCode, Cherry Studio, LM Studio, `ollmcp` or Open WebUI. Gemma 4 and Qwen 3.6 can call tools but are less reliable than Claude at choosing among many. That's why the default tool lists are short and the risky steps are confirmed in Atelier.
 
 ## MCP points in, Processors point out
 
@@ -250,6 +250,101 @@ Codex reviewed this design on November 13, 2026 ([review on PR #115](https://git
 - **A small test host shaped like Easel.** A tiny in-memory host with a few open documents and layers checks that the module assumes neither photo ids nor a single catalog.
 - **Tested protocol, not assumed.** Build on the 2025-06-18 protocol that today's clients speak, and add the 2026-07-28 response shapes for clients that ask for them, as VectorCraft does. A1 records the version actually tested with Claude, Codex and an Ollama client. Check the Swift SDK against this before choosing it.
 
+## Connect a chat app
+
+*Works from AT-050b, the read-only server, onward. Until then there is no server to connect to. These steps go into Atelier Help (an "Agents" page) in AT-050b, and they are re-checked against each app then.*
+
+Every app below starts the same command, with no arguments:
+
+```
+/Applications/Atelier.app/Contents/MacOS/atelier-mcp
+```
+
+If Atelier runs from Xcode instead of /Applications, Settings > Agents (AT-050b) shows the helper's path and has a **Copy** button. The first time an app connects, Atelier asks whether to allow it and which profile it gets (Look, Organize, Edit or Everything). You can change that later in Settings > Agents.
+
+### OpenCode (free models)
+
+1. Add the server from Terminal (`--global` adds it for every project):
+   ```
+   opencode mcp add atelier --global -- /Applications/Atelier.app/Contents/MacOS/atelier-mcp
+   opencode mcp list
+   ```
+   Or add it to `opencode.jsonc` yourself. In the current format, servers go under `mcp.servers`:
+   ```json
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "mcp": {
+       "servers": {
+         "atelier": {
+           "type": "local",
+           "command": ["/Applications/Atelier.app/Contents/MacOS/atelier-mcp"]
+         }
+       }
+     }
+   }
+   ```
+   To turn it off without deleting it, add `"disabled": true`.
+2. Pick a free model. In OpenCode, run `/connect`, choose the OpenCode provider and sign in, then use `/models` to pick one marked free (for example `opencode/big-pickle` or `opencode/glm-5.3-flash-free`). OpenCode says free models are free for a limited time and change often. Your Ollama models work here too.
+3. Ask, for example: "How many photos did I pick from the last import?"
+
+### Cherry Studio
+
+1. Settings > MCP Server > Add server.
+2. Name `Atelier`, Type **STDIO**, Command `/Applications/Atelier.app/Contents/MacOS/atelier-mcp`, Arguments left empty. Save.
+3. In a chat, turn on MCP in the chat box and select Atelier. Pick a model that can call tools: Cherry can use your Ollama models (Gemma 4, Qwen 3.6) or a hosted one.
+
+### Ollama, with ollmcp (Terminal)
+
+Ollama doesn't connect to MCP servers itself, so `ollmcp` (mcp-client-for-ollama) sits in between. It needs Python 3.11 or later and Ollama running.
+
+```
+uv tool install --upgrade ollmcp        # or: pip install --upgrade ollmcp
+ollmcp mcp add atelier --scope user -- /Applications/Atelier.app/Contents/MacOS/atelier-mcp
+ollmcp mcp list
+ollmcp                                  # then pick qwen3.6 or gemma4 and chat
+```
+
+`--scope user` writes `~/.config/ollmcp/mcp.json`. Without it, the server goes into `~/.config/ollmcp/mcp.local.json`.
+
+### LM Studio
+
+1. Right sidebar > Program > Install > Edit mcp.json.
+2. Inside `"mcpServers": { … }`, add:
+   ```json
+   "atelier": {
+     "command": "/Applications/Atelier.app/Contents/MacOS/atelier-mcp",
+     "args": []
+   }
+   ```
+3. Load a model that supports tool use, and turn on the Atelier tools in the chat.
+
+### Open WebUI
+
+Open WebUI connects only to MCP servers over HTTP (Streamable HTTP, v0.6.31 and later), not to a local command. Two ways:
+
+- **Now:** run the helper behind `mcpo`, which serves it over HTTP: `uvx mcpo --port 8000 --api-key "pick-a-secret" -- /Applications/Atelier.app/Contents/MacOS/atelier-mcp`. Then add `http://localhost:8000` in Open WebUI as a tool server.
+- **Later (AT-050f):** Atelier's own HTTP listener, under Admin Settings > External Tools > + > MCP (Streamable HTTP).
+
+### Claude Desktop, Claude Code and Codex
+
+- **Claude Desktop:** Claude > Settings… > Developer > Edit Config opens `~/Library/Application Support/Claude/claude_desktop_config.json`. Add the entry below, then quit and reopen Claude. Logs are in `~/Library/Logs/Claude/mcp*.log`.
+  ```json
+  { "mcpServers": { "atelier": { "command": "/Applications/Atelier.app/Contents/MacOS/atelier-mcp", "args": [] } } }
+  ```
+- **Claude Code:** `claude mcp add --transport stdio --scope user atelier -- /Applications/Atelier.app/Contents/MacOS/atelier-mcp`, then `/mcp` in Claude Code to check it.
+- **Codex CLI:** add the server to `~/.codex/config.toml` (not re-checked for this doc; Codex's MCP page moved, so confirm it in AT-050b):
+  ```toml
+  [mcp_servers.atelier]
+  command = "/Applications/Atelier.app/Contents/MacOS/atelier-mcp"
+  args = []
+  ```
+
+### If it doesn't work
+
+- **Atelier isn't open.** The helper answers with "Atelier isn't running" (AT-050b), and the client shows that as an error. Open Atelier and ask again.
+- **The app isn't allowed.** Settings > Agents lists every app that connected. Allow it, or raise its profile.
+- **The model never calls a tool.** Small free or local models often answer without calling tools. Ask directly ("use the Atelier tools to list my collections"), or pick a model marked for tool use.
+
 ## Privacy and reach
 
 - **Local by default.** The stdio helper and Unix socket never touch the network. Atelier makes no outgoing calls for this.
@@ -312,6 +407,14 @@ Nothing here contradicts the PRD, but these points need a PRD change once approv
 - MCP transports (draft): https://modelcontextprotocol.net/specification/draft/basic/transports
 - Official Swift SDK: https://swiftpackageregistry.com/modelcontextprotocol/swift-sdk
 - mcp-client-for-ollama (ollmcp): https://pypi.org/project/mcp-client-for-ollama/0.24.1/
+- OpenCode MCP servers: https://opencode.ai/docs/mcp-servers/ ; models: https://opencode.ai/docs/console/models/
+- Cherry Studio, Configure and Use MCP: https://docs.cherry-ai.com/docs/en-us/advanced-basic/mcp/config
+- mcp-client-for-ollama (ollmcp) README: https://github.com/jonigl/mcp-client-for-ollama
+- Ollama blog and repository (no built-in MCP client found): https://ollama.com/blog , https://github.com/ollama/ollama
+- LM Studio MCP: https://lmstudio.ai/docs/app/mcp
+- Open WebUI MCP: https://docs.openwebui.com/features/mcp ; mcpo: https://github.com/open-webui/mcpo
+- Claude Desktop local servers: https://modelcontextprotocol.io/quickstart/user ; Claude Code MCP: https://code.claude.com/docs/en/mcp
+- Codex configuration: https://github.com/openai/codex/blob/main/docs/config.md
 - Codex design review of this document, Nov 13, 2026: https://github.com/roshan-davis/atelier/pull/115#issuecomment-6842233533
 - VectorCraft MCP docs, `docs/mcp.md` and `docs/control-protocol.md` at `f7a03f7`: https://github.com/storytold/vectorcraft
 - VectorCraft product page: https://getartcraft.com/apps/vectorcraft

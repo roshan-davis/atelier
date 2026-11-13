@@ -1,3 +1,4 @@
+import AgentActions
 import AppKit
 import AtelierCore
 import Combine
@@ -99,6 +100,8 @@ final class LibraryModel: ObservableObject {
     @Published var selection: Set<Int64> = []
     /// Set while a Filmstrip right-click menu is open; see `targetIDs`.
     var menuTargets: [Int64]?
+    /// Every menu, key and right-click command (see LibraryModel+Actions.swift).
+    lazy var actions: AtelierRegistry = makeActionRegistry()
     @Published var focusedID: Int64? {
         didSet {
             guard focusedID != oldValue else { return }
@@ -577,14 +580,24 @@ final class LibraryModel: ObservableObject {
 
     /// `targetIDs` plus the JPEGs hidden behind those RAWs, which follow their RAW's rating,
     /// flag, label, keywords, collections and import entries.
-    var pairTargetIDs: [Int64] {
-        guard filter.groupsRawPairs else { return targetIDs }
-        return (try? catalog.withPairSiblings(targetIDs)) ?? targetIDs
+    var pairTargetIDs: [Int64] { pairIDs(targetIDs) }
+
+    /// `ids` plus the JPEGs hidden behind those RAWs.
+    func pairIDs(_ ids: [Int64]) -> [Int64] {
+        guard filter.groupsRawPairs else { return ids }
+        return (try? catalog.withPairSiblings(ids)) ?? ids
     }
 
-    func setRating(_ rating: Int) { perform { try $0.setRating(rating, for: self.pairTargetIDs) } }
-    func setFlag(_ flag: Flag) { perform { try $0.setFlag(flag, for: self.pairTargetIDs) } }
-    func toggleLabel(_ label: ColorLabel) { perform { try $0.toggleColorLabel(label, for: self.pairTargetIDs) } }
+    func setRating(_ rating: Int) { setRating(rating, for: targetIDs) }
+    func setFlag(_ flag: Flag) { setFlag(flag, for: targetIDs) }
+    func toggleLabel(_ label: ColorLabel) { toggleLabel(label, for: targetIDs) }
+
+    // Each takes the photos it acts on (with their hidden JPEGs), for the action registry.
+    func setRating(_ rating: Int, for ids: [Int64]) { perform { try $0.setRating(rating, for: self.pairIDs(ids)) } }
+    func setFlag(_ flag: Flag, for ids: [Int64]) { perform { try $0.setFlag(flag, for: self.pairIDs(ids)) } }
+    func toggleLabel(_ label: ColorLabel, for ids: [Int64]) {
+        perform { try $0.toggleColorLabel(label, for: self.pairIDs(ids)) }
+    }
 
     func setKeywords(_ text: String) {
         let names = text.split(separator: ",").map(String.init)
@@ -607,8 +620,10 @@ final class LibraryModel: ObservableObject {
         }
     }
 
-    func addSelection(toCollection id: Int64) {
-        perform { try $0.addAssets(self.pairTargetIDs, toCollection: id) }
+    func addSelection(toCollection id: Int64) { addAssets(targetIDs, toCollection: id) }
+
+    func addAssets(_ ids: [Int64], toCollection id: Int64) {
+        perform { try $0.addAssets(self.pairIDs(ids), toCollection: id) }
     }
 
     func removeSelectionFromCurrentCollection() {
@@ -1088,78 +1103,16 @@ final class LibraryModel: ObservableObject {
         return false
     }
 
-    /// Runs a single-key command. Returns false when it doesn't apply in the current view.
+    /// Runs a single-key command through the action registry. Returns false when it doesn't
+    /// apply in the current view.
     @discardableResult
     func perform(_ action: KeyAction) -> Bool {
-        switch action {
-        case .rating0: setRating(0)
-        case .rating1: setRating(1)
-        case .rating2: setRating(2)
-        case .rating3: setRating(3)
-        case .rating4: setRating(4)
-        case .rating5: setRating(5)
-        case .labelRed: toggleLabel(.red)
-        case .labelYellow: toggleLabel(.yellow)
-        case .labelGreen: toggleLabel(.green)
-        case .labelBlue: toggleLabel(.blue)
-        case .pick: setFlag(.picked)
-        case .reject:
-            // As in Lightroom, X in the crop tool swaps the crop's orientation instead.
-            if mode == .develop, develop.isCropping {
-                develop.setCrop(develop.crop.switchedOrientation(imageAspect: develop.orientedAspect))
-            } else {
-                setFlag(.rejected)
-            }
-        case .unflag: setFlag(.none)
-        case .loupe: openLoupe()
-        case .develop: openDevelop()
-        case .grid: mode = .grid
-        case .beforeAfter:
-            if mode == .hdr, hdr.hasPhoto { hdr.showingBefore.toggle(); return true }
-            guard mode == .develop else { return false }
-            develop.showingBefore.toggle()
-        case .compareMode:
-            if mode == .hdr, hdr.hasPhoto { hdr.cycleCompareMode(); return true }
-            guard mode == .develop else { return false }
-            develop.cycleCompareMode()
-        case .zoom: toggleZoom()
-        case .crop:
-            if mode != .develop { openDevelop() }
-            guard mode == .develop else { return false }
-            develop.isCropping.toggle()
-        case .linearGradient, .brush:
-            if mode != .develop { openDevelop() }
-            guard mode == .develop else { return false }
-            develop.startMaskTool(action == .brush ? .brush : .linear)
-        case .maskOverlay:
-            guard mode == .develop, develop.isMasking else { return false }
-            develop.showMaskOverlay.toggle()
-        case .clipping:
-            guard mode == .develop, develop.assetID != nil else { return false }
-            develop.toggleClippingOverlay()
-        case .treatment:
-            guard mode == .develop, develop.assetID != nil else { return false }
-            develop.setMonochrome(!develop.settings.monochrome)
-        case .whiteBalance:
-            if mode != .develop { openDevelop() }
-            guard mode == .develop, develop.assetID != nil else { return false }
-            develop.isPickingWhiteBalance.toggle()
-        case .masking:
-            if mode != .develop { openDevelop() }
-            guard mode == .develop else { return false }
-            develop.isMasking.toggle()
-        case .radialGradient:
-            if mode != .develop { openDevelop() }
-            guard mode == .develop else { return false }
-            develop.startMaskTool(.radial)
-        case .guidedUpright:
-            guard mode == .develop else { return false }
-            if develop.isGuiding { develop.isGuiding = false } else { develop.setUpright(.guided) }
-        case .nextArea, .previousArea:
-            guard usesPanelKeys else { return false }
-            KeyboardFocus.shared.cycle(forward: action == .nextArea)
+        // As in Lightroom, X in the crop tool swaps the crop's orientation instead of rejecting.
+        if action == .reject, mode == .develop, develop.isCropping {
+            develop.setCrop(develop.crop.switchedOrientation(imageAspect: develop.orientedAspect))
+            return true
         }
-        return true
+        return action.run(in: actions)
     }
 
     /// Guided Upright, as in Lightroom (⇧T, a `KeyAction`, opens it): O shows or hides the loupe, Delete removes

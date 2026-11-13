@@ -166,13 +166,11 @@ enum Filmstrip {
 
 }
 
-/// View > Show Filmstrip (F6), checked while the Filmstrip is open.
-struct FilmstripMenuItem: View {
-    @AppStorage(Filmstrip.visibleKey) private var isVisible = true
-
-    var body: some View {
-        Toggle("Show Filmstrip", isOn: $isVisible)
-            .keyboardShortcut(KeyEquivalent(Character(UnicodeScalar(NSF6FunctionKey)!)), modifiers: [])
+extension Filmstrip {
+    /// Whether the Filmstrip is open (View > Show Filmstrip, F6; the `view.showFilmstrip` action).
+    static var isVisible: Bool {
+        get { UserDefaults.standard.object(forKey: visibleKey) as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: visibleKey) }
     }
 }
 

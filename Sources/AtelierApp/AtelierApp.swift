@@ -1,4 +1,6 @@
+import AgentActions
 import AppKit
+import AtelierActions
 import AtelierCore
 import SwiftUI
 
@@ -39,11 +41,15 @@ struct AtelierApp: App {
             CommandGroup(replacing: .newItem) {}
             LibraryCommands(model: launch.model)
             CommandGroup(replacing: .help) {
-                Button("Atelier Help") { HelpWindow.shared.show() }
+                // Help works before a catalog opens (the recovery screen), so it is not a
+                // registry action, and it means nothing to an agent.
+                Button("Atelier Help") { HelpWindow.shared.show() }  // not an action: works without a catalog
                     .keyboardShortcut("?", modifiers: [.command])
-                Button("Keyboard Shortcuts") { launch.model?.showingShortcuts = true }
-                    .keyboardShortcut("/", modifiers: [.command])
-                    .disabled(launch.model == nil)
+                if let model = launch.model {
+                    model.actions.button(AtelierAction.keyboardShortcuts)
+                } else {
+                    Button("Keyboard Shortcuts") {}.disabled(true)  // not an action: no catalog open
+                }
             }
         }
         Settings {
@@ -67,51 +73,46 @@ struct LibraryCommands: Commands {
 }
 
 private struct ReadyLibraryCommands: Commands {
+    // Read so the menu redraws its checkmarks when these change.
     @AppStorage(DevelopFrameHUD.preference) private var showFrameHUD = false
+    @AppStorage(Filmstrip.visibleKey) private var filmstripVisible = true
     @ObservedObject var model: LibraryModel
+
+    // Every item comes from an `AtelierAction` (see LibraryModel+Actions.swift), so the menus,
+    // keys and agent catalog can't drift apart. AtelierActionsTests fail on a bare Button here.
+    private var actions: AtelierRegistry { model.actions }
 
     var body: some Commands {
             CommandGroup(after: .newItem) {
-                Button("Import Photos…") { model.beginImport() }
-                    .keyboardShortcut("i", modifiers: [.command, .shift])
-                Button("Export…") { model.beginExport() }
-                    .keyboardShortcut("e", modifiers: [.command, .shift])
+                actions.button(AtelierAction.importPhotos)
+                actions.button(AtelierAction.export)
                 Divider()
                 // ⌘S saves in HDR mode; elsewhere it stays Library > Write XMP for Selection.
-                Button("Save HDR") { model.hdr.save() }
-                    .keyboardShortcut(model.mode == .hdr ? KeyboardShortcut("s", modifiers: [.command]) : nil)
-                    .disabled(model.mode != .hdr || !model.hdr.hasPhoto || model.hdr.busy)
-                Button("Save HDR As New…") { model.hdr.save(asNew: true) }
-                    .keyboardShortcut("s", modifiers: [.command, .shift])
-                    .disabled(model.mode != .hdr || !model.hdr.hasPhoto || model.hdr.busy)
+                actions.button(AtelierAction.saveHDR)
+                actions.button(AtelierAction.saveHDRAsNew)
             }
             // Undo and redo step through the open photo's develop history; text fields keep
             // their own undo.
             CommandGroup(replacing: .undoRedo) {
-                Button("Undo") { model.undo() }
-                    .keyboardShortcut("z", modifiers: [.command])
-                Button("Redo") { model.redo() }
-                    .keyboardShortcut("z", modifiers: [.command, .shift])
+                actions.button(AtelierAction.undo)
+                actions.button(AtelierAction.redo)
             }
             CommandGroup(after: .toolbar) {
-                Button("Zoom In") { model.zoomIn() }
-                    .keyboardShortcut("=", modifiers: [.command])
-                Button("Zoom Out") { model.zoomOut() }
-                    .keyboardShortcut("-", modifiers: [.command])
-                Button("Zoom to Fit") { model.zoom = .fit }
-                    .keyboardShortcut("0", modifiers: [.command])
-                Button("Zoom to 100%") { model.zoom = .percent(100) }
-                    .keyboardShortcut("1", modifiers: [.command, .option])
+                actions.button(AtelierAction.zoomIn)
+                actions.button(AtelierAction.zoomOut)
+                actions.button(AtelierAction.zoomToFit)
+                actions.button(AtelierAction.zoomTo100)
                 // Z itself is handled by the culling key monitor.
-                Button("Toggle Zoom (Z)") { model.toggleZoom() }
+                actions.button(AtelierAction.toggleZoom)
                 Divider()
-                FilmstripMenuItem()
+                actions.toggle(AtelierAction.showFilmstrip)
                 Divider()
                 // Only when an import or collection is private. Leaving Hide asks for Touch ID or
                 // the login password (see PrivatePhotos).
                 if model.sidebar.privateListCount > 0 {
-                    Picker("Private Photos", selection: Binding(get: { model.filter.privacy },
-                                                                set: { model.privatePhotos.choose($0) })) {
+                    Picker("Private Photos", selection: Binding(get: { model.filter.privacy }, set: {
+                        actions.run(AtelierAction.privatePhotos, PrivacyParameters(visibility: $0.choice))
+                    })) {
                         Text("Hide Private Photos").tag(PrivateVisibility.hidden)
                         Text(model.filter.showsPrivate ? "Show Private Photos" : "Show Private Photos…")
                             .tag(PrivateVisibility.shown)
@@ -122,110 +123,70 @@ private struct ReadyLibraryCommands: Commands {
                 }
             }
             CommandMenu("Library") {
-                Button("Grid") { model.mode = .grid }
-                    .keyboardShortcut("g", modifiers: [.command])
-                Button("Loupe") { model.openLoupe() }
-                    .keyboardShortcut("e", modifiers: [.command])
-                Button("Develop") { model.openDevelop() }
-                    .keyboardShortcut("d", modifiers: [.command])
+                actions.button(AtelierAction.grid)
+                actions.button(AtelierAction.loupe)
+                actions.button(AtelierAction.develop)
                 Divider()
-                Button("Cull Import…") {
-                    if case .importGroup(let id) = model.sidebarSelection { model.beginCull(importGroup: id) }
-                }
-                .disabled({ if case .importGroup = model.sidebarSelection { return false } else { return true } }())
+                actions.button(AtelierAction.cullImport)
                 Divider()
-                Button("Write XMP for Selection") { model.writeXMP(selectionOnly: true) }
-                    .keyboardShortcut(model.mode == .hdr ? nil : KeyboardShortcut("s", modifiers: [.command]))
-                Button("Write All Unsaved XMP") { model.writeXMP(selectionOnly: false) }
-                    .keyboardShortcut("s", modifiers: [.command, .option])
+                actions.button(AtelierAction.writeXMP)
+                actions.button(AtelierAction.writeAllXMP)
                 Divider()
-                Button("Refresh Volumes") { model.refreshVolumes() }
-                    .keyboardShortcut("r", modifiers: [.command])
+                actions.button(AtelierAction.refreshVolumes)
             }
             CommandMenu("Photo") {
-                Button("Create Virtual Copy") { model.createVirtualCopies() }
-                    .keyboardShortcut("'", modifiers: [.command])
-                    .disabled(model.focusedID == nil)
-                Button("Remove Virtual Copy…") { model.removeVirtualCopies() }
-                    .disabled(!model.targetsIncludeVirtualCopy)
+                actions.button(AtelierAction.createVirtualCopy)
+                actions.button(AtelierAction.removeVirtualCopy)
                 // Delete itself is handled by the key monitor, so text fields keep their Delete key.
-                Button("Remove Photo… (Delete)") { model.beginRemovePhotos() }
-                    .disabled(model.targetIDs.isEmpty)
+                actions.button(AtelierAction.removePhoto, title: "Remove Photo… (Delete)")
                 Divider()
-                Button("Show Cull Group") { model.showCullGroup() }
-                    .keyboardShortcut("g", modifiers: [.command, .shift])
-                    .disabled(model.focusedCullGroupSize < 2)
+                actions.button(AtelierAction.showCullGroup)
                 Divider()
                 // Lightroom's key for Photo Merge > HDR.
-                Button("HDR…") { model.openHDR() }
-                    .keyboardShortcut("h", modifiers: [.control])
-                    .disabled(model.targetIDs.count != 1)
+                actions.button(AtelierAction.hdr)
                 Menu("Edit In") {
                     ForEach(Array(model.externalEditors.enumerated()), id: \.element.id) { index, editor in
-                        if index == 0 {
-                            Button("Edit in \(editor.name)") { model.editIn(editor) }
-                                .keyboardShortcut("e", modifiers: [.command, .option])
-                        } else {
-                            Button("Edit in \(editor.name)") { model.editIn(editor) }
-                        }
+                        actions.button(AtelierAction.editIn, EditorParameters(editor: editor.appPath),
+                                       title: "Edit in \(editor.name)", showsShortcut: index == 0)
                     }
                     Divider()
-                    Button("Other Application…") { model.editInOtherApp() }
+                    actions.button(AtelierAction.editInOther)
                 }
                 .disabled(model.focusedID == nil)
                 Divider()
-                Button("Match Look to Reference…") { model.beginMatchLook() }
-                    .keyboardShortcut("m", modifiers: [.command, .shift])
-                    .disabled(model.mode != .develop || model.focusedID == nil)
+                actions.button(AtelierAction.matchLook)
                 Divider()
                 ForEach(AIRecipe.allCases, id: \.self) { recipe in
-                    Button("\(recipe.title)…") { model.openAI(recipe) }
-                        .disabled(model.focusedID == nil)
+                    actions.button(AtelierAction.ai, RecipeParameters(recipe: recipe.rawValue), title: "\(recipe.title)…")
                 }
             }
             CommandMenu("Develop") {
-                Toggle("Frame Diagnostics", isOn: $showFrameHUD)
-                    .disabled(model.mode != .develop)
+                actions.toggle(AtelierAction.frameDiagnostics)
                 Divider()
-                Button("Copy Settings") { model.copyDevelopSettings() }
-                    .keyboardShortcut("c", modifiers: [.command, .shift])
-                Button("Paste Settings") { model.pasteDevelopSettings() }
-                    .keyboardShortcut("v", modifiers: [.command, .shift])
+                actions.button(AtelierAction.copySettings)
+                actions.button(AtelierAction.pasteSettings)
                 Divider()
-                Button("Reset All Settings") { model.develop.resetAll() }
-                    .keyboardShortcut("r", modifiers: [.command, .shift])
-                    .disabled(model.mode != .develop)
+                actions.button(AtelierAction.resetAll)
                 // The \ and Y keys themselves are handled by the culling key monitor.
-                Button("Auto White Balance") { model.develop.findWhiteBalance() }
-                    .keyboardShortcut("u", modifiers: [.command, .shift])
-                    .disabled(model.mode != .develop || model.develop.assetID == nil)
-                Button("White Balance Selector (W)") { model.perform(.whiteBalance) }
-                    .disabled(model.focusedID == nil)
-                Button("Crop & Straighten (R)") { model.perform(.crop) }
-                    .disabled(model.focusedID == nil)
-                Button("Rotate Left") { model.rotate(clockwise: false) }
-                    .keyboardShortcut("[", modifiers: [.command])
-                    .disabled(model.mode != .develop)
-                Button("Rotate Right") { model.rotate(clockwise: true) }
-                    .keyboardShortcut("]", modifiers: [.command])
-                    .disabled(model.mode != .develop)
+                actions.button(AtelierAction.autoWhiteBalance)
+                actions.button(AtelierAction.whiteBalanceSelector)
+                actions.button(AtelierAction.crop)
+                actions.button(AtelierAction.rotateLeft)
+                actions.button(AtelierAction.rotateRight)
                 Divider()
-                Button("Show Before (\\)") { model.develop.showingBefore.toggle() }
-                    .disabled(model.mode != .develop)
-                Button("Show Clipping (J)") { model.perform(.clipping) }
-                    .disabled(model.mode != .develop || model.develop.assetID == nil)
-                Menu("Before and After (Y)") {
+                actions.button(AtelierAction.showBefore)
+                actions.button(AtelierAction.showClipping)
+                Menu(AtelierAction.compareMode.descriptor.title) {
                     ForEach(CompareMode.allCases, id: \.self) { mode in
-                        Button(mode.label) { model.develop.compareMode = mode }
+                        actions.button(AtelierAction.compareMode,
+                                       CompareParameters(mode: CompareChoice(rawValue: mode.rawValue) ?? .off),
+                                       title: mode.label)
                     }
                 }
                 .disabled(model.mode != .develop)
                 Divider()
-                Button("New Preset…") { model.develop.showingNewPreset = true }
-                    .keyboardShortcut("n", modifiers: [.command, .shift])
-                    .disabled(model.mode != .develop || model.develop.assetID == nil)
-                Button("Manage Presets…") { model.develop.showingManagePresets = true }
-                    .disabled(model.mode != .develop)
+                actions.button(AtelierAction.newPreset)
+                actions.button(AtelierAction.managePresets)
             }
     }
 }

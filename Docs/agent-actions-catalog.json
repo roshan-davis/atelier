@@ -1,0 +1,1190 @@
+{
+  "actions": [
+    {
+      "exposed": true,
+      "id": "develop.applyPreset",
+      "kind": "edit",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {
+          "preset": {
+            "description": "A Develop preset's id.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "preset"
+        ],
+        "type": "object"
+      },
+      "place": "Photo menu > Apply Develop Preset",
+      "summary": "Applies a Develop preset to the photos.",
+      "targets": "photos",
+      "tier": "undoable",
+      "title": "Apply Develop Preset",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "develop.autoWhiteBalance",
+      "kind": "edit",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Develop > Auto White Balance",
+      "shortcut": "⇧⌘U",
+      "summary": "Sets the open photo's white balance automatically.",
+      "tier": "undoable",
+      "title": "Auto White Balance",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "develop.blackAndWhite",
+      "kind": "edit",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Key V",
+      "summary": "Switches the open photo between color and black and white.",
+      "tier": "undoable",
+      "title": "Black & White",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "develop.brush",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Key K",
+      "summary": "Starts a Brush mask.",
+      "tier": "runs",
+      "title": "Masking: Brush",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "develop.compareMode",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "enum": [
+              "off",
+              "sideBySide",
+              "slider"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "type": "object"
+      },
+      "place": "Develop > Before and After (Y)",
+      "summary": "Sets the before and after view.",
+      "tier": "runs",
+      "title": "Before and After (Y)",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "develop.copySettings",
+      "kind": "reads",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Develop > Copy Settings, photo menu",
+      "shortcut": "⇧⌘C",
+      "summary": "Copies the focused photo's Develop settings.",
+      "tier": "runs",
+      "title": "Copy Settings",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "develop.crop",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Develop > Crop & Straighten (R), key R",
+      "summary": "Opens or closes the crop tool.",
+      "tier": "runs",
+      "title": "Crop & Straighten (R)",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "develop.cycleCompareMode",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Key Y",
+      "summary": "Moves to the next before and after view: off, side by side, slider (Develop and HDR).",
+      "tier": "runs",
+      "title": "Before and After: next view",
+      "version": 1
+    },
+    {
+      "exposed": false,
+      "hiddenReason": "A performance readout for people checking slider smoothness.",
+      "id": "develop.frameDiagnostics",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Develop > Frame Diagnostics",
+      "summary": "Shows or hides the frame timing readout.",
+      "tier": "runs",
+      "title": "Frame Diagnostics",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "develop.guidedUpright",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Key ⇧T",
+      "summary": "Opens or closes Guided Upright.",
+      "tier": "runs",
+      "title": "Transform: Guided Upright",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "develop.linearGradient",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Key M",
+      "summary": "Starts a Linear Gradient mask.",
+      "tier": "runs",
+      "title": "Masking: Linear Gradient",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "develop.managePresets",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Develop > Manage Presets…",
+      "summary": "Opens the preset manager.",
+      "tier": "runs",
+      "title": "Manage Presets…",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "develop.maskOverlay",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Key O",
+      "summary": "Shows or hides the mask overlay.",
+      "tier": "runs",
+      "title": "Masking: Show Overlay",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "develop.masking",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Key ⇧W",
+      "summary": "Opens or closes Masking.",
+      "tier": "runs",
+      "title": "Masking",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "develop.newPreset",
+      "kind": "edit",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Develop > New Preset…",
+      "shortcut": "⇧⌘N",
+      "summary": "Opens the dialog to save the open photo's settings as a preset.",
+      "tier": "undoable",
+      "title": "New Preset…",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "develop.pasteSettings",
+      "kind": "edit",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Develop > Paste Settings, photo menu",
+      "shortcut": "⇧⌘V",
+      "summary": "Pastes the copied Develop settings onto the photos.",
+      "targets": "photos",
+      "tier": "undoable",
+      "title": "Paste Settings",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "develop.radialGradient",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Key ⇧M",
+      "summary": "Starts a Radial Gradient mask.",
+      "tier": "runs",
+      "title": "Masking: Radial Gradient",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "develop.resetAll",
+      "kind": "edit",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Develop > Reset All Settings",
+      "shortcut": "⇧⌘R",
+      "summary": "Resets every Develop setting of the open photo.",
+      "tier": "undoable",
+      "title": "Reset All Settings",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "develop.rotateLeft",
+      "kind": "edit",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Develop > Rotate Left",
+      "shortcut": "⌘[",
+      "summary": "Turns the open photo 90° counterclockwise.",
+      "tier": "undoable",
+      "title": "Rotate Left",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "develop.rotateRight",
+      "kind": "edit",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Develop > Rotate Right",
+      "shortcut": "⌘]",
+      "summary": "Turns the open photo 90° clockwise.",
+      "tier": "undoable",
+      "title": "Rotate Right",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "develop.showBefore",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Develop > Show Before (\\), key \\",
+      "summary": "Shows the photo without its edits, or with them again (Develop and HDR).",
+      "tier": "runs",
+      "title": "Show Before (\\)",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "develop.showClipping",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Develop > Show Clipping (J), key J",
+      "summary": "Shows or hides clipped highlights and shadows on the photo.",
+      "tier": "runs",
+      "title": "Show Clipping (J)",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "develop.whiteBalanceSelector",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Develop > White Balance Selector (W), key W",
+      "summary": "Picks up or puts away the white balance eyedropper.",
+      "tier": "runs",
+      "title": "White Balance Selector (W)",
+      "version": 1
+    },
+    {
+      "exposed": false,
+      "hiddenReason": "The person's own Redo. Agents undo only their own change (undo_change, AT-050d).",
+      "id": "edit.redo",
+      "kind": "edit",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Edit > Redo",
+      "shortcut": "⇧⌘Z",
+      "summary": "Steps forward through the open photo's Develop or HDR history.",
+      "tier": "undoable",
+      "title": "Redo",
+      "version": 1
+    },
+    {
+      "exposed": false,
+      "hiddenReason": "The person's own Undo. Agents undo only their own change (undo_change, AT-050d).",
+      "id": "edit.undo",
+      "kind": "edit",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Edit > Undo",
+      "shortcut": "⌘Z",
+      "summary": "Steps back through the open photo's Develop or HDR history.",
+      "tier": "undoable",
+      "title": "Undo",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "file.export",
+      "kind": "writesFiles",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "File > Export…",
+      "shortcut": "⇧⌘E",
+      "summary": "Opens the export dialog for the selected photos.",
+      "targets": "photos",
+      "tier": "asksFirst",
+      "title": "Export…",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "file.importPhotos",
+      "kind": "writesFiles",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "File > Import Photos…",
+      "shortcut": "⇧⌘I",
+      "summary": "Opens the import dialog, where the person picks sources and how to import.",
+      "tier": "asksFirst",
+      "title": "Import Photos…",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "file.saveHDR",
+      "kind": "writesFiles",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "File > Save HDR",
+      "shortcut": "⌘S",
+      "summary": "Saves the HDR edit in HDR mode.",
+      "tier": "asksFirst",
+      "title": "Save HDR",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "file.saveHDRAsNew",
+      "kind": "writesFiles",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "File > Save HDR As New…",
+      "shortcut": "⇧⌘S",
+      "summary": "Saves the HDR edit as a new photo.",
+      "tier": "asksFirst",
+      "title": "Save HDR As New…",
+      "version": 1
+    },
+    {
+      "exposed": false,
+      "hiddenReason": "Moves the keyboard focus, which means nothing without a keyboard.",
+      "id": "focus.nextArea",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Key ⌃Tab",
+      "summary": "Moves keyboard focus to the next area (Presets, right panel, Filmstrip).",
+      "tier": "runs",
+      "title": "Focus: Next Area",
+      "version": 1
+    },
+    {
+      "exposed": false,
+      "hiddenReason": "Moves the keyboard focus, which means nothing without a keyboard.",
+      "id": "focus.previousArea",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Key ⌃⇧Tab",
+      "summary": "Moves keyboard focus to the previous area.",
+      "tier": "runs",
+      "title": "Focus: Previous Area",
+      "version": 1
+    },
+    {
+      "exposed": false,
+      "hiddenReason": "Shows the person a cheat sheet of keys.",
+      "id": "help.keyboardShortcuts",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Help > Keyboard Shortcuts",
+      "shortcut": "⌘/",
+      "summary": "Shows the keyboard shortcut sheet.",
+      "tier": "runs",
+      "title": "Keyboard Shortcuts",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "library.cullImport",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Library > Cull Import…",
+      "summary": "Starts culling the import selected in the sidebar.",
+      "tier": "runs",
+      "title": "Cull Import…",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "library.develop",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Library > Develop, key D, photo menu > Edit in Develop",
+      "shortcut": "⌘D",
+      "summary": "Opens the focused photo in Develop.",
+      "tier": "runs",
+      "title": "Develop",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "library.grid",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Library > Grid, key G",
+      "shortcut": "⌘G",
+      "summary": "Shows the photos as a grid.",
+      "tier": "runs",
+      "title": "Grid",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "library.loupe",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Library > Loupe, key E, photo menu > Open in Loupe",
+      "shortcut": "⌘E",
+      "summary": "Shows the focused photo large.",
+      "tier": "runs",
+      "title": "Loupe",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "library.refreshVolumes",
+      "kind": "reads",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Library > Refresh Volumes",
+      "shortcut": "⌘R",
+      "summary": "Checks which drives are connected and retries photos that couldn't be read.",
+      "tier": "runs",
+      "title": "Refresh Volumes",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "library.writeAllXMP",
+      "kind": "writesFiles",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Library > Write All Unsaved XMP",
+      "shortcut": "⌥⌘S",
+      "summary": "Writes XMP sidecars for every photo with unsaved changes.",
+      "tier": "asksFirst",
+      "title": "Write All Unsaved XMP",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "library.writeXMP",
+      "kind": "writesFiles",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Library > Write XMP for Selection, photo menu > Write XMP Metadata",
+      "shortcut": "⌘S",
+      "summary": "Writes XMP sidecars for the selected photos.",
+      "targets": "photos",
+      "tier": "asksFirst",
+      "title": "Write XMP for Selection",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "photo.addToCollection",
+      "kind": "edit",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {
+          "collection": {
+            "description": "A collection's id.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "collection"
+        ],
+        "type": "object"
+      },
+      "place": "Photo menu > Add to Collection",
+      "summary": "Adds the photos to a collection.",
+      "targets": "photos",
+      "tier": "undoable",
+      "title": "Add to Collection",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "photo.ai",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {
+          "recipe": {
+            "description": "An AI recipe's id, as in the Photo menu's AI items.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "recipe"
+        ],
+        "type": "object"
+      },
+      "place": "Photo > Remove Object…, Replace Background…, Upscale…, photo menu > AI",
+      "summary": "Opens Develop with the AI tool set to that recipe; nothing runs until the person starts it.",
+      "tier": "runs",
+      "title": "AI",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "photo.createVirtualCopy",
+      "kind": "edit",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Photo > Create Virtual Copy, photo menu",
+      "shortcut": "⌘'",
+      "summary": "Adds a virtual copy of each photo, with its own Develop settings.",
+      "targets": "photos",
+      "tier": "undoable",
+      "title": "Create Virtual Copy",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "photo.editIn",
+      "kind": "opensApp",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {
+          "editor": {
+            "description": "The path of an app set up in Settings > Edit In.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "editor"
+        ],
+        "type": "object"
+      },
+      "place": "Photo > Edit In, photo menu > Edit In",
+      "shortcut": "⌥⌘E",
+      "summary": "Renders the photo and opens it in another app; the edit comes back as a new photo.",
+      "targets": "photos",
+      "tier": "asksFirst",
+      "title": "Edit In",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "photo.editInOther",
+      "kind": "opensApp",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Photo > Edit In > Other Application…",
+      "summary": "Asks the person for an app, then opens the photo in it.",
+      "targets": "photos",
+      "tier": "asksFirst",
+      "title": "Other Application…",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "photo.hdr",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Photo > HDR…, photo menu > Edit in HDR",
+      "shortcut": "⌃H",
+      "summary": "Opens one photo in HDR mode.",
+      "targets": "photos",
+      "tier": "runs",
+      "title": "HDR…",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "photo.matchLook",
+      "kind": "edit",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Photo > Match Look to Reference…, photo menu",
+      "shortcut": "⇧⌘M",
+      "summary": "Opens Match Look for the photo (Photo menu: the open photo in Develop; right-click: the clicked photos).",
+      "targets": "photos",
+      "tier": "undoable",
+      "title": "Match Look to Reference…",
+      "version": 1
+    },
+    {
+      "exposed": false,
+      "id": "photo.remove",
+      "kind": "deletes",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Photo > Remove Photo… (Delete), photo menu",
+      "summary": "Asks, then removes the photos from the catalog or moves them to the Trash.",
+      "targets": "photos",
+      "tier": "never",
+      "title": "Remove Photo…",
+      "version": 1
+    },
+    {
+      "exposed": false,
+      "id": "photo.removeFromCollection",
+      "kind": "deletes",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Photo menu > Remove from This Collection",
+      "summary": "Takes the photos out of the collection shown in the sidebar; the photos stay in the catalog.",
+      "targets": "photos",
+      "tier": "never",
+      "title": "Remove from This Collection",
+      "version": 1
+    },
+    {
+      "exposed": false,
+      "id": "photo.removeFromImport",
+      "kind": "deletes",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Photo menu > Remove from This Import",
+      "summary": "Takes the photos out of the import shown in the sidebar; the photos stay in the catalog.",
+      "targets": "photos",
+      "tier": "never",
+      "title": "Remove from This Import",
+      "version": 1
+    },
+    {
+      "exposed": false,
+      "id": "photo.removeVirtualCopy",
+      "kind": "deletes",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Photo > Remove Virtual Copy…, photo menu",
+      "summary": "Asks, then removes the selected virtual copies.",
+      "targets": "photos",
+      "tier": "never",
+      "title": "Remove Virtual Copy…",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "photo.resetSettings",
+      "kind": "edit",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Photo menu > Develop Settings > Reset All Settings",
+      "summary": "Resets every Develop setting of the photos.",
+      "targets": "photos",
+      "tier": "undoable",
+      "title": "Reset All Settings",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "photo.setFlag",
+      "kind": "edit",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {
+          "flag": {
+            "enum": [
+              "picked",
+              "rejected",
+              "unflagged"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "flag"
+        ],
+        "type": "object"
+      },
+      "place": "Photo menu > Set Flag, keys P, X, U",
+      "summary": "Flags the photos as picked or rejected, or removes the flag.",
+      "targets": "photos",
+      "tier": "undoable",
+      "title": "Set Flag",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "photo.setRating",
+      "kind": "edit",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {
+          "stars": {
+            "description": "Stars, 0 to clear the rating.",
+            "maximum": 5,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "stars"
+        ],
+        "type": "object"
+      },
+      "place": "Photo menu > Set Rating, keys 0 to 5",
+      "summary": "Sets the star rating; a RAW's hidden JPEG follows it.",
+      "targets": "photos",
+      "tier": "undoable",
+      "title": "Set Rating",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "photo.showCullGroup",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Photo > Show Cull Group, photo menu",
+      "shortcut": "⇧⌘G",
+      "summary": "Shows the other shots of the focused photo's burst or similar group.",
+      "tier": "runs",
+      "title": "Show Cull Group",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "photo.showInFinder",
+      "kind": "opensApp",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Photo menu > Show in Finder",
+      "summary": "Shows the originals in Finder.",
+      "targets": "photos",
+      "tier": "asksFirst",
+      "title": "Show in Finder",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "photo.toggleLabel",
+      "kind": "edit",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "description": "Turns the label on, or off if the photos already have it.",
+            "enum": [
+              "red",
+              "yellow",
+              "green",
+              "blue",
+              "purple"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "label"
+        ],
+        "type": "object"
+      },
+      "place": "Photo menu > Set Color Label, keys 6 to 9",
+      "summary": "Turns a color label on or off.",
+      "targets": "photos",
+      "tier": "undoable",
+      "title": "Set Color Label",
+      "version": 1
+    },
+    {
+      "exposed": false,
+      "hiddenReason": "Showing private photos asks for Touch ID or the login password; only the person may do that.",
+      "id": "view.privatePhotos",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {
+          "visibility": {
+            "enum": [
+              "hidden",
+              "shown",
+              "only"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "visibility"
+        ],
+        "type": "object"
+      },
+      "place": "View > Hide, Show, Show Only Private Photos",
+      "summary": "Hides or shows private imports and collections.",
+      "tier": "runs",
+      "title": "Private Photos",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "view.setZoom",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {
+          "level": {
+            "enum": [
+              "fit",
+              "fill",
+              "100%",
+              "200%"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "level"
+        ],
+        "type": "object"
+      },
+      "place": "Photo menu > Zoom to Fit, Fill, 100%, 200%",
+      "summary": "Sets the zoom of the open photo.",
+      "tier": "runs",
+      "title": "Zoom",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "view.showFilmstrip",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "View > Show Filmstrip",
+      "shortcut": "F6",
+      "summary": "Shows or hides the Filmstrip.",
+      "tier": "runs",
+      "title": "Show Filmstrip",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "view.toggleZoom",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "View > Toggle Zoom (Z), key Z",
+      "summary": "Switches between Fit and the click zoom; from the grid, opens the photo in Loupe.",
+      "tier": "runs",
+      "title": "Toggle Zoom (Z)",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "view.zoomIn",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "View > Zoom In",
+      "shortcut": "⌘=",
+      "summary": "Zooms in on the photo.",
+      "tier": "runs",
+      "title": "Zoom In",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "view.zoomOut",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "View > Zoom Out",
+      "shortcut": "⌘-",
+      "summary": "Zooms out of the photo.",
+      "tier": "runs",
+      "title": "Zoom Out",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "view.zoomTo100",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "View > Zoom to 100%",
+      "shortcut": "⌥⌘1",
+      "summary": "Shows the photo at 100%.",
+      "tier": "runs",
+      "title": "Zoom to 100%",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "view.zoomToFit",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "View > Zoom to Fit",
+      "shortcut": "⌘0",
+      "summary": "Shows the whole photo.",
+      "tier": "runs",
+      "title": "Zoom to Fit",
+      "version": 1
+    }
+  ],
+  "app": "Atelier",
+  "format": 1,
+  "tiers": {
+    "deletes": "never",
+    "edit": "undoable",
+    "opensApp": "asksFirst",
+    "reads": "runs",
+    "view": "runs",
+    "writesFiles": "asksFirst"
+  }
+}
