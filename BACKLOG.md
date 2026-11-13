@@ -707,7 +707,7 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 ## AT-050 — Agent Actions: MCP server for chat clients (Atelier and Easel)
 
-**Status:** Direction approved by Rosh on Nov 13, 2026 ("add one section in the backlog for mcp … so the next PRs can pick one by one"). The design is done. Implementation is split into AT-050a to AT-050g below, one PR each, taken in order. AT-050a is ready to start. **Design owner:** Claude. **Design chat:** [Design an MCP server for Atelier actions](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKLw4mNvV9wQDgMyFLnzx5sL). **Design PRs:** [#110](https://github.com/roshan-davis/atelier/pull/110) (merged `fa4239b`), [#115](https://github.com/roshan-davis/atelier/pull/115).
+**Status:** Direction approved by Rosh on Nov 13, 2026 ("add one section in the backlog for mcp … so the next PRs can pick one by one"). The design is done. Implementation is split into AT-050a to AT-050g below (plus AT-050h, docking beside Docent, added Nov 13), one PR each, taken in order. AT-050a is ready to start. **Design owner:** Claude. **Design chat:** [Design an MCP server for Atelier actions](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKLw4mNvV9wQDgMyFLnzx5sL). **Design PRs:** [#110](https://github.com/roshan-davis/atelier/pull/110) (merged `fa4239b`), [#115](https://github.com/roshan-davis/atelier/pull/115).
 
 **Evidence:**
 - Rosh (Nov 11, 2026): "Can my app setup an MCP and many of the menu function there as actions that can be conversationally execute from the chat that connect to this MCP?"
@@ -762,7 +762,7 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 ### AT-050b — Read-only MCP, client grants and Settings > Agents (A1)
 
-**Status:** In review; needs a Mac build, the client checks below and Rosh's acceptance. **Owner:** Claude. **Chat:** [Design an MCP server for Atelier actions](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKLw4mNvV9wQDgMyFLnzx5sL). **Branch:** `claude/project-thread-eecdru`. **PR:** [#118](https://github.com/roshan-davis/atelier/pull/118). **Depends on:** AT-050a (merged, #116).
+**Status:** Merged ([#118](https://github.com/roshan-davis/atelier/pull/118), `9388131`, Nov 13, 2026) at Rosh's ask, after Rosh built it in Xcode and connected OpenCode and Cherry Studio (Gemma 4): both listed the tools, answered library questions and called `get_preview` (Cherry Studio shows the images as "Image blocked", its own limit). Claude Desktop, Codex, ollmcp and LM Studio not yet tried; `check_pr.py` not run. **Owner:** Claude. **Chat:** [Design an MCP server for Atelier actions](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKLw4mNvV9wQDgMyFLnzx5sL). **Branch:** `claude/project-thread-eecdru`. **PR:** [#118](https://github.com/roshan-davis/atelier/pull/118). **Depends on:** AT-050a (merged, #116).
 
 **Done so far (not yet accepted):** `Sources/AgentMCP` (app-neutral: JSON-RPC sessions for 2025-06-18, 2025-03-26 and 2024-11-05; the private socket server that names each peer from its process tree and code signature and never takes over a live socket; the helper relay with the "Atelier isn't running" answer; profiles, grants with "asking for more never raises it", the grant store and the activity log; `command_list` from the registry). `Sources/AtelierMCPHelper` (the `atelier-mcp` product, copied into Contents/MacOS by `Scripts/build_macos_app.py`). App: `Agents/AgentServer.swift` (host, approval questions, get_context and the window's lists), `Agents/AgentLookTools.swift` (search_photos, get_photo, get_preview, list_items, cull_groups, get_develop; private photos never shown), `Agents/AgentApproval.swift`, `Views/AgentsSettings.swift` (Settings > Agents). PRD and Help (Settings > Agents) updated. Validation: `AgentMCPTests` (36 tests with the AT-050a ones: sessions, denial and revocation, the socket end to end through the relay, disconnect and stop, a second server, grants) pass on Linux with Swift 6.1 (cloud). The app files were not built in the cloud.
 
@@ -783,7 +783,11 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 ### AT-050c — Organize: library and cull writes (A2)
 
-**Status:** Approved, waits for AT-050b. **Owner/chat/branch/PR:** unassigned. **Depends on:** AT-050b.
+**Status:** Merged at Rosh's ask on Nov 13, 2026 (`dd2381f`) before a Mac build; a Mac build, `check_pr.py` and Rosh's acceptance are still open. Started Nov 13, 2026 at Rosh's ask ("continue to pick up next mcp work here for atelier"). **Owner:** Claude. **Chat:** [Design an MCP server for Atelier actions](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKLw4mNvV9wQDgMyFLnzx5sL). **Branch:** `claude/project-thread-eecdru`. **PR:** [#121](https://github.com/roshan-davis/atelier/pull/121). **Depends on:** AT-050b (merged, #118).
+
+**Done so far (not yet accepted):** shared, in `Sources/AgentMCP`: `ParameterCheck` (checks an agent's parameters against the generated schema, with "did you mean" for names and choices), `AgentChangeLog` (each change's states before and after; undo only while it is still the latest on its items, by owner or by the person), `CommandRunTool` (exists, exposed, profile, this version's ceiling, parameters). `Sources/AtelierActions/AtelierAgentTools.swift`: the typed tools' parameter types and schemas, and `editProfile` (Photo > Reset All Settings and Match Look now need Edit, as Develop changes). AtelierCore `Catalog+LibraryState.swift`: library state snapshot and one-transaction restore, set or clear a color label, remove keywords, set title or caption alone. App: `Agents/AgentOrganizeTools.swift` (the tools, the guard, the confirmation), `Views/AgentNoticeView.swift` (the notice with Undo), Settings > Agents' "Ask before one change touches more than" (50). Validation: on Linux (Swift 6.1, cloud) the shared and catalog targets build and 57 tests pass (`AgentChangeTests`, `ParameterCheckTests`, `CommandRunToolTests`, `AtelierAgentToolsTests` among them, including "both layers agree" for every catalog action). The app target and `AtelierCoreTests.testLibraryStatesSnapshotAndRestore` were not built in the cloud.
+
+**Left out:** `stack` (the design table lists it; Atelier's stacks are made by Edit In and AI, not by a command); ⌘Z for agent changes (library edits have no ⌘Z in Atelier yet, for the person either; the notice's Undo and `undo_change` cover agents); undoing virtual copies (that would delete photos); waiting for a slider drag (AT-050d, with Develop edits).
 
 **Scope:**
 - Typed `show`, `set_metadata` and `organize`, plus `command_run` for exposed library and cull commands.
@@ -823,9 +827,11 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 - Folder roots for writes. Destination, overwrite and license gate rechecked at run time.
 - Jobs with progress, Cancel and a list of files written so far.
 - None of these may be in an atomic batch.
+- **"This app asks for me" (Rosh, Nov 13, 2026, Docent project thread):** a switch on a client's grant in Settings > Agents, offered only for a client whose code signature is Rosh's own Docent. With it on, Atelier skips its Allow sheet and takes the approval Docent's own card got from Rosh: Docent sends the exact operation it showed (photos, preset or recipe, destination, options), and Atelier runs only that operation, rechecking folders, overwrite and the license gate as usual. Other clients (OpenCode, ollmcp, Cherry Studio, Claude Desktop) always get the sheet. Profiles still cap what Docent may call, edits keep their toast and named undo step, and deletes stay never. Docent's side: [Docent PRD, Approvals](https://github.com/roshan-davis/docent/blob/main/Requirements/Docent-PRD.md#approvals). Update `Docs/Atelier-Agent-Actions.md` ("Approving an export, AI job or Edit In") in the same PR.
 
 **Acceptance:**
 - No agent tool can approve its own Allow.
+- "This app asks for me" can't be turned on for a client that isn't signed as Docent, and a call whose operation differs from what Docent approved is refused.
 - A changed destination or preset needs a new Allow.
 - Cancel mid-export reports partial output.
 - Provenance and the license gate are unchanged from the AI panel.
@@ -850,6 +856,29 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 - Easel's AGENTS.md gets the same "Agent Actions" rules (Easel's repo, not this one).
 
 **Acceptance:** one client config pattern works for both apps; Atelier unchanged after the extraction.
+
+### AT-050h — Docking protocol: Atelier docks beside Docent
+
+**Status:** In progress: Rosh asked for it on Nov 13, 2026 ("can you take up the work of docking backlog item that docent added next?"). Source and Linux tests of the shared module only; needs a Mac build and Docent's DO-007 to accept. **Owner:** Claude. **Chat:** [Design an MCP server for Atelier actions](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKLw4mNvV9wQDgMyFLnzx5sL). **Branch:** `claude/project-thread-eecdru`. **PR:** [#122](https://github.com/roshan-davis/atelier/pull/122). **Baseline:** `dd2381f`. **Depends on:** AT-050b (the MCP connection it rides on). **Docent side:** [Docent PRD, Docking](https://github.com/roshan-davis/docent/blob/main/Requirements/Docent-PRD.md#docking) ([docent#2](https://github.com/roshan-davis/docent/pull/2)), Docent's DO-007.
+
+**Evidence:** Rosh (Nov 13, 2026, Docent project thread): Docent "can stay on the left side and the other apps which is selected from the mcp list in the chat aligns correctly on the right", through "some docking protocol with our apps"; "add it to atelier only, easel don't have any mcp work yet".
+
+**Scope:**
+- In the app-neutral `Sources/AgentMCP`: advertise `capabilities.experimental.docking` (with a version) in the `initialize` result, and handle the client-only requests `docking/dock` (a frame: screen, x, y, width, height in points; answers with the frame taken, or refuses below the minimum width and names it), `docking/update` (a new frame while Docent moves or resizes) and `docking/undock`. Send the notifications `docking/moved` (Rosh dragged the window away), `docking/closed` (the window closed or Atelier quit) and `docking/minWidth`.
+- These are JSON-RPC methods outside `tools/list`: not registry actions, never in the MCP catalog or `command_list`, so no model can call them. This keeps "No driving the window" for agents.
+- Only a granted client can dock (any profile, Look included); revoking the grant undocks.
+- Atelier's side: place the main window at the frame, beside Docent; while docked, keep the photo and collapse side panels first when the width is narrow; restore Atelier's own size, place and panels on undock.
+- Tests in `AgentMCPTests` with the Easel-shaped host: the capability, the requests, refusal below the minimum width, and no docking method showing in `tools/list`.
+
+**Left out:** Easel (it has no MCP work yet; it gets the protocol with AT-050g). Accessibility-based docking for other apps (Docent's own later item).
+
+**Built (protocol version 1; reference in [Docs/Atelier-Agent-Actions.md](Docs/Atelier-Agent-Actions.md#docking-beside-a-chat-app)):**
+- `Sources/AgentMCP/Docking.swift`: `DockingCoordinator` (one holder per window, newest dock wins and the previous holder is told, refusal below the minimum width with `data.minWidth`), `DockingWindows` (what an app supplies), `MCPChannel` (notifications back down the connection), `MCPDockingHost`. `MCPSession` advertises the capability and routes `docking/*` after the grant check; the socket server writes replies and notifications one whole line at a time and lets go of a closed connection's docks.
+- Frames are AppKit global coordinates in points. `docking/undock` takes `restore` (default false: the window stays, as the Docent PRD's request says; true: Atelier's own size and place come back).
+- Atelier: `Agents/AgentDocking.swift` places the main window, never takes the keyboard from the chat app, and treats only a drag or resize by hand as moved. `DockLayout` (AtelierCore) collapses the left panel, then the right, and brings them back once they fit. Settings > Agents shows the docked app with Undock. Quitting sends `docking/closed` (`quit`).
+- Tests: `DockingTests` (9) and a socket test in `MCPSocketTests` with the Easel-shaped host; `DockLayoutTests` in AtelierCoreTests. All pass on Linux (Swift 6.1); the app target is not built in the cloud.
+
+**Acceptance:** with Docent's DO-007 on a Mac, switching Atelier on in a Docent chat docks Atelier's window on Docent's right; moving or resizing Docent keeps it aligned; dragging Atelier away undocks; undocking restores Atelier's layout.
 
 ## AT-051 — Menus: no New Window, no window tabs
 

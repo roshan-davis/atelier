@@ -124,10 +124,31 @@ public final class MCPSession: @unchecked Sendable {
     public private(set) var client: AgentClient
     public private(set) var protocolVersion: String?
     private let host: MCPHost
+    private let output: (@Sendable (String) -> Bool)?
+    private var openChannel: MCPChannel?
 
-    public init(client: AgentClient, host: MCPHost) {
+    /// `output` sends a line to the client outside a reply (notifications such as
+    /// `docking/moved`); without it the session only answers.
+    public init(client: AgentClient, host: MCPHost, output: (@Sendable (String) -> Bool)? = nil) {
         self.client = client
         self.host = host
+        self.output = output
+    }
+
+    private var docking: DockingCoordinator? { (host as? MCPDockingHost)?.docking }
+
+    private var channel: MCPChannel {
+        if let openChannel { return openChannel }
+        let channel = MCPChannel(client: client, output: output)
+        openChannel = channel
+        return channel
+    }
+
+    /// The connection is gone: windows it docked are let go.
+    public func close() async {
+        guard let openChannel else { return }
+        openChannel.close()
+        await docking?.closed(openChannel)
     }
 
     /// Handles one line; returns the reply line, or nil for notifications.
@@ -171,9 +192,14 @@ public final class MCPSession: @unchecked Sendable {
                 return Self.error(id: id, code: -32001, message: reason)
             }
             let info = host.serverInfo
+            var capabilities: [String: JSONValue] = ["tools": .object(["listChanged": .bool(false)])]
+            // Docking needs a way back to the client for its notifications.
+            if docking != nil, output != nil {
+                capabilities["experimental"] = .object(["docking": DockingProtocol.capability])
+            }
             return Self.result(id: id, .object([
                 "protocolVersion": .string(version),
-                "capabilities": .object(["tools": .object(["listChanged": .bool(false)])]),
+                "capabilities": .object(capabilities),
                 "serverInfo": .object(["name": .string(info.name), "title": .string(info.title),
                                        "version": .string(info.version)]),
                 "instructions": .string(info.instructions),
@@ -206,6 +232,19 @@ public final class MCPSession: @unchecked Sendable {
                 let result = await host.call(name, arguments: arguments, client: client, profile: profile)
                 return Self.result(id: id, result.json)
             }
+        case let method where DockingProtocol.methods.contains(method):
+            guard let docking, output != nil else {
+                return Self.error(id: id, code: -32601, message: "Method not found: \(method)")
+            }
+            if case .denied(let reason) = await host.authorize(client) {
+                return Self.error(id: id, code: -32001, message: reason)
+            }
+            switch await docking.handle(method, params, channel: channel) {
+            case .success(let result):
+                return Self.result(id: id, result)
+            case .failure(let failure):
+                return Self.error(id: id, code: failure.code, message: failure.message, data: failure.data)
+            }
         case "resources/list":
             return Self.result(id: id, .object(["resources": .array([])]))
         case "prompts/list":
@@ -219,9 +258,10 @@ public final class MCPSession: @unchecked Sendable {
         .object(["jsonrpc": .string("2.0"), "id": id, "result": result])
     }
 
-    static func error(id: JSONValue, code: Int, message: String) -> JSONValue {
-        .object(["jsonrpc": .string("2.0"), "id": id,
-                 "error": .object(["code": .int(code), "message": .string(message)])])
+    static func error(id: JSONValue, code: Int, message: String, data: JSONValue? = nil) -> JSONValue {
+        var error: [String: JSONValue] = ["code": .int(code), "message": .string(message)]
+        if let data { error["data"] = data }
+        return .object(["jsonrpc": .string("2.0"), "id": id, "error": .object(error)])
     }
 }
 

@@ -8,12 +8,28 @@ struct ContentView: View {
     @AppStorage("panel.width") private var panelWidth = 320.0
     @AppStorage(Theme.defaultsKey) private var theme: Theme = .system
     @AppStorage(Filmstrip.visibleKey) private var filmstripVisible = true
+    /// Docked beside a chat app (AT-050h): the width the panels are laid out for, from `AgentDock`.
+    @State private var dockWidth: Double?
+    @State private var columns: NavigationSplitViewVisibility = .automatic
+    /// The person's own sidebar choice, put back when docking no longer hides it.
+    @State private var columnsBeforeDock: NavigationSplitViewVisibility = .automatic
+    @State private var sidebarHiddenByDock = false
+    @State private var sidebarWidth = 240.0
+
+    /// Both panels, unless the window is docked (or still narrow after) and they don't fit:
+    /// the left panel collapses first, then the right one, never the photo.
+    private var dockLayout: DockLayout {
+        guard let dockWidth else { return .full }
+        // A sidebar the person hid themselves takes no room.
+        let sidebar = columns == .detailOnly && !sidebarHiddenByDock ? 0 : sidebarWidth
+        return .fitting(width: dockWidth, sidebar: sidebar, inspector: showInspector ? panelWidth + 1 : 0)
+    }
 
     var body: some View {
         // Like Lightroom Classic, the Filmstrip runs the full width of the window, under
         // both side panels.
         VStack(spacing: 0) {
-            NavigationSplitView {
+            NavigationSplitView(columnVisibility: $columns) {
                 Group {
                     if model.mode == .develop {
                         DevelopSidebar(develop: model.develop)
@@ -26,6 +42,11 @@ struct ContentView: View {
                     }
                 }
                 .navigationSplitViewColumnWidth(min: 200, ideal: 240)
+                .background(GeometryReader { geometry in
+                    Color.clear.onChange(of: geometry.size.width, initial: true) { _, width in
+                        if width > 100 { sidebarWidth = width }
+                    }
+                })
             } detail: {
                 // The right panel sits beside the content, below the toolbar, like Lightroom's,
                 // rather than as a full-height inspector the toolbar floats over.
@@ -48,6 +69,8 @@ struct ContentView: View {
                                 EmptyLibraryView()
                             }
                         }
+                        // A chat app's change, with Undo (Settings > Agents, AT-050c).
+                        .overlay(alignment: .bottom) { AgentNoticeView(agents: model.agents) }
                         Divider()
                         StatusBar()
                     }
@@ -55,7 +78,7 @@ struct ContentView: View {
                     .frame(minWidth: 0, maxWidth: .infinity)
                     .background(Color(nsColor: theme.chrome))
                     .clipped()
-                    if showInspector {
+                    if showInspector && dockLayout.showsInspector {
                         PanelResizeHandle(width: $panelWidth, range: 280...560, panel: .trailing)
                         InspectorView()
                             .frame(width: panelWidth)
@@ -132,10 +155,34 @@ struct ContentView: View {
                 .environment(\.theme, theme)
         }
         .background(WindowAccessor { model.mainWindow = $0 })
+        .background(DockWidthReader(dock: model.agents.dock, width: $dockWidth))
+        .onChange(of: dockLayout.showsSidebar) { _, shows in
+            if shows {
+                if sidebarHiddenByDock { columns = columnsBeforeDock }
+                sidebarHiddenByDock = false
+            } else if columns != .detailOnly {
+                columnsBeforeDock = columns
+                columns = .detailOnly
+                sidebarHiddenByDock = true
+            }
+        }
+        .onChange(of: dockWidth) { _, _ in
+            if dockLayout == .full { model.agents.dock.panelsFit() }
+        }
         .environment(\.theme, theme)
         .environment(\.developFrameHUD, model.mode == .develop ? model.develop.frameHUD : nil)
         .onAppear { theme.apply() }
         .onChange(of: theme) { _, newTheme in newTheme.apply() }
+    }
+}
+
+/// Copies the docked width (`AgentDock.width`) into ContentView's layout.
+private struct DockWidthReader: View {
+    @ObservedObject var dock: AgentDock
+    @Binding var width: Double?
+
+    var body: some View {
+        Color.clear.onChange(of: dock.width, initial: true) { _, newWidth in width = newWidth }
     }
 }
 
