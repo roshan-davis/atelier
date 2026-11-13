@@ -804,7 +804,7 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 ### AT-050d — Edit: Develop, presets, masks, Match Look and batches (A3)
 
-**Status:** In progress, first part in review: Rosh asked for it on Nov 13, 2026 ("can you continue on the mcp work here - wanted to see develop works"). Source and Linux tests only; needs a Mac build, `check_pr.py` and Rosh's test. **Owner:** Claude. **Chat:** [Design an MCP server for Atelier actions](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKLw4mNvV9wQDgMyFLnzx5sL). **Branch:** `claude/project-thread-eecdru`. **PR:** [#123](https://github.com/roshan-davis/atelier/pull/123). **Baseline:** `80ee453`. **Depends on:** AT-050c (merged).
+**Status:** In progress: first part merged (#123), second part in review (below), `command_batch` split out as AT-050j. Rosh asked for it on Nov 13, 2026 ("can you continue on the mcp work here - wanted to see develop works"). Source and Linux tests only; needs a Mac build, `check_pr.py` and Rosh's test. **Owner:** Claude. **Chat:** [Design an MCP server for Atelier actions](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKLw4mNvV9wQDgMyFLnzx5sL). **Branch:** `claude/project-thread-eecdru`. **PR:** [#123](https://github.com/roshan-davis/atelier/pull/123). **Baseline:** `80ee453`. **Depends on:** AT-050c (merged).
 
 **Built in the first part:**
 - Typed `adjust` (Basic sliders by name plus any slider in `other`, `mode` set or add, clamped at the slider's ends, panels turned on as by hand), `apply_preset` (id or name, did-you-mean), `sync` (from one photo, by part; Lightroom's default parts) and `reset` (all or by part), for the Edit profile.
@@ -812,11 +812,19 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 - Each call is one Develop history step per photo, named "<change> (<app>)"; `undo_change` and the notice's Undo restore the settings as an "Undo …" step only while nothing changed them since (`PhotoState` in the change log).
 - Agent Develop edits wait up to 10 s for a drag in progress (`DevelopController.isEditingByHand`).
 
-**Still to do in AT-050d:** `crop`, `add_mask`, `match_look`, Auto (needs the photo's pixels), `command_batch` with `atomic`, and the timed render check below.
+**Second part, in review (Nov 13, 2026):** Rosh asked for the next MCP item in parallel with batching ("Also have another next item for the mcp in parallel"); `command_batch` is split out as AT-050j (its own thread). **Owner:** Claude. **Chat:** [Add typed Edit tools to Atelier MCP](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGK9uaaukxpZa2VDAXzk8k6dd). **Branch:** `claude/project-thread-p4fuug`. **PR:** opened from that branch (number recorded once GitHub assigns it). **Baseline:** `0fd59e6`.
+- Typed `crop` (reset, rotate, flip, straighten, aspect with orientation, or a box; the crop tool's own steps, kept on the photo), `add_mask` (Select Subject, Object, People, Linear, Radial, Luminance Range as a new mask with its sliders, or added, subtracted or intersected into a mask by name; agent positions are the shown, cropped photo's, mapped with `MaskSpace`), `auto` (Basic > Auto and Auto White Balance at the Auto button's proxy size) and `match_look` (catalog photo or built-in study; the dialog's options, Same settings or Match each photo, sharing the dialog's target and fit code).
+- `auto` and `match_look` measure off the main thread with progress and Cancel in the status bar, one job at a time, then write through the guard; photos changed meanwhile are skipped and named.
+- Other photos' preview refreshes (`DevelopController.refreshPreviews`, used by agent edits, Paste, presets and Match each photo) run two at a time and skip a look that a newer save superseded; before, each was its own global-queue block.
+- The timed render check is `AgentEditToolsTests` (AtelierAppTests): 40 agent edits on the open photo of a 24 MP JPEG and 3 rounds on 8 other photos, printing `AGENT-RENDER-CHECK` lines with the numbers; it asserts no more renders than the burst had time for and settling within about two renders. Numbers need a Mac run.
+- Validation so far: 90 Linux tests pass (Swift 6.1, cloud; `AgentActions`, `AgentMCP`, `AtelierActions`, including the new `AtelierEditToolsTests`). The app target and `AgentEditToolsTests` were not compiled or run in the cloud: they need a Mac build, `check_pr.py` and Rosh's test.
+- Left out: Brush masks (manual by design), Select Sky (Atelier has none), arbitrary image files as Match Look references (agents name a catalog photo or a study), Match Areas boxes, Fine Edges on agent masks. `auto` and `match_look` can't be steps of `command_batch` (they measure first).
+
+**Still to do in AT-050d:** `command_batch` with `atomic` (AT-050j).
 
 **Scope:**
 - Typed `adjust`, `auto`, `apply_preset`, `sync`, `reset`, `crop`, `add_mask` (Brush stays manual) and `match_look`.
-- `command_batch`, with `atomic: true` allowed only for catalog and Develop changes that roll back in one transaction.
+- `command_batch` (now AT-050j), with `atomic: true` allowed only for catalog and Develop changes that roll back in one transaction.
 - Agent edits wait for an active slider drag to end, then recheck targets.
 - Develop history names carry the client.
 

@@ -163,6 +163,10 @@ final class LibraryModel: ObservableObject {
     /// The Match Look dialog, while open, and Match each photo's progress in the status bar.
     @Published var matchLook: MatchLookModel?
     @Published var matchProgress: ImportStatus?
+    /// An agent's auto or match_look measuring photos in the background (AT-050d), shown in the
+    /// status bar with Cancel, and how to cancel it.
+    @Published var agentProgress: ImportStatus?
+    var agentJob: AgentJob?
     /// The Remove Photo dialog, while open.
     @Published var removal: PhotoRemoval?
     /// The Delete Import dialog, while open.

@@ -618,6 +618,13 @@ final class DevelopController: ObservableObject {
     private let openGeneration = LockedValue(0)
     /// Counts proxy renders, so an older histogram never replaces a newer one.
     private var renderCount = 0
+    /// Renders that ran, and how long they took: the open photo's proxy renders, and other
+    /// photos' preview refreshes (`refreshPreviews`). The agent render check reads them
+    /// (AgentEditRenderTests, AT-050d).
+    let proxyRenders = LockedValue(RenderTally())
+    let refreshRenders = LockedValue(RenderTally())
+    /// A proxy render is running or waiting to.
+    var isRenderingProxy: Bool { rendering }
     /// The rank (`DevelopMeasureRequest.rank`) of what the shown histogram was counted from.
     private var measuredRank = 0
     var onPreviewsUpdated: ((Int64) -> Void)?
@@ -2050,6 +2057,7 @@ final class DevelopController: ObservableObject {
             }
         }
         let readyAt = renderedAt ?? CACurrentMediaTime()
+        controller.proxyRenders.update { $0.record(readyAt - renderClock) }
         let renderTook = DevelopTimingLog.ms(since: renderBegan)
         if renderTook > 300 || (surface == nil && cgImage == nil) {
             DevelopTimingLog.shared.log(request.assetID, surface == nil && cgImage == nil ? "render FAILED after \(renderTook) ms"
@@ -2577,6 +2585,14 @@ final class DevelopController: ObservableObject {
     /// Grid and Loupe previews of the open photo, rendered beside the live renders instead of
     /// between them.
     private static let previewQueue = DispatchQueue(label: "atelier.develop.previews", qos: .utility)
+    /// Other photos' preview refreshes (`refreshPreviews`), two at a time.
+    private static let refreshQueue: OperationQueue = {
+        let queue = OperationQueue()
+        queue.name = "atelier.develop.refresh"
+        queue.maxConcurrentOperationCount = 2
+        queue.qualityOfService = .utility
+        return queue
+    }()
 
     /// Each photo's latest preview write asked for (`nextPreviewRevision`). Writes come from the
     /// render queue and from independent decodes (`refreshPreviews`), so an older one can finish
@@ -2606,14 +2622,24 @@ final class DevelopController: ObservableObject {
     }
 
     /// Re-renders previews for a photo that is not open, after pasting settings onto it.
+    /// Two at a time, and skipped when a newer edit of the same photo was saved before its turn
+    /// came: an agent's edit of hundreds of photos, or several quick ones, mustn't start a decode
+    /// per photo per edit all at once (AT-050d; each was its own block on a global queue before).
     func refreshPreviews(for assetID: Int64, settings: DevelopSettings) {
         guard let url = try? catalog.fileURL(for: assetID) else { return }
         let previews = self.previews
         let revisions = previewRevisions
         let revision = nextPreviewRevision(for: assetID)
-        DispatchQueue.global(qos: .utility).async {
+        let tally = refreshRenders
+        Self.refreshQueue.addOperation {
+            guard (revisions.value[assetID] ?? 0) == revision else {
+                tally.update { $0.skipped += 1 }
+                return
+            }
+            let began = CACurrentMediaTime()
             guard let session = DevelopRenderer.shared.session(for: url, maxPixelSize: Self.proxySize),
                   let cgImage = session.render(settings) else { return }
+            tally.update { $0.record(CACurrentMediaTime() - began) }
             Self.writePreviews(cgImage, for: assetID, revision: revision, previews: previews, revisions: revisions)
             DispatchQueue.main.async {
                 MainActor.assumeIsolated { self.onPreviewsUpdated?(assetID) }
@@ -2912,4 +2938,21 @@ extension DevelopController {
         settings.masks[index].components[part].inverted.toggle()
         changed(step: "Invert Part of \(settings.masks[index].name)")
     }
+}
+
+/// How many renders ran and how long they took, for the agent render check (AT-050d).
+struct RenderTally: Sendable {
+    var count = 0
+    var seconds = 0.0
+    var longest = 0.0
+    /// Refreshes dropped because a newer edit of the photo came first.
+    var skipped = 0
+
+    mutating func record(_ duration: Double) {
+        count += 1
+        seconds += duration
+        longest = max(longest, duration)
+    }
+
+    var meanMS: Double { count == 0 ? 0 : seconds * 1000 / Double(count) }
 }
