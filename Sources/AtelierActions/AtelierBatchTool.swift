@@ -17,8 +17,13 @@ extension AtelierAgentTools {
         var tools: [MCPTool] = []
         if profile >= .organize { tools += organizeTools.filter { $0.name != undoChange.name } }
         if profile >= .edit { tools += editTools }
-        return tools.map(\.name)
+        return tools.map(\.name).filter { !notInBatch.contains($0) }
     }
+
+    /// Tools that measure photos off the main thread before they change anything (auto and
+    /// match_look, AT-050d), which a batch's steps on the main thread can't wait for. Send them
+    /// on their own.
+    public static let notInBatch: Set<String> = ["auto", "match_look"]
 
     /// Why a step can't be in an atomic batch, or nil when it can: only changes Atelier can put
     /// back if a later step fails.

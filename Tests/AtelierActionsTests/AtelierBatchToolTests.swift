@@ -14,6 +14,9 @@ final class AtelierBatchToolTests: XCTestCase {
         XCTAssertFalse(organize.contains("adjust"))
         XCTAssertFalse(organize.contains("command_batch"))
         XCTAssertTrue(AtelierAgentTools.batchTools(profile: .edit).contains("adjust"))
+        for name in AtelierAgentTools.notInBatch {
+            XCTAssertFalse(AtelierAgentTools.batchTools(profile: .everything).contains(name), name)
+        }
     }
 
     func testAtomicTakesOnlyWhatCanBePutBack() {
