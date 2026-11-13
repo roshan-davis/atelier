@@ -10,9 +10,12 @@ enum AgentSettings {
     static let enabledKey = "agents.enabled"
     static let previewsKey = "agents.previews"
     static let locationKey = "agents.location"
+    static let confirmAboveKey = "agents.confirmAbove"
 
     /// On unless turned off: every app still has to be allowed the first time it connects.
     static var isEnabled: Bool { UserDefaults.standard.object(forKey: enabledKey) as? Bool ?? true }
+    /// One agent change touching more photos than this asks the person first (0: never asks).
+    static var confirmAbove: Int { UserDefaults.standard.object(forKey: confirmAboveKey) as? Int ?? 50 }
     static var options: AgentLookTools.Options {
         AgentLookTools.Options(previews: UserDefaults.standard.bool(forKey: previewsKey),
                                location: UserDefaults.standard.bool(forKey: locationKey))
@@ -20,8 +23,8 @@ enum AgentSettings {
 }
 
 /// Atelier's MCP server (AT-050b): the private socket the bundled `atelier-mcp` helper connects
-/// to, the grants (one per checked client), the activity log and the Look tools. Settings >
-/// Agents shows and edits it. Nothing it serves writes to the catalog yet.
+/// to, the grants (one per checked client), the activity log, the Look tools (AT-050b) and the
+/// Organize tools (AT-050c, Agents/AgentOrganizeTools.swift). Settings > Agents shows and edits it.
 @MainActor
 final class AgentServer: ObservableObject {
     static let appName = "Atelier"
@@ -34,8 +37,12 @@ final class AgentServer: ObservableObject {
     @Published private(set) var isRunning = false
     /// Why the server couldn't start, for Settings.
     @Published private(set) var problem: String?
+    /// The line at the bottom of the photo after an agent changed something.
+    @Published var notice: AgentNotice?
+    /// Agents' changes while Atelier runs, for undo_change and the notice's Undo.
+    var changes = PhotoChangeLog()
 
-    private weak var model: LibraryModel?
+    private(set) weak var model: LibraryModel?
     private var server: MCPSocketServer?
     /// One approval question per client at a time, however many requests are waiting on it.
     private var questions: [String: Task<AgentProfile?, Never>] = [:]
@@ -149,19 +156,29 @@ final class AgentServer: ObservableObject {
     }
 
     func tools(profile: AgentProfile) -> [MCPTool] {
-        AgentLookTools.tools(options: AgentSettings.options) + [CommandListTool.tool]
+        var tools = AgentLookTools.tools(options: AgentSettings.options) + [CommandListTool.tool]
+        if profile >= .organize { tools += AtelierAgentTools.organizeTools }
+        return tools
     }
 
-    /// The tools that read the window or the app's lists, on the main thread.
-    func callOnMain(_ tool: String, _ arguments: [String: JSONValue], profile: AgentProfile) -> MCPToolResult? {
+    /// The tools that read the window or the app's lists, and every write, on the main thread.
+    func callOnMain(_ tool: String, _ arguments: [String: JSONValue], client: AgentClient,
+                    profile: AgentProfile) -> MCPToolResult? {
         guard let model else { return .error("\(Self.appName) is closing.") }
+        if let result = callWrite(tool, arguments, client: client, profile: profile) { return result }
         switch tool {
         case CommandListTool.name:
             let registry = model.actions
+            let runs = profile >= .organize
             return .json(CommandListTool.list(catalog: registry.catalog, profile: profile,
                                               search: arguments["search"]?.stringValue,
                                               editProfile: Self.editProfile,
-                                              isEnabled: { registry.isEnabled($0) }))
+                                              isEnabled: { registry.isEnabled($0) },
+                                              note: runs
+                                                ? "Run a command with command_run. Develop edits, exports and other apps "
+                                                    + "arrive in a later version."
+                                                : "This app is allowed Look, so these are for reading. The person can "
+                                                    + "allow more in Atelier > Settings… > Agents."))
         case AgentLookTools.getContext.name:
             return context(model)
         case AgentLookTools.listItems.name:
@@ -188,7 +205,7 @@ final class AgentServer: ObservableObject {
 
     /// Library edits (ratings, flags, collections) need Organize; Develop edits need Edit.
     nonisolated static func editProfile(_ action: ActionDescriptor) -> AgentProfile {
-        action.id.rawValue.hasPrefix("develop.") ? .edit : .organize
+        AtelierAgentTools.editProfile(action)
     }
 
     private func context(_ model: LibraryModel) -> MCPToolResult {
@@ -260,7 +277,7 @@ final class AgentServer: ObservableObject {
         grantList = grants.all
     }
 
-    private func log(_ name: String, _ kind: AgentActivity.Kind, _ text: String) {
+    func log(_ name: String, _ kind: AgentActivity.Kind, _ text: String) {
         activity.add(AgentActivity(clientName: name, kind: kind, text: text))
     }
 }
@@ -283,8 +300,11 @@ final class AtelierMCPHost: MCPHost, @unchecked Sendable {
             instructions: """
                 Atelier is a Lightroom-style photo catalog and editor on this Mac. Use get_context to see what the \
                 person is looking at, search_photos and get_photo to answer questions about the library, and \
-                command_list to see the menu commands. This version only reads: nothing you call changes photos. \
-                Private photos are never shown to agents.
+                command_list to see the menu commands. With the Organize profile, show selects photos in Atelier, \
+                set_metadata rates, flags, labels and adds keywords, organize adds to collections, and command_run \
+                runs library commands. Each change returns a change id; undo_change undoes your own change while it \
+                is still the latest on those photos. Name photos by id when you can. Private photos are never shown \
+                to agents, and nothing an agent calls deletes anything.
                 """)
     }
 
@@ -301,7 +321,7 @@ final class AtelierMCPHost: MCPHost, @unchecked Sendable {
     func call(_ tool: String, arguments: [String: JSONValue], client: AgentClient, profile: AgentProfile) async -> MCPToolResult {
         guard let server else { return .error("Atelier is closing.") }
         let result: MCPToolResult
-        if let onMain = await server.callOnMain(tool, arguments, profile: profile) {
+        if let onMain = await server.callOnMain(tool, arguments, client: client, profile: profile) {
             result = onMain
         } else {
             result = lookTools.call(tool, arguments, options: AgentSettings.options)

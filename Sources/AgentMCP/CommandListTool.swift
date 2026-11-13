@@ -24,7 +24,8 @@ public enum CommandListTool {
     /// The commands `profile` may see, as JSON.
     public static func list(catalog: ActionCatalog, profile: AgentProfile, search: String?,
                             editProfile: (ActionDescriptor) -> AgentProfile,
-                            isEnabled: (ActionID) -> Bool) -> JSONValue {
+                            isEnabled: (ActionID) -> Bool,
+                            note: String = "Running commands arrives in a later version; this list is for reading.") -> JSONValue {
         let words = (search ?? "").lowercased().split(separator: " ").map(String.init)
         let visible = catalog.actions
             .filter { action in
@@ -56,7 +57,7 @@ public enum CommandListTool {
             "app": .string(catalog.app),
             "profile": .string(profile.rawValue),
             "commands": .array(commands),
-            "note": .string("Running commands arrives in a later version; this list is for reading."),
+            "note": .string(note),
         ])
     }
 }

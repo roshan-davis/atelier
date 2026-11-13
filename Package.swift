@@ -26,9 +26,10 @@ let package = Package(
         // and its tests run anywhere. Nothing about photos or catalogs goes in it.
         .target(name: "AgentActions"),
         .testTarget(name: "AgentActionsTests", dependencies: ["AgentActions"]),
-        // Atelier's action catalog (ids, kinds, parameter types), without handlers.
-        .target(name: "AtelierActions", dependencies: ["AgentActions"]),
-        .testTarget(name: "AtelierActionsTests", dependencies: ["AgentActions", "AtelierActions"]),
+        // Atelier's action catalog (ids, kinds, parameter types) and typed agent tool schemas,
+        // without handlers.
+        .target(name: "AtelierActions", dependencies: ["AgentActions", "AgentMCP"]),
+        .testTarget(name: "AtelierActionsTests", dependencies: ["AgentActions", "AtelierActions", "AgentMCP"]),
         // App-neutral MCP server: JSON-RPC sessions, the private Unix socket, checked client
         // identity and profiles. Foundation only, so it builds and tests without a Mac.
         .target(name: "AgentMCP", dependencies: ["AgentActions"]),

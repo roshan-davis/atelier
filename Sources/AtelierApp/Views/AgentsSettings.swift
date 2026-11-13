@@ -88,6 +88,7 @@ private struct AgentsSettingsForm: View {
     @ObservedObject var server: AgentServer
     @AppStorage(AgentSettings.previewsKey) private var previews = false
     @AppStorage(AgentSettings.locationKey) private var location = false
+    @AppStorage(AgentSettings.confirmAboveKey) private var confirmAbove = 50
     @AppStorage("agents.setupClient") private var client: AgentHelper.Client = .openCode
     @State private var copied: String?
     @State private var selectedActivity: Set<UUID> = []
@@ -103,8 +104,15 @@ private struct AgentsSettingsForm: View {
                 status
                 Toggle("Let agents see photo previews", isOn: $previews)
                 Toggle("Include location in photo details", isOn: $location)
+                Picker("Ask before one change touches more than", selection: $confirmAbove) {
+                    ForEach([10, 25, 50, 100, 250, 500], id: \.self) { count in
+                        Text("\(count) photos").tag(count)
+                    }
+                    Divider()
+                    Text("Never ask").tag(0)
+                }
             } footer: {
-                Text("Chat apps such as OpenCode, Claude or Cherry Studio connect through Atelier's helper, and Atelier asks you the first time each one connects. Whatever Atelier tells an app goes to the model it uses: with Ollama nothing leaves this Mac, with a hosted model it goes to that provider. Private photos are never shared. Agents can only read in this version.")
+                Text("Chat apps such as OpenCode, Claude or Cherry Studio connect through Atelier's helper, and Atelier asks you the first time each one connects. Whatever Atelier tells an app goes to the model it uses: with Ollama nothing leaves this Mac, with a hosted model it goes to that provider. Private photos are never shared. Apps allowed Organize can rate, flag, label, add keywords and add to collections: each change shows a notice with Undo at the bottom of the photo, and nothing an app does deletes anything.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

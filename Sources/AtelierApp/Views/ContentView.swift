@@ -48,6 +48,8 @@ struct ContentView: View {
                                 EmptyLibraryView()
                             }
                         }
+                        // A chat app's change, with Undo (Settings > Agents, AT-050c).
+                        .overlay(alignment: .bottom) { AgentNoticeView(agents: model.agents) }
                         Divider()
                         StatusBar()
                     }
