@@ -40,16 +40,18 @@ final class MCPSocketTests: XCTestCase {
 
         func send(_ line: String) { toRelay.fileHandleForWriting.write(Data((line + "\n").utf8)) }
 
+        /// Lines read but not yet received (a notification can arrive with a reply).
+        var buffered: [Data] = []
+
         func receive(timeout: Double = 5) -> JSONValue? {
             let fd = fromRelay.fileHandleForReading.fileDescriptor
-            var lines: [Data] = []
             let deadline = Date().addingTimeInterval(timeout)
-            while lines.isEmpty, Date() < deadline {
+            while buffered.isEmpty, Date() < deadline {
                 guard UnixSocket.waitReadable(fd, timeout: 0.1) else { continue }
                 guard let batch = reader.read(from: fd) else { return nil }
-                lines = batch
+                buffered = batch
             }
-            return lines.first.flatMap { JSONValue(parsing: $0) }
+            return buffered.isEmpty ? nil : JSONValue(parsing: buffered.removeFirst())
         }
 
         func closeInput() { try? toRelay.fileHandleForWriting.close() }
@@ -153,6 +155,38 @@ final class MCPSocketTests: XCTestCase {
         XCTAssertEqual(AgentSocketPath.path(app: "Sketch"), "/tmp/x.sock")
         unsetenv("SKETCH_MCP_SOCKET")
         XCTAssertTrue(AgentSocketPath.path(app: "Sketch").hasSuffix("Sketch/Agents/sketch.sock"))
+    }
+
+    /// Docking over the socket: the capability, a dock, and the app's notification on the same line.
+    func testDockingNotificationsReachTheChatApp() throws {
+        let host = SketchDockingHost()
+        host.base.allow("test#TEAM", .look)
+        let server = MCPSocketServer(path: socketPath, host: host, identify: fixedClient)
+        try server.start()
+        defer { server.stop() }
+
+        let relay = RelayHarness(path: socketPath, profile: nil)
+        relay.send(#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}"#)
+        XCTAssertEqual(relay.receive()?["result"]?["capabilities"]?["experimental"]?["docking"]?["version"], .int(1))
+        relay.send(#"{"jsonrpc":"2.0","id":2,"method":"docking/dock","params":{"frame":{"x":800,"y":100,"width":900,"height":800}}}"#)
+        XCTAssertEqual(relay.receive()?["result"]?["frame"]?["width"]?.doubleValue, 900)
+
+        let released = expectation(description: "released")
+        Task { await host.coordinator.released(reason: .user); released.fulfill() }
+        wait(for: [released], timeout: 5)
+        let moved = relay.receive()
+        XCTAssertEqual(moved?["method"], .string("docking/moved"))
+        XCTAssertNil(moved?["id"])
+        XCTAssertEqual(moved?["params"]?["reason"], .string("user"))
+
+        // Closing the chat app's side lets go of a dock.
+        relay.send(#"{"jsonrpc":"2.0","id":3,"method":"docking/dock","params":{"frame":{"x":800,"y":100,"width":900,"height":800}}}"#)
+        XCTAssertNotNil(relay.receive()?["result"])
+        relay.closeInput()
+        XCTAssertEqual(relay.finished.wait(timeout: .now() + 5), .success)
+        let deadline = Date().addingTimeInterval(5)
+        while host.coordinator.holder() != nil, Date() < deadline { usleep(20_000) }
+        XCTAssertNil(host.coordinator.holder())
     }
 }
 

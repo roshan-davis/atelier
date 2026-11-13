@@ -102,6 +102,7 @@ private struct AgentsSettingsForm: View {
                     get: { server.isRunning || (AgentSettings.isEnabled && server.problem != nil) },
                     set: { server.setEnabled($0) }))
                 status
+                DockStatus(dock: server.dock)
                 Toggle("Let agents see photo previews", isOn: $previews)
                 Toggle("Include location in photo details", isOn: $location)
                 Picker("Ask before one change touches more than", selection: $confirmAbove) {
@@ -112,7 +113,7 @@ private struct AgentsSettingsForm: View {
                     Text("Never ask").tag(0)
                 }
             } footer: {
-                Text("Chat apps such as OpenCode, Claude or Cherry Studio connect through Atelier's helper, and Atelier asks you the first time each one connects. Whatever Atelier tells an app goes to the model it uses: with Ollama nothing leaves this Mac, with a hosted model it goes to that provider. Private photos are never shared. Apps allowed Organize can rate, flag, label, add keywords and add to collections: each change shows a notice with Undo at the bottom of the photo, and nothing an app does deletes anything.")
+                Text("Chat apps such as OpenCode, Claude or Cherry Studio connect through Atelier's helper, and Atelier asks you the first time each one connects. Whatever Atelier tells an app goes to the model it uses: with Ollama nothing leaves this Mac, with a hosted model it goes to that provider. Private photos are never shared. Apps allowed Organize can rate, flag, label, add keywords and add to collections: each change shows a notice with Undo at the bottom of the photo, and nothing an app does deletes anything. A chat app built for it (Docent) can dock Atelier's window beside its own; no model can move the window.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -280,6 +281,23 @@ private struct AgentsSettingsForm: View {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
         copied = name == "Path" ? nil : name
+    }
+}
+
+/// "Docked beside Docent", with Undock, while a chat app has docked Atelier's window (AT-050h).
+private struct DockStatus: View {
+    @ObservedObject var dock: AgentDock
+
+    var body: some View {
+        if let client = dock.dockedTo {
+            HStack {
+                Label("Atelier's window is docked beside \(client.name).", systemImage: "rectangle.split.2x1")
+                    .font(.callout)
+                Spacer()
+                Button("Undock") { dock.undockByHand() }
+                    .controlSize(.small)
+            }
+        }
     }
 }
 
