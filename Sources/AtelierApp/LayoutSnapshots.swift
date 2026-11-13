@@ -419,10 +419,22 @@ enum LayoutSnapshots {
             UserDefaults.standard.set(view, forKey: "develop.gradeView")
             await capture(AnyView(ColorGradingPanel(develop: develop).padding(12).frame(width: 320)
                                     .background(Color(nsColor: .windowBackgroundColor))),
-                          size: CGSize(width: 320, height: view == "3-Way" ? 560 : 520),
+                          size: CGSize(width: 320, height: view == "3-Way" ? 590 : 550),
                           to: folder.appendingPathComponent("color-grading-\(view.lowercased())-320.png"))
         }
         UserDefaults.standard.set("3-Way", forKey: "develop.gradeView")
+        // A built-in Color Grading preset: its name shows in the panel's Preset menu.
+        let gradeBefore = develop.settings
+        if let teal = SectionPresetKind.colorGrading.builtIn.first(where: { $0.name == "Teal & Orange" }) {
+            develop.applySectionPreset(teal, kind: .colorGrading)
+            try? await Task.sleep(for: .seconds(1))
+            print("SNAPSHOT: color grading preset \(develop.sectionPresetTitle(.colorGrading))")
+            await capture(AnyView(ColorGradingPanel(develop: develop).padding(12).frame(width: 320)
+                                    .background(Color(nsColor: .windowBackgroundColor))),
+                          size: CGSize(width: 320, height: 590),
+                          to: folder.appendingPathComponent("color-grading-preset-320.png"))
+            develop.apply(gradeBefore, onto: nil, step: "Snapshot")
+        }
         develop.setPanelOn(.colorGrading, false)
         try? await Task.sleep(for: .seconds(1))
         await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
@@ -461,13 +473,22 @@ enum LayoutSnapshots {
         develop.set(.curveMidtoneSplit, to: 45)
         UserDefaults.standard.set("parametric", forKey: DevelopController.curveModeKey)
         try? await Task.sleep(for: .seconds(1))
-        await panel(ToneCurvePanel(develop: develop), "tone-curve-parametric", height: 520)
+        await panel(ToneCurvePanel(develop: develop), "tone-curve-parametric", height: 550)
         develop.setPoints([.init(x: 0, y: 0.05), .init(x: 0.3, y: 0.24), .init(x: 0.7, y: 0.78), .init(x: 1, y: 1)], for: .rgb)
         develop.set(.curveRefineSaturation, to: 60)
         UserDefaults.standard.set("point", forKey: DevelopController.curveModeKey)
         UserDefaults.standard.set("rgb", forKey: DevelopController.curveChannelKey)
         try? await Task.sleep(for: .seconds(1))
-        await panel(ToneCurvePanel(develop: develop), "tone-curve-point", height: 560)
+        await panel(ToneCurvePanel(develop: develop), "tone-curve-point", height: 590)
+        // A built-in Tone Curve preset: its name shows in the panel's Preset menu.
+        let curveBefore = develop.settings
+        if let matte = SectionPresetKind.toneCurve.builtIn.first(where: { $0.name == "Matte" }) {
+            develop.applySectionPreset(matte, kind: .toneCurve)
+            try? await Task.sleep(for: .seconds(1))
+            print("SNAPSHOT: tone curve preset \(develop.sectionPresetTitle(.toneCurve))")
+            await panel(ToneCurvePanel(develop: develop), "tone-curve-preset", height: 590)
+            develop.apply(curveBefore, onto: nil, step: "Snapshot")
+        }
 
         develop.set(.hsl(.saturation, .blue), to: 30)
         develop.set(.hsl(.luminance, .blue), to: -25)

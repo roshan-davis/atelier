@@ -758,3 +758,13 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 **Status:** Approved (Rosh, 2026-11-12), not started; blocked on bracket fixtures. **Owner:** Claude (Cl). **Chat:** as AT-053.
 
 **Scope:** 2–9 selected photos + ⌃H; frames fill the Exposures strip and feed Natural/Fusion; alignment that tolerates exposure differences; Deghost None/Low/Medium/High with an overlay; project stores all sources; result stacked with the reference frame. **Dependencies:** AT-053; a real handheld and a tripod bracket (with motion) from Rosh.
+
+## AT-055 — Develop: Tone Curve and Color Grading presets (panel Preset menus)
+
+**Status:** Done — Rosh built and tested `a7fc3ee` in Xcode and asked to merge (2026-11-12, "this is good, merge it"). No Codex `check_pr.py` run or snapshot review recorded; CI did not run (billing). **Owner:** Claude (Cl). **Chat:** [Add Tone Curve and Color Grading presets](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGK72WTFWffG4o8f2nXFkwkcG). **Branch:** `claude/project-thread-qk0le7`. **PR:** #114. **Baseline:** `c458544`.
+
+**Evidence:** Rosh (2026-11-12) asked whether Tone Curve presets (as in Easel) and Color Grading presets based on color-harmony patterns ("Y", triangle and others) are a good idea and real, and said to go ahead. Research: reports/color-harmony-grading-2026-11-12.md (project files). Easel: Curves has a Photoshop-style Preset menu with Easel's own named curves plus Save/Load .acv (`EaselCore/Adjustments/AdjustmentPresets.swift`).
+
+**Scope:** `SectionPresetKind` (AtelierCore, `Develop/SectionPresets.swift`): 20 Tone Curve and 18 Color Grading built-ins (bold set after Rosh's Nov 13 feedback that the first ones were "blah", tuned on fixtures with develop_sim.py) with fixed IDs, match detection, user presets in their own JSON files through `PresetStore`. `DevelopController+SectionPresets.swift` applies (one history step), saves, deletes. `SectionPresetRow` (AppKit pull-down so a highlighted item previews in the Navigator) at the top of both panels. Help (tone-curve, color-grading, presets pages), PRD, layout snapshots (`tone-curve-preset-320`, `color-grading-preset-320`; taller panel captures). No rendering change, no PreviewCache bump, no catalog change.
+
+**Acceptance:** Mac build and tests of the exact head (`Scripts/check_pr.py`, incl. `SectionPresetTests`), the layout snapshots, then Rosh: hover presets in both menus (Navigator preview, photo unchanged), apply (one undo step, the name shows; Custom after a tweak), save/replace/delete a user preset, apply while the panel is off (turns on). Not in scope: presets for other panels, .acv import/export, preset Amount for panel presets, a harmony-rotation tool.

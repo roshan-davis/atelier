@@ -6,13 +6,14 @@ import SwiftUI
 /// three split points under the graph, and dragging on the graph moves the region under the
 /// pointer) and a Point view (an editable curve per channel with Input and Output, Refine
 /// Saturation and a menu of saved curves). Both views are drawn over the histogram, and the
-/// Targeted Adjustment Tool follows the one that is shown.
+/// Targeted Adjustment Tool follows the one that is shown. The Preset menu above them sets the
+/// whole panel (`SectionPresetRow`).
 struct ToneCurvePanel: View {
     @ObservedObject var develop: DevelopController
     @AppStorage(DevelopController.curveModeKey) private var mode = "parametric"
     @AppStorage(DevelopController.curveChannelKey) private var channelName = "rgb"
     @AppStorage("develop.curveSnapToGrid") private var snapToGrid = false
-    @AppStorage("develop.curveShowAll") private var showAllCurves = false
+    @AppStorage(DevelopController.curveShowAllKey) private var showAllCurves = false
     @State private var selected: Int?
     @State private var naming = false
     @State private var curveName = ""
@@ -26,6 +27,7 @@ struct ToneCurvePanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            SectionPresetRow(kind: .toneCurve, develop: develop)
             HStack(spacing: 6) {
                 PickerButton(develop: develop, kind: .targetCurve, symbol: "scope",
                              help: "Targeted Adjustment: drag up or down on the photo to change the tones under the pointer")

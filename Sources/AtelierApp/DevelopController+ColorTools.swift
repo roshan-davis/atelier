@@ -52,6 +52,7 @@ extension DevelopController {
     /// Adjustment Tool follows.
     static let curveModeKey = "develop.curveMode"
     static let curveChannelKey = "develop.curveChannel"
+    static let curveShowAllKey = "develop.curveShowAll"
 
     func targetedDrag(_ drag: PhotoDrag) {
         guard let picker, picker.isTargeted else { return }
