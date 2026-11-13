@@ -57,19 +57,29 @@ final class AtelierAgentToolsTests: XCTestCase {
     /// Both layers agree: every exposed command an Organize client may see in command_list,
     /// command_run accepts (with its example parameters), and nothing else.
     func testCommandRunAgreesWithCommandList() throws {
-        let listed = CommandListTool.list(catalog: AtelierAction.catalog, profile: .organize, search: nil,
-                                          editProfile: AtelierAgentTools.editProfile, isEnabled: { _ in true })
-        let ids = Set(listed["commands"]?.arrayValue?.compactMap { $0["id"]?.stringValue } ?? [])
-        XCTAssertFalse(ids.isEmpty)
-        for action in AtelierAction.catalog.actions {
-            let example = JSONValue(parsing: Data(Self.exampleJSON(action).utf8))?.objectValue ?? [:]
-            let result = CommandRunTool.check(["id": .string(action.id.rawValue), "parameters": .object(example)],
-                                              catalog: AtelierAction.catalog, profile: .organize,
-                                              ceiling: AtelierAgentTools.runCeiling, editProfile: AtelierAgentTools.editProfile)
-            switch result {
-            case .success: XCTAssertTrue(ids.contains(action.id.rawValue), "\(action.id) runs but isn't listed")
-            case .failure(let problems): XCTAssertFalse(ids.contains(action.id.rawValue), "\(action.id) listed but refused: \(problems.text)")
+        for profile in [AgentProfile.organize, .edit] {
+            let listed = CommandListTool.list(catalog: AtelierAction.catalog, profile: profile, search: nil,
+                                              editProfile: AtelierAgentTools.editProfile, isEnabled: { _ in true })
+            let ids = Set(listed["commands"]?.arrayValue?.compactMap { $0["id"]?.stringValue } ?? [])
+            XCTAssertFalse(ids.isEmpty)
+            for action in AtelierAction.catalog.actions {
+                let example = JSONValue(parsing: Data(Self.exampleJSON(action).utf8))?.objectValue ?? [:]
+                let result = CommandRunTool.check(["id": .string(action.id.rawValue), "parameters": .object(example)],
+                                                  catalog: AtelierAction.catalog, profile: profile,
+                                                  ceiling: AtelierAgentTools.runCeiling, editProfile: AtelierAgentTools.editProfile)
+                switch result {
+                case .success: XCTAssertTrue(ids.contains(action.id.rawValue), "\(profile): \(action.id) runs but isn't listed")
+                case .failure(let problems):
+                    XCTAssertFalse(ids.contains(action.id.rawValue), "\(profile): \(action.id) listed but refused: \(problems.text)")
+                }
             }
+        }
+        // With Edit, Develop commands run; with Organize they don't.
+        let rotate: [String: JSONValue] = ["id": .string(AtelierAction.rotateRight.id.rawValue)]
+        for (profile, runs) in [(AgentProfile.organize, false), (.edit, true)] {
+            let result = CommandRunTool.check(rotate, catalog: AtelierAction.catalog, profile: profile,
+                                              ceiling: AtelierAgentTools.runCeiling, editProfile: AtelierAgentTools.editProfile)
+            if case .success = result { XCTAssertTrue(runs, "\(profile)") } else { XCTAssertFalse(runs, "\(profile)") }
         }
         // Deletes are never runnable, whatever the profile.
         for action in AtelierAction.catalog.actions where action.kind == .deletes {
