@@ -15,7 +15,7 @@
 <h1>Connect a chat app</h1>
 <p class="lede">Ask a chat app to work in Atelier for you: “how many photos did I pick from the last import?”, “add the five-star ones to Website”, “warm this one up a bit”. Atelier speaks MCP, the standard way chat apps reach other apps, so any chat app that supports MCP servers can connect, with a free, local or hosted model.</p>
 
-<div class="note"><p><span class="label">Coming soon.</span> This works once Atelier's chat server is built (backlog item AT-050b). Until then there is nothing to connect to, and Settings has no Agents pane yet. The menus, keys and photo menu are already built from the same commands chat apps will use, so every menu command will be available to them without extra work. The steps below are checked again against each app when the server ships.</p></div>
+<div class="note"><p><span class="label">Coming soon.</span> This works once Atelier's chat server is merged (backlog item AT-050b, in review). Until then there is nothing to connect to, and Settings has no Agents pane yet. The menus, keys and photo menu are already built from the same commands chat apps will use, so every menu command will be available to them without extra work. The steps below are checked again against each app when the server ships.</p></div>
 
 <div class="chips"><a href="#how">How it works</a><a href="#opencode">OpenCode</a><a href="#cherry">Cherry Studio</a><a href="#ollama">Ollama (ollmcp)</a><a href="#lmstudio">LM Studio</a><a href="#openwebui">Open WebUI</a><a href="#claude-desktop">Claude Desktop</a><a href="#claude-code">Claude Code</a><a href="#codex">Codex</a><a href="#models">Which model</a><a href="#privacy">Privacy</a><a href="#trouble">If it doesn't work</a></div>
 
@@ -28,7 +28,15 @@
   <li><b>Undo works.</b> Each change from a chat is one step in the photo's history, with a plain name, and you can undo it with <kbd>⌘Z</kbd> like your own edits.</li>
   <li><b>Nothing is deleted.</b> Chat apps can't remove photos or move files to the Trash; they tell you to use <span class="path">Photo › Remove Photo…</span> yourself.</li>
 </ul>
-<div class="tip"><p>If you run Atelier from Xcode instead of <code>/Applications</code>, <span class="path">Settings › Agents</span> shows the helper's real path, with a <b>Copy</b> button for each app's setup.</p></div>
+<h3 id="settings-agents">Settings › Agents</h3>
+<p><span class="path">Atelier › Settings… › Agents</span> is where you manage this:</p>
+<dl class="defs">
+  <dt>Access</dt><dd>Switches that turn chat apps on or off, and what they may see.</dd>
+  <dt>Apps</dt><dd>Every app that has asked to connect, each with a menu to change or revoke what it may do.</dd>
+  <dt>Connect an App</dt><dd>The helper's path with <b>Copy</b>, and <b>Copy Setup</b> for each chat app, ready to paste into its settings.</dd>
+  <dt>Activity</dt><dd>What chat apps have done in Atelier.</dd>
+</dl>
+<div class="tip"><p>Running Atelier from Xcode instead of <code>/Applications</code>? Build the <b>atelier-mcp</b> scheme once (choose it in the toolbar's scheme menu, then <span class="path">Product › Build</span>, <kbd>⌘B</kbd>), then use the path that <span class="path">Connect an App</span> shows.</p></div>
 
 <h2 id="opencode">OpenCode (free models)</h2>
 <p>OpenCode is a free chat app for Terminal with free hosted models, and it can use your Ollama models too.</p>
@@ -130,7 +138,7 @@ args = []</code></pre>
   <dt>“Atelier isn't running”</dt><dd>Open Atelier and ask again.</dd>
   <dt>The app isn't allowed</dt><dd><span class="path">Settings › Agents</span> lists every app that asked. Allow it, or give it a higher level.</dd>
   <dt>The model never uses Atelier</dt><dd>Small free or local models often answer without calling tools. Ask directly (“use the Atelier tools to list my collections”), or pick a model that supports tool use.</dd>
-  <dt>Wrong path</dt><dd>If Atelier isn't in <code>/Applications</code>, copy the helper's path from <span class="path">Settings › Agents</span>.</dd>
+  <dt>Wrong path</dt><dd>If Atelier isn't in <code>/Applications</code>, copy the helper's path from <span class="path">Settings › Agents › Connect an App</span>.</dd>
 </dl>
 
 <div class="see-also">See also: <a href="settings.html">Settings</a> · <a href="shortcuts.html">Keyboard shortcuts</a> · <a href="ai.html">AI tools</a></div>
