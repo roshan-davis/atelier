@@ -14,7 +14,8 @@ final class AtelierDevelopToolsTests: XCTestCase {
         for (name, schema) in AtelierAgentTools.developParameterSchemas {
             XCTAssertEqual(schema.problems, [], name)
         }
-        XCTAssertEqual(AtelierAgentTools.editTools.map(\.name), ["adjust", "apply_preset", "sync", "reset"])
+        XCTAssertEqual(AtelierAgentTools.editTools.map(\.name),
+                       ["adjust", "auto", "apply_preset", "sync", "reset", "crop", "add_mask", "match_look"])
         let all = (AtelierAgentTools.organizeTools + AtelierAgentTools.editTools).map(\.name)
         XCTAssertEqual(Set(all).count, all.count)
         let properties = AtelierAgentTools.adjust.inputSchema["properties"]

@@ -23,7 +23,7 @@ extension AtelierAgentTools {
     /// Tools that measure photos off the main thread before they change anything (auto and
     /// match_look, AT-050d), which a batch's steps on the main thread can't wait for. Send them
     /// on their own.
-    public static let notInBatch: Set<String> = ["auto", "match_look"]
+    public static var notInBatch: Set<String> { Set(measuringTools.map(\.name)) }
 
     /// Why a step can't be in an atomic batch, or nil when it can: only changes Atelier can put
     /// back if a later step fails.

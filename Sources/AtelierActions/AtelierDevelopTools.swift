@@ -3,7 +3,7 @@ import AgentMCP
 import Foundation
 
 // Atelier's Develop tools for agents (AT-050d, the Edit profile): adjust, apply_preset, sync
-// and reset. Like the Organize tools, their parameters are Swift types, so the schemas agents
+// and reset (crop, add_mask, auto and match_look are in AtelierEditTools.swift). Like the Organize tools, their parameters are Swift types, so the schemas agents
 // see come from the code. The app runs them (Agents/AgentDevelopTools.swift), and the plain
 // rules (names, values, clamping) live here so they're tested without a Mac.
 
@@ -314,12 +314,16 @@ public extension AtelierAgentTools {
         inputSchema: ParameterSchema.of(ResetParameters.self).json, readOnly: false)
 
     /// The Develop tools the Edit profile adds.
-    static let editTools = [adjust, applyPreset, sync, reset]
+    static let editTools = [adjust, auto, applyPreset, sync, reset, crop, addMask, matchLook]
 
     static let developParameterSchemas: [String: ParameterSchema] = [
         adjust.name: .of(AdjustParameters.self),
         applyPreset.name: .of(ApplyPresetParameters.self),
         sync.name: .of(SyncParameters.self),
         reset.name: .of(ResetParameters.self),
+        crop.name: .of(CropParameters.self),
+        addMask.name: .of(AddMaskParameters.self),
+        auto.name: .of(AutoParameters.self),
+        matchLook.name: .of(MatchLookParameters.self),
     ]
 }

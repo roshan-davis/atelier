@@ -317,9 +317,11 @@ final class AtelierMCPHost: MCPDockingHost, MCPResourceHost, @unchecked Sendable
                 command_list to see the menu commands. With the Organize profile, show selects photos in Atelier, \
                 set_metadata rates, flags, labels and adds keywords, organize adds to collections, and command_run \
                 runs library commands. With the Edit profile, adjust sets or nudges Develop sliders, apply_preset applies \
-                a Develop preset, sync copies settings from one photo to others, reset resets them, and command_run \
-                also runs Develop commands; each is one step in the photo's Develop history. command_batch runs several of \
-                these changes in one call; with atomic: true they are all or nothing, with one Undo. Each change returns a change id; undo_change undoes your own change while it \
+                a Develop preset, sync copies settings from one photo to others, reset resets them, crop crops, \
+                straightens, rotates and flips, add_mask adds a mask (subject, object, people, gradients, luminance), \
+                auto runs Auto tone and white balance, match_look matches a reference photo or built-in study, and \
+                command_run also runs Develop commands; each is one step in the photo's Develop history. command_batch \
+                runs several of these changes in one call; with atomic: true they are all or nothing, with one Undo. Each change returns a change id; undo_change undoes your own change while it \
                 is still the latest on those photos. Name photos by id when you can. Private photos are never shown \
                 to agents, and nothing an agent calls deletes anything.
                 """)
@@ -345,6 +347,8 @@ final class AtelierMCPHost: MCPDockingHost, MCPResourceHost, @unchecked Sendable
         let result: MCPToolResult
         if Self.editsDevelop(tool, arguments), !(await server.waitForDevelopIdle()) {
             result = .error("The person is still dragging in Develop. Nothing was changed; try again in a moment.")
+        } else if let measured = await server.callMeasuring(tool, arguments, client: client, profile: profile) {
+            result = measured
         } else if let onMain = await server.callOnMain(tool, arguments, client: client, profile: profile) {
             result = onMain
         } else {
