@@ -10,9 +10,11 @@ public struct MCPTool: Sendable, Hashable {
     public var readOnly: Bool
     public var destructive: Bool
     public var idempotent: Bool
+    /// MCP Apps: the view that shows this tool's results, or who may call it.
+    public var ui: MCPToolUI?
 
     public init(name: String, title: String, description: String, inputSchema: JSONValue = .emptyObjectSchema,
-                readOnly: Bool, destructive: Bool = false, idempotent: Bool = false) {
+                readOnly: Bool, destructive: Bool = false, idempotent: Bool = false, ui: MCPToolUI? = nil) {
         self.name = name
         self.title = title
         self.description = description
@@ -20,10 +22,17 @@ public struct MCPTool: Sendable, Hashable {
         self.readOnly = readOnly
         self.destructive = destructive
         self.idempotent = idempotent
+        self.ui = ui
     }
 
-    public var json: JSONValue {
-        .object([
+    /// Only a view calls it; the model never sees it.
+    public var isAppOnly: Bool { ui.map { !$0.visibility.contains(.model) } ?? false }
+
+    public var json: JSONValue { json(apps: true) }
+
+    /// Without `apps` (the client doesn't show views), the view link is left out.
+    public func json(apps: Bool) -> JSONValue {
+        var members: [String: JSONValue] = [
             "name": .string(name),
             "title": .string(title),
             "description": .string(description),
@@ -36,7 +45,14 @@ public struct MCPTool: Sendable, Hashable {
                 // Atelier's own library only; nothing on the internet.
                 "openWorldHint": .bool(false),
             ]),
-        ])
+        ]
+        if apps, let ui {
+            var meta: [String: JSONValue] = ["ui": ui.json]
+            // The flat key that hosts from before the stable spec read.
+            if let uri = ui.resourceURI { meta["ui/resourceUri"] = .string(uri) }
+            members["_meta"] = .object(meta)
+        }
+        return .object(members)
     }
 }
 
@@ -59,6 +75,11 @@ public struct MCPToolResult: Sendable, Hashable {
 
     public static func json(_ value: JSONValue) -> MCPToolResult {
         MCPToolResult(structured: value, text: value.compactText, imageList: [], isError: false)
+    }
+
+    /// A result whose structured part is for a view (large, such as thumbnails), with a short text.
+    public static func json(_ value: JSONValue, text: String) -> MCPToolResult {
+        MCPToolResult(structured: value, text: text, imageList: [], isError: false)
     }
 
     public static func image(_ data: Data, mimeType: String, caption: JSONValue) -> MCPToolResult {
@@ -123,6 +144,8 @@ public final class MCPSession: @unchecked Sendable {
 
     public private(set) var client: AgentClient
     public private(set) var protocolVersion: String?
+    /// The client shows MCP Apps views (it declared `io.modelcontextprotocol/ui` in `initialize`).
+    public private(set) var showsViews = false
     private let host: MCPHost
     private let output: (@Sendable (String) -> Bool)?
     private var openChannel: MCPChannel?
@@ -188,11 +211,18 @@ public final class MCPSession: @unchecked Sendable {
                 let name = info["name"]?.stringValue ?? "?"
                 client.clientInfo = info["version"]?.stringValue.map { "\(name) \($0)" } ?? name
             }
+            showsViews = MCPApps.clientSupports(params["capabilities"])
             if case .denied(let reason) = await host.authorize(client) {
                 return Self.error(id: id, code: -32001, message: reason)
             }
             let info = host.serverInfo
             var capabilities: [String: JSONValue] = ["tools": .object(["listChanged": .bool(false)])]
+            if host is MCPResourceHost {
+                capabilities["resources"] = .object(["listChanged": .bool(false)])
+            }
+            if showsViews, host is MCPResourceHost {
+                capabilities["extensions"] = .object([MCPApps.extensionID: .object([:])])
+            }
             // Docking needs a way back to the client for its notifications.
             if docking != nil, output != nil {
                 capabilities["experimental"] = .object(["docking": DockingProtocol.capability])
@@ -211,8 +241,8 @@ public final class MCPSession: @unchecked Sendable {
             case .denied(let reason):
                 return Self.error(id: id, code: -32001, message: reason)
             case .allowed(let profile):
-                let tools = await host.tools(for: client, profile: profile)
-                return Self.result(id: id, .object(["tools": .array(tools.map(\.json))]))
+                let tools = await visibleTools(profile)
+                return Self.result(id: id, .object(["tools": .array(tools.map { $0.json(apps: showsViews) })]))
             }
         case "tools/call":
             guard let name = params["name"]?.stringValue else {
@@ -222,9 +252,9 @@ public final class MCPSession: @unchecked Sendable {
             case .denied(let reason):
                 return Self.error(id: id, code: -32001, message: reason)
             case .allowed(let profile):
-                let tools = await host.tools(for: client, profile: profile)
+                let tools = await visibleTools(profile)
                 guard tools.contains(where: { $0.name == name }) else {
-                    let names = tools.map(\.name)
+                    let names = tools.filter { !$0.isAppOnly }.map(\.name)
                     let hint = Suggest.closest(to: name, in: names).map { " Did you mean \($0)?" } ?? ""
                     return Self.error(id: id, code: -32602, message: "Unknown tool: \(name).\(hint)")
                 }
@@ -246,12 +276,46 @@ public final class MCPSession: @unchecked Sendable {
                 return Self.error(id: id, code: failure.code, message: failure.message, data: failure.data)
             }
         case "resources/list":
-            return Self.result(id: id, .object(["resources": .array([])]))
+            switch await host.authorize(client) {
+            case .denied(let reason):
+                return Self.error(id: id, code: -32001, message: reason)
+            case .allowed(let profile):
+                let resources = await visibleResources(profile)
+                return Self.result(id: id, .object(["resources": .array(resources.map(\.listing))]))
+            }
+        case "resources/templates/list":
+            return Self.result(id: id, .object(["resourceTemplates": .array([])]))
+        case "resources/read":
+            guard let uri = params["uri"]?.stringValue else {
+                return Self.error(id: id, code: -32602, message: "resources/read needs a uri")
+            }
+            switch await host.authorize(client) {
+            case .denied(let reason):
+                return Self.error(id: id, code: -32001, message: reason)
+            case .allowed(let profile):
+                guard let resource = await visibleResources(profile).first(where: { $0.uri == uri }) else {
+                    return Self.error(id: id, code: -32002, message: "Resource not found: \(uri)", data: .object(["uri": .string(uri)]))
+                }
+                return Self.result(id: id, .object(["contents": .array([resource.contents])]))
+            }
         case "prompts/list":
             return Self.result(id: id, .object(["prompts": .array([])]))
         default:
             return Self.error(id: id, code: -32601, message: "Method not found: \(method)")
         }
+    }
+
+    /// The host's tools, without those only a view calls when this client shows no views.
+    private func visibleTools(_ profile: AgentProfile) async -> [MCPTool] {
+        let tools = await host.tools(for: client, profile: profile)
+        return showsViews ? tools : tools.filter { !$0.isAppOnly }
+    }
+
+    /// The host's resources, without views when this client shows none.
+    private func visibleResources(_ profile: AgentProfile) async -> [MCPResource] {
+        guard let host = host as? MCPResourceHost else { return [] }
+        let resources = await host.resources(for: client, profile: profile)
+        return showsViews ? resources : resources.filter { !$0.isView }
     }
 
     static func result(id: JSONValue, _ result: JSONValue) -> JSONValue {

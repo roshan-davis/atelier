@@ -1,5 +1,6 @@
 import AgentActions
 import AgentMCP
+import AtelierActions
 import AtelierCore
 import Foundation
 import GRDB
@@ -22,7 +23,11 @@ struct AgentLookTools: Sendable {
 
     static func tools(options: Options) -> [MCPTool] {
         var tools = [getContext, searchPhotos, getPhoto, listItems, cullGroups, getDevelop]
-        if options.previews { tools.insert(getPreview, at: 3) }
+        if options.previews {
+            tools.insert(getPreview, at: 3)
+            // Only the photo carousel calls it; clients without views never see it.
+            tools.append(AtelierPhotoCarousel.getThumbnails)
+        }
         return tools
     }
 
@@ -55,7 +60,7 @@ struct AgentLookTools: Sendable {
             "offset": .object(["type": .string("integer"), "minimum": .int(0),
                                "description": .string("Skip this many first, to page through results.")]),
         ]),
-        readOnly: true, idempotent: true)
+        readOnly: true, idempotent: true, ui: AtelierPhotoCarousel.link)
 
     static let getPhoto = MCPTool(
         name: "get_photo", title: "Photo details",
@@ -89,7 +94,7 @@ struct AgentLookTools: Sendable {
         description: "The photos culled together with a photo (a burst or similar shots, from Library > Cull Import), "
             + "in capture order, with their rating and flag.",
         inputSchema: objectSchema(["id": property("integer", "Any photo in the group.")], required: ["id"]),
-        readOnly: true, idempotent: true)
+        readOnly: true, idempotent: true, ui: AtelierPhotoCarousel.link)
 
     static let getDevelop = MCPTool(
         name: "get_develop", title: "Develop settings",
@@ -108,6 +113,9 @@ struct AgentLookTools: Sendable {
             case Self.getPreview.name:
                 guard options.previews else { return .error(Self.previewsOff) }
                 return try getPreview(arguments)
+            case AtelierPhotoCarousel.getThumbnails.name:
+                guard options.previews else { return .error(Self.previewsOff) }
+                return try getThumbnails(arguments)
             case Self.cullGroups.name: return try cullGroup(arguments)
             case Self.getDevelop.name: return try getDevelop(arguments)
             case Self.listItems.name: return try listCatalogItems(arguments)
@@ -236,6 +244,32 @@ struct AgentLookTools: Sendable {
             throw ArgumentProblem("Atelier couldn't read the preview of photo \(id).")
         }
         return .image(data, mimeType: "image/jpeg", caption: .object(["id": .int(Int(id)), "max_size": .int(size)]))
+    }
+
+    /// Thumbnails for the photo carousel, as data URLs. A private or unknown photo is left out,
+    /// like one without a preview yet.
+    private func getThumbnails(_ arguments: [String: JSONValue]) throws -> MCPToolResult {
+        let ids: [Int64]
+        switch AtelierPhotoCarousel.thumbnailIDs(arguments) {
+        case .failure(let problems): throw ArgumentProblem(problems.text)
+        case .success(let value): ids = value
+        }
+        let hidden = try catalog.privatePhotoIDs(among: ids)
+        var thumbnails: [JSONValue] = []
+        var missing: [JSONValue] = []
+        for id in ids {
+            guard !hidden.contains(id), try catalog.detail(for: id) != nil,
+                  let url = [PreviewCache.Size.thumbnail, .preview].map({ previews.url(for: id, size: $0) })
+                    .first(where: { FileManager.default.fileExists(atPath: $0.path) }),
+                  let data = Self.jpeg(from: url, maxPixels: AtelierPhotoCarousel.thumbnailSize) else {
+                missing.append(.int(Int(id)))
+                continue
+            }
+            thumbnails.append(.object(["id": .int(Int(id)),
+                                       "data": .string("data:image/jpeg;base64," + data.base64EncodedString())]))
+        }
+        let text = "\(thumbnails.count) thumbnails" + (missing.isEmpty ? "." : ", \(missing.count) without a preview yet.")
+        return .json(.object(["thumbnails": .array(thumbnails), "missing": .array(missing)]), text: text)
     }
 
     private func cullGroup(_ arguments: [String: JSONValue]) throws -> MCPToolResult {

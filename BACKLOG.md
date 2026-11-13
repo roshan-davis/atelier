@@ -827,7 +827,7 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 ### AT-050i — Photo carousel for chat apps (MCP App)
 
-**Status:** Approved by Rosh on Nov 13, 2026 ("do the photo carosel and edit commands"), after AT-050d's first part. **Owner:** Claude. **Depends on:** AT-050b (Look tools); Docent's MCP Apps host for the full view.
+**Status:** In review: approved by Rosh on Nov 13, 2026 ("do the photo carosel and edit commands"), after AT-050d's first part. Source, Linux tests and a browser check with a pretend host; needs a Mac build and a try in Docent once Docent shows MCP Apps views. **Owner:** Claude. **Chat:** [Design an MCP server for Atelier actions](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKLw4mNvV9wQDgMyFLnzx5sL). **Branch:** `claude/project-thread-eecdru`. **PR:** pending. **Baseline:** `11e5783`. **Depends on:** AT-050b (Look tools); Docent's MCP Apps host for the full view.
 
 **Evidence:** The Docent proposal (Nov 12–13) planned `ui://atelier/photos` after the read-only server so search results show as photos in Docent; it was missing from AT-050a–h. Rosh (Nov 13): "something missing in the priority order in mcp", then confirmed the carousel.
 
@@ -837,6 +837,10 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 - Clients without MCP Apps get the same results as today.
 
 **Acceptance:** in Docent, a search shows a carousel of the found photos; Cherry Studio and OpenCode still get the plain result.
+
+**Done so far (not yet accepted):** Shared `AgentMCP`: `MCPApps` (client detection from `initialize`), `MCPToolUI` (`_meta.ui.resourceUri` and `visibility`, plus the older flat `ui/resourceUri` key), `MCPResource` and `MCPResourceHost` (`resources/list`, `resources/read`); sessions hide view links, views and view-only tools from clients that don't declare MCP Apps. Atelier: `AtelierActions/AtelierPhotoCarousel.swift` (the view's HTML, inline, and `get_thumbnails`), `search_photos` and `cull_groups` linked to it, `get_thumbnails` in `AgentLookTools` (320 px, previews setting, private photos left out). The view uses `show` rather than a new tool. Validation: 80 Linux tests pass (Swift 6.1, cloud), including `MCPAppsTests` (Easel-shaped host) and `AtelierPhotoCarouselTests`; the view was run in Chromium inside a sandboxed iframe with a pretend host, light and dark, with thumbnails, Show, and previews off: no console errors. The app target was not built in the cloud.
+
+**Left out:** a bigger single-photo view (Docent can open get_preview); showing the carousel for `get_context`'s selection.
 
 ### AT-050e — Everything: export, Edit In and AI recipes with Allow (A4)
 
