@@ -194,7 +194,7 @@ enum LayoutSnapshots {
             if let savedPane { UserDefaults.standard.set(savedPane, forKey: SettingsPane.defaultsKey) }
             else { UserDefaults.standard.removeObject(forKey: SettingsPane.defaultsKey) }
         }
-        let shots: [(Theme, SettingsPane)] = [(.light, .general), (.light, .appearance), (.light, .ai), (.light, .keyboard),
+        let shots: [(Theme, SettingsPane)] = [(.light, .general), (.light, .appearance), (.light, .ai), (.light, .agents), (.light, .keyboard),
                                               (.graphite, .general), (.graphite, .editIn)]
         for (theme, pane) in shots {
             UserDefaults.standard.set(theme.rawValue, forKey: Theme.defaultsKey)

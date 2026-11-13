@@ -102,6 +102,8 @@ final class LibraryModel: ObservableObject {
     var menuTargets: [Int64]?
     /// Every menu, key and right-click command (see LibraryModel+Actions.swift).
     lazy var actions: AtelierRegistry = makeActionRegistry()
+    /// The MCP server for chat apps (Settings > Agents).
+    lazy var agents = AgentServer(model: self)
     @Published var focusedID: Int64? {
         didSet {
             guard focusedID != oldValue else { return }
@@ -257,6 +259,7 @@ final class LibraryModel: ObservableObject {
         }
         ai.model = self
         editWatcher.onChange = { [weak self] id in self?.editedFileChanged(id) }
+        agents.startIfEnabled()
         // Folder events can be missed on network shares; coming back from the editor checks too.
         NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil,
                                                queue: .main) { [weak self] _ in

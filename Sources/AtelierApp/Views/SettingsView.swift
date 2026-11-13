@@ -28,7 +28,7 @@ struct SettingsView: View {
 
 /// The panes of the Settings window, in sidebar order.
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case general, appearance, keyboard, imports = "import", develop, export, metadata, editIn, ai
+    case general, appearance, keyboard, imports = "import", develop, export, metadata, editIn, ai, agents
 
     static let defaultsKey = "settings.pane"
 
@@ -38,7 +38,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
     static let groups: [(title: String, panes: [SettingsPane])] = [
         ("Atelier", [.general, .appearance, .keyboard]),
         ("Photos", [.imports, .develop, .export, .metadata]),
-        ("Editors & AI", [.editIn, .ai]),
+        ("Editors & AI", [.editIn, .ai, .agents]),
     ]
 
     var title: String {
@@ -52,6 +52,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .metadata: return "Metadata"
         case .editIn: return "Edit In"
         case .ai: return "AI"
+        case .agents: return "Agents"
         }
     }
 
@@ -66,6 +67,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .metadata: return "tag"
         case .editIn: return "paintbrush"
         case .ai: return "wand.and.stars"
+        case .agents: return "bubble.left.and.text.bubble.right"
         }
     }
 
@@ -81,6 +83,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .metadata: return SettingsPalette.seafoam
         case .editIn: return SettingsPalette.rose
         case .ai: return SettingsPalette.mist
+        case .agents: return SettingsPalette.butter
         }
     }
 
@@ -96,6 +99,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .metadata: return "Writing ratings, keywords and edits to XMP sidecars."
         case .editIn: return "The apps under Photo > Edit In, and what each is sent."
         case .ai: return "The ComfyUI server, AI models and masking models."
+        case .agents: return "Chat apps that use Atelier over MCP, and what each one may do."
         }
     }
 }
@@ -224,6 +228,7 @@ private struct SettingsPaneView: View {
         case .metadata: MetadataSettings()
         case .editIn: EditInSettings()
         case .ai: AISettingsTab()
+        case .agents: AgentsSettings()
         }
     }
 }

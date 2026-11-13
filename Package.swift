@@ -9,7 +9,11 @@ let package = Package(
         .library(name: "AtelierHDRCore", targets: ["AtelierHDRCore"]),
         // The app-neutral agent action registry (AT-050), shared with Easel.
         .library(name: "AgentActions", targets: ["AgentActions"]),
+        // The MCP server pieces (protocol, socket, helper relay), shared with Easel.
+        .library(name: "AgentMCP", targets: ["AgentMCP"]),
         .executable(name: "AtelierApp", targets: ["AtelierApp"]),
+        // The helper chat apps launch (stdio); it relays to the running app's private socket.
+        .executable(name: "atelier-mcp", targets: ["AtelierMCPHelper"]),
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.0.0"),
@@ -25,6 +29,11 @@ let package = Package(
         // Atelier's action catalog (ids, kinds, parameter types), without handlers.
         .target(name: "AtelierActions", dependencies: ["AgentActions"]),
         .testTarget(name: "AtelierActionsTests", dependencies: ["AgentActions", "AtelierActions"]),
+        // App-neutral MCP server: JSON-RPC sessions, the private Unix socket, checked client
+        // identity and profiles. Foundation only, so it builds and tests without a Mac.
+        .target(name: "AgentMCP", dependencies: ["AgentActions"]),
+        .testTarget(name: "AgentMCPTests", dependencies: ["AgentMCP", "AgentActions"]),
+        .executableTarget(name: "AtelierMCPHelper", dependencies: ["AgentMCP"]),
         .target(name: "AtelierHDRCore", swiftSettings: [.unsafeFlags(["-O"], .when(configuration: .debug))]),
         .executableTarget(name: "PresetQualification", dependencies: ["AtelierCore"]),
         .executableTarget(name: "HDRQualification", dependencies: ["AtelierHDRCore", "AtelierCore"]),
@@ -42,13 +51,13 @@ let package = Package(
         ),
         .executableTarget(
             name: "AtelierApp",
-            dependencies: ["AtelierCore", "AtelierHDRCore", "AgentActions", "AtelierActions",
+            dependencies: ["AtelierCore", "AtelierHDRCore", "AgentActions", "AtelierActions", "AgentMCP",
                            .product(name: "GRDB", package: "GRDB.swift")],
             resources: [.process("Resources"), .copy("Help")]
         ),
         .testTarget(
             name: "AtelierAppTests",
-            dependencies: ["AtelierApp", "AgentActions", "AtelierActions"]
+            dependencies: ["AtelierApp", "AgentActions", "AtelierActions", "AgentMCP"]
         ),
         .testTarget(
             name: "AtelierCoreTests",
