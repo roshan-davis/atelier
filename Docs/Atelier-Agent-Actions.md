@@ -207,6 +207,14 @@ Protocol: the official Swift SDK (`modelcontextprotocol/swift-sdk`) if it suppor
 
 Each phase is one PR, updating the PRD, Help (a new Agents page) and BACKLOG.md. A1 is the cheapest real test of whether this gets used day to day.
 
+## The same approach in Easel
+
+Rosh wants Easel to work the same way once this is implemented, so one chat setup and the same habits work in both apps. VectorCraft does this across the Craft apps: the same tool names and flags, so one client config fits the suite.
+
+- **Shared plumbing, app-specific actions.** The parts that don't know about photos go in one app-neutral Swift module: the action and risk-tier types, the MCP server, `command_list` / `command_run` / `command_batch`, the guard and its Allow sheet, the socket, the helper, the activity log and the Settings > Agents pane. Each app supplies its own actions, typed tools and targets (photos in Atelier; documents, layers and selections in Easel) and assigns their tiers.
+- **Same names everywhere.** Same tool names, profiles (Look, Organize, Edit, Everything), error style, tiers and config shape. Each app has its own helper (`atelier-mcp`, `easel-mcp`) and its own private socket.
+- **Build once, extract when Easel starts.** Build the module inside Atelier as its own target that imports nothing from Atelier, so A0 and A1 aren't slowed by a second repo. Move it into its own package, which both apps depend on, when Easel's work begins. A test that the module builds without Atelier keeps that move cheap.
+
 ## PRD check
 
 Nothing here contradicts the PRD, but these points need a PRD change once approved:
@@ -222,6 +230,7 @@ Nothing here contradicts the PRD, but these points need a PRD change once approv
 - Approve the direction, and whether A0 + A1 are the first bounded item.
 - Remote access: leave it for later (recommended), or Tailscale in A1.
 - Previews for cloud-hosted models (Claude, Codex): off by default with a switch (recommended), or never.
+- Easel: shared module built inside Atelier and extracted when Easel starts (recommended), or a separate package from day one.
 
 ## Sources
 
