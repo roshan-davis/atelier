@@ -112,12 +112,13 @@ extension PresetStore {
 
 // MARK: Tone Curve
 
-/// Built-in Tone Curve presets. Contrast curves follow Lightroom's Linear, Medium Contrast and
-/// Strong Contrast points; the rest are Atelier's own, made only from the curve so they combine
-/// with any Basic or Color Grading setting. All keep black at 0 and white at 255 except the
-/// Fade looks, whose point is to lift black and lower white.
+/// Built-in Tone Curve presets: characterful looks made only from the curve, in the spirit of
+/// Easel's and Photoshop's Curves presets (Rosh, Nov 13, 2026: the first set was too tame).
+/// Film processes and cinematic looks use the Red, Green and Blue curves; Basic holds
+/// Lightroom's own Medium and Strong Contrast points. Tuned on the preset fixtures with
+/// Scripts/presets/develop_sim.py.
 enum ToneCurvePresets {
-    static let groups = ["Contrast", "Brightness", "Fade", "Color"]
+    static let groups = ["Basic", "Film Process", "Cinematic", "Fade", "Effects"]
 
     private static let kind = SectionPresetKind.toneCurve
 
@@ -126,34 +127,81 @@ enum ToneCurvePresets {
         points.map { DevelopSettings.CurvePoint(x: $0.0 / 255, y: $0.1 / 255) }
     }
 
+    /// Each of red, green and blue on the same curve.
+    private static func allChannels(_ s: inout DevelopSettings, _ points: [DevelopSettings.CurvePoint]) {
+        for channel in [DevelopSettings.CurveChannel.red, .green, .blue] { s.setPoints(points, for: channel) }
+    }
+
     static let all: [DevelopPreset] = [
-        kind.look("Contrast", 0, "Linear") { _ in },
-        kind.look("Contrast", 1, "Soft Contrast") { s in
-            s.setPoints(curve((0, 0), (64, 60), (128, 128), (192, 196), (255, 255)), for: .rgb)
-        },
+        kind.look("Basic", 0, "Linear") { _ in },
         // Lightroom's own Medium Contrast and Strong Contrast points.
-        kind.look("Contrast", 2, "Medium Contrast") { s in
+        kind.look("Basic", 1, "Medium Contrast") { s in
             s.setPoints(curve((0, 0), (32, 22), (64, 56), (128, 128), (192, 196), (255, 255)), for: .rgb)
         },
-        kind.look("Contrast", 3, "Strong Contrast") { s in
+        kind.look("Basic", 2, "Strong Contrast") { s in
             s.setPoints(curve((0, 0), (32, 16), (64, 50), (128, 128), (192, 202), (255, 255)), for: .rgb)
         },
-        // Parametric, so it stays editable with the region sliders.
-        kind.look("Contrast", 4, "Punchy Midtones") { s in
-            s[.curveLights] = 18
-            s[.curveDarks] = -18
+        kind.look("Basic", 3, "Lighter") { s in
+            s.setPoints(curve((0, 0), (128, 155), (255, 255)), for: .rgb)
         },
-        kind.look("Brightness", 0, "Lighter") { s in
-            s.setPoints(curve((0, 0), (128, 150), (255, 255)), for: .rgb)
+        kind.look("Basic", 4, "Darker") { s in
+            s.setPoints(curve((0, 0), (128, 100), (255, 255)), for: .rgb)
         },
-        kind.look("Brightness", 1, "Darker") { s in
-            s.setPoints(curve((0, 0), (128, 106), (255, 255)), for: .rgb)
+        // Slide film developed as negative (E-6 in C-41): punchy red and green, blue lifted in
+        // the shadows and held down in the highlights, so yellow highlights and cyan shadows.
+        kind.look("Film Process", 0, "Cross Process") { s in
+            s.setPoints(curve((0, 0), (64, 40), (192, 222), (255, 255)), for: .red)
+            s.setPoints(curve((0, 0), (64, 48), (192, 214), (255, 255)), for: .green)
+            s.setPoints(curve((0, 40), (128, 120), (255, 200)), for: .blue)
         },
-        kind.look("Brightness", 2, "Open Shadows") { s in
-            s.setPoints(curve((0, 0), (40, 54), (110, 118), (255, 255)), for: .rgb)
+        // Negative film developed as slide (C-41 in E-6): flat, pale and cyan-green.
+        kind.look("Film Process", 1, "Reverse Cross Process") { s in
+            s.setPoints(curve((0, 30), (128, 140), (255, 240)), for: .rgb)
+            s.setPoints(curve((0, 0), (128, 118), (255, 235)), for: .red)
+            s.setPoints(curve((0, 10), (128, 138), (255, 255)), for: .green)
+            s.setPoints(curve((0, 30), (128, 140), (255, 250)), for: .blue)
         },
-        kind.look("Brightness", 3, "Soft Highlights") { s in
-            s.setPoints(curve((0, 0), (128, 130), (205, 198), (255, 242)), for: .rgb)
+        // Toy-camera look: deep contrast in red and green, inky blue-black shadows, warm highlights.
+        kind.look("Film Process", 2, "Lomo") { s in
+            s.setPoints(curve((0, 0), (64, 42), (192, 220), (255, 255)), for: .red)
+            s.setPoints(curve((0, 0), (64, 44), (192, 218), (255, 255)), for: .green)
+            s.setPoints(curve((0, 24), (64, 50), (192, 190), (255, 225)), for: .blue)
+        },
+        kind.look("Film Process", 3, "Expired Film") { s in
+            s.setPoints(curve((0, 28), (128, 132), (255, 238)), for: .rgb)
+            s.setPoints(curve((0, 10), (128, 135), (255, 250)), for: .red)
+            s.setPoints(curve((0, 20), (128, 128), (255, 232)), for: .green)
+            s.setPoints(curve((0, 30), (128, 118), (255, 215)), for: .blue)
+        },
+        kind.look("Film Process", 4, "Instant Film") { s in
+            s.setPoints(curve((0, 36), (64, 78), (192, 200), (255, 238)), for: .rgb)
+            s.setPoints(curve((0, 12), (255, 255)), for: .red)
+            s.setPoints(curve((0, 0), (128, 120), (255, 226)), for: .blue)
+        },
+        // Warm skin and highlights against cool shadows, the way colorists did it with curves.
+        kind.look("Cinematic", 0, "Teal & Orange") { s in
+            s.setPoints(curve((0, 0), (64, 54), (192, 202), (255, 255)), for: .rgb)
+            s.setPoints(curve((0, 0), (64, 52), (192, 212), (255, 255)), for: .red)
+            s.setPoints(curve((0, 0), (64, 66), (192, 192), (255, 250)), for: .green)
+            s.setPoints(curve((0, 0), (64, 82), (192, 172), (255, 232)), for: .blue)
+        },
+        kind.look("Cinematic", 1, "Matrix Green") { s in
+            s.setPoints(curve((0, 0), (64, 52), (192, 200), (255, 255)), for: .rgb)
+            s.setPoints(curve((0, 0), (128, 110), (255, 225)), for: .red)
+            s.setPoints(curve((0, 10), (128, 140), (255, 255)), for: .green)
+            s.setPoints(curve((0, 0), (128, 108), (255, 215)), for: .blue)
+        },
+        kind.look("Cinematic", 2, "Neon Night") { s in
+            s.setPoints(curve((0, 0), (64, 46), (192, 215), (255, 255)), for: .red)
+            s.setPoints(curve((0, 0), (64, 58), (192, 185), (255, 235)), for: .green)
+            s.setPoints(curve((0, 30), (64, 84), (192, 205), (255, 255)), for: .blue)
+        },
+        // Daylight shot made to read as night: darker by about a stop and a half, blue.
+        kind.look("Cinematic", 3, "Day for Night") { s in
+            s.setPoints(curve((0, 0), (128, 62), (255, 160)), for: .rgb)
+            s.setPoints(curve((0, 0), (128, 100), (255, 190)), for: .red)
+            s.setPoints(curve((0, 0), (128, 118), (255, 215)), for: .green)
+            s.setPoints(curve((0, 28), (128, 155), (255, 255)), for: .blue)
         },
         kind.look("Fade", 0, "Matte") { s in
             s.setPoints(curve((0, 26), (64, 66), (192, 196), (255, 250)), for: .rgb)
@@ -161,29 +209,23 @@ enum ToneCurvePresets {
         kind.look("Fade", 1, "Faded Film") { s in
             s.setPoints(curve((0, 36), (70, 76), (190, 192), (255, 236)), for: .rgb)
         },
-        kind.look("Fade", 2, "Matte Contrast") { s in
-            s.setPoints(curve((0, 30), (50, 40), (128, 128), (200, 210), (255, 248)), for: .rgb)
+        kind.look("Fade", 2, "Vintage Fade") { s in
+            s.setPoints(curve((0, 40), (128, 135), (255, 232)), for: .rgb)
+            s.setPoints(curve((0, 14), (255, 255)), for: .red)
+            s.setPoints(curve((0, 0), (255, 210)), for: .blue)
         },
-        // Warm highlights and cool shadows with the channel curves: the complementary pair of
-        // Color Grading's Teal & Orange, made the way colorists did it before grading wheels.
-        kind.look("Color", 0, "Warm Highlights, Cool Shadows") { s in
-            s.setPoints(curve((0, 0), (64, 58), (192, 200), (255, 255)), for: .red)
-            s.setPoints(curve((0, 0), (64, 70), (192, 186), (255, 252)), for: .blue)
+        kind.look("Effects", 0, "Negative") { s in
+            allChannels(&s, curve((0, 255), (255, 0)))
         },
-        kind.look("Color", 1, "Cool Fade") { s in
-            s.setPoints(curve((0, 18), (64, 68), (192, 194), (255, 248)), for: .rgb)
-            s.setPoints(curve((0, 22), (255, 245)), for: .blue)
+        // A negative as if printed without the orange film base taken out.
+        kind.look("Effects", 1, "Color Negative") { s in
+            s.setPoints(curve((0, 255), (255, 30)), for: .red)
+            s.setPoints(curve((0, 240), (255, 0)), for: .green)
+            s.setPoints(curve((0, 200), (255, 0)), for: .blue)
         },
-        kind.look("Color", 2, "Warm Fade") { s in
-            s.setPoints(curve((0, 18), (64, 68), (192, 194), (255, 248)), for: .rgb)
-            s.setPoints(curve((0, 16), (255, 255)), for: .red)
-            s.setPoints(curve((0, 0), (255, 232)), for: .blue)
-        },
-        // Film developed in the other process's chemicals: cyan-green shadows, yellow highlights.
-        kind.look("Color", 3, "Cross Process") { s in
-            s.setPoints(curve((0, 0), (64, 45), (192, 215), (255, 255)), for: .red)
-            s.setPoints(curve((0, 0), (64, 50), (192, 210), (255, 255)), for: .green)
-            s.setPoints(curve((0, 30), (255, 220)), for: .blue)
+        // The Sabattier effect: tones rise to a peak, then the brightest turn back toward dark.
+        kind.look("Effects", 2, "Solarize") { s in
+            allChannels(&s, curve((0, 0), (150, 230), (255, 40)))
         },
     ]
 }
@@ -194,9 +236,11 @@ enum ToneCurvePresets {
 /// (positions on the hue wheel: complementary = opposite, split complementary = one hue and the
 /// two either side of its opposite, analogous = neighbors, triad = three evenly apart). Research
 /// (Nov 12, 2026, reports/color-harmony-grading-2026-11-12.md) found these patterns are a design
-/// tradition, not a law of perception; the presets are starting points with modest saturation,
-/// and warm hues sit in the highlights or midtones so skin stays natural. Hues are Lightroom's
-/// (0 red, 30 orange, 60 yellow, 120 green, 180 cyan, 240 blue, 300 magenta).
+/// tradition, not a law of perception, so they are named looks rather than rules. A wheel at
+/// Saturation 100 adds only 0.10 Oklab chroma, so the looks use high saturation to read clearly
+/// (Rosh, Nov 13, 2026: the first set, at 36 and under, was too tame). Warm hues sit in the
+/// highlights or midtones so skin stays natural. Hues are Lightroom's (0 red, 30 orange,
+/// 60 yellow, 120 green, 180 cyan, 240 blue, 300 magenta).
 enum ColorGradingPresets {
     static let groups = ["Complementary", "Split Complementary", "Analogous", "Triad", "Monochrome Toning"]
 
@@ -211,81 +255,96 @@ enum ColorGradingPresets {
 
     static let all: [DevelopPreset] = [
         kind.look("Complementary", 0, "None") { _ in },
-        // The film look: teal shadows opposite orange highlights, which sit on skin's own hue.
+        // Teal shadows opposite orange highlights, which sit on skin's own hue.
         kind.look("Complementary", 1, "Teal & Orange") { s in
-            grade(&s, .shadows, 194, 30)
-            grade(&s, .highlights, 36, 24)
+            grade(&s, .shadows, 195, 90)
+            grade(&s, .highlights, 38, 75)
             s[.gradeBlending] = 60
         },
-        kind.look("Complementary", 2, "Blue & Gold") { s in
-            grade(&s, .shadows, 225, 24)
-            grade(&s, .highlights, 48, 26)
+        kind.look("Complementary", 2, "Blockbuster") { s in
+            grade(&s, .shadows, 205, 100, luminance: -10)
+            grade(&s, .midtones, 30, 35)
+            grade(&s, .highlights, 40, 60)
+            s[.gradeBalance] = -15
         },
-        // The reverse pair: warm shadows under cool, clean highlights (dusk, moonlight).
-        kind.look("Complementary", 3, "Warm Shadows, Cool Highlights") { s in
-            grade(&s, .shadows, 30, 20)
-            grade(&s, .highlights, 205, 14)
+        kind.look("Complementary", 3, "Neon Noir") { s in
+            grade(&s, .shadows, 190, 90, luminance: -5)
+            grade(&s, .highlights, 320, 75)
         },
-        kind.look("Complementary", 4, "Green & Magenta") { s in
-            grade(&s, .shadows, 150, 18)
-            grade(&s, .highlights, 320, 10)
+        kind.look("Complementary", 4, "Desert Heat") { s in
+            grade(&s, .shadows, 200, 50)
+            grade(&s, .midtones, 32, 60)
+            grade(&s, .highlights, 42, 75)
         },
-        // Orange highlights; the two neighbors of its opposite (blue) in shadows and midtones.
-        kind.look("Split Complementary", 0, "Orange with Cyan & Blue") { s in
-            grade(&s, .shadows, 240, 24)
-            grade(&s, .midtones, 185, 8)
-            grade(&s, .highlights, 36, 22)
+        // Teal shadows; its opposite (red) split into rose midtones and amber highlights.
+        kind.look("Split Complementary", 0, "Coral Reef") { s in
+            grade(&s, .shadows, 190, 80)
+            grade(&s, .midtones, 340, 35)
+            grade(&s, .highlights, 40, 60)
         },
-        kind.look("Split Complementary", 1, "Gold with Teal & Violet") { s in
-            grade(&s, .shadows, 270, 18)
-            grade(&s, .midtones, 200, 8)
-            grade(&s, .highlights, 50, 22)
+        // Orange highlights; its opposite (blue) split into cyan midtones and deep blue shadows.
+        kind.look("Split Complementary", 1, "Sunset Split") { s in
+            grade(&s, .shadows, 246, 80)
+            grade(&s, .midtones, 186, 30)
+            grade(&s, .highlights, 36, 70)
         },
         kind.look("Analogous", 0, "Golden Hour") { s in
-            grade(&s, .shadows, 18, 18)
-            grade(&s, .midtones, 32, 12)
-            grade(&s, .highlights, 48, 24)
+            grade(&s, .shadows, 20, 55)
+            grade(&s, .midtones, 32, 50)
+            grade(&s, .highlights, 48, 80)
+            grade(&s, .global, 40, 15)
         },
-        kind.look("Analogous", 1, "Blue Hour") { s in
-            grade(&s, .shadows, 240, 26)
-            grade(&s, .midtones, 215, 10)
-            grade(&s, .highlights, 190, 12)
+        kind.look("Analogous", 1, "Moonlight") { s in
+            grade(&s, .shadows, 235, 90, luminance: -15)
+            grade(&s, .midtones, 215, 55)
+            grade(&s, .highlights, 200, 30)
+            grade(&s, .global, 220, 15)
         },
-        kind.look("Analogous", 2, "Forest") { s in
-            grade(&s, .shadows, 160, 18)
-            grade(&s, .midtones, 110, 8)
-            grade(&s, .highlights, 70, 16)
+        kind.look("Analogous", 2, "Matrix Green") { s in
+            grade(&s, .shadows, 140, 85)
+            grade(&s, .midtones, 120, 60)
+            grade(&s, .highlights, 90, 40)
         },
-        kind.look("Analogous", 3, "Rose") { s in
-            grade(&s, .shadows, 300, 14)
-            grade(&s, .midtones, 340, 8)
-            grade(&s, .highlights, 20, 16)
+        kind.look("Analogous", 3, "Arctic") { s in
+            grade(&s, .shadows, 210, 75)
+            grade(&s, .midtones, 195, 45)
+            grade(&s, .highlights, 185, 30)
         },
-        // Three hues 120° apart: kept low, since three strong tints fight each other.
-        kind.look("Triad", 0, "Orange, Teal-Green & Violet") { s in
-            grade(&s, .shadows, 270, 16)
-            grade(&s, .midtones, 150, 6)
-            grade(&s, .highlights, 30, 18)
+        kind.look("Analogous", 4, "Autumn") { s in
+            grade(&s, .shadows, 10, 65)
+            grade(&s, .midtones, 28, 60)
+            grade(&s, .highlights, 45, 55)
         },
-        kind.look("Triad", 1, "Red, Green & Blue") { s in
-            grade(&s, .shadows, 240, 14)
-            grade(&s, .midtones, 120, 5)
-            grade(&s, .highlights, 0, 12)
+        // Three hues 120° apart, one per tonal range.
+        kind.look("Triad", 0, "Psychedelic") { s in
+            grade(&s, .shadows, 270, 85)
+            grade(&s, .midtones, 150, 50)
+            grade(&s, .highlights, 30, 75)
+        },
+        kind.look("Triad", 1, "Technicolor") { s in
+            grade(&s, .shadows, 240, 70)
+            grade(&s, .midtones, 120, 25)
+            grade(&s, .highlights, 0, 55)
         },
         // One hue through every range: toning, mainly for Black & White.
         kind.look("Monochrome Toning", 0, "Sepia") { s in
-            grade(&s, .shadows, 30, 26)
-            grade(&s, .midtones, 36, 18)
-            grade(&s, .highlights, 45, 14)
+            grade(&s, .shadows, 30, 85)
+            grade(&s, .midtones, 36, 70)
+            grade(&s, .highlights, 45, 45)
         },
         kind.look("Monochrome Toning", 1, "Cyanotype") { s in
-            grade(&s, .shadows, 215, 36)
-            grade(&s, .midtones, 210, 22)
-            grade(&s, .highlights, 200, 10)
+            grade(&s, .shadows, 215, 100)
+            grade(&s, .midtones, 210, 80)
+            grade(&s, .highlights, 200, 40)
         },
         kind.look("Monochrome Toning", 2, "Selenium") { s in
-            grade(&s, .shadows, 290, 14)
-            grade(&s, .midtones, 330, 6)
+            grade(&s, .shadows, 290, 55)
+            grade(&s, .midtones, 330, 25)
+        },
+        kind.look("Monochrome Toning", 3, "Gold Tone") { s in
+            grade(&s, .shadows, 35, 45)
+            grade(&s, .midtones, 45, 60)
+            grade(&s, .highlights, 50, 80)
         },
     ]
 }

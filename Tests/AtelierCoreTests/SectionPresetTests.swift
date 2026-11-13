@@ -37,7 +37,7 @@ final class SectionPresetTests: XCTestCase {
             XCTAssertEqual(Set(presets.map(\.name)).count, presets.count, kind.title)
         }
         XCTAssertEqual(SectionPresetKind.toneCurve.builtIn.first { $0.name == "Matte" }?.id.uuidString,
-                       "5EC7A0B5-0120-4C5E-9A7E-0A7E11E50120")
+                       "5EC7A0B5-0130-4C5E-9A7E-0A7E11E50130")
         XCTAssertEqual(SectionPresetKind.colorGrading.builtIn.first { $0.name == "Teal & Orange" }?.id.uuidString,
                        "5EC7A0B5-0201-4C5E-9A7E-0A7E11E50201")
     }
@@ -75,8 +75,8 @@ final class SectionPresetTests: XCTestCase {
         XCTAssertEqual(result.contrast, 20)
         XCTAssertEqual(result.points(for: .rgb), photo.points(for: .rgb))
         XCTAssertEqual(result[.gradeGlobalSat], 0, "wheels the preset leaves neutral are reset")
-        XCTAssertEqual(result[.gradeShadowsHue], 194)
-        XCTAssertEqual(result[.gradeHighlightsHue], 36)
+        XCTAssertEqual(result[.gradeShadowsHue], 195)
+        XCTAssertEqual(result[.gradeHighlightsHue], 38)
         // Shadows and highlights sit roughly opposite on the wheel.
         let gap = abs(result[.gradeShadowsHue] - result[.gradeHighlightsHue])
         XCTAssertEqual(min(gap, 360 - gap), 180, accuracy: 25)
