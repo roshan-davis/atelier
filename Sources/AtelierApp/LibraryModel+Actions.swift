@@ -229,7 +229,7 @@ extension LibraryModel {
 }
 
 private extension LibraryModel {
-    func startMaskTool(_ tool: MaskComponent.Kind) -> Bool {
+    func startMaskTool(_ tool: DevelopSettings.MaskComponent.Kind) -> Bool {
         if mode != .develop { openDevelop() }
         guard mode == .develop else { return false }
         develop.startMaskTool(tool)
