@@ -1589,6 +1589,11 @@ final class DevelopController: ObservableObject {
     /// Each photo's own new settings as one history step named `step` (agents, AT-050d). The
     /// open photo's change in progress becomes its own step first, so this step never swallows it.
     func apply(each newSettings: [Int64: DevelopSettings], step: String) throws {
+        if staged != nil {
+            // An atomic agent batch: held until the batch ends (`commitStaged`).
+            staged?.merge(newSettings) { $1 }
+            return
+        }
         if let assetID, newSettings[assetID] != nil { flushSave() }
         for (id, settings) in newSettings.sorted(by: { $0.key < $1.key }) where id != assetID {
             try catalog.saveDevelopSettings(settings, for: id, step: step)
@@ -1609,10 +1614,26 @@ final class DevelopController: ObservableObject {
     func currentSettings(for ids: [Int64]) throws -> [Int64: DevelopSettings] {
         var result: [Int64: DevelopSettings] = [:]
         for id in ids {
+            if let held = staged?[id] { result[id] = held; continue }
             result[id] = id == assetID ? settings : try catalog.developSettings(for: id)
         }
         return result
     }
+
+    /// An atomic agent batch (AT-050j) holds its Develop changes here, so they land as one
+    /// history step per photo if every step succeeds, and leave nothing if one fails.
+    private var staged: [Int64: DevelopSettings]?
+
+    func beginStaging() { staged = [:] }
+
+    /// Applies what the batch held, as one step named `step`.
+    func commitStaged(step: String) throws {
+        guard let held = staged else { return }
+        staged = nil
+        if !held.isEmpty { try apply(each: held, step: step) }
+    }
+
+    func discardStaged() { staged = nil }
 
     /// The person is dragging a slider, handle or the photo: agent edits wait for it to end.
     var isEditingByHand: Bool { pointerEditInProgress || targetDrag != nil }
