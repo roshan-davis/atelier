@@ -11,8 +11,11 @@ enum UnixSocket {
     enum Failure: Error, CustomStringConvertible {
         case system(String, Int32)
         case pathTooLong(String)
+        /// Another process (a second copy of the app) is listening there.
+        case inUse(String)
         var description: String {
             switch self {
+            case .inUse(let path): return "Another app is already listening at \(path)"
             case .system(let call, let code): return "\(call) failed: \(String(cString: strerror(code)))"
             case .pathTooLong(let path): return "Socket path too long: \(path)"
             }
@@ -50,12 +53,16 @@ enum UnixSocket {
         return address
     }
 
-    /// Opens a listening socket at `path`, replacing a stale one.
+    /// Opens a listening socket at `path`, replacing a stale one (never a live one).
     static func listen(at path: String) throws -> Int32 {
         let folder = (path as NSString).deletingLastPathComponent
         try FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true,
                                                 attributes: [.posixPermissions: 0o700])
         chmod(folder, 0o700)
+        if let live = try? connect(to: path) {
+            close(live)
+            throw Failure.inUse(path)
+        }
         unlink(path)
         let fd = try makeSocket()
         var address = try address(path)

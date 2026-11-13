@@ -136,6 +136,11 @@ def package(args, arch, products, revision, output):
 
     bundle(staging, "AtelierApp", "Atelier", args.bundle_id,
            ["Atelier_AtelierApp.bundle", "GRDB_GRDB.bundle", "Atelier_AtelierCore.bundle"])
+    # The MCP helper chat apps launch (Settings > Agents shows its path). Nested code is
+    # signed before the bundle that holds it.
+    helper = staging / "Contents/MacOS/atelier-mcp"
+    shutil.copy2(executable_file("atelier-mcp"), helper)
+    subprocess.run(["codesign", "--force", "--sign", "-", str(helper)], check=True)
     subprocess.run(["codesign", "--force", "--sign", "-", str(staging)], check=True)
     if output.exists():
         backup = output.parent / (output.stem + "-previous-" + str(uuid.uuid4()) + ".app")

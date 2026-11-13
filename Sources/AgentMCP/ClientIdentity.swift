@@ -62,8 +62,11 @@ public enum ClientIdentity {
     static func signingTeam(of url: URL) -> String? {
         #if canImport(Security) && os(macOS)
         var staticCode: SecStaticCode?
+        // The executable's signature, not every resource: checking all of a large app (an
+        // Electron chat app) took seconds per connection.
         guard SecStaticCodeCreateWithPath(url as CFURL, [], &staticCode) == errSecSuccess, let code = staticCode,
-              SecStaticCodeCheckValidity(code, [], nil) == errSecSuccess else { return nil }
+              SecStaticCodeCheckValidity(code, SecCSFlags(rawValue: kSecCSDoNotValidateResources), nil) == errSecSuccess
+        else { return nil }
         var info: CFDictionary?
         guard SecCodeCopySigningInformation(code, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess,
               let dictionary = info as? [String: Any] else { return nil }

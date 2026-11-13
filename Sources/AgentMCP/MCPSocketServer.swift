@@ -34,10 +34,20 @@ public final class MCPSocketServer: @unchecked Sendable {
 
     public var isRunning: Bool { lock.withLock { running } }
 
+    /// `start()` found another process (a second copy of the app) serving the socket.
+    public struct InUse: Error, CustomStringConvertible {
+        public let path: String
+        public var description: String { "Another app is already listening at \(path)" }
+    }
+
     public func start() throws {
         try lock.withLock {
             guard !running else { return }
-            listener = try UnixSocket.listen(at: path)
+            do {
+                listener = try UnixSocket.listen(at: path)
+            } catch UnixSocket.Failure.inUse {
+                throw InUse(path: path)
+            }
             running = true
         }
         let thread = Thread { [weak self] in self?.acceptLoop() }

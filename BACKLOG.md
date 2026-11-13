@@ -738,7 +738,7 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 ### AT-050a — Action registry, kinds and catalog check (A0)
 
-**Status:** In review; needs a Mac build and Rosh's re-test. **Owner:** Claude. **Chat:** [Design an MCP server for Atelier actions](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKLw4mNvV9wQDgMyFLnzx5sL). **Branch:** `claude/project-thread-eecdru`. **PR:** [#116](https://github.com/roshan-davis/atelier/pull/116). **Depends on:** nothing.
+**Status:** Merged ([#116](https://github.com/roshan-davis/atelier/pull/116), c3515fd); Rosh built it on the Mac (Nov 13, 2026). **Owner:** Claude. **Chat:** [Design an MCP server for Atelier actions](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKLw4mNvV9wQDgMyFLnzx5sL). **Branch:** `claude/project-thread-eecdru`. **PR:** [#116](https://github.com/roshan-davis/atelier/pull/116). **Depends on:** nothing.
 
 **Done so far (not yet accepted):** `Sources/AgentActions` (app-neutral: `ActionKind` → `AgentTier`, `Action<P>`/`ActionDescriptor`, schemas read from `ActionParameters` types, `ActionCatalog` with its problems check and JSON, `ActionRegistry` with resolved targets, and the menu builders `button`/`toggle`/`menuItem`); `Sources/AtelierActions` (64 actions, catalog without handlers); `LibraryModel+Actions.swift` (every handler); the menu bar, `KeyAction` keys and the photo menu now run through the registry; `Docs/agent-actions-catalog.json` and `Scripts/agent_catalog.py`. Validation: `AgentActionsTests` (Easel-shaped host) and `AtelierActionsTests` pass on Linux with Swift 6.1 (cloud). The app target, `ActionMenus.swift` and `AtelierAppTests/ActionRegistryTests` were not built in the cloud; they need a Mac `check_pr.py` run and Rosh's menu re-test.
 
@@ -762,7 +762,11 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 ### AT-050b — Read-only MCP, client grants and Settings > Agents (A1)
 
-**Status:** Approved, waits for AT-050a. **Owner/chat/branch/PR:** unassigned. **Depends on:** AT-050a.
+**Status:** In review; needs a Mac build, the client checks below and Rosh's acceptance. **Owner:** Claude. **Chat:** [Design an MCP server for Atelier actions](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKLw4mNvV9wQDgMyFLnzx5sL). **Branch:** `claude/project-thread-eecdru`. **PR:** opened from that branch (number recorded when GitHub assigns it). **Depends on:** AT-050a (merged, #116).
+
+**Done so far (not yet accepted):** `Sources/AgentMCP` (app-neutral: JSON-RPC sessions for 2025-06-18, 2025-03-26 and 2024-11-05; the private socket server that names each peer from its process tree and code signature and never takes over a live socket; the helper relay with the "Atelier isn't running" answer; profiles, grants with "asking for more never raises it", the grant store and the activity log; `command_list` from the registry). `Sources/AtelierMCPHelper` (the `atelier-mcp` product, copied into Contents/MacOS by `Scripts/build_macos_app.py`). App: `Agents/AgentServer.swift` (host, approval questions, get_context and the window's lists), `Agents/AgentLookTools.swift` (search_photos, get_photo, get_preview, list_items, cull_groups, get_develop; private photos never shown), `Agents/AgentApproval.swift`, `Views/AgentsSettings.swift` (Settings > Agents). PRD and Help (Settings > Agents) updated. Validation: `AgentMCPTests` (36 tests with the AT-050a ones: sessions, denial and revocation, the socket end to end through the relay, disconnect and stop, a second server, grants) pass on Linux with Swift 6.1 (cloud). The app files were not built in the cloud.
+
+**Left out:** the 2026-07-28 response shapes (clients that ask for it are answered with 2025-06-18, which the spec allows); the Allow question's half-second hardening (chat apps can't click Atelier's window in this version); `chat-apps.html` (PR #117) still says "coming soon" until both land.
 
 **Scope:**
 - The MCP server (2025-06-18 protocol, plus 2026-07-28 response shapes when a client asks for them), the `atelier-mcp` helper in the app bundle and the private socket.

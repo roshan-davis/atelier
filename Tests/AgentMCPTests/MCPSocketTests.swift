@@ -107,6 +107,17 @@ final class MCPSocketTests: XCTestCase {
         XCTAssertFalse(server.isRunning)
     }
 
+    func testSecondServerDoesNotTakeOverALiveSocket() throws {
+        let first = MCPSocketServer(path: socketPath, host: SketchMCPHost(), identify: fixedClient)
+        try first.start()
+        defer { first.stop() }
+        let second = MCPSocketServer(path: socketPath, host: SketchMCPHost(), identify: fixedClient)
+        XCTAssertThrowsError(try second.start()) { XCTAssertTrue($0 is MCPSocketServer.InUse) }
+        XCTAssertFalse(second.isRunning)
+        XCTAssertTrue(first.isRunning)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: socketPath))
+    }
+
     func testRelayWithoutAppAnswersEveryRequest() {
         let relay = RelayHarness(path: socketPath, profile: nil, connectOnly: true)
         relay.send(#"{"jsonrpc":"2.0","id":7,"method":"initialize","params":{}}"#)

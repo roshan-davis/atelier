@@ -69,7 +69,7 @@ Config for any of them is one entry pointing at the helper. Settings would offer
 {
   "mcpServers": {
     "atelier": {
-      "command": "/Applications/Atelier.app/Contents/Helpers/atelier-mcp",
+      "command": "/Applications/Atelier.app/Contents/MacOS/atelier-mcp",
       "args": ["--profile", "edit"]
     }
   }
@@ -252,7 +252,7 @@ Codex reviewed this design on November 13, 2026 ([review on PR #115](https://git
 
 ## Connect a chat app
 
-*Works from AT-050b, the read-only server, onward. Until then there is no server to connect to. These steps go into Atelier Help (an "Agents" page) in AT-050b, and they are re-checked against each app then.*
+*Works from AT-050b, the read-only server, onward. The same steps are in Atelier Help (Connect a chat app; Settings > Agents). Atelier > Settings… > Agents > Connect an App copies each app's setup with the real helper path.*
 
 Every app below starts the same command, with no arguments:
 
@@ -260,7 +260,7 @@ Every app below starts the same command, with no arguments:
 /Applications/Atelier.app/Contents/MacOS/atelier-mcp
 ```
 
-If Atelier runs from Xcode instead of /Applications, Settings > Agents (AT-050b) shows the helper's path and has a **Copy** button. The first time an app connects, Atelier asks whether to allow it and which profile it gets (Look, Organize, Edit or Everything). You can change that later in Settings > Agents.
+If Atelier runs from Xcode instead of /Applications, build the helper once (Product > Scheme > atelier-mcp, then Product > Build, ⌘B, then switch back to AtelierApp). Settings > Agents then shows its path with **Copy**, and **Copy Setup** gives each app's setup with that path. The first time an app connects, Atelier asks whether to allow it and which profile it gets (Look, Organize, Edit or Everything). You can change that later in Settings > Agents.
 
 ### OpenCode (free models)
 
@@ -322,7 +322,7 @@ ollmcp                                  # then pick qwen3.6 or gemma4 and chat
 
 Open WebUI connects only to MCP servers over HTTP (Streamable HTTP, v0.6.31 and later), not to a local command. Two ways:
 
-- **Now:** run the helper behind `mcpo`, which serves it over HTTP: `uvx mcpo --port 8000 --api-key "pick-a-secret" -- /Applications/Atelier.app/Contents/MacOS/atelier-mcp`. Then add `http://localhost:8000` in Open WebUI as a tool server.
+- **Now:** run the helper behind `mcpo`, which serves its tools as an OpenAPI server: `uvx mcpo --port 8000 --api-key "pick-a-secret" -- /Applications/Atelier.app/Contents/MacOS/atelier-mcp`. Then add `http://localhost:8000` in Open WebUI as an **OpenAPI** tool server (not as an MCP server), with the same key.
 - **Later (AT-050f):** Atelier's own HTTP listener, under Admin Settings > External Tools > + > MCP (Streamable HTTP).
 
 ### Claude Desktop, Claude Code and Codex
@@ -332,7 +332,7 @@ Open WebUI connects only to MCP servers over HTTP (Streamable HTTP, v0.6.31 and 
   { "mcpServers": { "atelier": { "command": "/Applications/Atelier.app/Contents/MacOS/atelier-mcp", "args": [] } } }
   ```
 - **Claude Code:** `claude mcp add --transport stdio --scope user atelier -- /Applications/Atelier.app/Contents/MacOS/atelier-mcp`, then `/mcp` in Claude Code to check it.
-- **Codex CLI:** add the server to `~/.codex/config.toml` (not re-checked for this doc; Codex's MCP page moved, so confirm it in AT-050b):
+- **Codex CLI:** add the server to `~/.codex/config.toml` (Codex documents local stdio servers only through this file; `codex mcp add` is documented for URL servers. `enabled = false` turns one off):
   ```toml
   [mcp_servers.atelier]
   command = "/Applications/Atelier.app/Contents/MacOS/atelier-mcp"
