@@ -1,18 +1,53 @@
 # MCP and Atelier Agent Actions
 
-**Design proposal, November 11, 2026.** Not yet approved and not yet in the PRD. Backlog item: [AT-050](../BACKLOG.md#at-050--mcp-server-agent-actions-for-chat-clients). Published page with the same content: [Atelier Agent Actions](https://claude.ai/artifact/1zAwwGsuc14v3yZbxBfrB2) (private to Rosh).
+**Design proposal, November 11, 2026; revised November 12 after comparing VectorCraft and other apps.** Not yet approved and not yet in the PRD. Backlog item: [AT-050](../BACKLOG.md#at-050--mcp-server-agent-actions-for-chat-clients). Published page with the same content: [Atelier Agent Actions](https://claude.ai/artifact/1zAwwGsuc14v3yZbxBfrB2) (private to Rosh).
 
 This proposal lets Claude, Codex or a local Ollama model run Atelier's commands from a chat, through an MCP server that lives inside the app.
 
 ## Recommendation
 
-Build it, but not as "every menu item becomes a tool." The PRD already plans an MCP server for agents (AI row, "Later"). It fits Atelier because the app is local, keyboard-driven and has clean commands. It's also the right way to give an agent control without anyone driving the screen.
+Build it, and make every command reachable, as VectorCraft does. Rosh's idea is quickly becoming the standard for creative apps. VectorCraft, from the LightCraft and ArtCraft team, hands every menu item, tool, panel and dialog to an agent over MCP. Blender, Photoshop, GIMP and Lightroom Classic have community MCP bridges, and Figma ships an official one. Comparing them changed one of the three choices below and added several details worth copying. The PRD already plans an MCP server for agents (AI row, "Later").
 
-Three choices make or break it:
+- **One command table.** Unchanged. Menus, keys, the right-click menu and MCP all read the same list of actions. VectorCraft works the same way: its menus, shortcuts and MCP catalog come from one table, and its CI fails if they drift apart.
+- **Every command reachable, in two layers.** Changed. The first draft offered only about 20 hand-made tools. VectorCraft shows the better pattern. A short set of typed tools (`set_metadata`, `adjust`, `export`…) is the front door, and `command_list` / `command_run` reach every command in the registry. Gemma and Qwen do well with the front door, and Claude can reach everything.
+- **Atelier owns the safety.** Unchanged, and stricter than VectorCraft. VectorCraft lets the agent answer its dialogs. Atelier can't, because it touches originals, the Trash, the NAS and the shop license gate. Reads run freely and edits are undoable. Export, AI jobs and Edit In ask in Atelier's own window. Deletes can't be called.
 
-- **One action registry.** Menus, keys, the right-click menu and MCP all read the same list of actions. Otherwise the agent ends up with its own copy of each command, which is the "same bug tool by tool" problem AGENTS.md warns about.
-- **About 20 task-sized tools, not 150 menu clicks.** For example `set_metadata(photos, rating: 3)` instead of "press 3". Small local models choose well from a short list.
-- **Atelier owns the safety.** Reads run freely and edits are undoable. Exports, AI jobs and Edit In ask in Atelier's own window. Deletes are never callable. This works the same whichever chat client or model is asking.
+## How other apps do it
+
+Most of these are community bridges: a plug-in inside the app opens a local socket, and a separate MCP server talks to it. VectorCraft and Figma build the server into the product themselves, which is what Atelier would do.
+
+| App | Built by | How the agent reaches the app | Tools | Safety |
+| --- | --- | --- | --- | --- |
+| **VectorCraft** | The app's own developers, open source (app still "in development") | `vectorcraft-cli mcp` (stdio) relays to the app's control port on 127.0.0.1:7979, opened by launching with `--control`; or a headless engine with no window | About 30 tools. `command_list`, `command_run` and `command_batch` reach roughly 450 menu commands plus engine commands. Typed `draw_path`, `export` and `render_preview`. UI driving: `invoke_menu`, `answer_dialog`, clicks, keys, screenshots | Read and write folder roots. Hints on every tool. Batches undo as one step. Plug-in installs need a person, and the agent can't confirm them. The control port has no authentication. |
+| **Blender** | Community (blender-mcp), not the Blender Foundation | Add-on runs a socket server on localhost:9876; a Python MCP server relays | A few scene tools plus `execute_blender_code`, which runs any Python | "Anyone who can reach that port can run Python inside Blender." Optional safe mode |
+| **Figma** | Figma, official | The desktop app serves HTTP at 127.0.0.1:3845/mcp; also a remote server at mcp.figma.com | Read tools (design context, screenshot, variables). Writing to the canvas only through the remote server, in beta | Paid seat. The desktop server is read-only |
+| **Photoshop, Premiere** | Community (adb-mcp, "not endorsed by Adobe", proof of concept) | MCP server, then a Node proxy on ws://localhost:3001, then a UXP plug-in (UXP can't listen on a socket) | Lower-level typed tools per app | No direct file access by default |
+| **Lightroom Classic** | Community (lightroom-mcp, lightroom-classic-mcp) | A Lua plug-in opens localhost sockets | Mostly catalog reads, some collection tools | Read-mostly |
+| **GIMP** | Community (gimp-mcp) | GIMP plug-in | Script-Fu | — |
+
+### What to adopt from VectorCraft
+
+- **The catalog tools, by the same names.** Use `command_list` (filter, menu path, enabled only), `command_run` (id, params) and `command_batch` (steps, `atomic`, `label`). VectorCraft says these names follow a convention it shares with FilmCraft, so prompts and habits carry over between apps.
+- **A batch as one undo step.** With `atomic: true`, a batch becomes one named undo step, which fits the one-edit-one-step rule.
+- **A catalog that can't drift.** VectorCraft generates its MCP list from the menu table and checks it in CI. Atelier can go one step further: menus are built *from* the registry, so there's nothing to mirror.
+- **Ids instead of the selection, never mixed.** Explicit ids replace the selection. A bad id is refused under the command's name, never quietly replaced by the selection. This design already did that, and VectorCraft confirms it.
+- **"Did you mean" errors.** An unknown parameter is an error that names the nearest real key ("unknown parameter `widht`; did you mean `width`?"), instead of running with a default. This matters a lot for small local models.
+- **Folder roots.** Their `--automation-read-root` and `--automation-write-root` map well to Atelier. Export and Edit In write only into folders Rosh allows (the export presets' folders by default), and the agent never names a path outside them.
+- **Long calls.** Progress notifications, cancellation, and a "busy" error after two seconds instead of a silent queue.
+- **Prompts.** VectorCraft ships eight ready workflows (poster, recolor, export set…). Atelier's would be "Cull this import", "Export the picks for the website" and "Match these to a reference".
+- **Approval only a person can give.** VectorCraft's plug-in install dialog ignores the agent's `answer_dialog` and injected input, and OK only works after the question has been on screen for half a second. Atelier's Allow sheets should use the same hardening.
+
+### Where Atelier differs, on purpose
+
+- **No driving the window.** No clicks, keys or `answer_dialog`. Atelier's commands mean something on their own (rate these, export those), and driving the window is the computer-use pattern Rosh has ruled out. An agent that can answer dialogs could also click Allow on its own export.
+- **Stricter safety tiers.** VectorCraft relies on undo and folder roots, which suits a vector document. Atelier also guards originals, the Trash, the NAS and the license gate, so it keeps "Asks first" and "Never".
+- **Private socket, not an open port.** VectorCraft opens an unauthenticated TCP port, and only when launched with `--control`. Atelier listens on a Unix socket that only Rosh's user account can open, so a web page or another account on the Mac can't reach it. It's turned on with a switch in Settings, not a launch flag.
+- **No headless mode at first.** VectorCraft can run its engine without the window. Atelier's catalog has one writer, so the helper launches Atelier instead. A read-only headless search could come later.
+- **No "run any code" tool.** Blender's `execute_blender_code` shows why: it bypasses every tier.
+
+![Two layers: Gemma and Qwen (profile Organize) use the ~20 typed front-door tools; Claude and Codex (profile Edit or Everything) also get command_list, command_run and command_batch. Both layers reach the action registry and the same guard, so command_run on Export still asks first and delete commands stay out of the list.](images/agent-actions/two-layers.png)
+
+*Both layers land on the same registry and the same guard. A profile decides which layer a client sees: Look and Organize get only typed tools, while Edit and Everything also get `command_run`, limited to commands within that profile's tiers.*
 
 ## How it fits together
 
@@ -69,11 +104,11 @@ Apple was reported in 2025 to be testing MCP support through App Intents in macO
 
 ## Tool catalog
 
-About 20 tools grouped by task. Each takes a `photos` target and returns what it changed. The client picks a profile, which decides how many tools the model sees:
+About 20 typed tools grouped by task, plus the three catalog tools that reach every command. Each takes a `photos` target and returns what it changed. The client picks a profile, which decides how many tools the model sees:
 
 - **Look:** read only.
 - **Organize:** adds library and cull.
-- **Edit:** adds Develop, presets, masks and Match Look.
+- **Edit:** adds Develop, presets, masks, Match Look and `command_run`.
 - **Everything:** adds export, Edit In and AI.
 
 For Gemma or Qwen, start with Organize or Edit.
@@ -100,6 +135,8 @@ For Gemma or Qwen, start with Organize or Edit.
 | Export | `export` | Export with a preset to a folder; license gate applies | Asks first |
 | Edit In | `edit_in` | Open in an editor from Settings > Edit In | Asks first |
 | Safety | `undo_change`, `job_status` | Undo one of the agent's own changes by id; check or cancel a running job | Undoable |
+| Every command | `command_list` | Commands in the registry: id, title, menu path, key, parameters, tier, and whether it's enabled now | Reads |
+| | `command_run`, `command_batch` | Run any listed command, or several as one named undo step. Each command keeps its own tier. | Its own tier |
 | Not exposed | — | Remove or delete photos, delete imports or collections, change Settings or keys. A request opens Atelier's own Remove sheet for Rosh to click. | Never |
 
 ### What a conversation looks like
@@ -161,11 +198,11 @@ Protocol: the official Swift SDK (`modelcontextprotocol/swift-sdk`) if it suppor
 
 | Phase | Scope |
 | --- | --- |
-| **A0. Action registry** | Move the menu, key and right-click commands onto one registry, with handlers that take resolved ids. No visible change. Tests in AtelierCoreTests. |
-| **A1. Read-only MCP** | Helper, socket and the Look tools. Settings > Agents with on/off, Copy config and the activity log. Lets Rosh try Claude, Codex and Ollama safely. |
-| **A2. Organize** | Ratings, flags, labels, keywords, collections, cull groups. Guard, toast and named undo steps. |
-| **A3. Edit** | Develop adjust, auto, presets, sync, crop, masks, Match Look. Wait for an active drag. |
-| **A4. Everything** | Export, Edit In and AI recipes with the confirmation sheet, background jobs, progress and Cancel. |
+| **A0. Action registry** | Move the menu, key and right-click commands onto one registry, with handlers that take resolved ids. Menus are built from it, and a test fails if a menu command is missing from it. No visible change. Tests in AtelierCoreTests. |
+| **A1. Read-only MCP** | Helper, socket, the Look tools and `command_list`. Settings > Agents with on/off, Copy config and the activity log. Lets Rosh try Claude, Codex and Ollama safely. |
+| **A2. Organize** | Ratings, flags, labels, keywords, collections, cull groups. Guard, toast and named undo steps, "did you mean" errors. |
+| **A3. Edit** | Develop adjust, auto, presets, sync, crop, masks, Match Look. `command_run` and atomic `command_batch`. Wait for an active drag. |
+| **A4. Everything** | Export, Edit In and AI recipes with the hardened confirmation sheet, folder roots, background jobs, progress and Cancel. |
 | **A5. Optional** | HTTP listener with Tailscale and a token, App Intents for Shortcuts, MCP prompts such as "Cull this import". |
 
 Each phase is one PR, updating the PRD, Help (a new Agents page) and BACKLOG.md. A1 is the cheapest real test of whether this gets used day to day.
@@ -196,10 +233,16 @@ Nothing here contradicts the PRD, but these points need a PRD change once approv
 - MCP transports (draft): https://modelcontextprotocol.net/specification/draft/basic/transports
 - Official Swift SDK: https://swiftpackageregistry.com/modelcontextprotocol/swift-sdk
 - mcp-client-for-ollama (ollmcp): https://pypi.org/project/mcp-client-for-ollama/0.24.1/
+- VectorCraft MCP docs, `docs/mcp.md` and `docs/control-protocol.md` at `f7a03f7`: https://github.com/storytold/vectorcraft
+- VectorCraft product page: https://getartcraft.com/apps/vectorcraft
+- Blender MCP: https://github.com/ahujasid/blender-mcp
+- Figma MCP server: https://developers.figma.com/docs/figma-mcp-server/ and https://developers.figma.com/docs/figma-mcp-server/local-server-installation
+- adb-mcp (Photoshop, Premiere): https://github.com/mikechambers/adb-mcp
 - Atelier source at `8436d93`: `Requirements/Atelier-PRD.md`, `Sources/AtelierApp/KeyBindings.swift`, `AtelierApp.swift`, `PhotoMenu.swift`, `LibraryModel.swift`, `Sources/AtelierCore/Processors`
 
 **Secondary**
 
+- Photography MCP servers (Lightroom, GIMP) review: https://dev.to/grove_chatforest/photography-mcp-servers-lightroom-photoshop-gimp-stock-photos-image-optimization-camera-13ih
 - 9to5Mac, macOS Tahoe 26.1 beta and MCP in App Intents (Sept 2025): https://9to5mac.com/2025/09/22/macos-tahoe-26-1-beta-1-mcp-integration/
 - Using MCP servers with Ollama and local LLMs: https://dev.to/hola_gus/how-to-use-mcp-servers-with-ollama-and-local-llms-f3
 - Best local models for tool calling, 2026: https://www.promptquorum.com/power-local-llm/best-local-models-tool-calling-2026
