@@ -823,9 +823,11 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 - Folder roots for writes. Destination, overwrite and license gate rechecked at run time.
 - Jobs with progress, Cancel and a list of files written so far.
 - None of these may be in an atomic batch.
+- **"This app asks for me" (Rosh, Nov 13, 2026, Docent project thread):** a switch on a client's grant in Settings > Agents, offered only for a client whose code signature is Rosh's own Docent. With it on, Atelier skips its Allow sheet and takes the approval Docent's own card got from Rosh: Docent sends the exact operation it showed (photos, preset or recipe, destination, options), and Atelier runs only that operation, rechecking folders, overwrite and the license gate as usual. Other clients (OpenCode, ollmcp, Cherry Studio, Claude Desktop) always get the sheet. Profiles still cap what Docent may call, edits keep their toast and named undo step, and deletes stay never. Docent's side: [Docent PRD, Approvals](https://github.com/roshan-davis/docent/blob/main/Requirements/Docent-PRD.md#approvals). Update `Docs/Atelier-Agent-Actions.md` ("Approving an export, AI job or Edit In") in the same PR.
 
 **Acceptance:**
 - No agent tool can approve its own Allow.
+- "This app asks for me" can't be turned on for a client that isn't signed as Docent, and a call whose operation differs from what Docent approved is refused.
 - A changed destination or preset needs a new Allow.
 - Cancel mid-export reports partial output.
 - Provenance and the license gate are unchanged from the AI panel.
