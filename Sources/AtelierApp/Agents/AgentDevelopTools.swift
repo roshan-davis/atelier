@@ -4,7 +4,8 @@ import AtelierActions
 import AtelierCore
 import Foundation
 
-/// The Edit profile's Develop tools (AT-050d): adjust, apply_preset, sync and reset. Each call
+/// The Edit profile's Develop tools (AT-050d): adjust, apply_preset, sync and reset here; crop,
+/// add_mask, auto and match_look in AgentEditTools.swift. Each call
 /// is one change through the same guard as the Organize tools (resolve once, ask above the
 /// limit, record before and after), saved as one step in each photo's Develop history named for
 /// the app, so the person sees it there and undo_change or the notice's Undo puts it back.
@@ -25,6 +26,14 @@ extension AgentServer {
                 return try sync(try decode(SyncParameters.self, arguments), client, model)
             case AtelierAgentTools.reset.name:
                 return try reset(try decode(ResetParameters.self, arguments), client, model)
+            case AtelierAgentTools.crop.name:
+                return try crop(try decode(CropParameters.self, arguments), client, model)
+            case AtelierAgentTools.addMask.name:
+                return try addMask(try decode(AddMaskParameters.self, arguments), client, model)
+            case AtelierAgentTools.auto.name, AtelierAgentTools.matchLook.name:
+                // They measure photos in the background first (callMeasuring), so they run on their own.
+                return .error("\(tool) measures photos before it changes them, so it runs as a call of its own, not "
+                              + "inside another call.")
             default:
                 return .error("Unknown tool: \(tool).")
             }
@@ -165,12 +174,12 @@ extension AgentServer {
         var catalog: String?
     }
 
-    private func adding(_ notes: [String], to result: MCPToolResult) -> MCPToolResult {
+    func adding(_ notes: [String], to result: MCPToolResult) -> MCPToolResult {
         guard !notes.isEmpty else { return result }
         return adding(["note": .string(notes.joined(separator: " "))], to: result)
     }
 
-    private func adding(_ members: [String: JSONValue], to result: MCPToolResult) -> MCPToolResult {
+    func adding(_ members: [String: JSONValue], to result: MCPToolResult) -> MCPToolResult {
         guard case .object(var reply)? = result.structured, !result.isError else { return result }
         for (key, value) in members { reply[key] = value }
         return .json(.object(reply))

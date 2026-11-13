@@ -432,14 +432,10 @@ final class MatchLookModel: ObservableObject, Identifiable {
         let options = self.options, base = self.base, latest = self.latest, features = self.features
         let photoFaces = self.photoFaces
         let study = builtInReference
-        let authoredSkinTones = options.skinMode == .match ? study?.skinToneRegions : nil
         fitQueue.async {
             guard latest.current == generation else { return }
-            let needsFeatures = areas == .subject || (options.skinMode != .off && authoredSkinTones == nil)
-            // A portrait study's person and face are drawn, so they are known, not looked for.
-            let found = needsFeatures ? study?.features(for: referenceCG) ?? features.features(for: referenceCG) : nil
-            let target = LookTarget(image: referenceCG, features: found, areas: areas, skinMode: options.skinMode,
-                                    authoredSkinTones: authoredSkinTones, colorStudy: study != nil)
+            let target = Self.lookTarget(reference: referenceCG, study: study, areas: areas, options: options,
+                                         features: features)
             let result = target.flatMap { target in
                 LookMatcher.match(session: fitSession, settings: base, target: target, options: options,
                                   photoFaces: photoFaces, isCancelled: { latest.current != generation })
@@ -457,6 +453,18 @@ final class MatchLookModel: ObservableObject, Identifiable {
         }
     }
 
+    /// What a photo is fitted to: the reference, with what Vision finds in it when the areas or
+    /// skin need it. Shared by the dialog and agents' match_look (AT-050d). Off the main thread.
+    nonisolated static func lookTarget(reference: CGImage, study: BuiltInLookReference?, areas: LookAreas,
+                                       options: LookMatchOptions, features: FeatureCache) -> LookTarget? {
+        let authoredSkinTones = options.skinMode == .match ? study?.skinToneRegions : nil
+        let needsFeatures = areas == .subject || (options.skinMode != .off && authoredSkinTones == nil)
+        // A portrait study's person and face are drawn, so they are known, not looked for.
+        let found = needsFeatures ? study?.features(for: reference) ?? features.features(for: reference) : nil
+        return LookTarget(image: reference, features: found, areas: areas, skinMode: options.skinMode,
+                          authoredSkinTones: authoredSkinTones, colorStudy: study != nil)
+    }
+
     private var lookAreas: LookAreas {
         switch areaMode {
         case .wholePhoto: return .wholePhoto
@@ -466,7 +474,7 @@ final class MatchLookModel: ObservableObject, Identifiable {
     }
 
     /// What to tell the user about a match that couldn't do all it was asked.
-    static func message(for notices: Set<LookMatchNotice>) -> String? {
+    nonisolated static func message(for notices: Set<LookMatchNotice>) -> String? {
         var parts: [String] = []
         if notices.contains(.noSubjectInReference) {
             parts.append("No subject found in the reference, so the whole photo was matched.")
@@ -631,18 +639,12 @@ extension LibraryModel {
                           let settings = try? self.catalog.developSettings(for: id) else { return nil }
                     return (url, settings)
                 }
-                guard let found,
-                      let session = DevelopRenderer.shared.session(for: found.0, maxPixelSize: LookSample.size)
-                else {
+                guard let found else {
                     failed += 1
                     continue
                 }
-                let faces: [CGRect]? = options.skinMode == .off ? nil :
-                    DevelopRenderer.shared.session(for: found.0, maxPixelSize: MatchLookModel.previewSize)?
-                    .renderSRGB(found.1).map { LookSkin.faces(in: $0) }
-                guard let match = LookMatcher.match(session: session, settings: found.1, target: target,
-                                                    options: options, photoFaces: faces,
-                                                    isCancelled: { Task.isCancelled }) else {
+                guard let match = Self.fitLook(url: found.0, settings: found.1, target: target, options: options,
+                                               isCancelled: { Task.isCancelled }) else {
                     if Task.isCancelled { break }
                     failed += 1
                     continue
@@ -691,6 +693,19 @@ extension LibraryModel {
                 self.matchTask = nil
             }
         }
+    }
+
+    /// One photo fitted to `target` on its own, as Match each photo does: a small render to fit
+    /// on, and with skin on, its faces found on a larger one. Shared with agents' match_look
+    /// (AT-050d). Off the main thread; nil when the photo can't be opened or the fit was cancelled.
+    nonisolated static func fitLook(url: URL, settings: DevelopSettings, target: LookTarget,
+                                    options: LookMatchOptions, isCancelled: () -> Bool) -> LookMatch? {
+        guard let session = DevelopRenderer.shared.session(for: url, maxPixelSize: LookSample.size) else { return nil }
+        let faces: [CGRect]? = options.skinMode == .off ? nil :
+            DevelopRenderer.shared.session(for: url, maxPixelSize: MatchLookModel.previewSize)?
+            .renderSRGB(settings).map { LookSkin.faces(in: $0) }
+        return LookMatcher.match(session: session, settings: settings, target: target, options: options,
+                                 photoFaces: faces, isCancelled: isCancelled)
     }
 
     func cancelMatchEach() {

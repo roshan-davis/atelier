@@ -48,4 +48,11 @@ public final class LockedValue<Value>: @unchecked Sendable {
         get { lock.lock(); defer { lock.unlock() }; return stored }
         set { lock.lock(); stored = newValue; lock.unlock() }
     }
+
+    /// Changes the value in place under the lock, so two threads' changes can't overwrite each other.
+    public func update(_ body: (inout Value) -> Void) {
+        lock.lock()
+        defer { lock.unlock() }
+        body(&stored)
+    }
 }

@@ -226,7 +226,11 @@ private struct StatusBar: View {
             if let progress = model.matchProgress {
                 ProgressItem(progress: progress) { model.cancelMatchEach() }
             }
+            if let progress = model.agentProgress {
+                ProgressItem(progress: progress) { model.agentJob?.cancel() }
+            }
             if model.importProgress == nil, model.exportProgress == nil, model.matchProgress == nil,
+               model.agentProgress == nil,
                let status = model.status {
                 Text(status).lineLimit(1)
                 if !model.problems.isEmpty {
