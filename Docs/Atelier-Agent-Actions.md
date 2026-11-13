@@ -264,26 +264,20 @@ If Atelier runs from Xcode instead of /Applications, build the helper once (Prod
 
 ### OpenCode (free models)
 
-1. Add the server from Terminal (`--global` adds it for every project):
-   ```
-   opencode mcp add atelier --global -- /Applications/Atelier.app/Contents/MacOS/atelier-mcp
-   opencode mcp list
-   ```
-   Or add it to `opencode.jsonc` yourself. In the current format, servers go under `mcp.servers`:
+1. Add the server to `~/.config/opencode/opencode.json` (Settings > Agents > Copy Setup for OpenCode gives a Terminal command that does this, keeping what's already in the file). `opencode mcp add atelier --global -- …` saved nothing when Rosh tried it (Nov 12, 2026), so use the file:
    ```json
    {
      "$schema": "https://opencode.ai/config.json",
      "mcp": {
-       "servers": {
-         "atelier": {
-           "type": "local",
-           "command": ["/Applications/Atelier.app/Contents/MacOS/atelier-mcp"]
-         }
+       "atelier": {
+         "type": "local",
+         "command": ["/Applications/Atelier.app/Contents/MacOS/atelier-mcp"],
+         "enabled": true
        }
      }
    }
    ```
-   To turn it off without deleting it, add `"disabled": true`.
+   Check it with `opencode mcp list`. `"enabled": false` turns it off without deleting it.
 2. Pick a free model. In OpenCode, run `/connect`, choose the OpenCode provider and sign in, then use `/models` to pick one marked free (for example `opencode/big-pickle` or `opencode/glm-5.3-flash-free`). OpenCode says free models are free for a limited time and change often. Your Ollama models work here too.
 3. Ask, for example: "How many photos did I pick from the last import?"
 

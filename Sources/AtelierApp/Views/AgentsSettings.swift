@@ -37,7 +37,7 @@ enum AgentHelper {
         /// Where the copied text goes.
         var hint: String {
             switch self {
-            case .openCode: return "Paste in Terminal."
+            case .openCode: return "Paste in Terminal. It adds Atelier to ~/.config/opencode/opencode.json; check with opencode mcp list."
             case .cherry: return "Paste as the Command in Settings > MCP Server > Add server (Type STDIO)."
             case .ollmcp: return "Paste in Terminal, then run ollmcp."
             case .lmStudio: return "Paste inside \"mcpServers\" in Program > Install > Edit mcp.json."
@@ -50,7 +50,20 @@ enum AgentHelper {
         func setup(helper path: String) -> String {
             let json = path.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
             switch self {
-            case .openCode: return "opencode mcp add atelier --global -- \(shellPath(path))"
+            // `opencode mcp add … -- <command>` saved nothing on Rosh's Mac (Nov 12, 2026), so this
+            // adds the server to OpenCode's settings file, keeping what is already there.
+            case .openCode:
+                return """
+                    python3 - \(shellPath(path)) <<'EOF'
+                    import json, os, sys
+                    path = os.path.expanduser("~/.config/opencode/opencode.json")
+                    os.makedirs(os.path.dirname(path), exist_ok=True)
+                    config = json.load(open(path)) if os.path.exists(path) else {"$schema": "https://opencode.ai/config.json"}
+                    config.setdefault("mcp", {})["atelier"] = {"type": "local", "command": [sys.argv[1]], "enabled": True}
+                    json.dump(config, open(path, "w"), indent=2)
+                    print("Saved", path)
+                    EOF
+                    """
             case .cherry: return path
             case .ollmcp: return "ollmcp mcp add atelier --scope user -- \(shellPath(path))"
             case .lmStudio, .claudeDesktop: return "\"atelier\": { \"command\": \"\(json)\", \"args\": [] }"
