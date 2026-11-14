@@ -105,19 +105,20 @@ final class BuiltInLookReferenceTests: XCTestCase {
                                                         options: options, photoFaces: faces))
             let mask = try XCTUnwrap(result.skinMasks.first, study.name)
             // Skin is compared tone by tone: the photo's darkest, middle and brightest thirds of
-            // skin against the study's drawn skin shadows, midtones and highlights.
-            XCTAssertEqual(reference.toneColors.count, 3, study.name)
+            // skin against the study's drawn skin shadows, midtones and highlights, as color
+            // relative to brightness (what Match Skin Tone matches).
+            XCTAssertEqual(reference.relativeToneColors.count, 3, study.name)
             let groups = LookSkin.toneSplit(source, skin.pixels).groups
             func error(_ settings: DevelopSettings) throws -> Double {
                 let sample = try XCTUnwrap(fit.renderSRGB(settings).flatMap { LookSample(image: $0) })
-                return try zip(groups, reference.toneColors).reduce(0) { sum, pair in
-                    let d = try XCTUnwrap(LookSkin.meanAB(sample, pair.0)) - pair.1
+                return try zip(groups, reference.relativeToneColors).reduce(0) { sum, pair in
+                    let d = try XCTUnwrap(LookSkin.relativeAB(sample, pair.0)) - pair.1
                     return sum + (d * d).sum().squareRoot()
                 }
             }
             let start = try error(.neutral), half = try error(result.settings(strength: 0.5))
             let end = try error(result.settings(strength: 1))
-            print("SKIN \(study.name) / \(fixture): Oklab color distance \(start) → \(half) → \(end)")
+            print("SKIN \(study.name) / \(fixture): Oklab color distance (relative to lightness) \(start) → \(half) → \(end)")
             XCTAssertLessThan(end, half, study.name)
             XCTAssertLessThan(half, start, study.name)
             XCTAssertEqual(result.notices, [])

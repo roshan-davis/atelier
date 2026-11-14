@@ -260,6 +260,37 @@ final class LookMatchTests: XCTestCase {
         XCTAssertEqual(LookSkin.eyesSelection.parts, [.eyeSclera, .iris])
     }
 
+    /// Skin color is matched relative to brightness: a/b over lightness, per tone.
+    func testSkinColorIsMeasuredRelativeToBrightness() throws {
+        let width = 30, height = 10
+        // Fury Road's drawn skin: shadows, midtones, highlights, side by side.
+        let tones: [(UInt8, UInt8, UInt8)] = [(0x8F, 0x5E, 0x37), (0xCF, 0x99, 0x67), (0xF0, 0xC4, 0x96)]
+        var pixels = [UInt8](repeating: 255, count: width * height * 4)
+        for y in 0..<height {
+            for x in 0..<width {
+                let tone = tones[x / 10], i = (y * width + x) * 4
+                pixels[i] = tone.0
+                pixels[i + 1] = tone.1
+                pixels[i + 2] = tone.2
+            }
+        }
+        let sample = LookSample(pixels: pixels, width: width, height: height)
+        let thirds = (0..<3).map { CGRect(x: Double($0) / 3, y: 0, width: 1.0 / 3, height: 1) }
+        let skin = try XCTUnwrap(LookSkin(sample: sample, toneRegions: thirds))
+        let relative = skin.relativeToneColors
+        XCTAssertEqual(relative.count, 3)
+        for k in 0..<3 {
+            XCTAssertEqual(relative[k].x, skin.toneColors[k].x / skin.toneLightness[k], accuracy: 1e-9)
+            XCTAssertEqual(relative[k].y, skin.toneColors[k].y / skin.toneLightness[k], accuracy: 1e-9)
+            let measured = try XCTUnwrap(LookSkin.relativeAB(sample, LookSkin.pixels(in: thirds[k], of: sample)))
+            XCTAssertEqual(measured.x, relative[k].x, accuracy: 1e-6)
+            XCTAssertEqual(measured.y, relative[k].y, accuracy: 1e-6)
+        }
+        // The darker shadow looks more saturated than its absolute chroma says.
+        let shadow = relative[0], mid = relative[1]
+        XCTAssertGreaterThan((shadow * shadow).sum(), (mid * mid).sum())
+    }
+
     func testProtectSkinTonesKeepsSkinInsideItsLimits() throws {
         let session = try XCTUnwrap(DevelopRenderer.shared.session(for: try samplePhoto(), maxPixelSize: LookSample.size))
         // A strong teal look that turns orange skin green and grey.

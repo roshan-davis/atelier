@@ -153,6 +153,26 @@ public struct LookSkin: Sendable {
         return n > 0 ? sum / n : nil
     }
 
+    /// The pixels' color relative to their brightness: mean Oklab a/b over mean Oklab lightness.
+    /// How saturated skin looks goes with chroma over lightness, so this is what Match Skin Tone
+    /// matches: the same a/b on a brighter face looks paler, on a darker one deeper. Matching
+    /// the reference's absolute a/b while the face kept its own brightness overshot a dark
+    /// photo's shadows by 44% against Fury Road and left Thrones' pale skin 32% too saturated
+    /// (Rosh, Nov 14, 2026). Nil when the pixels are nearly black.
+    static func relativeAB(_ sample: LookSample, _ pixels: [Int]) -> SIMD2<Double>? {
+        guard let ab = meanAB(sample, pixels), let lightness = meanLightness(sample, pixels), lightness > 0.05 else {
+            return nil
+        }
+        return ab / lightness
+    }
+
+    /// The skin's shadows, midtones and highlights as `relativeAB` measures them; empty unless
+    /// both the colors and the lightness of all three tones are known.
+    var relativeToneColors: [SIMD2<Double>] {
+        guard toneColors.count == 3, toneLightness.count == 3, toneLightness.allSatisfy({ $0 > 0.05 }) else { return [] }
+        return zip(toneColors, toneLightness).map { $0 / $1 }
+    }
+
     /// Mean Oklab a/b of the pixels.
     static func meanAB(_ sample: LookSample, _ pixels: [Int]) -> SIMD2<Double>? {
         var sum = SIMD2<Double>(0, 0), n = 0.0

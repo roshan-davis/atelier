@@ -7,7 +7,7 @@ extension LookMatcher {
     /// photo's skin midtones to the reference's; "Match Look: Skin Shadows" and "Match Look: Skin
     /// Highlights" add a Luminance Range to the same faces and take the darkest and brightest
     /// thirds of the skin to the reference's skin shadows and highlights. Color is scored in the
-    /// Oklab color plane; lightness is left to the ordinary Tone fit, except that Protect Skin
+    /// Oklab color plane relative to lightness (`LookSkin.relativeAB`); lightness is left to the ordinary Tone fit, except that Protect Skin
     /// Tones (`holdsLightness`) also brings each tone's brightness back with the mask's Exposure.
     /// False when no tone came closer.
     static func fitSkin(_ skin: LookSkin, to reference: LookSkin, in settings: inout DevelopSettings,
@@ -37,13 +37,24 @@ extension LookMatcher {
                 faces.append(DevelopSettings.MaskComponent(.people(LookSkin.eyesSelection), mode: .subtract))
             }
         }
-        guard reference.toneColors.count == 3, let start = measure(settings) else {
+        // Color is matched relative to brightness (`LookSkin.relativeAB`): the face keeps its own
+        // brightness, so the reference's absolute a/b would look more or less saturated on it.
+        let targets = reference.relativeToneColors
+        guard targets.count == 3, let start = measure(settings) else {
             // Without tones: one mask, the skin's mean color to the reference's.
+            let lightness = reference.toneLightness.isEmpty ? 0
+                : reference.toneLightness.reduce(0, +) / Double(reference.toneLightness.count)
+            let relative = lightness > 0.05
             return fitMaskColor(LookMatch.skinMaskName, components: faces,
-                                target: colorVector(hue: reference.hue, chroma: reference.chroma),
+                                target: colorVector(hue: reference.hue, chroma: reference.chroma) / (relative ? lightness : 1),
                                 in: &settings, measure: measure, limit: limit, lightness: nil,
                                 isCancelled: isCancelled, pixels: skin.pixels) { sample in
-                LookSkin.hueAndChroma(sample, skin.pixels).map { colorVector(hue: $0.hue, chroma: $0.chroma) }
+                guard relative else {
+                    return LookSkin.hueAndChroma(sample, skin.pixels).map { colorVector(hue: $0.hue, chroma: $0.chroma) }
+                }
+                guard let measured = LookSkin.hueAndChroma(sample, skin.pixels),
+                      let now = LookSkin.meanLightness(sample, skin.pixels), now > 0.05 else { return nil }
+                return colorVector(hue: measured.hue, chroma: measured.chroma) / now
             }
         }
         // The photo's skin split into thirds by brightness after the global fit, which is what
@@ -69,10 +80,10 @@ extension LookMatcher {
         for tone in [1, 0, 2] where !isCancelled() {
             let pixels = split.groups[tone]
             let lightness = holdsLightness && reference.toneLightness.count == 3 ? reference.toneLightness[tone] : nil
-            if fitMaskColor(masks[tone].0, components: masks[tone].1, target: reference.toneColors[tone],
+            if fitMaskColor(masks[tone].0, components: masks[tone].1, target: targets[tone],
                             in: &settings, measure: measure, limit: limit, lightness: lightness,
                             isCancelled: isCancelled, pixels: pixels,
-                            color: { LookSkin.meanAB($0, pixels) }) {
+                            color: { LookSkin.relativeAB($0, pixels) }) {
                 matched = true
             }
         }
