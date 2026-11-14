@@ -293,6 +293,9 @@ extension LibraryModel {
         section("Color Label", \.colorLabel, labels)
         let edits: [(String, Bool?)] = [("Edited or Not", nil), ("Edited", true), ("Unedited", false)]
         section("Edits", \.edited, edits)
+        var notes: [(String, NotesFilter?)] = [("Notes or Not", nil)]
+        for choice in NotesFilter.allCases { notes.append((choice.title, choice)) }
+        section("Notes", \.notes, notes)
         menu.addItem(.separator())
         menu.addItem(ClosureMenuItem("Clear Filters", enabled: filter.isFiltering) { self.filter = self.filter.cleared })
         return menu

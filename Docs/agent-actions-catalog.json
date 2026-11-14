@@ -673,6 +673,25 @@
       "version": 1
     },
     {
+      "exposed": false,
+      "hiddenReason": "Opens a note for the person to type in; agents add notes with set_metadata's add_note.",
+      "id": "photo.addNote",
+      "kind": "edit",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Photo > Add Note…, photo menu",
+      "shortcut": "⌥⇧⌘N",
+      "summary": "Opens a new note to type on the photo; the text also goes to the other selected photos.",
+      "targets": "photos",
+      "tier": "undoable",
+      "title": "Add Note…",
+      "version": 1
+    },
+    {
       "exposed": true,
       "id": "photo.addToCollection",
       "kind": "edit",
@@ -1090,6 +1109,23 @@
       "summary": "Shows or hides the Filmstrip.",
       "tier": "runs",
       "title": "Show Filmstrip",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "view.showNotes",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "View > Show Notes",
+      "shortcut": "⌥⌘N",
+      "summary": "Shows or hides the sticky notes panel over the photo (AT-058).",
+      "tier": "runs",
+      "title": "Show Notes",
       "version": 1
     },
     {

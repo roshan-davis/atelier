@@ -276,6 +276,7 @@ struct ThumbnailBadges: View {
         if row.hasEdits { marks.append(StatusMark(symbol: "slider.horizontal.3", description: "Edited in Develop")) }
         if row.isCropped { marks.append(StatusMark(symbol: "crop", description: "Cropped")) }
         if row.hasMasks { marks.append(StatusMark(symbol: "circle.dashed", description: "Has masks")) }
+        if row.hasNotes { marks.append(StatusMark(symbol: "note.text", color: .systemYellow, description: "Has notes")) }
         if row.isOffline {
             marks.append(StatusMark(symbol: "exclamationmark.triangle.fill", color: .systemOrange,
                                     description: "Original is offline"))

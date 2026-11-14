@@ -162,6 +162,7 @@ public final class Catalog: Sendable {
         registerPairMigration(&migrator)
         registerProcessorMigration(&migrator)
         registerPrivateMigration(&migrator)
+        registerNotesMigration(&migrator)
         return migrator
     }
 }

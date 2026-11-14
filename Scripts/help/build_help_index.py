@@ -33,6 +33,7 @@ GROUPS = [
         ("library.html", "Organize and find"),
         ("cull.html", "Cull: pick the keepers"),
         ("photos.html", "Virtual copies, stacks and removing"),
+        ("notes.html", "Notes on photos"),
     ]),
     ("Develop", [
         ("develop.html", "Develop basics"),

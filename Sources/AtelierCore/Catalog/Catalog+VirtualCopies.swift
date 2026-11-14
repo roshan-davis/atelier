@@ -99,9 +99,10 @@ extension Catalog {
         }
     }
 
-    /// Rating, label, title, caption, keywords, collections and import entries, for a photo
-    /// that joins a stack.
+    /// Rating, label, title, caption, keywords, notes, collections and import entries, for a
+    /// photo that joins a stack.
     static func copyCatalogInfo(_ db: Database, from parentID: Int64, to derivedID: Int64) throws {
+        try copyNotes(db, from: parentID, to: derivedID)
         try db.execute(sql: """
             UPDATE metadata SET
                 rating = (SELECT rating FROM metadata WHERE assetId = :parent),

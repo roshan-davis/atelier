@@ -31,6 +31,8 @@ enum CursorShape: Equatable {
     case slide
     /// A divider dragged up and down.
     case rowResize
+    /// Text that can be typed in (a note being written).
+    case text
     case notAllowed
 
     /// The shape held while a drag that started on this one goes on.
@@ -50,6 +52,7 @@ enum CursorShape: Equatable {
         case .resize(let position): return .frameResize(position: position, directions: .all)
         case .columnResize, .slide: return .columnResize
         case .rowResize: return .rowResize
+        case .text: return .iBeam
         case .notAllowed: return .operationNotAllowed
         }
     }

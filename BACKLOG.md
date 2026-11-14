@@ -1018,7 +1018,7 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 ## AT-058 — Photo notes: a sticky note on each photo, with culling's reasons
 
-**Status:** Proposed / discuss. Requirement only; nothing built. Rosh decides the open questions below before step 1 starts, and the PRD gets its "Photo notes" section in the first build PR. **Owner/chat/branch/PR:** unassigned (requirement written by Claude in [Add photo sticky notes requirement](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKWkRUXPM7xxcv1bPGTT7uWg)). **Depends on:** nothing for steps 1 and 2; step 3 on the Cull view; step 4 on AT-050c/d (Organize and edit tools).
+**Status:** In progress. Approved by Rosh (Nov 14, 2026: "can you start on this? I merged 130") with the proposed picks: notes per virtual copy, XMP in `atelier:Notes`, Cull notes on rejected photos only. First build PR (steps 1, 2 and most of 4) open; needs a Mac build and Rosh's acceptance. Step 3 (Cull reasons, eye openness) later. **Owner:** Claude, chat [Add photo sticky notes requirement](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKWkRUXPM7xxcv1bPGTT7uWg), branch `claude/project-thread-zyfp36`, PR: see the branch's open PR. **Depends on:** nothing for steps 1 and 2; step 3 on the Cull view; step 4 on AT-050c/d (Organize and edit tools).
 
 **Evidence:** Rosh (Nov 14, 2026): "would it be a good idea to have a notes section hideable and showable in each image (like a sticky note section - may be that type of font too), may be i can put my notes on so far on that image (may be culling can add the rejection reasons says eyes closed on blurrier in the set etc). does any of the tools like lightroom has it?"
 
@@ -1078,6 +1078,11 @@ So no tool has a private note per photo, and none leaves a readable, editable re
 2. **Panel:** the overlay in Library, Loupe, Cull and Develop; menu items, keys, badges; Settings > Appearance font choice; layout snapshots; Help page `notes.html`; PRD "Photo notes" section.
 3. **Cull reasons:** keep each photo's measurements until the cull finishes, eye openness from landmarks, the reason note, re-cull rules, "Write reasons to notes"; tests on fixtures.
 4. **Agents:** the actions and tools above, regenerated `agent-actions-catalog.json`, Help > Connect a chat app.
+
+### First build (steps 1, 2 and part of 4), as built
+- **Built:** `note` table (migration `v10-notes`), copied to virtual copies, stacks and processor results; search and Library filter (Has Notes, No Notes, Unticked Checkboxes; Filter bar and Filmstrip Filter pop-up); `atelier:Notes` in sidecars keyed by filename, read back on import; the sticky panel over the photo in Grid, Loupe, Develop and Cull (drag to a corner, resize, remembered); thumbnail note mark; View > Show Notes (⌥⌘N), Photo > Add Note… (⌥⇧⌘N) and right-click > Add Note…; Settings > Appearance > Notes font; agent tools: `get_photo` returns notes, `search_photos` takes `has_notes` and searches note text, `set_metadata` takes `add_note` (one Undo with the rest).
+- **Changed from the requirement while building (to confirm with Rosh):** while a note is being typed its markers show dimmed rather than hidden (formatted once typing ends); delete is ⋯ / right-click > Delete with an Undo row in the panel for 10 seconds, not Edit > Undo or the Delete key; ⌥⌘N and ⌥⇧⌘N are menu shortcuts, not yet in Settings > Keyboard; no toolbar button; the thumbnail mark is not clickable; `photo.addNote` is hidden from agents (it opens a note for the person to type) and agents use `set_metadata` `add_note` instead of a separate `add_note` tool.
+- **Left for later:** Format > List menu items (⌘⇧7, ⌘⇧L); pasting keeps lists (pastes are plain text today); notes filter by author and in smart collections; `edit_note` for agents; step 3 (Cull reasons and eye openness).
 
 ### Open questions for Rosh
 - Per virtual copy (proposed) or one set of notes shared by the original and its copies?

@@ -45,6 +45,16 @@ final class AtelierAgentToolsTests: XCTestCase {
         XCTAssertTrue(problems.text.contains("Did you mean \"picked\"?"), problems.text)
     }
 
+    func testSetMetadataAddsNotes() throws {
+        XCTAssertNotNil(AtelierAgentTools.setMetadata.inputSchema["properties"]?["add_note"])
+        let parameters = try ParameterCheck.decode(SetMetadataParameters.self, from: [
+            "ids": .array([.int(7)]), "add_note": .string("Eyes closed"),
+        ]).get()
+        XCTAssertEqual(parameters.addNote, "Eyes closed")
+        XCTAssertFalse(parameters.changesNothing)
+        XCTAssertTrue(SetMetadataParameters(ids: [1], addNote: "  \n ").changesNothing)
+    }
+
     func testDevelopEditsNeedEditAndLibraryEditsOrganize() {
         XCTAssertEqual(AtelierAgentTools.editProfile(AtelierAction.setRating.descriptor), .organize)
         XCTAssertEqual(AtelierAgentTools.editProfile(AtelierAction.addToCollection.descriptor), .organize)

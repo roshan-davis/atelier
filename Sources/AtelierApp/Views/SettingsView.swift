@@ -262,6 +262,7 @@ private struct SettingsPaneHeader: View {
 
 struct AppearanceSettings: View {
     @AppStorage(Theme.defaultsKey) private var theme: Theme = .system
+    @AppStorage(NotesPanel.fontKey) private var notesFont: NotesFont = .handwriting
 
     private let columns = [GridItem(.adaptive(minimum: 150), spacing: 14)]
 
@@ -276,6 +277,18 @@ struct AppearanceSettings: View {
                 .padding(.vertical, 6)
             } footer: {
                 Text(theme.summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            SettingsSection("Notes") {
+                Picker("Notes font", selection: $notesFont) {
+                    ForEach(NotesFont.allCases) { font in
+                        Text(font.title).font(font.font).tag(font)
+                    }
+                }
+            } footer: {
+                Text("The font of the sticky notes on photos (View > Show Notes, ⌥⌘N). Noteworthy comes with macOS.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

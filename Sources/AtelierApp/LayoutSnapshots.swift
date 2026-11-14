@@ -107,6 +107,7 @@ enum LayoutSnapshots {
         try? await Task.sleep(for: .seconds(2))
         await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
                       to: folder.appendingPathComponent("loupe-1280x800.png"))
+        await snapshotNotes(model: model, into: folder)
         await snapshotHDR(model: model, into: folder)
         model.mode = .grid
         // Render and catalog an Edit In copy to show the stack without opening Preview.
@@ -161,6 +162,31 @@ enum LayoutSnapshots {
         Theme.system.apply()
         fflush(stdout)
         exit(0)
+    }
+
+    /// The sticky notes panel (AT-058) over Loupe, with a list, a checkbox and bold text, in the
+    /// current theme and Graphite. The notes are taken off again so later snapshots don't change.
+    private static func snapshotNotes(model: LibraryModel, into folder: URL) async {
+        guard let id = model.focusedID else { return print("SNAPSHOT: no photo for notes") }
+        let catalog = model.catalog
+        let day = Date(timeIntervalSince1970: 1_794_000_000)
+        let added = (try? catalog.addNote("Second pass: **keep** for the shop.\n- [ ] Crop tighter\n- [x] Fix the horizon",
+                                          to: [id], at: day)) ?? []
+        let cull = (try? catalog.addNote("Rejected: eyes closed in 2 of 3 faces", source: .cull, to: [id],
+                                         at: day.addingTimeInterval(-3600))) ?? []
+        let visible = NotesPanel.isVisible, theme = Theme.current
+        NotesPanel.isVisible = true
+        try? await Task.sleep(for: .milliseconds(500))
+        await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
+                      to: folder.appendingPathComponent("loupe-notes-1280x800.png"))
+        UserDefaults.standard.set(Theme.graphite.rawValue, forKey: Theme.defaultsKey)
+        Theme.graphite.apply()
+        await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1000, height: 584),
+                      to: folder.appendingPathComponent("loupe-notes-graphite.png"))
+        UserDefaults.standard.set(theme.rawValue, forKey: Theme.defaultsKey)
+        theme.apply()
+        NotesPanel.isVisible = visible
+        for note in added + cull { if let noteID = note.id { _ = try? catalog.deleteNote(noteID) } }
     }
 
     /// The whole Settings window (sidebar and pane) on a few panes, in Light and Graphite.

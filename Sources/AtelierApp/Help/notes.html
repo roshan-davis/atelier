@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Notes on photos · Atelier Help</title>
+<link rel="stylesheet" href="assets/help.css">
+<script src="assets/toc.js" defer></script>
+<script src="assets/help.js" defer></script>
+<style>
+  .sticky { position: absolute; top: 14px; right: 14px; width: 46%; max-width: 300px; border-radius: 4px 4px 4px 4px;
+            background: #fff5b3; color: #332b14; box-shadow: 0 4px 14px rgba(0,0,0,0.35); overflow: hidden;
+            font-family: "Noteworthy", "Marker Felt", "Comic Sans MS", cursive; font-size: 14.5px; line-height: 1.35; }
+  .sticky .bar { display: flex; align-items: center; gap: 6px; padding: 5px 8px; background: #fae685;
+                 font: 600 11px -apple-system, BlinkMacSystemFont, sans-serif; color: #332b14; }
+  .sticky .bar .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; opacity: .7; }
+  .sticky .bar .btn { width: 16px; text-align: center; opacity: .8; }
+  .sticky .body { padding: 8px 10px 10px; }
+  .sticky .meta { font: 10.5px -apple-system, BlinkMacSystemFont, sans-serif; opacity: .55; margin: 2px 0 8px; }
+  .sticky .done { text-decoration: line-through; opacity: .55; }
+  .sticky ul { margin: 0; padding-left: 0; list-style: none; }
+  .sticky li { margin: 0; }
+  .sticky hr { border: 0; border-top: 1px solid rgba(51,43,20,.18); margin: 6px 0; }
+</style>
+</head>
+<body>
+<main class="page">
+
+<div class="eyebrow">Library</div>
+<h1>Notes on photos</h1>
+<p class="lede">Write yourself a sticky note on any photo: what to fix, why you kept it, a list of things to try. Notes float over the photo in Library, Loupe, Develop and Cull, and never change the photo or its zoom.</p>
+
+<figure>
+  <div class="frame" style="aspect-ratio: 3/2">
+    <img src="images/redwoods.jpg" alt="" style="width:100%;height:100%;object-fit:cover">
+    <div class="sticky" aria-label="A drawn notes panel">
+      <div class="bar"><span>Notes</span><span class="name">NZ6_9144.NEF</span><span class="btn">+</span><span class="btn">×</span></div>
+      <div class="body">
+        <div>Second pass: <b>keep</b> for the shop.</div>
+        <ul>
+          <li>☐ Crop tighter</li>
+          <li class="done">☑ Fix the horizon</li>
+        </ul>
+        <div class="meta">You · 12 Nov 2026, 18:40</div>
+        <hr>
+        <div>Rejected: eyes closed in 2 of 3 faces</div>
+        <div class="meta">Cull · 12 Nov 2026, 17:40</div>
+      </div>
+    </div>
+  </div>
+  <figcaption><b>The notes panel</b> in a corner of the photo: newest note first, each signed with who wrote it and when.</figcaption>
+</figure>
+
+<h2 id="show">Show and hide the notes</h2>
+<ul>
+  <li><span class="path">View › Show Notes</span> (<kbd>⌥⌘N</kbd>) shows or hides the panel. It stays shown or hidden in every view and after a relaunch.</li>
+  <li>The panel shows the notes of the photo in front: the focused photo in the Grid, the photo in Loupe and Develop, and the focused shot in Cull.</li>
+  <li>Photos with notes carry a small yellow note mark on their thumbnail in the Grid and Filmstrip.</li>
+  <li><b>Move it:</b> drag the panel's top strip; it snaps to the nearest corner. <b>Resize it:</b> drag the grip on the corner facing the middle of the photo. Atelier remembers both.</li>
+</ul>
+
+<h2 id="write">Write a note</h2>
+<ol class="steps">
+  <li>Click <span class="path">+</span> in the panel, or choose <span class="path">Photo › Add Note…</span> (<kbd>⌥⇧⌘N</kbd>), or right-click a photo and choose <span class="path">Add Note…</span> The panel opens if it was hidden.</li>
+  <li>Type. Each note is saved as you type.</li>
+  <li>Press <kbd>Esc</kbd> or <kbd>⌘Return</kbd>, or click <span class="path">Done</span>, to finish. A note left empty goes away.</li>
+</ol>
+<p><b>Several photos at once:</b> select them in the Grid first. The panel says “Adding to 12 photos”, and the note goes to each of them when you finish.</p>
+<p><b>Change a note:</b> click it. <b>Delete one:</b> point at it and click <span class="path">⋯</span> › <span class="path">Delete</span>, or right-click it. It goes at once, with <span class="path">Undo</span> in the panel for ten seconds.</p>
+
+<h3 id="formatting">Lists, checkboxes and bold</h3>
+<p>Notes are plain text with a few marks, as in Notes and many chat apps:</p>
+<dl class="defs">
+  <dt><code>- </code> or <code>* </code></dt><dd>A bullet. Return starts the next one; Return on an empty bullet ends the list.</dd>
+  <dt><code>1. </code></dt><dd>A numbered list; Return carries on with the next number.</dd>
+  <dt><code>[] </code></dt><dd>A checkbox. Click a box in the note to tick it, without opening the note.</dd>
+  <dt><kbd>Tab</kbd>, <kbd>⇧Tab</kbd></dt><dd>Moves a list line in or out (two levels).</dd>
+  <dt><kbd>⌘B</kbd>, <kbd>⌘I</kbd></dt><dd>Bold (<code>**word**</code>) and italic (<code>*word*</code>).</dd>
+  <dt><kbd>⇧Return</kbd></dt><dd>A new line without a bullet.</dd>
+</dl>
+<p>While you type, the marks stay visible but dimmed, so what you see is what is saved.</p>
+
+<h2 id="find">Find photos by their notes</h2>
+<ul>
+  <li>The Library search field also searches notes.</li>
+  <li>The filter bar's <span class="path">Notes</span> menu (and the Filmstrip's <span class="path">Filter</span> pop-up) shows only photos with notes, without notes, or with <span class="path">Unticked Checkboxes</span>: your to-do list across the catalog.</li>
+</ul>
+
+<h2 id="copies">Virtual copies, XMP and privacy</h2>
+<ul>
+  <li>Each virtual copy has its own notes. A new copy, Edit In version or AI result starts with the original's notes.</li>
+  <li>Notes are saved in the photo's XMP sidecar in Atelier's own field, so they come back if you import the photo into another Atelier catalog. They never go into the Caption or any field other apps show, and Export never includes them.</li>
+  <li>Undo (<kbd>⌘Z</kbd>) takes back a note a chat app added.</li>
+</ul>
+
+<h2 id="chat-apps">Notes from chat apps</h2>
+<p>A connected chat app can read a photo's notes and add one (it is signed with the app's name, such as “Claude”). It cannot change or delete your notes. See <a href="chat-apps.html">Connect a chat app</a>.</p>
+
+<h2 id="settings">Font</h2>
+<p><span class="path">Atelier › Settings… › Appearance › Notes</span> chooses the handwriting-style Noteworthy font (comes with macOS) or the system font.</p>
+
+<div class="beyond"><p><span class="label">Beyond Lightroom.</span> Lightroom Classic has no per-photo notes; people use the Caption field, which is exported with the photo. Atelier's notes are private and stay out of exports.</p></div>
+
+<div class="see-also">See also: <a href="library.html">Organize and find</a> · <a href="cull.html">Cull: pick the keepers</a> · <a href="photos.html">Virtual copies</a></div>
+
+</main>
+</body>
+</html>

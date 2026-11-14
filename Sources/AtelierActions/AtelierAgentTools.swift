@@ -79,16 +79,19 @@ public struct SetMetadataParameters: ActionParameters, Hashable, PhotoTargeting 
     public var removeKeywords: [String]?
     public var title: String?
     public var caption: String?
+    /// A note to add to each photo's notes (AT-058), shown as written by the chat app.
+    public var addNote: String?
 
     enum CodingKeys: String, CodingKey {
         case ids, selection, current, catalog, rating, flag, label, title, caption
         case addKeywords = "add_keywords"
         case removeKeywords = "remove_keywords"
+        case addNote = "add_note"
     }
 
     public init(ids: [Int64]? = nil, selection: Bool? = nil, current: Bool? = nil, catalog: String? = nil,
                 rating: Int? = nil, flag: FlagChoice? = nil, label: LabelSetting? = nil, addKeywords: [String]? = nil,
-                removeKeywords: [String]? = nil, title: String? = nil, caption: String? = nil) {
+                removeKeywords: [String]? = nil, title: String? = nil, caption: String? = nil, addNote: String? = nil) {
         self.ids = ids
         self.selection = selection
         self.current = current
@@ -100,11 +103,13 @@ public struct SetMetadataParameters: ActionParameters, Hashable, PhotoTargeting 
         self.removeKeywords = removeKeywords
         self.title = title
         self.caption = caption
+        self.addNote = addNote
     }
 
     public static let example = SetMetadataParameters(
         ids: [1], selection: false, current: false, catalog: "Atelier Catalog", rating: 3, flag: .picked, label: .red,
-        addKeywords: ["sunset"], removeKeywords: ["test"], title: "Title", caption: "Caption")
+        addKeywords: ["sunset"], removeKeywords: ["test"], title: "Title", caption: "Caption",
+        addNote: "Eyes closed in the next frame")
     public static let fieldNotes: [String: FieldNote] = PhotoTargetNotes.notes.merging([
         "rating": FieldNote("Stars, 0 to clear the rating.", minimum: 0, maximum: 5),
         "flag": FieldNote("Pick, reject or remove the flag."),
@@ -113,12 +118,16 @@ public struct SetMetadataParameters: ActionParameters, Hashable, PhotoTargeting 
         "remove_keywords": FieldNote("Keywords to take off."),
         "title": FieldNote("The title; an empty string clears it."),
         "caption": FieldNote("The caption; an empty string clears it."),
+        "add_note": FieldNote("A note to add to each photo's sticky notes, signed with your app's name. Plain text with "
+                              + "\"- \" bullets, \"1. \" numbers, \"- [ ] \" checkboxes, **bold** and *italic*. Notes are "
+                              + "private to Atelier: never put in the caption or exported."),
     ]) { $1 }
 
     /// True when the call names nothing to change.
     public var changesNothing: Bool {
         rating == nil && flag == nil && label == nil && (addKeywords ?? []).isEmpty && (removeKeywords ?? []).isEmpty
             && title == nil && caption == nil
+            && (addNote ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 }
 
@@ -190,7 +199,7 @@ public enum AtelierAgentTools {
     public static let setMetadata = MCPTool(
         name: "set_metadata", title: "Rate, flag, label and describe",
         description: "Sets the rating, flag, color label, keywords, title or caption of photos (a RAW's hidden JPEG follows "
-            + "it). One call is one change you can undo with undo_change; Atelier shows it with an Undo button. Changing "
+            + "it), or adds a note to them. One call is one change you can undo with undo_change; Atelier shows it with an Undo button. Changing "
             + "more photos than the person allows at once asks them first.",
         inputSchema: ParameterSchema.of(SetMetadataParameters.self).json, readOnly: false)
 

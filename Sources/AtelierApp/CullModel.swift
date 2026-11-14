@@ -80,6 +80,8 @@ final class CullModel: ObservableObject, Identifiable {
     /// Measurements between a group's first shot and later ones, made as grouping needs them.
     private var distant: [Int: CullComparison] = [:]
     @Published private(set) var largeImage: NSImage?
+    /// Photo > Add Note… asks this view's notes panel for a new note (AT-058).
+    @Published var noteRequest: NoteRequest?
 
     private weak var model: LibraryModel?
     /// Set when the Cull view is a step of the Import dialog: called with true after Import, with
@@ -94,6 +96,11 @@ final class CullModel: ObservableObject, Identifiable {
     private var loadTask: Task<Void, Never>?
     private var analysisTask: Task<Void, Never>?
     private var largeTask: Task<Void, Never>?
+
+    /// The catalog, for the notes panel.
+    var catalog: Catalog? { model?.catalog }
+    /// The focused photo in the catalog; nil while it is still being imported.
+    var focusedAssetID: Int64? { focused.flatMap { photos.indices.contains($0) ? photos[$0].assetID : nil } }
 
     var isImporting: Bool { if case .importing = source { return true } else { return false } }
     var isReview: Bool { if case .photos(_, true) = source { return true } else { return false } }

@@ -133,10 +133,10 @@ extension AgentServer {
                              _ model: LibraryModel) throws -> MCPToolResult {
         guard !parameters.changesNothing else {
             throw ArgumentProblem("set_metadata needs something to set: rating, flag, label, add_keywords, "
-                                  + "remove_keywords, title or caption.")
+                                  + "remove_keywords, title, caption or add_note.")
         }
         let title = Self.metadataTitle(parameters)
-        return try write(parameters, title: title, client, model) { _, affected in
+        return try write(parameters, title: title, client, model) { named, affected in
             let catalog = model.catalog
             if let rating = parameters.rating { try catalog.setRating(rating, for: affected) }
             if let flag = parameters.flag { try catalog.setFlag(Flag(flag), for: affected) }
@@ -145,6 +145,10 @@ extension AgentServer {
             if let names = parameters.removeKeywords, !names.isEmpty { try catalog.removeKeywords(names, from: affected) }
             if parameters.title != nil || parameters.caption != nil {
                 try catalog.setTitle(parameters.title, orCaption: parameters.caption, for: affected)
+            }
+            // Notes stay on the photo named, not on a RAW's hidden JPEG.
+            if let note = parameters.addNote {
+                _ = try catalog.addNote(note, source: .agent, appName: client.name, to: named)
             }
         }
     }
@@ -170,6 +174,7 @@ extension AgentServer {
         }
         if parameters.title != nil { parts.append("set the title") }
         if parameters.caption != nil { parts.append("set the caption") }
+        if let note = parameters.addNote, !NoteText.cleaned(note).isEmpty { parts.append("add a note") }
         let text = parts.joined(separator: ", ")
         return text.prefix(1).uppercased() + text.dropFirst()
     }

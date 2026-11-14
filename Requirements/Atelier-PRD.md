@@ -124,6 +124,20 @@ Rosh wants several treatments of one photo (colour and black and white, two crop
 - **Remove:** right-click > Remove Virtual Copy…, or Photo > Remove Virtual Copy…, after a confirmation. Only catalog data goes; the original and its file are never touched.
 - **Files:** a copy shares the original's file. Export names it `name-Copy1.jpg`. XMP sidecars are written for the original only. Re-importing the folder never mistakes a copy for the file. Culling an import entry skips copies.
 
+### Photo notes (AT-058, decided Nov 14, 2026)
+
+Rosh wants a private sticky note on each photo: their own notes so far, and later the reasons culling rejected a shot. No Lightroom-style app has private per-photo notes, so this goes beyond Lightroom (see BACKLOG AT-058 for the comparison).
+
+- **Notes:** a photo has a list of notes, newest first, each with its text, when it was written and last edited, and who wrote it: You, Cull, or a chat app by name. Text is plain text in a small Markdown subset: `- ` bullets, `1. ` numbers, `- [ ] ` / `- [x] ` checkboxes, `**bold**`, `*italic*`, two levels of indent.
+- **Per virtual copy:** each photo and virtual copy has its own notes; a new copy, Edit In version, AI result or processor result starts with the original's notes. A RAW+JPEG pair keeps its notes on the RAW.
+- **Panel:** a sticky note (pale yellow paper, toned down in dark themes, Noteworthy or the system font from Settings > Appearance > Notes) floating over a corner of the photo area in Grid, Loupe, Develop and Cull, for the photo in front. It is an overlay, so showing, moving or resizing it never changes zoom, pan or grid scroll. Drag its top strip to snap it to a corner and its grip to resize; its corner, size and shown state are one setting for every view and survive a relaunch. View > Show Notes (⌥⌘N) shows and hides it; photos with notes have a note mark on their thumbnail.
+- **Writing:** Photo > Add Note… (⌥⇧⌘N), right-click > Add Note…, or + in the panel opens a new note to type; with several photos selected the note goes to each ("Adding to 12 photos"). Saved as you type; Esc, ⌘Return or Done ends typing, and an empty note goes away. Return carries a list on, ⇧Return is a plain line, Tab/⇧Tab indent, ⌘B/⌘I bold and italic, `[] ` starts a checkbox. While typing, markers show dimmed; once done, the note is drawn formatted and checkboxes tick with a click. Library's keys never act while a note is being typed.
+- **Delete:** ⋯ or right-click on a note > Delete, at once with the remove sound and an Undo row in the panel for ten seconds.
+- **Find:** Library search also matches notes; the Notes filter (Filter bar and Filmstrip Filter pop-up) shows Has Notes, No Notes or Unticked Checkboxes.
+- **Private:** notes are never written to exported files, Edit In or AI renders, or Caption, IPTC Instructions or EXIF User Comment. XMP sidecars keep them in Atelier's own `atelier:Notes` field (JSON, keyed by filename, like `atelier:DevelopRecovery`) so a new catalog gets them back on import.
+- **Chat apps:** `get_photo` returns notes, `search_photos` searches note text and takes `has_notes`, `set_metadata` takes `add_note` (signed with the app's name, one Undo with the rest of the call). Agents can't edit or delete notes.
+- **Later (AT-058 step 3):** when a cull ends, each rejected photo gets a Cull note with the measured reasons (softer than the keeper, eyes closed).
+
 ### Remove and delete photos (decided Oct 28, 2026)
 
 Rosh asked for Remove (from the list) and Delete (from disk) on the right-click menus. As in Lightroom, it is one command with a dialog.
@@ -633,6 +647,7 @@ The catalog is one SQLite database (WAL mode) in a `.atelier` package on the loc
 | Mask | id, version id, kind, parameters or bitmap path | AI masks cached as 8-bit PNG |
 | Metadata | asset id, rating, flag, label, title, caption, GPS | Synced to XMP |
 | Keyword / Collection | id, name, parent id; join tables to assets | Hierarchical |
+| Note | id, asset id, text, source (person, cull, agent), app name, created at, edited at | Private sticky notes (AT-058); in XMP only as `atelier:Notes` |
 | ImportGroup | id, name, created at; join table to assets | One per import entry; deleting it keeps the photos |
 | Processor | id, kind (app, plugin, backend), versioned capabilities/configuration; ordered typed inputs and source-linked results or interactive handoff | One contract for external apps, plugins and AI; grouped HDR extension planned |
 | Model | id, processor id, name, version, license, allowed use, paths | The model registry |

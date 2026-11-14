@@ -234,6 +234,8 @@ public struct AssetRow: Codable, Hashable, Identifiable, Sendable, FetchableReco
     public var isCropped = false
     public var hasMasks = false
     public var isOffline = false
+    /// The photo has notes (AT-058): a folded-note badge on its thumbnail.
+    public var hasNotes = false
 }
 
 /// Everything the inspector and loupe need for one photo.
