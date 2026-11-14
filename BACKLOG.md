@@ -988,3 +988,24 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 **Scope:** shared `onClick(perform:doubleClick:)` / `onDoubleClick(perform:)` (`Views/ClickGestures.swift`, double-tap as a simultaneous gesture); every `.onTapGesture(count: 2)` in the app moved onto them except the histogram's spatial double-click (no single click there); `ClickGestureTests` fails on a new one; AGENTS.md rule; PRD Culling and Filmstrip lines.
 
 **Acceptance:** Mac build and tests of the exact head, then Rosh: Cull tiles and Filmstrip cells respond at once to a click, double-click still keeps/drops and opens Loupe; double-click to reset slider names, group headings, Color Grading labels, Effects/HDR row names, preset Amount; double-click a mask name renames (and selects it). Not in scope: AppKit views (Grid already uses `clickCount`).
+
+## AT-057 — Import with presets and section presets, from the UI and over MCP
+
+**Status:** Proposed; scope narrowed by Rosh on Nov 14, 2026, building not started. **Owner:** Claude (Cl). **Chat:** [Plan field imports with presets over MCP](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKXQv1cazVRfR98PNVAP8z7A). **Branch:** `claude/project-thread-kbohj6`. **Depends on:** AT-055 (section presets), AT-050d (edit tools); step 4 on AT-050e and AT-050f.
+
+**Evidence:** Rosh (Nov 14, 2026): "calling import with processing with presets or certain sectional presets - so while I am in the field, I can remotely do this operations through mcp. before that, from the UI there has to be able to do that and that can be part of the mcp command list." Then, on the proposal: culling keeps the other grouped photos as today ("more room to improve which is the best photo by automation"), and "listening to folder and polling can be taken out for now - all those can be through calls (either in the future phone app and mcp to desktop or a home machine)." Report: project files `reports/batch-import-presets-mcp-2026-11-14.md` (Easel's Actions and Batch, Lightroom Classic, Capture One, Photo Mechanic, Narrative, Aftershoot and others, with sources).
+
+**Today (main at `b0c8297`):** Apply During Import takes one Develop preset and keywords. The PRD's metadata preset on import isn't built. `file.importPhotos` only opens the dialog; `apply_preset` doesn't reach Tone Curve or Color Grading presets; there are no job tools for long work.
+
+**Ready now (one PR each):**
+1. **Import Presets (UI).** Save the Import dialog's right column as a named preset. Apply During Import becomes a fixed-order stack: Auto Settings, Develop preset, Tone Curve preset, Color Grading preset (one history step each), plus a metadata preset (creator, copyright, keywords). Culling unchanged: none, or Cull before importing. The PRD's watch folder (Import modes, 3) is marked "not planned for now" in the same PR.
+2. **`apply_preset` reaches section presets,** plus `list_presets` by kind (develop, tone curve, color grading). Independent of step 1.
+3. **`import_photos` over MCP as a job:** source folder, Import Preset, optional overrides (name, develop, tone curve and color grading presets, keywords); asks first in Atelier's window; returns a job id. Shared `get_job` / `cancel_job` in `AgentMCP` (Easel and AT-050e's export reuse them), and `list_import_presets`. Needs step 1.
+
+**Later:** 4. Calls from outside the Mac with nobody at it: AT-050f's HTTP listener behind Tailscale Serve (tailnet only, never Funnel) with a token and request keys, and a standing "Agents may run this" Allow per Import Preset. That changes the AT-050 rule that file writes always ask in Atelier's window, so it is Rosh's call with AT-050f. A future phone app calls the same tools.
+
+**Not planned (Rosh, Nov 14, 2026):** automatic Pick/Reject on import (Auto-Cull); Auto Import watch folders and polling a NAS folder.
+
+**Easel (AT-050g):** its Actions and Batch (EA-049) become `play_action` and `run_batch`, using the same shared jobs.
+
+**Acceptance (per step, once started):** step 1, an Import Preset with Film + a Tone Curve preset + a Color Grading preset imports a folder with one history step per preset and the metadata set; step 2, a chat app applies a Tone Curve preset by name with one undo; step 3, a chat app imports a folder with an Import Preset after Rosh's Allow, follows the job and cancels it, keeping the photos already in.
