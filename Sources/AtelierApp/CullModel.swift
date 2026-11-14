@@ -575,9 +575,11 @@ final class CullModel: ObservableObject, Identifiable {
         let group = groups.first { $0.contains(id) } ?? [id]
         let eyes = Culling.eyes(in: group.map { photos[$0].signals?.faces ?? [] })
         let mine = eyes[group.firstIndex(of: id) ?? 0]
-        return zip(signals.faces, mine).map { face, eyes in
+        let all = zip(signals.faces, mine).map { face, eyes in
             CullPreviewFace(box: face.box, eyes: eyes, smile: face.expression?.smile, byMediaPipe: face.byMediaPipe)
         }
+        // Numbered left to right on the photo.
+        return all.sorted { $0.box.minX < $1.box.minX }
     }
 
     /// What was measured for the focused photo, for the preview's caption.

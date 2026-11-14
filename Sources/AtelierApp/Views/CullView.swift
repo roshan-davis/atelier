@@ -404,7 +404,21 @@ struct CullView: View {
                         .foregroundStyle(CullSubjectOverlay.subjectColor)
                         .lineLimit(1)
                         .truncationMode(.tail)
-                        .help(line + "\n" + CullSubjectOverlay.legend)
+                        .help(line + "\n" + CullSubjectOverlay.colorKey)
+                    let faces = cull.previewFaces(of: id)
+                    if !faces.isEmpty {
+                        CullSubjectOverlay.legend(faces)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                            .truncationMode(.tail)
+                            .help(faces.enumerated().map { "\($0.offset + 1). " + CullSubjectOverlay.words($0.element) }
+                                .joined(separator: "\n"))
+                    }
+                }
+                // What each note marker's number means (the text stays off the photo).
+                if showMarkers, let notes = cull.markerNotes {
+                    PinnedNotesLine(notes: notes)
                 }
                 // Why it isn't kept, as its note will say when the cull ends.
                 if let reasons = cull.reasons(of: id), !reasons.isEmpty {

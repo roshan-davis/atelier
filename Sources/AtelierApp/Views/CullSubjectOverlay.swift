@@ -15,11 +15,13 @@ struct CullPreviewFace {
 /// What Cull measured on the focused photo, drawn on it for checking (Rosh, Nov 14, 2026: "when
 /// it says subject, can it annotate on the preview of cull which one is picked as subject"): a
 /// dashed orange box around the subject its sharpness was read on, and each face's box in the
-/// color of its eyes (dashed when MediaPipe found it), with a smile mark. Text stays off the
-/// photo: what the subject is and the legend are a line in the bar under it (`describe`), so
-/// labels never pile up on a group shot (Rosh, Nov 14, 2026). Everything is cut to the photo.
+/// color of its eyes (dashed when MediaPipe found it) with a small number. Text stays off the
+/// photo: what the subject is and what each number means are lines in the bar under it
+/// (`describe`, `legend`), so labels never pile up on a group shot (Rosh, Nov 14, 2026: "a small
+/// circled number and at the bottom the text associated"). Everything is cut to the photo.
 /// Display only, like the note markers.
 struct CullSubjectOverlay: View {
+    /// Kept so the overlay redraws when the photo's size changes.
     @ObservedObject var frame: PhotoFrame
     let subject: CullSubject
     let faces: [CullPreviewFace]
@@ -27,20 +29,22 @@ struct CullSubjectOverlay: View {
     static let subjectColor = Color(red: 1, green: 0.62, blue: 0.1)
 
     var body: some View {
+        // The overlay's host is the photo itself (ZoomScrollView moves and clips it), so the
+        // photo is this view's own size: no PhotoFrame timing involved.
         GeometryReader { view in
-            let visible = frame.rect.intersection(CGRect(origin: .zero, size: view.size))
-            content(visible: visible)
-                .clipShape(PhotoClip(rect: visible))
+            let photo = CGRect(origin: .zero, size: view.size)
+            content(photo: photo)
+                .clipShape(PhotoClip(rect: photo))
         }
         .allowsHitTesting(false)
     }
 
     @ViewBuilder
-    private func content(visible rect: CGRect) -> some View {
+    private func content(photo rect: CGRect) -> some View {
         ZStack(alignment: .topLeading) {
             Color.clear
-            if !rect.isNull, rect.width > 0, rect.height > 0 {
-                let placed = Self.place(subject.box, in: frame.rect).intersection(rect)
+            if rect.width > 0, rect.height > 0 {
+                let placed = Self.place(subject.box, in: rect).intersection(rect)
                 if !placed.isNull {
                     // Inset by half the line so the dashes stay inside the photo.
                     let box = placed.insetBy(dx: 1, dy: 1)
@@ -50,7 +54,7 @@ struct CullSubjectOverlay: View {
                         .offset(x: box.minX, y: box.minY)
                 }
                 ForEach(faces.indices, id: \.self) { index in
-                    faceMark(faces[index])
+                    faceMark(faces[index], number: index + 1, photo: rect)
                 }
             }
         }
@@ -58,22 +62,51 @@ struct CullSubjectOverlay: View {
     }
 
     @ViewBuilder
-    private func faceMark(_ face: CullPreviewFace) -> some View {
-        let box = Self.place(face.box, in: frame.rect)
+    private func faceMark(_ face: CullPreviewFace, number: Int, photo: CGRect) -> some View {
+        let box = Self.place(face.box, in: photo)
         let color = Self.color(face.eyes)
         let dash: [CGFloat] = face.byMediaPipe ? [3, 2] : []
         Rectangle()
             .stroke(color, style: StrokeStyle(lineWidth: 1.5, dash: dash))
             .frame(width: box.width, height: box.height)
             .offset(x: box.minX, y: box.minY)
-        if let smile = face.smile, smile >= CullEyes.smiling {
-            Image(systemName: "face.smiling")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(color)
-                .padding(1)
-                .background(Circle().fill(Color.black.opacity(0.6)))
-                .offset(x: box.maxX - 6, y: box.maxY - 6)
+        // The face's number on its top left corner; what it means is in the bar below.
+        FaceNumberBadge(number: number, color: color)
+            .offset(x: box.minX - 8, y: box.minY - 8)
+    }
+
+    /// What each face's number means, for the line under the photo: "Eyes open, smiling".
+    static func words(_ face: CullPreviewFace) -> String {
+        var text: String
+        switch face.eyes {
+        case .open: text = "Eyes open"
+        case .halfClosed: text = "Half closed"
+        case .closed: text = "Eyes closed"
+        case .unknown: text = "Not checked"
         }
+        if let smile = face.smile { text += smile >= CullEyes.smiling ? ", smiling" : ", not smiling" }
+        if face.byMediaPipe { text += ", found by MediaPipe" }
+        return text
+    }
+
+    /// "① Eyes open, smiling  ② Half closed", each number in its face's color.
+    static func legend(_ faces: [CullPreviewFace]) -> Text {
+        var line = Text("")
+        for (index, face) in faces.enumerated() {
+            let gap: String = index == 0 ? "" : "   "
+            let number: Text = Text(circled(index + 1)).foregroundColor(color(face.eyes)).bold()
+            let meaning: Text = Text(" " + words(face))
+            line = line + Text(gap)
+            line = line + number
+            line = line + meaning
+        }
+        return line
+    }
+
+    /// ①…⑳, then (21) and on.
+    static func circled(_ number: Int) -> String {
+        guard (1...20).contains(number), let scalar = Unicode.Scalar(0x2460 + number - 1) else { return "(\(number))" }
+        return String(Character(scalar))
     }
 
     /// The line under the photo: what the subject is, and how to read the boxes.
@@ -90,8 +123,8 @@ struct CullSubjectOverlay: View {
     }
 
     /// How the face boxes are colored, for the bar's tooltip.
-    static let legend = "Face boxes: green eyes open, yellow half closed, red closed, gray not checked; "
-        + "dashed when MediaPipe found the face; a smile mark when smiling (Advanced checks)."
+    static let colorKey = "Face boxes: green eyes open, yellow half closed, red closed, gray not checked; "
+        + "dashed when MediaPipe found the face. Each face's number is explained in the line below."
 
     static func color(_ eyes: CullEyes) -> Color {
         switch eyes {
@@ -106,6 +139,21 @@ struct CullSubjectOverlay: View {
     static func place(_ box: CGRect, in rect: CGRect) -> CGRect {
         CGRect(x: rect.minX + box.minX * rect.width, y: rect.minY + (1 - box.maxY) * rect.height,
                width: box.width * rect.width, height: box.height * rect.height)
+    }
+}
+
+/// A face's number on the Cull preview: a small disc in the color of its eyes.
+struct FaceNumberBadge: View {
+    let number: Int
+    let color: Color
+
+    var body: some View {
+        Text("\(number)")
+            .font(.system(size: 10, weight: .bold, design: .rounded))
+            .foregroundStyle(.black)
+            .frame(width: 16, height: 16)
+            .background(Circle().fill(color))
+            .overlay(Circle().stroke(Color.black.opacity(0.4), lineWidth: 1))
     }
 }
 
