@@ -10,6 +10,9 @@ enum NotesPanel {
     static let widthKey = "notes.width"
     static let heightKey = "notes.height"
     static let fontKey = "notes.font"
+    static let colorKey = "notes.color"
+    static let customColorKey = "notes.customColor"
+    static let opacityKey = "notes.opacity"
 
     static let defaultWidth = 280.0
     static let defaultHeight = 240.0
@@ -101,24 +104,33 @@ enum NotesFont: String, CaseIterable, Identifiable {
     var font: Font { Font(nsFont()) }
 }
 
-/// The sticky note's colors: pale yellow paper with dark ink, toned down in dark themes so it
-/// doesn't glare beside the photo.
+/// The sticky note's colors, from Settings > Appearance > Notes: a sticky-note paper (classic
+/// yellow by default) at 85% opacity, so the photo shows faintly through, with ink that reads on
+/// it. A flat fill: nothing behind the note is blurred or re-rendered.
 struct NotesPalette {
     let paper: NSColor
     let header: NSColor
     let ink: NSColor
     let faint: NSColor
 
-    static func forDark(_ dark: Bool) -> NotesPalette {
-        dark
-            ? NotesPalette(paper: NSColor(srgbRed: 0.33, green: 0.30, blue: 0.17, alpha: 0.97),
-                           header: NSColor(srgbRed: 0.40, green: 0.36, blue: 0.20, alpha: 1),
-                           ink: NSColor(srgbRed: 0.96, green: 0.93, blue: 0.80, alpha: 1),
-                           faint: NSColor(srgbRed: 0.96, green: 0.93, blue: 0.80, alpha: 0.55))
-            : NotesPalette(paper: NSColor(srgbRed: 1.0, green: 0.96, blue: 0.70, alpha: 0.98),
-                           header: NSColor(srgbRed: 0.98, green: 0.90, blue: 0.52, alpha: 1),
-                           ink: NSColor(srgbRed: 0.20, green: 0.17, blue: 0.08, alpha: 1),
-                           faint: NSColor(srgbRed: 0.20, green: 0.17, blue: 0.08, alpha: 0.55))
+    init(paper: NSColor, header: NSColor, ink: NSColor, faint: NSColor) {
+        self.paper = paper
+        self.header = header
+        self.ink = ink
+        self.faint = faint
+    }
+
+    init(color: NoteColor, customHex: String, opacity: Double) {
+        let rgb = color.paper(customHex: customHex)
+        let alpha = min(max(opacity, NoteColor.opacityRange.lowerBound), NoteColor.opacityRange.upperBound)
+        func ns(_ c: NoteColor.RGB, _ a: Double) -> NSColor {
+            NSColor(srgbRed: c.red, green: c.green, blue: c.blue, alpha: a)
+        }
+        paper = ns(rgb, alpha)
+        header = ns(rgb.header, min(1, alpha + 0.08))
+        let ink = rgb.inkIsDark ? NoteColor.RGB(red: 0.16, green: 0.13, blue: 0.06) : NoteColor.RGB(red: 0.98, green: 0.97, blue: 0.94)
+        self.ink = ns(ink, 1)
+        faint = ns(ink, 0.55)
     }
 }
 
@@ -231,10 +243,14 @@ struct NotesPanelView: View {
     let resized: (CGSize) -> Void
     let resizeEnded: () -> Void
     let hide: () -> Void
-    @Environment(\.colorScheme) private var colorScheme
     @AppStorage(NotesPanel.fontKey) private var fontChoice: NotesFont = .handwriting
+    @AppStorage(NotesPanel.colorKey) private var color: NoteColor = .yellow
+    @AppStorage(NotesPanel.customColorKey) private var customHex = "FFEB6B"
+    @AppStorage(NotesPanel.opacityKey) private var opacity = NoteColor.defaultOpacity
 
-    private var palette: NotesPalette { .forDark(colorScheme == .dark) }
+    @State private var editorProxy = NoteEditorProxy()
+
+    private var palette: NotesPalette { NotesPalette(color: color, customHex: customHex, opacity: opacity) }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -246,8 +262,9 @@ struct NotesPanelView: View {
         .clipShape(StickyShape())
         .overlay(alignment: .bottomTrailing) { foldedCorner }
         .overlay(alignment: corner.gripAlignment) { grip }
-        .shadow(color: .black.opacity(0.35), radius: 8, y: 3)
-        .environment(\.colorScheme, colorScheme)
+        // A soft drop shadow, as a note lifted off the page; lighter when the paper is see-through
+        // so it doesn't muddy the photo behind.
+        .shadow(color: .black.opacity(0.12 + 0.18 * opacity), radius: 6, x: 1, y: 3)
         // Over the photo, the panel's own cursor wins (a photo view's hand or crosshair never
         // shows through it).
         .cursor(.arrow)
@@ -314,9 +331,19 @@ struct NotesPanelView: View {
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(Color(nsColor: palette.faint))
                 }
+                formatBar
                 NoteEditor(text: notes.draft, font: fontChoice, palette: palette,
-                           changed: { notes.draftChanged($0) }, finished: { notes.finishEditing() })
+                           changed: { notes.draftChanged($0) }, finished: { notes.finishEditing() },
+                           proxy: editorProxy)
                     .cursor(.text)
+                    .overlay(alignment: .topLeading) {
+                        if notes.draft.isEmpty {
+                            Text("Type a note. - starts a bullet, 1. a numbered list, [] a checkbox.")
+                                .font(fontChoice.font)
+                                .foregroundStyle(Color(nsColor: palette.faint))
+                                .allowsHitTesting(false)
+                        }
+                    }
                 if let editing = notes.editingID, let note = notes.notes.first(where: { $0.id == editing }) {
                     meta(note)
                 }
@@ -351,6 +378,35 @@ struct NotesPanelView: View {
                 }
             }
         }
+    }
+
+    /// Bullets, numbers, checkboxes, bold and italic for the note being typed, for anyone who
+    /// doesn't know the typed shortcuts (each button's tip names its shortcut).
+    private var formatBar: some View {
+        HStack(spacing: 2) {
+            formatButton("list.bullet", "Bullets (type - and a space)") { editorProxy.toggleList(.bullet) }
+            formatButton("list.number", "Numbered list (type 1. and a space)") { editorProxy.toggleList(.numbered) }
+            formatButton("checklist", "Checkboxes (type [] and a space)") { editorProxy.toggleList(.checkbox) }
+            Divider().frame(height: 12).padding(.horizontal, 3)
+            formatButton("bold", "Bold (⌘B)") { editorProxy.wrap("**") }
+            formatButton("italic", "Italic (⌘I)") { editorProxy.wrap("*") }
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(Color(nsColor: palette.ink).opacity(0.75))
+    }
+
+    private func formatButton(_ symbol: String, _ help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 11, weight: .semibold))
+                .frame(width: 22, height: 18)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .focusable(false)
+        .help(help)
+        .cursor(.link)
+        .accessibilityLabel(help)
     }
 
     private func placeholder(_ text: String) -> some View {

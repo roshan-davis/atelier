@@ -12,6 +12,8 @@ struct NoteEditor: NSViewRepresentable {
     let palette: NotesPalette
     let changed: (String) -> Void
     let finished: () -> Void
+    /// Lets the panel's format buttons reach the text view.
+    var proxy: NoteEditorProxy?
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -45,6 +47,7 @@ struct NoteEditor: NSViewRepresentable {
 
         textView.string = text
         context.coordinator.restyle(textView)
+        proxy?.textView = textView
         DispatchQueue.main.async {
             textView.window?.makeFirstResponder(textView)
             textView.setSelectedRange(NSRange(location: (textView.string as NSString).length, length: 0))
@@ -154,6 +157,16 @@ struct NoteEditor: NSViewRepresentable {
             return true
         }
 
+        /// The panel's list buttons: the selected lines become a list of that kind, or plain again.
+        func toggleList(_ kind: NoteText.ListKind, in textView: NSTextView) {
+            let string = textView.string as NSString
+            var range = string.lineRange(for: textView.selectedRange())
+            if string.substring(with: range).hasSuffix("\n") { range.length -= 1 }
+            let lines = string.substring(with: range).components(separatedBy: "\n")
+            let toggled = NoteText.togglingList(kind, lines: lines).joined(separator: "\n")
+            replace(range, with: toggled, in: textView)
+        }
+
         /// ⌘B and ⌘I: wraps the selection in `**` or `*` (or takes them off again).
         func wrapSelection(in textView: NSTextView, with mark: String) {
             let range = textView.selectedRange()
@@ -233,6 +246,24 @@ struct NoteEditor: NSViewRepresentable {
         private static let bold = try! NSRegularExpression(pattern: #"(\*\*|__)(?=\S)(.+?)(?<=\S)(\1)"#)
         private static let italic = try! NSRegularExpression(
             pattern: #"(?<![\*\w])([\*_])(?![\*\s])(.+?)(?<![\*\s])(\1)(?![\*\w])"#)
+    }
+}
+
+/// The panel's format buttons act on the note being typed through this.
+@MainActor
+final class NoteEditorProxy {
+    weak var textView: NoteTextView?
+
+    func toggleList(_ kind: NoteText.ListKind) {
+        guard let textView, let coordinator = textView.coordinator else { return }
+        textView.window?.makeFirstResponder(textView)
+        coordinator.toggleList(kind, in: textView)
+    }
+
+    func wrap(_ mark: String) {
+        guard let textView, let coordinator = textView.coordinator else { return }
+        textView.window?.makeFirstResponder(textView)
+        coordinator.wrapSelection(in: textView, with: mark)
     }
 }
 

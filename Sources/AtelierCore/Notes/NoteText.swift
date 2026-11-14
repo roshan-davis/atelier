@@ -148,6 +148,43 @@ public enum NoteText {
         return parsed.source
     }
 
+    /// The notes panel's format buttons: bullets, a numbered list or checkboxes.
+    public enum ListKind: Sendable {
+        case bullet, numbered, checkbox
+
+        func matches(_ marker: Marker) -> Bool {
+            switch (self, marker) {
+            case (.bullet, .bullet), (.numbered, .numbered), (.checkbox, .checkbox): return true
+            default: return false
+            }
+        }
+    }
+
+    /// The lines made into a list of `kind`, keeping their indents (numbers count from 1), or,
+    /// when every line already is one, made plain again, as the list buttons in Notes work.
+    public static func togglingList(_ kind: ListKind, lines raw: [String]) -> [String] {
+        let parsed = raw.map { line($0) }
+        if !parsed.isEmpty, parsed.allSatisfy({ kind.matches($0.marker) }) {
+            return parsed.map { $0.content }
+        }
+        var number = 0
+        return parsed.map { line in
+            let marker: Marker
+            switch kind {
+            case .bullet: marker = .bullet
+            case .checkbox:
+                if case .checkbox = line.marker { marker = line.marker } else { marker = .checkbox(checked: false) }
+            case .numbered:
+                number += 1
+                marker = .numbered(number)
+            }
+            // A plain line's own leading spaces aren't an indent level.
+            let plain = line.marker == .none
+            let content = plain ? String(line.content.drop { $0 == " " }) : line.content
+            return Line(indent: plain ? 0 : line.indent, marker: marker, content: content).source
+        }
+    }
+
     /// The words without list markers or `**`/`*`/`_` around them, for one-line summaries.
     public static func plain(_ text: String) -> String {
         lines(text).map { line in

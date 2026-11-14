@@ -137,7 +137,7 @@ enum LayoutSnapshots {
                       size: CGSize(width: ImportSheet.size.width, height: ImportSheet.size.height - 92),
                       to: folder.appendingPathComponent("import-progress.png"))
         model.importProgress = nil
-        await capture(AnyView(AppearanceSettings().frame(width: 560)), size: CGSize(width: 560, height: 330),
+        await capture(AnyView(AppearanceSettings().frame(width: 560)), size: CGSize(width: 560, height: 470),
                       to: folder.appendingPathComponent("settings-appearance.png"))
         await capture(AnyView(EditInSettings().frame(width: 640)), size: CGSize(width: 640, height: 360),
                       to: folder.appendingPathComponent("settings-editin.png"))

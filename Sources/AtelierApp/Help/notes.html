@@ -9,9 +9,9 @@
 <script src="assets/help.js" defer></script>
 <style>
   .sticky { position: absolute; top: 14px; right: 14px; width: 46%; max-width: 300px; border-radius: 4px 4px 4px 4px;
-            background: #fff5b3; color: #332b14; box-shadow: 0 4px 14px rgba(0,0,0,0.35); overflow: hidden;
+            background: rgba(255,235,107,0.85); color: #29210f; box-shadow: 1px 3px 8px rgba(0,0,0,0.3); overflow: hidden;
             font-family: "Noteworthy", "Marker Felt", "Comic Sans MS", cursive; font-size: 14.5px; line-height: 1.35; }
-  .sticky .bar { display: flex; align-items: center; gap: 6px; padding: 5px 8px; background: #fae685;
+  .sticky .bar { display: flex; align-items: center; gap: 6px; padding: 5px 8px; background: rgba(237,212,86,0.93);
                  font: 600 11px -apple-system, BlinkMacSystemFont, sans-serif; color: #332b14; }
   .sticky .bar .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; opacity: .7; }
   .sticky .bar .btn { width: 16px; text-align: center; opacity: .8; }
@@ -78,7 +78,8 @@
   <dt><kbd>⌘B</kbd>, <kbd>⌘I</kbd></dt><dd>Bold (<code>**word**</code>) and italic (<code>*word*</code>).</dd>
   <dt><kbd>⇧Return</kbd></dt><dd>A new line without a bullet.</dd>
 </dl>
-<p>While you type, the marks stay visible but dimmed, so what you see is what is saved.</p>
+<p>While you type, the marks stay visible but dimmed, so what you see is what is saved. Once you finish, the note shows real bullets, numbers and checkboxes.</p>
+<p><b>Prefer buttons?</b> While a note is open, the strip above the text has <span class="path">Bullets</span>, <span class="path">Numbered list</span>, <span class="path">Checkboxes</span>, <span class="path">Bold</span> and <span class="path">Italic</span>. A list button turns the selected lines into that list, or back into plain lines. An empty note also shows a hint with the typed shortcuts.</p>
 
 <h2 id="find">Find photos by their notes</h2>
 <ul>
@@ -96,8 +97,13 @@
 <h2 id="chat-apps">Notes from chat apps</h2>
 <p>A connected chat app can read a photo's notes and add one (it is signed with the app's name, such as “Claude”). It cannot change or delete your notes. See <a href="chat-apps.html">Connect a chat app</a>.</p>
 
-<h2 id="settings">Font</h2>
-<p><span class="path">Atelier › Settings… › Appearance › Notes</span> chooses the handwriting-style Noteworthy font (comes with macOS) or the system font.</p>
+<h2 id="settings">Font, color and opacity</h2>
+<p>In <span class="path">Atelier › Settings… › Appearance › Notes</span>:</p>
+<dl class="defs">
+  <dt>Notes font</dt><dd>The handwriting-style Noteworthy (comes with macOS) or the system font.</dd>
+  <dt>Color</dt><dd>Sticky-note yellow (the default), pink, green, blue, orange or purple, or any color from the color well. The text turns light on a dark color.</dd>
+  <dt>Opacity</dt><dd>85% to start, so the photo shows faintly through the paper; 100% is solid. The text always stays solid. The note is a flat see-through fill, so it never slows the photo down.</dd>
+</dl>
 
 <div class="beyond"><p><span class="label">Beyond Lightroom.</span> Lightroom Classic has no per-photo notes; people use the Caption field, which is exported with the photo. Atelier's notes are private and stay out of exports.</p></div>
 

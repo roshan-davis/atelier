@@ -263,6 +263,9 @@ private struct SettingsPaneHeader: View {
 struct AppearanceSettings: View {
     @AppStorage(Theme.defaultsKey) private var theme: Theme = .system
     @AppStorage(NotesPanel.fontKey) private var notesFont: NotesFont = .handwriting
+    @AppStorage(NotesPanel.colorKey) private var notesColor: NoteColor = .yellow
+    @AppStorage(NotesPanel.customColorKey) private var notesCustomHex = "FFEB6B"
+    @AppStorage(NotesPanel.opacityKey) private var notesOpacity = NoteColor.defaultOpacity
 
     private let columns = [GridItem(.adaptive(minimum: 150), spacing: 14)]
 
@@ -287,14 +290,70 @@ struct AppearanceSettings: View {
                         Text(font.title).font(font.font).tag(font)
                     }
                 }
+                LabeledContent("Color") {
+                    HStack(spacing: 8) {
+                        ForEach(NoteColor.allCases.filter { $0 != .custom }, id: \.self) { color in
+                            NoteSwatch(rgb: color.paper(customHex: notesCustomHex), title: color.title,
+                                       isSelected: notesColor == color) { notesColor = color }
+                        }
+                        ColorPicker("Custom", selection: customColor, supportsOpacity: false)
+                            .labelsHidden()
+                            .help("Custom color")
+                            .overlay(RoundedRectangle(cornerRadius: 4)
+                                .stroke(notesColor == .custom ? Color.accentColor : .clear, lineWidth: 2))
+                    }
+                }
+                SliderRow(label: "Opacity",
+                          value: Binding(get: { (notesOpacity * 100).rounded() }, set: { notesOpacity = $0 / 100 }),
+                          range: NoteColor.opacityRange.lowerBound * 100...NoteColor.opacityRange.upperBound * 100,
+                          step: 1, origin: NoteColor.opacityRange.lowerBound * 100, format: { "\(Int($0.rounded()))%" },
+                          reset: { notesOpacity = NoteColor.defaultOpacity })
             } footer: {
-                Text("The font of the sticky notes on photos (View > Show Notes, ⌥⌘N). Noteworthy comes with macOS.")
+                Text("The sticky notes on photos (View > Show Notes, ⌥⌘N). Below 100% opacity the photo shows faintly through the paper; the text stays solid. Noteworthy comes with macOS.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
         .onChange(of: theme) { _, newTheme in newTheme.apply() }
+    }
+}
+
+extension AppearanceSettings {
+    /// The custom note color; picking one also chooses Custom.
+    fileprivate var customColor: Binding<Color> {
+        Binding(get: {
+            let rgb = NoteColor.custom.paper(customHex: notesCustomHex)
+            return Color(.sRGB, red: rgb.red, green: rgb.green, blue: rgb.blue)
+        }, set: { color in
+            guard let srgb = NSColor(color).usingColorSpace(.sRGB) else { return }
+            notesCustomHex = NoteColor.RGB(red: srgb.redComponent, green: srgb.greenComponent,
+                                           blue: srgb.blueComponent).hex
+            notesColor = .custom
+        })
+    }
+}
+
+/// One sticky-note color in Settings > Appearance > Notes.
+private struct NoteSwatch: View {
+    let rgb: NoteColor.RGB
+    let title: String
+    let isSelected: Bool
+    let select: () -> Void
+
+    var body: some View {
+        Button(action: select) {
+            RoundedRectangle(cornerRadius: 3)
+                .fill(Color(.sRGB, red: rgb.red, green: rgb.green, blue: rgb.blue))
+                .frame(width: 22, height: 22)
+                .shadow(color: .black.opacity(0.25), radius: 1.5, y: 1)
+                .overlay(RoundedRectangle(cornerRadius: 4).stroke(isSelected ? Color.accentColor : .clear, lineWidth: 2)
+                    .padding(-3))
+        }
+        .buttonStyle(.plain)
+        .help(title)
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 

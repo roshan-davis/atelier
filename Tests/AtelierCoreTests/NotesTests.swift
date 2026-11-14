@@ -221,6 +221,27 @@ final class NotesTests: XCTestCase {
         XCTAssertEqual(NoteText.line("\t- tabbed").indent, 1)
     }
 
+    func testListButtonsToggleLists() {
+        XCTAssertEqual(NoteText.togglingList(.bullet, lines: ["Crop", "  Horizon"]), ["- Crop", "- Horizon"])
+        XCTAssertEqual(NoteText.togglingList(.bullet, lines: ["- Crop", "- Horizon"]), ["Crop", "Horizon"],
+                       "a list of that kind goes back to plain lines")
+        XCTAssertEqual(NoteText.togglingList(.numbered, lines: ["- Crop", "  - Horizon"]), ["1. Crop", "  2. Horizon"])
+        XCTAssertEqual(NoteText.togglingList(.checkbox, lines: ["- [x] Done", "Todo"]), ["- [x] Done", "- [ ] Todo"])
+        XCTAssertEqual(NoteText.togglingList(.checkbox, lines: [""]), ["- [ ] "])
+    }
+
+    func testNoteColors() {
+        XCTAssertEqual(NoteColor.yellow.paper(customHex: "").hex, "FFEB6B")
+        XCTAssertEqual(NoteColor.custom.paper(customHex: "#336699").hex, "336699")
+        XCTAssertEqual(NoteColor.custom.paper(customHex: "nonsense"), NoteColor.yellow.preset)
+        XCTAssertNil(NoteColor.RGB(hex: "12345"))
+        for color in NoteColor.allCases where color != .custom {
+            XCTAssertTrue(color.paper(customHex: "").inkIsDark, "\(color) paper takes dark ink")
+        }
+        XCTAssertFalse(NoteColor.custom.paper(customHex: "202040").inkIsDark, "a dark custom color takes light ink")
+        XCTAssertEqual(NoteColor.defaultOpacity, 0.85)
+    }
+
     func testTypingHelpers() {
         XCTAssertEqual(NoteText.continuation(after: "- milk"), .continueWith("- "))
         XCTAssertEqual(NoteText.continuation(after: "  - [x] done"), .continueWith("  - [ ] "))
