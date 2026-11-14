@@ -981,7 +981,7 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 ## AT-056 — Clicks: a single click never waits for a double-click (Cull tiles, Filmstrip, everywhere)
 
-**Status:** Approved (Rosh, 2026-11-14), implemented, not built on a Mac yet. **Owner:** Claude (Cl). **Chat:** [Fix slow single click on Cull tiles](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGK8Uii7hj45nyXwr6vLYGdf5). **Branch:** `claude/project-thread-14w45e`. **PR:** #127. **Baseline:** `9d62808`.
+**Status:** Done — Rosh built and tested it in Xcode and asked to merge (2026-11-14, "tested, you can merge 127"). No Codex `check_pr.py` run recorded; CI did not run (billing). **Owner:** Claude (Cl). **Chat:** [Fix slow single click on Cull tiles](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGK8Uii7hj45nyXwr6vLYGdf5). **Branch:** `claude/project-thread-14w45e`. **PR:** #127. **Baseline:** `9d62808`.
 
 **Evidence:** Rosh relayed a report from Easel (its PR #60): Cull tiles had `.onTapGesture(count: 2)` before `.onTapGesture`, so SwiftUI held every single click for the double-click time (about 0.3 s). The Filmstrip, Develop group headings (⌥-click) and the mask name in the Masks list had the same delay.
 
