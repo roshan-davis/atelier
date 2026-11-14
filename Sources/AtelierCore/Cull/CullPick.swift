@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// How Cull picks the suggested keeper of each group (the Cull view's Pick By menu). Grouping
@@ -234,6 +235,23 @@ extension Culling {
         }
         if photo.isUtility, !keeper.isUtility { lines.append("Looks like a screenshot or document") }
         return lines
+    }
+
+    /// Where each photo's reason note is pinned (0...1 across and down the photo), or nil: the
+    /// first face with eyes closed, else half closed, else (with fewer smiles than the keeper)
+    /// the first face not smiling. Approximate, for the Cull preview's markers.
+    public static func reasonSpots(_ group: [CullSignals], keeper: Int) -> [CGPoint?] {
+        let eyes = Self.eyes(in: group.map(\.faces))
+        let smiles = group.map { $0.faces.filter { ($0.expression?.smile ?? 0) >= CullEyes.smiling }.count }
+        return group.indices.map { index in
+            let faces = group[index].faces
+            let pick = eyes[index].firstIndex(of: .closed) ?? eyes[index].firstIndex(of: .halfClosed)
+                ?? (keeper < smiles.count && smiles[index] < smiles[keeper]
+                    ? faces.firstIndex { ($0.expression?.smile ?? 1) < CullEyes.smiling } : nil)
+            guard index != keeper, let pick, pick < faces.count else { return nil }
+            let box = faces[pick].box
+            return CGPoint(x: box.midX, y: 1 - box.midY)
+        }
     }
 
     /// The Cull note for a photo not kept: a heading line, then a bullet per reason.

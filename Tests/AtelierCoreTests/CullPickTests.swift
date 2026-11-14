@@ -85,6 +85,20 @@ final class CullPickTests: XCTestCase {
         XCTAssertTrue(Culling.caption(a[1], inGroup: true).contains("Smiling: 2 of 2"))
     }
 
+    func testReasonNotesArePinnedToTheFaceWithClosedEyes() {
+        let keeper = photo(faces: [face(0.1, 0.30), face(0.5, 0.29)])
+        let blink = photo(faces: [face(0.1, 0.31), face(0.5, 0.05)])
+        let soft = photo(faces: [face(0.1, 0.30), face(0.5, 0.29)], sharpness: 40)
+        let spots = Culling.reasonSpots([keeper, blink, soft], keeper: 0)
+        XCTAssertNil(spots[0], "the keeper gets no note")
+        // The second face's box is x 0.5...0.6, y 0.5...0.65 from the bottom.
+        let spot = spots[1]
+        XCTAssertNotNil(spot)
+        XCTAssertEqual(spot?.x ?? 0, 0.55, accuracy: 1e-9)
+        XCTAssertEqual(spot?.y ?? 0, 1 - 0.575, accuracy: 1e-9, "measured down from the top")
+        XCTAssertNil(spots[2], "softness is about the whole photo")
+    }
+
     func testFacesMatchPeopleWhoMoveALittle() {
         let faces: [[CullFace]] = [[face(0.2, 0.3), face(0.6, 0.3)], [face(0.62, 0.3), face(0.23, 0.3)], [face(0.9, 0.3)]]
         XCTAssertEqual(Culling.people(in: faces), [[0, 1], [1, 0], [2]])

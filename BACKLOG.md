@@ -1108,3 +1108,18 @@ So no tool has a private note per photo, and none leaves a readable, editable re
 **Acceptance:** fixture test `CullFixtureTests` passes on a Mac (group of five: right people closed; portraits, narrow eyes and glasses: open vs closed; kids: middle child closed), and its printed timings are recorded; one real NEF shoot culled with each Pick By (Rosh): the suggested keeper is the one Rosh would pick in most groups, notes read correctly; Advanced on a group shot finishes with progress and Cancel by unticking; the old suggestion is available as Classic. Thresholds in `CullEyes` are provisional until then.
 
 **Deferred:** a learned image-quality model (sizes and dataset licenses), animal eyes, learning Rosh's own picks; reasons shown in the notes panel while culling (shown in the preview caption instead).
+
+## AT-060 — Cull preview: zoom like Loupe, and note markers
+
+**Status:** Built, not compiled in the cloud (no macOS); needs a Mac build and Rosh's acceptance. Approved by Rosh in words (Nov 14, 2026, below). **Owner:** Claude, chat [Build smarter Cull photo picking](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKBeo6kR8NWm4EtvF5wDHZjJ), branch `claude/project-thread-2n3y8e` (after PR #133). **Depends on:** AT-058 (notes), AT-059 (Cull reasons).
+
+**Evidence:** Rosh (Nov 14, 2026): "when the cull preview is shown, can we able to zoom that just like other places? also the notes can have annotation locations which preview can show the annotations there itself?"; "just an approximate coordinates, and that annotations can be turned off or on, and it will only on preview"; "cull preview while culling or opening the culled group".
+
+**Today (main at `84bdc79`):** the Cull preview is a plain SwiftUI `Image` (1800 px), with no zoom; notes have no position.
+
+**Built:** the preview is `ZoomableImageView` with its own `ZoomState` in `CullModel` (kept across photos), the zoom key, `ZoomControls`, full-size read past Fit; a display-only overlay mode in the shared photo view (`overlayPassesClicks`: clicks, drags and cursor stay the photo view's) for `NoteMarkersOverlay`; `PhotoNote.spotX/spotY` (migration `v11-note-spots`, `Catalog.setNoteSpot`, copied to virtual copies, in the XMP notes packet as `x`/`y`); Pin to Photo / Remove Pin in the notes panel only when the Cull view passes `NotePins`; Note Markers checkbox (`cull.noteMarkers`); Cull reason notes pinned by `Culling.reasonSpots`.
+
+**Acceptance:** in Cull and in Show Cull Group, double-click, Z, pinch, ⌥-scroll, drag and the zoom buttons work as in Loupe, and the zoom stays when moving to the next photo; Loupe's zoom is unchanged after; Pin to Photo then a click places a numbered marker that follows zoom and pan; Remove Pin and the Note Markers switch work; markers never show in Grid, Loupe, Develop or exports; a culled group's dropped photo with closed eyes shows its reason marker on that face.
+
+**Deferred:** dragging a marker to move it (Pin to Photo again moves it); markers in other views (Rosh chose Cull only).
+

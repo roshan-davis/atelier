@@ -117,6 +117,19 @@ final class CullModel: ObservableObject, Identifiable {
     /// Measurements between a group's first shot and later ones, made as grouping needs them.
     private var distant: [Int: CullComparison] = [:]
     @Published private(set) var largeImage: NSImage?
+    /// The focused photo at full size, read once it is zoomed past Fit; nil until then.
+    @Published private(set) var fullImage: NSImage?
+    /// The focused photo's size in pixels (as shot, turned upright), so 100% is one pixel per
+    /// screen pixel whatever size the preview is.
+    @Published private(set) var pixelSize: CGSize?
+    /// The Cull preview's zoom, its own: zooming here doesn't move Loupe or Develop. Kept from
+    /// photo to photo, so the same spot can be compared across a group, as in Lightroom.
+    let zoom = ZoomState()
+    /// The note waiting for a click on the photo to be pinned there (the notes panel's Pin
+    /// button); nil when none. Esc or another photo stops it.
+    @Published var placingNote: Int64?
+    /// The focused photo's notes, for the markers on the preview (the notes panel has its own).
+    private(set) lazy var markerNotes: PhotoNotesModel? = catalog.map { PhotoNotesModel(catalog: $0) }
     /// Photo > Add Note… asks this view's notes panel for a new note (AT-058).
     @Published var noteRequest: NoteRequest?
 
@@ -471,19 +484,62 @@ final class CullModel: ObservableObject, Identifiable {
     }
 
     private func loadLarge() {
+        placingNote = nil
+        fullImage = nil
+        fullTask?.cancel()
+        fullTask = nil
         guard let id = focused, let url = photos[id].url else {
             largeImage = nil
+            pixelSize = nil
             return
         }
         largeImage = photos[id].thumbnail
+        pixelSize = nil
         largeTask?.cancel()
         largeTask = Task.detached(priority: .userInitiated) { [weak self] in
+            let size = Culling.pixelSize(at: url)
             let image = Culling.image(at: url, maxPixel: 1800).map { NSImage(cgImage: $0, size: .zero) }
             await MainActor.run {
                 guard let self, !Task.isCancelled, self.focused == id else { return }
                 self.largeImage = image
+                self.pixelSize = size
+                self.zoomChanged()
             }
         }
+    }
+
+    private var fullTask: Task<Void, Never>?
+
+    /// The preview's zoom moved: past Fit, the focused photo is read at full size (once).
+    func zoomChanged() {
+        guard zoom.report.isZoomedPastFit, fullImage == nil, fullTask == nil,
+              let id = focused, let url = photos[id].url else { return }
+        let side = pixelSize.map { Int(max($0.width, $0.height)) } ?? 12000
+        fullTask = Task.detached(priority: .userInitiated) { [weak self] in
+            let image = Culling.image(at: url, maxPixel: max(side, 1800)).map { NSImage(cgImage: $0, size: .zero) }
+            await MainActor.run {
+                guard let self, !Task.isCancelled, self.focused == id else { return }
+                self.fullImage = image
+            }
+        }
+    }
+
+    /// Z (the zoom key in Settings > Keyboard): Fit, or the click zoom (100% unless changed).
+    func toggleZoom() {
+        zoom.level = zoom.report.isZoomedPastFit ? .fit : .percent(ZoomLevel.clickZoomPercent)
+    }
+
+    /// The click on the photo that pins the waiting note (0...1 across and down the photo).
+    func placeNote(at point: CGPoint) {
+        guard let id = placingNote, let catalog else { return }
+        placingNote = nil
+        _ = try? catalog.setNoteSpot(id, point)
+    }
+
+    func removePin(_ note: PhotoNote) {
+        guard let id = note.id, let catalog else { return }
+        if placingNote == id { placingNote = nil }
+        _ = try? catalog.setNoteSpot(id, nil)
     }
 
     /// What was measured for the focused photo, for the preview's caption.
@@ -526,6 +582,20 @@ final class CullModel: ObservableObject, Identifiable {
         return notes
     }
 
+    /// Where each dropped photo's reason note is pinned (key: photo id): the face with closed
+    /// eyes, for the Cull preview's markers.
+    func reasonSpots() -> [Int: CGPoint] {
+        var spots: [Int: CGPoint] = [:]
+        for group in multiGroups {
+            guard let keeper = self.keeper(of: group), let keeperIndex = group.firstIndex(of: keeper) else { continue }
+            let signals = group.map { photos[$0].signals ?? CullSignals() }
+            for (id, spot) in zip(group, Culling.reasonSpots(signals, keeper: keeperIndex)) where !kept.contains(id) {
+                if let spot { spots[id] = spot }
+            }
+        }
+        return spots
+    }
+
     // MARK: Finishing
 
     var keptCount: Int { kept.count }
@@ -541,6 +611,7 @@ final class CullModel: ObservableObject, Identifiable {
         loadTask?.cancel()
         analysisTask?.cancel()
         largeTask?.cancel()
+        fullTask?.cancel()
         stopAdvanced()
     }
 
@@ -552,6 +623,7 @@ final class CullModel: ObservableObject, Identifiable {
         // Reasons for the photos not kept (AT-058), and the kept ones whose old Cull note says
         // "Kept later".
         let notes = writeReasons ? reasonNotes() : [:]
+        let spots = writeReasons ? reasonSpots() : [:]
         let keptInGroups = writeReasons ? groups.filter { $0.count > 1 }.flatMap { $0 }.filter { kept.contains($0) } : []
         switch source {
         case .importing(_, let options):
@@ -566,14 +638,16 @@ final class CullModel: ObservableObject, Identifiable {
                 try? model.catalog.removeAssets(rejectFiles, fromImportGroup: entry)
                 try? model.catalog.applyCull(groups: groups.map { $0.compactMap(id) },
                                              keepers: Set(kept.compactMap(id)))
-                try? model.catalog.writeCullNotes(rejected: Self.byAsset(notes, id), kept: keptInGroups.compactMap(id))
+                try? model.catalog.writeCullNotes(rejected: Self.byAsset(notes, id), spots: Self.byAsset(spots, id),
+                                                  kept: keptInGroups.compactMap(id))
                 model.status = "Imported \(kept.count) kept photo\(kept.count == 1 ? "" : "s"); \(rejects.count) culled shot\(rejects.count == 1 ? " is" : "s are") in Show Cull Group"
             }
         case .photos:
             let id = { (index: Int) in photos[index].assetID }
             do {
                 try model.catalog.applyCull(groups: groups.map { $0.compactMap(id) }, keepers: Set(kept.compactMap(id)))
-                try model.catalog.writeCullNotes(rejected: Self.byAsset(notes, id), kept: keptInGroups.compactMap(id))
+                try model.catalog.writeCullNotes(rejected: Self.byAsset(notes, id), spots: Self.byAsset(spots, id),
+                                                 kept: keptInGroups.compactMap(id))
                 let culled = groups.filter { $0.count > 1 }.flatMap { $0 }
                 let rejected = culled.filter { !kept.contains($0) }.count
                 model.status = isReview ? "Cull group updated"
@@ -587,9 +661,9 @@ final class CullModel: ObservableObject, Identifiable {
     }
 
     /// Notes keyed by photo id, re-keyed by catalog id (photos without one are left out).
-    nonisolated static func byAsset(_ notes: [Int: String], _ id: (Int) -> Int64?) -> [Int64: String] {
-        var result: [Int64: String] = [:]
-        for (photo, text) in notes { if let asset = id(photo) { result[asset] = text } }
+    nonisolated static func byAsset<Value>(_ values: [Int: Value], _ id: (Int) -> Int64?) -> [Int64: Value] {
+        var result: [Int64: Value] = [:]
+        for (photo, value) in values { if let asset = id(photo) { result[asset] = value } }
         return result
     }
 }
