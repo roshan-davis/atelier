@@ -283,6 +283,8 @@ final class ZoomScrollView: NSScrollView {
     var isUpdating = false
     let photoFrame = PhotoFrame()
     private var overlayHost: OverlayHostingView?
+    /// Holds a display-only overlay, cut to this view; nil for a tool's overlay.
+    private var overlayClip: OverlayClipView?
     /// The overlay only shows something; see `ZoomableImageView.overlayPassesClicks`.
     var overlayPassesClicks = false {
         didSet { overlayHost?.passesClicks = overlayPassesClicks }
@@ -318,6 +320,8 @@ final class ZoomScrollView: NSScrollView {
         guard let view else {
             overlayHost?.removeFromSuperview()
             overlayHost = nil
+            overlayClip?.removeFromSuperview()
+            overlayClip = nil
             Cursors.shared.refresh()
             return
         }
@@ -329,12 +333,38 @@ final class ZoomScrollView: NSScrollView {
             host.passesClicks = overlayPassesClicks
             // Cover the whole view, not the overlay's own ideal size, or clicks miss it.
             host.sizingOptions = []
-            host.frame = bounds
-            host.autoresizingMask = [.width, .height]
-            addSubview(host, positioned: .above, relativeTo: nil)
+            if overlayPassesClicks {
+                // Display only (Cull's subject and note markers): the host is the photo's own
+                // rectangle and AppKit moves it with every scroll, so marks stay on the photo
+                // while panning without waiting for SwiftUI (Rosh, Nov 14, 2026: "panning the
+                // preview, the annotations not moving correctly"). A clip view the size of this
+                // view cuts it to what's on screen.
+                let clip = OverlayClipView(frame: bounds)
+                clip.autoresizingMask = [.width, .height]
+                addSubview(clip, positioned: .above, relativeTo: nil)
+                clip.addSubview(host)
+                overlayClip = clip
+            } else {
+                host.frame = bounds
+                host.autoresizingMask = [.width, .height]
+                // Nothing an overlay draws may spill past the photo view onto the bars around it.
+                host.wantsLayer = true
+                host.layer?.masksToBounds = true
+                addSubview(host, positioned: .above, relativeTo: nil)
+            }
             overlayHost = host
+            placeFollowingOverlay()
             Cursors.shared.refresh()
         }
+    }
+
+    /// A display-only overlay's host covers the photo exactly (this view's coordinates). Plain
+    /// AppKit, so it's safe during SwiftUI updates and moves in the same frame as the photo.
+    private func placeFollowingOverlay() {
+        guard let overlayClip, let overlayHost else { return }
+        if overlayClip.frame != bounds { overlayClip.frame = bounds }
+        let rect = documentSize.width > 0 ? overlayClip.convert(canvas.bounds, from: canvas) : .zero
+        if overlayHost.frame != rect { overlayHost.frame = rect }
     }
 
     /// A tool is drawn over the photo; it decides the cursor and takes the clicks. A display-only
@@ -343,11 +373,17 @@ final class ZoomScrollView: NSScrollView {
 
     override func tile() {
         super.tile()
-        overlayHost?.frame = bounds
+        if overlayClip != nil {
+            placeFollowingOverlay()
+        } else {
+            overlayHost?.frame = bounds
+        }
     }
 
-    /// Tells the overlay where the photo is now.
+    /// Tells the overlay where the photo is now. A display-only overlay is moved by AppKit
+    /// (`placeFollowingOverlay`); its `PhotoFrame.rect` is then the whole host.
     func updatePhotoFrame() {
+        placeFollowingOverlay()
         guard let overlayHost, !isUpdating else { return }
         let rect = documentSize.width > 0 ? overlayHost.convert(canvas.bounds, from: canvas) : .zero
         photoFrame.canPan = canPan
@@ -639,6 +675,19 @@ final class ZoomScrollView: NSScrollView {
         contentView.scroll(to: contentView.constrainBoundsRect(NSRect(origin: origin, size: contentView.bounds.size)).origin)
         reflectScrolledClipView(contentView)
     }
+}
+
+/// Cuts a display-only overlay to the photo view and lets every click through.
+final class OverlayClipView: NSView {
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.masksToBounds = true
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
 /// A tool's SwiftUI overlay over the photo. It takes clicks and drags; scrolling and pinching

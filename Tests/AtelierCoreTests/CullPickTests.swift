@@ -99,6 +99,119 @@ final class CullPickTests: XCTestCase {
         XCTAssertNil(spots[2], "softness is about the whole photo")
     }
 
+    /// The subject Show Subject draws: the faces big enough to read, else the whole frame
+    /// (Vision's salient object needs a real photo).
+    func testSubjectIsTheFacesElseTheWholeFrame() {
+        let faces = [face(0.1, 0.3), face(0.5, 0.3), CullFace(box: CGRect(x: 0.8, y: 0.1, width: 0.01, height: 0.01))]
+        let subject = Culling.subject(faces: faces, people: [], saliency: nil, planeWidth: 1024)
+        XCTAssertEqual(subject.kind, .faces)
+        XCTAssertEqual(subject.box.minX, 0.1, accuracy: 1e-9)
+        XCTAssertEqual(subject.box.maxX, 0.6, accuracy: 1e-9, "the 10 px face is left out")
+        XCTAssertEqual(Culling.subject(faces: [], people: [], saliency: nil, planeWidth: 1024), CullSubject(kind: .wholeFrame))
+    }
+
+    /// No face found (sunglasses, turned away): the people Vision found are the subject.
+    func testSubjectIsThePeopleWhenNoFaceIsFound() {
+        let people = [CGRect(x: 0.2, y: 0.1, width: 0.2, height: 0.6), CGRect(x: 0.5, y: 0.1, width: 0.2, height: 0.95)]
+        let subject = Culling.subject(faces: [], people: people, saliency: nil, planeWidth: 1024)
+        XCTAssertEqual(subject.kind, .people)
+        XCTAssertEqual(subject.box.minX, 0.2, accuracy: 1e-9)
+        XCTAssertEqual(subject.box.maxX, 0.7, accuracy: 1e-9)
+        XCTAssertEqual(subject.box.maxY, 1, accuracy: 1e-9, "kept inside the frame")
+    }
+
+    /// The grid gives the same variance as measuring the pixels of a region directly, and rows
+    /// are counted from the top (a Vision box's maxY is the top).
+    func testSharpnessGridMeasuresARegion() {
+        let side = 64
+        var pixels = [UInt8](repeating: 128, count: side * side)
+        // Noise in the top half only.
+        var seed: UInt32 = 7
+        for y in 0..<(side / 2) {
+            for x in 0..<side {
+                seed = seed &* 1_664_525 &+ 1_013_904_223
+                pixels[y * side + x] = UInt8(truncatingIfNeeded: seed >> 24)
+            }
+        }
+        let plane = GrayPlane(width: side, height: side, pixels: pixels)
+        let grid = plane.laplacianGrid(cells: 16)
+        let top = grid.variance(in: CGRect(x: 0, y: 0.5, width: 1, height: 0.5))
+        let bottom = grid.variance(in: CGRect(x: 0, y: 0, width: 1, height: 0.5))
+        XCTAssertGreaterThan(top, bottom * 100)
+        XCTAssertEqual(grid.variance(in: CGRect(x: 0, y: 0, width: 1, height: 1)), plane.laplacianVariance(), accuracy: plane.laplacianVariance() * 1e-9)
+    }
+
+    /// Without faces in every shot, a group is measured on one region (the union of the
+    /// subjects), so near-identical shots compare the same pixels.
+    func testGroupWithoutFacesSharesOneRegion() {
+        var a = photo(), b = photo()
+        a.subject = CullSubject(kind: .object, box: CGRect(x: 0.1, y: 0.1, width: 0.3, height: 0.3))
+        b.subject = CullSubject(kind: .people, box: CGRect(x: 0.3, y: 0.2, width: 0.4, height: 0.5))
+        XCTAssertNil(Culling.sharedSubject([a, b]), "needs the grids")
+        a.sharpnessGrid = CullSharpnessGrid(cells: 4)
+        b.sharpnessGrid = CullSharpnessGrid(cells: 4)
+        let shared = Culling.sharedSubject([a, b])
+        XCTAssertEqual(shared?.kind, .people)
+        XCTAssertEqual(shared?.box.minX ?? 0, 0.1, accuracy: 1e-9)
+        XCTAssertEqual(shared?.box.maxY ?? 0, 0.7, accuracy: 1e-9)
+        var c = photo(faces: [face(0.1, 0.3)]), d = photo(faces: [face(0.1, 0.3)])
+        c.subject = CullSubject(kind: .faces); d.subject = CullSubject(kind: .faces)
+        c.sharpnessGrid = CullSharpnessGrid(cells: 4); d.sharpnessGrid = CullSharpnessGrid(cells: 4)
+        XCTAssertNil(Culling.sharedSubject([c, d]), "faces are read face by face")
+    }
+
+    /// MediaPipe's face detector: anchors in the model's order, a box from one anchor's
+    /// offsets, and overlapping boxes reduced to the best.
+    func testFaceDetectorDecodesBoxes() {
+        XCTAssertEqual(FaceDetector.anchors.count, 896)
+        XCTAssertEqual(FaceDetector.anchors[0].x, 0.5 / 16, accuracy: 1e-9)
+        XCTAssertEqual(FaceDetector.anchors[512].x, 0.5 / 8, accuracy: 1e-9, "the 8 x 8 grid starts after 16 x 16 x 2")
+        var regressors = [Float](repeating: 0, count: 896 * 16)
+        var logits = [Float](repeating: -10, count: 896)
+        // Anchor 0 of cell (8, 8) on the 16 grid: center (8.5/16, 8.5/16).
+        let i = (8 * 16 + 8) * 2
+        regressors[i * 16] = 6.4; regressors[i * 16 + 1] = -6.4      // +0.05, -0.05
+        regressors[i * 16 + 2] = 25.6; regressors[i * 16 + 3] = 32    // 0.2 x 0.25
+        logits[i] = 3
+        // A weaker box on the same face, and one far away under the threshold.
+        regressors[(i + 1) * 16 + 2] = 25.6; regressors[(i + 1) * 16 + 3] = 32
+        logits[i + 1] = 1
+        logits[0] = -1
+        let found = FaceDetector.decode(regressors: regressors, logits: logits)
+        XCTAssertEqual(found.count, 1)
+        XCTAssertEqual(found[0].box.midX, 8.5 / 16 + 0.05, accuracy: 1e-6)
+        XCTAssertEqual(found[0].box.midY, 8.5 / 16 - 0.05, accuracy: 1e-6)
+        XCTAssertEqual(found[0].box.width, 0.2, accuracy: 1e-6)
+        XCTAssertEqual(found[0].score, 1 / (1 + exp(-3)), accuracy: 1e-6)
+    }
+
+    /// MediaPipe looks for a head in the top half of each person.
+    func testFaceDetectorLooksAtThePersonsTopHalf() {
+        let head = FaceDetector.headRegion(of: CGRect(x: 0.4, y: 0.1, width: 0.2, height: 0.8))
+        XCTAssertEqual(head.minY, 0.5, accuracy: 1e-9)
+        XCTAssertEqual(head.maxY, 0.9, accuracy: 1e-9)
+        XCTAssertEqual(head.minX, 0.38, accuracy: 1e-9)
+        XCTAssertTrue(Culling.sameFace(CGRect(x: 0.4, y: 0.6, width: 0.1, height: 0.1), CGRect(x: 0.42, y: 0.62, width: 0.05, height: 0.05)))
+        XCTAssertFalse(Culling.sameFace(CGRect(x: 0.1, y: 0.6, width: 0.1, height: 0.1), CGRect(x: 0.5, y: 0.6, width: 0.1, height: 0.1)))
+    }
+
+    /// Find Faces switches to another finder's faces and subject without reading again, and
+    /// those faces need the Advanced checks again.
+    func testFindFacesSwitchesFaceSets() {
+        var signals = photo(faces: [face(0.1, 0.3)])
+        signals.advanced = true
+        let mediaPipe = [face(0.1, 0.3), face(0.5, 0.3)]
+        signals.faceSets[.vision] = CullFaceSet(faces: signals.faces, subject: CullSubject(kind: .faces), subjectSharpness: 100, coherence: 0)
+        signals.faceSets[.mediaPipe] = CullFaceSet(faces: mediaPipe, subject: CullSubject(kind: .faces), subjectSharpness: 80, coherence: 0.2)
+        let switched = signals.using(.mediaPipe)
+        XCTAssertEqual(switched.finder, .mediaPipe)
+        XCTAssertEqual(switched.faces.count, 2)
+        XCTAssertEqual(switched.subjectSharpness, 80)
+        XCTAssertFalse(switched.advanced)
+        XCTAssertEqual(signals.using(.vision).advanced, true, "the same finder changes nothing")
+        XCTAssertEqual(signals.using(.both).faces.count, 1, "a finder that wasn't read changes nothing")
+    }
+
     func testFacesMatchPeopleWhoMoveALittle() {
         let faces: [[CullFace]] = [[face(0.2, 0.3), face(0.6, 0.3)], [face(0.62, 0.3), face(0.23, 0.3)], [face(0.9, 0.3)]]
         XCTAssertEqual(Culling.people(in: faces), [[0, 1], [1, 0], [2]])

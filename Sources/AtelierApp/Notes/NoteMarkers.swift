@@ -30,10 +30,18 @@ struct NoteMarkersOverlay: View {
     private let labelWidth: CGFloat = 220
 
     var body: some View {
+        // The overlay's host is the photo itself (ZoomScrollView moves and clips it with the
+        // photo), so the photo is this view's own size.
+        GeometryReader { view in
+            markers(in: CGRect(origin: .zero, size: view.size))
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func markers(in rect: CGRect) -> some View {
         let written = notes.notes.filter { !NoteText.cleaned($0.text).isEmpty }
         let numbers = NotePins.numbers(written)
-        let rect = frame.rect
-        ZStack(alignment: .topLeading) {
+        return ZStack(alignment: .topLeading) {
             Color.clear
             if rect.width > 0 {
                 ForEach(written.filter { $0.spot != nil }, id: \.id) { note in
@@ -47,25 +55,15 @@ struct NoteMarkersOverlay: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .allowsHitTesting(false)
+        // Cut to the photo, so a label never reaches the bars or the panel beside it.
+        .clipShape(PhotoClip(rect: rect))
     }
 
-    /// The badge with the label beside it. Laid out so the badge's center is the view's center.
-    private func marker(_ note: PhotoNote, number: Int, leftLabel: Bool) -> some View {
-        let label = Text(Self.summary(note))
-            .font(.system(size: 11, weight: .medium))
-            .lineLimit(1)
-            .truncationMode(.tail)
-            .foregroundStyle(.white)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
-            .background(Capsule().fill(Color.black.opacity(0.6)))
-        return HStack(spacing: 4) {
-            label.opacity(leftLabel ? 1 : 0)
-            NoteMarkerBadge(number: number)
-            label.opacity(leftLabel ? 0 : 1)
-        }
-        .shadow(color: .black.opacity(0.4), radius: 2, y: 1)
+    /// The numbered badge alone: the note's words are in the line under the photo
+    /// (`PinnedNotesLine`), so text never covers the photo (Rosh, Nov 14, 2026).
+    private func marker(_ note: PhotoNote, number: Int, leftLabel _: Bool) -> some View {
+        NoteMarkerBadge(number: number, size: 18)
+            .shadow(color: .black.opacity(0.4), radius: 2, y: 1)
     }
 
     /// A note's first words for its marker: for Cull's reasons, the first reason, not the heading.
@@ -82,5 +80,34 @@ struct NoteMarkersOverlay: View {
             return reasons.first ?? lines[0]
         }
         return lines.first ?? ""
+    }
+}
+
+/// The line under the Cull preview saying what each note marker's number means:
+/// "1 Eyes half closed: 1 of 2 people   2 Check focus".
+struct PinnedNotesLine: View {
+    @ObservedObject var notes: PhotoNotesModel
+
+    var body: some View {
+        let written = notes.notes.filter { $0.spot != nil && !NoteText.cleaned($0.text).isEmpty }
+        let numbers = NotePins.numbers(notes.notes)
+        let pinned = written.sorted { (numbers[$0.id ?? -1] ?? 0) < (numbers[$1.id ?? -1] ?? 0) }
+        if !pinned.isEmpty {
+            HStack(spacing: 10) {
+                ForEach(pinned, id: \.id) { note in
+                    HStack(spacing: 4) {
+                        NoteMarkerBadge(number: numbers[note.id ?? -1] ?? 0, size: 14)
+                        Text(NoteMarkersOverlay.summary(note))
+                    }
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .clipped()
+            .help(pinned.map { "\(numbers[$0.id ?? -1] ?? 0). " + NoteMarkersOverlay.summary($0) }.joined(separator: "\n"))
+        }
     }
 }

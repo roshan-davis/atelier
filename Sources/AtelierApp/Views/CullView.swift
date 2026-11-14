@@ -13,6 +13,8 @@ struct CullView: View {
     @AppStorage("cull.listWidth") private var listWidth = 560.0
     /// Notes pinned to a spot show as numbered markers on the preview (Rosh, Nov 14, 2026).
     @AppStorage("cull.noteMarkers") private var showMarkers = true
+    /// Draw what was measured on the preview: the subject and each face's eyes.
+    @AppStorage("cull.showSubject") private var showSubject = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -89,8 +91,10 @@ struct CullView: View {
                     .font(embedded ? .headline : .body)
                     .foregroundStyle(embedded ? .primary : .secondary)
                     .monospacedDigit()
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
-            Spacer()
+            Spacer(minLength: 16)
             VStack(alignment: .trailing, spacing: 8) {
                 if !cull.isReview {
                     HStack(spacing: 16) {
@@ -116,28 +120,63 @@ struct CullView: View {
                         .help("How alike shots must look to be grouped")
                     }
                 }
-                // Which photo of each group is suggested; grouping doesn't change with it.
-                HStack(spacing: 16) {
-                    Picker("Pick By", selection: $cull.pickBy) {
-                        ForEach(CullPick.allCases) { pick in
-                            Text(pick.title).tag(pick)
-                        }
+                // How faces are found and which photo of each group is suggested; grouping
+                // doesn't change with these. One row when it fits, else two, never wrapped.
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 20) {
+                        findFacesPicker
+                        pickByPicker
+                        advancedToggle
                     }
-                    .pickerStyle(.menu)
-                    .fixedSize()
-                    .disabled(cull.isAnalyzing)
-                    .help("How the suggested keeper of each group is chosen. \(cull.pickBy.title): \(cull.pickBy.help)")
-                    Toggle("Advanced checks (slower)", isOn: $cull.advanced)
-                        .toggleStyle(.checkbox)
-                        .help("Reads the eyes of every grouped photo again from a large copy: small faces in group "
-                              + "shots get checked, Sharpness compares the eyes themselves, and a built-in face model "
-                              + "reads blinks and smiles (needed for Best Expression). Roughly a fifth of a second "
-                              + "more per grouped photo; single shots are skipped.")
+                    VStack(alignment: .trailing, spacing: 8) {
+                        HStack(spacing: 20) {
+                            findFacesPicker
+                            pickByPicker
+                        }
+                        advancedToggle
+                    }
                 }
             }
+            // The controls keep their width; the title and subtitle give way (truncate).
+            .layoutPriority(1)
         }
+        .fixedSize(horizontal: false, vertical: true)
         .padding(.horizontal, 20)
         .padding(.vertical, 14)
+    }
+
+    private var pickByPicker: some View {
+        Picker("Pick By", selection: $cull.pickBy) {
+            ForEach(CullPick.allCases) { pick in
+                Text(pick.title).tag(pick)
+            }
+        }
+        .pickerStyle(.menu)
+        .fixedSize()
+        .disabled(cull.isAnalyzing)
+        .help("How the suggested keeper of each group is chosen. \(cull.pickBy.title): \(cull.pickBy.help)")
+    }
+
+    private var findFacesPicker: some View {
+        Picker("Find Faces", selection: $cull.faceFinder) {
+            ForEach(CullFaceFinder.allCases) { finder in
+                Text(finder.title).tag(finder)
+            }
+        }
+        .pickerStyle(.menu)
+        .fixedSize()
+        .help("Which face detector finds the faces Cull checks. \(cull.faceFinder.title): \(cull.faceFinder.help). "
+              + "Every photo is read with each, so switching only picks again.")
+    }
+
+    private var advancedToggle: some View {
+        Toggle("Advanced checks (slower)", isOn: $cull.advanced)
+            .toggleStyle(.checkbox)
+            .fixedSize()
+            .help("Reads the eyes of every grouped photo again from a large copy: small faces in group "
+                  + "shots get checked, Sharpness compares the eyes themselves, and a built-in face model "
+                  + "reads blinks and smiles (needed for Best Expression). Roughly a fifth of a second "
+                  + "more per grouped photo; single shots are skipped.")
     }
 
     private var subtitle: String {
@@ -256,29 +295,82 @@ struct CullView: View {
         }
     }
 
-    /// The note markers over the photo, while Note Markers is on.
+    /// What is drawn over the photo: the measured subject and faces (Show Subject) and the note
+    /// markers (Note Markers), or nil with both off.
     private var markersOverlay: ((PhotoFrame) -> AnyView)? {
-        guard showMarkers, let notes = cull.markerNotes else { return nil }
-        return { frame in AnyView(NoteMarkersOverlay(notes: notes, frame: frame)) }
+        let notes = showMarkers ? cull.markerNotes : nil
+        let measured = showSubject ? cull.focused.flatMap { id in cull.photos[id].signals.map { (id, $0) } } : nil
+        guard notes != nil || measured != nil else { return nil }
+        let faces = measured.map { cull.previewFaces(of: $0.0) } ?? []
+        let assessment = measured.flatMap { cull.assessments[$0.0] }
+        return { frame in
+            AnyView(ZStack {
+                if let measured {
+                    CullSubjectOverlay(frame: frame, subject: assessment?.subject ?? measured.1.subject, faces: faces)
+                }
+                if let notes {
+                    NoteMarkersOverlay(notes: notes, frame: frame)
+                }
+            })
+        }
     }
 
-    /// How to zoom, the Note Markers switch and the zoom buttons, as under Loupe's photo.
+    /// The hint, the two display switches side by side and the zoom buttons, laid out like
+    /// Loupe's bar: the hint goes first when room runs out, the switches never wrap.
     private var zoomBar: some View {
-        HStack(spacing: 12) {
-            Text(cull.placingNote != nil ? "Click the photo where the note belongs (Esc stops)"
-                                         : "Double-click the photo to zoom, drag to move around")
-                .foregroundStyle(cull.placingNote != nil ? Color.accentColor : .secondary)
-                .lineLimit(1)
-            Spacer(minLength: 8)
-            Toggle("Note Markers", isOn: $showMarkers)
-                .toggleStyle(.checkbox)
-                .help("Show notes pinned to a spot on the photo as numbered markers. Pin a note with "
-                      + "Pin to Photo in the notes panel. Markers show only here, never in exports.")
-            ZoomControls(zoom: cull.zoom)
+        AdaptiveControlBar(sizingKey: cull.placingNote != nil) {
+            HStack(spacing: 12) {
+                zoomHint
+                Spacer(minLength: 16)
+                displaySwitches
+                ZoomControls(zoom: cull.zoom)
+            }
+        } compact: {
+            HStack(spacing: 12) {
+                displaySwitches
+                Spacer(minLength: 8)
+                ZoomControls(zoom: cull.zoom)
+            }
+        } minimum: {
+            HStack(spacing: 8) {
+                displaySwitches
+                Spacer(minLength: 0)
+                ZoomControls(zoom: cull.zoom, compact: true)
+            }
         }
         .font(.callout)
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
+    }
+
+    private var zoomHint: some View {
+        Text(cull.placingNote != nil ? "Click the photo where the note belongs (Esc stops)"
+                                     : "Double-click the photo to zoom, drag to move around")
+            .foregroundStyle(cull.placingNote != nil ? Color.accentColor : .secondary)
+            .lineLimit(1)
+            .fixedSize()
+    }
+
+    /// What to draw on the photo: one group, read left to right.
+    private var displaySwitches: some View {
+        HStack(spacing: 14) {
+            Toggle("Show Subject", isOn: $showSubject)
+                .help("Draw what Cull measured: a dashed box around the area its sharpness is read on "
+                      + "(the faces, the people, Vision's main object or the whole frame) and each face with its eyes")
+            Toggle("Note Markers", isOn: $showMarkers)
+                .help("Show notes pinned to a spot on the photo as numbered markers. Pin a note with "
+                      + "Pin to Photo in the notes panel. Markers show only here, never in exports.")
+        }
+        .toggleStyle(.checkbox)
+        .fixedSize()
+    }
+
+    private func subjectLine(_ id: Int) -> String? {
+        guard let signals = cull.photos[id].signals else { return nil }
+        let assessment = cull.assessments[id]
+        return CullSubjectOverlay.describe(subject: assessment?.subject ?? signals.subject,
+                                           sharedRegion: assessment?.sharedRegion ?? false,
+                                           faceCount: signals.faces.count)
     }
 
     private func previewBar(_ id: Int) -> some View {
@@ -304,6 +396,29 @@ struct CullView: View {
                         .lineLimit(1)
                         .truncationMode(.tail)
                         .help(caption)
+                }
+                // What Show Subject draws, in words (no text on the photo).
+                if showSubject, let line = subjectLine(id) {
+                    Text(line)
+                        .font(.caption)
+                        .foregroundStyle(CullSubjectOverlay.subjectColor)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .help(line + "\n" + CullSubjectOverlay.colorKey)
+                    let faces = cull.previewFaces(of: id)
+                    if !faces.isEmpty {
+                        CullSubjectOverlay.legend(faces)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                            .truncationMode(.tail)
+                            .help(faces.enumerated().map { "\($0.offset + 1). " + CullSubjectOverlay.words($0.element) }
+                                .joined(separator: "\n"))
+                    }
+                }
+                // What each note marker's number means (the text stays off the photo).
+                if showMarkers, let notes = cull.markerNotes {
+                    PinnedNotesLine(notes: notes)
                 }
                 // Why it isn't kept, as its note will say when the cull ends.
                 if let reasons = cull.reasons(of: id), !reasons.isEmpty {

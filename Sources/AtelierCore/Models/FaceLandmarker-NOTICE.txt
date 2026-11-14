@@ -1,16 +1,16 @@
-FaceMesh.mlpackage and FaceBlendshapes.mlpackage
+FaceMesh.mlpackage, FaceBlendshapes.mlpackage and FaceDetector.mlpackage
 
-Contain Google's MediaPipe Face Landmarker models (Face Mesh V2 and Blendshape V2;
+Contain Google's MediaPipe Face Landmarker models (Face Mesh V2, Blendshape V2 and
+the BlazeFace short-range face detector;
 face_landmarker.task, float16, SHA-256
 64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff), from
 https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task
 Copyright Google LLC. Licensed under the Apache License, Version 2.0 (see
-FaceLandmarker-LICENSE.txt). Model cards: Face Mesh V2 and Blendshape V2
-(Apache 2.0).
+FaceLandmarker-LICENSE.txt). Model cards: Face Mesh V2, Blendshape V2 and
+BlazeFace Short Range (Apache 2.0).
 
-Changes made for Atelier: the two TFLite graphs (face_landmarks_detector.tflite and
-face_blendshapes.tflite) were rebuilt op by op as Core ML programs, the mesh
-model's weights stored in 16-bit floating point and its outputs flattened. The
-task's face detector (BlazeFace) is not included; Apple's Vision finds the
-faces. Made by Scripts/models/convert_mediapipe_face_landmarker.py in the
+Changes made for Atelier: the three TFLite graphs (face_landmarks_detector.tflite,
+face_blendshapes.tflite and face_detector.tflite) were rebuilt op by op as Core
+ML programs, the mesh and detector models' weights stored in 16-bit floating
+point and the mesh model's outputs flattened. Made by Scripts/models/convert_mediapipe_face_landmarker.py in the
 Atelier repository.

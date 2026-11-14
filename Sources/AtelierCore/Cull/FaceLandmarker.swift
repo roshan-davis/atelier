@@ -31,8 +31,8 @@ public struct FaceExpression: Sendable, Equatable {
 /// the app (Models/FaceMesh.mlpackage and FaceBlendshapes.mlpackage, about 4.5 MB together).
 /// Cull's Advanced checks run it on each face Vision found: the mesh model places 478 points on
 /// a 256 px crop of the face, and the blendshape model turns 146 of them into 52 expression
-/// scores, of which Cull reads blinks, squints and smiles. Google's own face detector isn't used:
-/// Vision has already found the faces.
+/// scores, of which Cull reads blinks, squints and smiles. The task's face detector is
+/// `FaceDetector` (Find Faces).
 public enum FaceLandmarker {
     /// The version is the first 12 hex digits of the .task file's SHA-256.
     static let mesh = BundledModel(name: "FaceMesh", version: "64184e229b26")

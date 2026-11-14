@@ -25,7 +25,7 @@ final class CullFixtureTests: XCTestCase {
         for name in names {
             let url = dir.appendingPathComponent(name)
             let start = Date()
-            var signal = await Culling.analyze(url)
+            var signal = await Culling.analyze(url, finder: .vision)
             let standard = Date().timeIntervalSince(start)
             signal = Culling.analyzeAdvanced(url, signals: signal)
             let advanced = Date().timeIntervalSince(start) - standard
@@ -68,6 +68,23 @@ final class CullFixtureTests: XCTestCase {
         let eyes = try await self.eyes("kids-group", ["base.jpg", "mixed.jpg"])
         XCTAssertEqual(eyes["base.jpg"], [.open, .open, .open])
         XCTAssertEqual(eyes["mixed.jpg"]?[1], .closed)
+    }
+
+    /// Find Faces: how many faces each finder found in every test photo, for comparing Apple
+    /// Vision with MediaPipe (AT-061). Prints only.
+    func testFaceFindersPrint() async throws {
+        let root = try folder()
+        let sets = (try? FileManager.default.contentsOfDirectory(atPath: root.path).sorted()) ?? []
+        for set in sets {
+            let files = (try? FileManager.default.contentsOfDirectory(atPath: root.appendingPathComponent(set).path).sorted()) ?? []
+            for name in files where name.lowercased().hasSuffix(".jpg") {
+                let signals = await Culling.analyze(root.appendingPathComponent(set).appendingPathComponent(name))
+                let counts = CullFaceFinder.allCases.map { finder in
+                    "\(finder.title) \(signals.faceSets[finder]?.faces.count ?? 0)"
+                }
+                print("cull finders \(set)/\(name): \(counts.joined(separator: ", ")), people \(signals.people.count)")
+            }
+        }
     }
 
     /// Profiles and the crowd only print, for tuning: nothing here is certain enough to assert.
