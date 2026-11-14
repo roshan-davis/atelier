@@ -580,13 +580,6 @@ final class CullModel: ObservableObject, Identifiable {
         }
     }
 
-    /// "Sharpness 82% of the group's best" (the eyes' with Advanced checks), or nil for a photo
-    /// on its own or not measured yet.
-    func sharpnessWords(of id: Int) -> String? {
-        guard let a = assessments[id], let group = groups.first(where: { $0.contains(id) }), group.count > 1 else { return nil }
-        return "\(a.onEyes ? "Eye sharpness" : "Sharpness") \(Int((a.sharpness * 100).rounded()))% of the group's best"
-    }
-
     /// What was measured for the focused photo, for the preview's caption.
     func caption(of id: Int) -> String? {
         guard let assessment = assessments[id] else { return nil }

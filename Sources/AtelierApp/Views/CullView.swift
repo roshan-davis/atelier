@@ -91,8 +91,10 @@ struct CullView: View {
                     .font(embedded ? .headline : .body)
                     .foregroundStyle(embedded ? .primary : .secondary)
                     .monospacedDigit()
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
-            Spacer()
+            Spacer(minLength: 16)
             VStack(alignment: .trailing, spacing: 8) {
                 if !cull.isReview {
                     HStack(spacing: 16) {
@@ -118,37 +120,63 @@ struct CullView: View {
                         .help("How alike shots must look to be grouped")
                     }
                 }
-                // Which photo of each group is suggested; grouping doesn't change with it.
-                HStack(spacing: 16) {
-                    Picker("Pick By", selection: $cull.pickBy) {
-                        ForEach(CullPick.allCases) { pick in
-                            Text(pick.title).tag(pick)
-                        }
+                // How faces are found and which photo of each group is suggested; grouping
+                // doesn't change with these. One row when it fits, else two, never wrapped.
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 20) {
+                        findFacesPicker
+                        pickByPicker
+                        advancedToggle
                     }
-                    .pickerStyle(.menu)
-                    .fixedSize()
-                    .disabled(cull.isAnalyzing)
-                    .help("How the suggested keeper of each group is chosen. \(cull.pickBy.title): \(cull.pickBy.help)")
-                    Picker("Find Faces", selection: $cull.faceFinder) {
-                        ForEach(CullFaceFinder.allCases) { finder in
-                            Text(finder.title).tag(finder)
+                    VStack(alignment: .trailing, spacing: 8) {
+                        HStack(spacing: 20) {
+                            findFacesPicker
+                            pickByPicker
                         }
+                        advancedToggle
                     }
-                    .pickerStyle(.menu)
-                    .fixedSize()
-                    .help("Which face detector finds the faces Cull checks. \(cull.faceFinder.title): \(cull.faceFinder.help). "
-                          + "Every photo is read with each, so switching only picks again.")
-                    Toggle("Advanced checks (slower)", isOn: $cull.advanced)
-                        .toggleStyle(.checkbox)
-                        .help("Reads the eyes of every grouped photo again from a large copy: small faces in group "
-                              + "shots get checked, Sharpness compares the eyes themselves, and a built-in face model "
-                              + "reads blinks and smiles (needed for Best Expression). Roughly a fifth of a second "
-                              + "more per grouped photo; single shots are skipped.")
                 }
             }
+            // The controls keep their width; the title and subtitle give way (truncate).
+            .layoutPriority(1)
         }
+        .fixedSize(horizontal: false, vertical: true)
         .padding(.horizontal, 20)
         .padding(.vertical, 14)
+    }
+
+    private var pickByPicker: some View {
+        Picker("Pick By", selection: $cull.pickBy) {
+            ForEach(CullPick.allCases) { pick in
+                Text(pick.title).tag(pick)
+            }
+        }
+        .pickerStyle(.menu)
+        .fixedSize()
+        .disabled(cull.isAnalyzing)
+        .help("How the suggested keeper of each group is chosen. \(cull.pickBy.title): \(cull.pickBy.help)")
+    }
+
+    private var findFacesPicker: some View {
+        Picker("Find Faces", selection: $cull.faceFinder) {
+            ForEach(CullFaceFinder.allCases) { finder in
+                Text(finder.title).tag(finder)
+            }
+        }
+        .pickerStyle(.menu)
+        .fixedSize()
+        .help("Which face detector finds the faces Cull checks. \(cull.faceFinder.title): \(cull.faceFinder.help). "
+              + "Every photo is read with each, so switching only picks again.")
+    }
+
+    private var advancedToggle: some View {
+        Toggle("Advanced checks (slower)", isOn: $cull.advanced)
+            .toggleStyle(.checkbox)
+            .fixedSize()
+            .help("Reads the eyes of every grouped photo again from a large copy: small faces in group "
+                  + "shots get checked, Sharpness compares the eyes themselves, and a built-in face model "
+                  + "reads blinks and smiles (needed for Best Expression). Roughly a fifth of a second "
+                  + "more per grouped photo; single shots are skipped.")
     }
 
     private var subtitle: String {
@@ -274,13 +302,11 @@ struct CullView: View {
         let measured = showSubject ? cull.focused.flatMap { id in cull.photos[id].signals.map { (id, $0) } } : nil
         guard notes != nil || measured != nil else { return nil }
         let faces = measured.map { cull.previewFaces(of: $0.0) } ?? []
-        let sharpness = measured.flatMap { cull.sharpnessWords(of: $0.0) }
         let assessment = measured.flatMap { cull.assessments[$0.0] }
         return { frame in
             AnyView(ZStack {
                 if let measured {
-                    CullSubjectOverlay(frame: frame, subject: assessment?.subject ?? measured.1.subject,
-                                       sharedRegion: assessment?.sharedRegion ?? false, faces: faces, sharpness: sharpness)
+                    CullSubjectOverlay(frame: frame, subject: assessment?.subject ?? measured.1.subject, faces: faces)
                 }
                 if let notes {
                     NoteMarkersOverlay(notes: notes, frame: frame)
@@ -339,6 +365,14 @@ struct CullView: View {
         .fixedSize()
     }
 
+    private func subjectLine(_ id: Int) -> String? {
+        guard let signals = cull.photos[id].signals else { return nil }
+        let assessment = cull.assessments[id]
+        return CullSubjectOverlay.describe(subject: assessment?.subject ?? signals.subject,
+                                           sharedRegion: assessment?.sharedRegion ?? false,
+                                           faceCount: signals.faces.count)
+    }
+
     private func previewBar(_ id: Int) -> some View {
         let photo = cull.photos[id]
         let kept = cull.kept.contains(id)
@@ -362,6 +396,15 @@ struct CullView: View {
                         .lineLimit(1)
                         .truncationMode(.tail)
                         .help(caption)
+                }
+                // What Show Subject draws, in words (no text on the photo).
+                if showSubject, let line = subjectLine(id) {
+                    Text(line)
+                        .font(.caption)
+                        .foregroundStyle(CullSubjectOverlay.subjectColor)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .help(line + "\n" + CullSubjectOverlay.legend)
                 }
                 // Why it isn't kept, as its note will say when the cull ends.
                 if let reasons = cull.reasons(of: id), !reasons.isEmpty {

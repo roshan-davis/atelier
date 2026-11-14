@@ -47,7 +47,8 @@ struct NoteMarkersOverlay: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .clipped()
+        // Cut to the photo, so a label never reaches the bars or the panel beside it.
+        .clipShape(PhotoClip(rect: rect))
         .allowsHitTesting(false)
     }
 
