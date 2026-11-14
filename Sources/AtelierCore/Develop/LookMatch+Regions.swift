@@ -24,6 +24,8 @@ public enum LookMatchNotice: Sendable, Hashable {
     case noSkinInPhoto
     case noSkinInReference
     case skinMatchLimited
+    /// Match Skin Tone brought the skin closer but its sliders' limits stopped it short.
+    case skinMatchPartial
     /// Subject & Background found no subject in the photo; the whole photo was matched.
     case noSubjectInPhoto
     /// Subject & Background found no subject in the reference; the whole photo was matched.
@@ -566,6 +568,7 @@ extension LookMatcher {
             fitSubject(&current, options: options, reference: subjectReference, measure: subjectSample)
         }
 
+        var skinFit: SkinFit?
         if let skin, !isCancelled() {
             let size = CGSize(width: baseImage.width, height: baseImage.height)
             let space = MaskSpace(sourceSize: session.sourceSize, crop: base.crop ?? .init(),
@@ -590,9 +593,15 @@ extension LookMatcher {
                     protect(skin, in: &current, from: base, asShot: asShot, options: options, measure: whole)
                 }
             } else if let referenceSkin = target.skin {
-                let fit = fitSkin(skin, to: referenceSkin, in: &current, space: space,
-                                  measure: whole, bodySkin: bodySkin, isCancelled: isCancelled)
-                if fit.outcome == .unchanged { notices.insert(.skinMatchLimited) }
+                let limit = target.whole.isColorStudy ? studySkinShift : maxSkinShift
+                let fit = fitSkin(skin, to: referenceSkin, in: &current, space: space, measure: whole,
+                                  limit: limit, bodySkin: bodySkin, isCancelled: isCancelled)
+                switch fit.outcome {
+                case .unchanged: notices.insert(.skinMatchLimited)
+                case .partial: notices.insert(.skinMatchPartial)
+                case .matched: break
+                }
+                skinFit = fit
             }
         }
         // The stand-in is close but not exact: check with a real render, and settle Exposure
@@ -603,6 +612,13 @@ extension LookMatcher {
             usesEmulator = false
             if let guess, let real = whole(current) { offBy = guess.distance(to: real) }
             if options.tone { fitExposure(&current, reference: reference, measure: sample) }
+            // The skin was fitted on the stand-in: check it on a real render, and step once more
+            // if it is off.
+            if options.skinMode == .match, let fit = skinFit, fit.outcome != .unchanged, !isCancelled(),
+               let settled = settleSkin(&current, fit: fit, measure: whole) {
+                notices.remove(.skinMatchPartial)
+                if settled == .partial { notices.insert(.skinMatchPartial) }
+            }
             if options.skinMode == .protect, let skin, let now = whole(current), !skin.isWithin(now) {
                 protect(skin, in: &current, from: base, asShot: asShot, options: options, measure: whole)
             }

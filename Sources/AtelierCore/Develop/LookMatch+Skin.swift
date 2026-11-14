@@ -14,6 +14,8 @@ struct SkinFit {
 
     var outcome: Outcome
     var solver: SkinSolver?
+    /// How far the skin was from its target before the fit.
+    var startError = 0.0
 }
 
 /// The joint skin fit: the skin masks' Temp, Tint and Saturation, solved together so every tone's
@@ -311,11 +313,35 @@ extension LookMatcher {
             if !stepped { break }
         }
 
-        guard improved, !isCancelled() else { return SkinFit(outcome: .unchanged, solver: solver) }
+        guard improved, !isCancelled() else { return SkinFit(outcome: .unchanged, solver: solver, startError: startError) }
         // A mask that moved nothing isn't worth adding.
         best.masks.removeAll { added.contains($0.name) && !$0.hasAdjustments }
         settings = best
-        return SkinFit(outcome: outcome(error: error, start: startError, solver: solver), solver: solver)
+        return SkinFit(outcome: outcome(error: error, start: startError, solver: solver), solver: solver,
+                       startError: startError)
+    }
+
+    /// The skin fit runs on the stand-in (`LookEmulator`), which is close but not exact. One real
+    /// render checks the skin; when it is off, one more step from the slopes the fit already
+    /// measured, kept only if the real render comes closer (one or two more renders). Nil when
+    /// there is nothing to check.
+    static func settleSkin(_ settings: inout DevelopSettings, fit: SkinFit,
+                           measure: (DevelopSettings) -> LookSample?) -> SkinFit.Outcome? {
+        guard let solver = fit.solver, !solver.jacobian.isEmpty, let sample = measure(settings),
+              let colors = solver.colors(sample) else { return nil }
+        var error = SkinSolver.norm(solver.residual(colors))
+        if error >= solver.closeEnough, let delta = solver.step(solver.residual(colors)) {
+            for fraction in [1.0, 0.5] {
+                let trial = solver.applying(delta, fraction: fraction, to: settings)
+                guard trial != settings, let next = measure(trial).flatMap(solver.colors) else { continue }
+                let nextError = SkinSolver.norm(solver.residual(next))
+                guard nextError < error else { continue }
+                settings = trial
+                error = nextError
+                break
+            }
+        }
+        return outcome(error: error, start: fit.startError, solver: solver)
     }
 
     /// Matched when the tones are close or most of the way there; partial when the sliders'
@@ -325,10 +351,16 @@ extension LookMatcher {
     }
 
     /// Rounds of the joint skin fit, each with freshly measured slopes.
-    static let skinRounds = 3
+    static let skinRounds = 4
 
-    /// The most Match Skin Tone moves each skin slider (Temp, Tint, Saturation) from where it was.
+    /// The most Match Skin Tone moves each skin slider (Temp, Tint, Saturation) from where it was,
+    /// for a photo reference: a reference whose skin sits under very different light shouldn't
+    /// paint the face.
     static let maxSkinShift = 35.0
+    /// The same for a built-in study, whose skin colors are drawn on purpose: Matrix's olive skin
+    /// is about 55° of hue from an ordinary face and Fury Road's highlights need about 1.7 × the
+    /// chroma, which ±35 couldn't reach (Rosh, Nov 14, 2026).
+    static let studySkinShift = 60.0
     /// Protect Skin Tones' skin masks undo the look on the face, so they may use the sliders'
     /// whole range: at 35 they couldn't undo a strong Temp/Tint, and Protect then pulled the
     /// whole match back.
