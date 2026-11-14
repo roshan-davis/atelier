@@ -137,8 +137,9 @@ struct NotesOverlay: View {
     let assetID: Int64?
     /// "DSC_0101.NEF" or "DSC_0101.NEF · 12 selected".
     let subtitle: String
-    /// Every photo a new note goes to (the selection), the shown one included.
-    let addTargets: [Int64]
+    /// Every photo a new note goes to (the selection), the shown one included. Asked only when
+    /// a note is started, so a large selection costs nothing while the panel just shows.
+    let addTargets: () -> [Int64]
     /// Why the photo can't take notes yet (a photo still being imported), shown instead of them.
     var unavailable: String? = nil
     @Binding var request: NoteRequest?
@@ -151,7 +152,7 @@ struct NotesOverlay: View {
     @State private var drag: CGSize = .zero
     @State private var resizeStart: CGSize?
 
-    init(catalog: Catalog, assetID: Int64?, subtitle: String, addTargets: [Int64], unavailable: String? = nil,
+    init(catalog: Catalog, assetID: Int64?, subtitle: String, addTargets: @escaping () -> [Int64], unavailable: String? = nil,
          request: Binding<NoteRequest?> = .constant(nil)) {
         self.assetID = assetID
         self.subtitle = subtitle
@@ -224,7 +225,7 @@ struct NotesPanelView: View {
     let subtitle: String
     let unavailable: String?
     let corner: NotesCorner
-    let addTargets: [Int64]
+    let addTargets: () -> [Int64]
     let moved: (CGSize) -> Void
     let dropped: (CGSize) -> Void
     let resized: (CGSize) -> Void
@@ -276,12 +277,11 @@ struct NotesPanelView: View {
                     .help("Finish this note (Esc or ⌘Return)")
                     .cursor(.link)
             } else if unavailable == nil {
-                Button { notes.startNewNote(alsoFor: addTargets) } label: {
+                Button { notes.startNewNote(alsoFor: addTargets()) } label: {
                     Image(systemName: "plus").font(.system(size: 11, weight: .bold))
                 }
                 .buttonStyle(.plain)
-                .help(addTargets.count > 1 ? "Add a note to the \(addTargets.count) selected photos (⌥⇧⌘N)"
-                                           : "Add a note (⌥⇧⌘N)")
+                .help("Add a note, to every selected photo (⌥⇧⌘N)")
                 .cursor(.link)
             }
             Button(action: hide) {
@@ -307,7 +307,7 @@ struct NotesPanelView: View {
     @ViewBuilder private var content: some View {
         if let unavailable {
             placeholder(unavailable)
-        } else if let editing = notes.editingID, let note = notes.notes.first(where: { $0.id == editing }) {
+        } else if notes.isEditing {
             VStack(alignment: .leading, spacing: 4) {
                 if notes.alsoFor.count > 0 {
                     Text("Adding to \(notes.alsoFor.count + 1) photos")
@@ -317,7 +317,9 @@ struct NotesPanelView: View {
                 NoteEditor(text: notes.draft, font: fontChoice, palette: palette,
                            changed: { notes.draftChanged($0) }, finished: { notes.finishEditing() })
                     .cursor(.text)
-                meta(note)
+                if let editing = notes.editingID, let note = notes.notes.first(where: { $0.id == editing }) {
+                    meta(note)
+                }
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
@@ -327,7 +329,7 @@ struct NotesPanelView: View {
             if written.isEmpty && notes.recentlyDeleted == nil {
                 placeholder("No notes yet. Click + to write one.")
                     .contentShape(Rectangle())
-                    .onTapGesture { notes.startNewNote(alsoFor: addTargets) }
+                    .onTapGesture { notes.startNewNote(alsoFor: addTargets()) }
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 10) {

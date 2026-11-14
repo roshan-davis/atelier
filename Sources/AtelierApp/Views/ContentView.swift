@@ -74,7 +74,7 @@ struct ContentView: View {
                         .overlay {
                             NotesOverlay(catalog: model.catalog,
                                          assetID: model.mode == .hdr || model.rows.isEmpty ? nil : model.focusedID,
-                                         subtitle: model.notesSubtitle, addTargets: model.noteTargets,
+                                         subtitle: model.notesSubtitle, addTargets: { model.noteTargets },
                                          request: $model.noteRequest)
                         }
                         // A chat app's change, with Undo (Settings > Agents, AT-050c).

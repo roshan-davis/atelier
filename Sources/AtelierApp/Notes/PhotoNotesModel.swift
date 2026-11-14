@@ -9,10 +9,20 @@ import GRDB
 final class PhotoNotesModel: ObservableObject {
     let catalog: Catalog
     @Published private(set) var assetID: Int64?
-    /// Newest first. The note being typed is included (it may still be empty).
+    /// Newest first, as saved.
     @Published private(set) var notes: [PhotoNote] = []
     /// The note open for typing, and its text as typed (saved shortly after each change).
-    @Published private(set) var editingID: Int64?
+    @Published private(set) var editingID: Int64? {
+        didSet { if editingID != oldValue { editingSeen = false } }
+    }
+    /// The catalog has shown the note being typed at least once, so its absence later means it
+    /// was deleted elsewhere (and not that the list is from before it was added).
+    private var editingSeen = false
+    /// A new note is being typed that has no text yet, so it isn't in the catalog. Its first
+    /// save adds it (then `editingID` is set), so an empty note is never written.
+    @Published private(set) var isNew = false
+    /// Set once the new note's first save added it: later saves of the same typing aren't edits.
+    private var typingNewNote = false
     @Published private(set) var draft = ""
     /// The note just deleted, while its Undo shows.
     @Published private(set) var recentlyDeleted: PhotoNote?
@@ -33,7 +43,7 @@ final class PhotoNotesModel: ObservableObject {
         undoTimer?.cancel()
     }
 
-    var isEditing: Bool { editingID != nil }
+    var isEditing: Bool { editingID != nil || isNew }
 
     /// Shows another photo's notes. Typing in progress is saved first.
     func show(_ id: Int64?) {
@@ -52,9 +62,15 @@ final class PhotoNotesModel: ObservableObject {
                     guard let self, !Task.isCancelled, self.assetID == id else { return }
                     self.notes = notes
                     // The note being typed was deleted elsewhere (an agent's undo): stop typing.
-                    if let editing = self.editingID, !notes.contains(where: { $0.id == editing }) {
-                        self.editingID = nil
-                        self.alsoFor = []
+                    if let editing = self.editingID {
+                        if notes.contains(where: { $0.id == editing }) {
+                            self.editingSeen = true
+                        } else if self.editingSeen {
+                            self.pendingSave?.cancel()
+                            self.editingID = nil
+                            self.typingNewNote = false
+                            self.alsoFor = []
+                        }
                     }
                 }
             } catch {}
@@ -66,16 +82,15 @@ final class PhotoNotesModel: ObservableObject {
     func startNewNote(alsoFor others: [Int64] = []) {
         guard let assetID else { return }
         finishEditing()
-        guard let note = try? catalog.addEmptyNote(to: assetID), let id = note.id else { return }
-        notes.insert(note, at: 0)
         alsoFor = others.filter { $0 != assetID }
         draft = ""
-        editingID = id
+        isNew = true
     }
 
     func beginEditing(_ note: PhotoNote) {
         guard let id = note.id, id != editingID else { return }
         finishEditing()
+        typingNewNote = false
         draft = note.text
         editingID = id
     }
@@ -95,18 +110,35 @@ final class PhotoNotesModel: ObservableObject {
     private func saveDraft() {
         pendingSave?.cancel()
         pendingSave = nil
+        if isNew {
+            guard let assetID, !NoteText.cleaned(draft).isEmpty,
+                  let note = (try? catalog.addNote(draft, to: [assetID]))?.first, let id = note.id else { return }
+            isNew = false
+            typingNewNote = true
+            editingID = id
+            return
+        }
         guard let id = editingID else { return }
-        _ = try? catalog.updateNote(id, text: draft)
+        _ = try? catalog.updateNote(id, text: draft, marksEdited: !typingNewNote)
     }
 
     /// Esc, ⌘Return, clicking Done, another photo or hiding the panel. An empty note goes away;
     /// a new note's text is also added to the other selected photos.
     func finishEditing() {
-        guard let id = editingID else { return }
-        let text = NoteText.cleaned(draft)
         pendingSave?.cancel()
         pendingSave = nil
-        _ = try? catalog.updateNote(id, text: text)
+        if isNew {
+            let text = NoteText.cleaned(draft)
+            if let assetID, !text.isEmpty { _ = try? catalog.addNote(text, to: [assetID] + alsoFor) }
+            isNew = false
+            alsoFor = []
+            draft = ""
+            return
+        }
+        guard let id = editingID else { return }
+        let text = NoteText.cleaned(draft)
+        _ = try? catalog.updateNote(id, text: text, marksEdited: !typingNewNote)
+        typingNewNote = false
         let removed = (try? catalog.finishNote(id)) ?? false
         if !removed, !alsoFor.isEmpty { _ = try? catalog.addNote(text, to: alsoFor) }
         editingID = nil
@@ -129,13 +161,14 @@ final class PhotoNotesModel: ObservableObject {
         guard let id = note.id else { return }
         if id == editingID {
             pendingSave?.cancel()
+            typingNewNote = false
             editingID = nil
             alsoFor = []
             draft = ""
         }
         guard let deleted = try? catalog.deleteNote(id) else { return }
         notes.removeAll { $0.id == id }
-        // An empty note being typed was never written: no sound, no Undo.
+        // A note emptied while typing has nothing to bring back: no sound, no Undo.
         guard !NoteText.cleaned(deleted.text).isEmpty else { return }
         DeleteFeedback.play(.remove)
         recentlyDeleted = deleted

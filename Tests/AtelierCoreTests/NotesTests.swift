@@ -69,19 +69,20 @@ final class NotesTests: XCTestCase {
         XCTAssertNil(try catalog.updateNote(999_999, text: "gone"))
     }
 
-    func testEmptyNoteIsRemovedWhenTypingEndsWithNothing() async throws {
+    func testEmptiedNoteIsRemovedWhenTypingEnds() async throws {
         let (catalog, ids) = try await makeLibrary(["DSC_1.JPG"])
-        let empty = try catalog.addEmptyNote(to: ids[0])
-        XCTAssertTrue(try catalog.assetRows(filter: LibraryFilter(notes: .hasNotes)).isEmpty,
-                      "an empty note being typed doesn't count as a note")
-        XCTAssertTrue(try catalog.finishNote(try XCTUnwrap(empty.id)))
-        XCTAssertTrue(try catalog.notes(for: ids[0]).isEmpty)
+        XCTAssertTrue(try catalog.addNote("  \n ", to: ids).isEmpty, "blank text adds nothing")
+        XCTAssertTrue(try catalog.assetRows(filter: LibraryFilter(notes: .hasNotes)).isEmpty)
 
-        let typed = try catalog.addEmptyNote(to: ids[0])
-        let saved = try XCTUnwrap(try catalog.updateNote(try XCTUnwrap(typed.id), text: "Eyes closed"))
-        XCTAssertNil(saved.editedAt, "the first words typed into a new note aren't an edit")
-        XCTAssertFalse(try catalog.finishNote(try XCTUnwrap(typed.id)))
-        XCTAssertEqual(try catalog.notes(for: ids[0]).map(\.text), ["Eyes closed"])
+        let note = try XCTUnwrap(try catalog.addNote("Eyes closed", to: ids).first)
+        let id = try XCTUnwrap(note.id)
+        XCTAssertNil(note.editedAt)
+        XCTAssertFalse(try catalog.finishNote(id))
+        XCTAssertNotNil(try catalog.updateNote(id, text: "Eyes closed, soft")?.editedAt)
+        _ = try catalog.updateNote(id, text: "")
+        XCTAssertTrue(try catalog.finishNote(id), "a note emptied while typing goes away when typing ends")
+        XCTAssertTrue(try catalog.notes(for: ids[0]).isEmpty)
+        XCTAssertTrue(try catalog.assetRows(filter: LibraryFilter(notes: .hasNotes)).isEmpty)
     }
 
     func testNotesFollowVirtualCopiesAndThenStayTheirOwn() async throws {
@@ -170,7 +171,8 @@ final class NotesTests: XCTestCase {
         try catalog.addNote("First note", to: ids, at: Date(timeIntervalSince1970: 1_800_000_000))
         try catalog.addNote("Second, by an app", source: .agent, appName: "Claude", to: ids,
                             at: Date(timeIntervalSince1970: 1_800_000_100))
-        _ = try catalog.addEmptyNote(to: ids[0])
+        let emptied = try XCTUnwrap(try catalog.addNote("x", to: ids).first?.id)
+        _ = try catalog.updateNote(emptied, text: "")
         let result = try catalog.writeXMPSidecars(for: ids)
         XCTAssertEqual(result.written, 1)
         let dirty = try catalog.writer.read { db in

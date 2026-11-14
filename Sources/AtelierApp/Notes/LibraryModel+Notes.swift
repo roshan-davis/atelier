@@ -27,7 +27,8 @@ extension LibraryModel {
 
     /// The panel's second line: the photo's name, and how many are selected in the Grid.
     var notesSubtitle: String {
-        let name = rows.first { $0.id == focusedID }?.filename ?? detail?.asset.filename ?? ""
+        // From the loaded detail, never a search of the rows: this is read on every redraw.
+        let name = detail.flatMap { $0.asset.id == focusedID ? $0.asset.filename : nil } ?? ""
         let others = mode == .grid ? selection.count : 0
         return others > 1 ? "\(name) · \(others) selected" : name
     }

@@ -103,33 +103,27 @@ extension Catalog {
         }
     }
 
-    /// Adds an empty note the person is about to type in. It is the only way a note is empty;
-    /// `finishNote` removes it again if nothing was typed.
-    public func addEmptyNote(to assetID: Int64, at date: Date = Date()) throws -> PhotoNote {
-        try writer.write { db in
-            var note = PhotoNote(assetId: assetID, text: "", createdAt: date)
-            try note.insert(db)
-            return note
-        }
-    }
-
     /// Changes a note's text and its edited time. Returns the note as saved, or nil when it is gone.
     @discardableResult
-    public func updateNote(_ id: Int64, text: String, at date: Date = Date()) throws -> PhotoNote? {
+    /// `marksEdited: false` while a note is still being typed for the first time.
+    public func updateNote(_ id: Int64, text: String, at date: Date = Date(),
+                           marksEdited: Bool = true) throws -> PhotoNote? {
         try writer.write { db in
             guard var note = try PhotoNote.fetchOne(db, key: id) else { return nil }
             guard note.text != text else { return note }
             // A note typed into for the first time isn't "edited".
-            if !note.text.isEmpty { note.editedAt = date }
+            if marksEdited, !note.text.isEmpty { note.editedAt = date }
             note.text = text
-            try note.update(db)
+            // Only these two columns, so the Library's photo list (which reads only whether a
+            // note exists) isn't fetched again each time typing pauses.
+            try db.execute(sql: "UPDATE note SET text = ?, editedAt = ? WHERE id = ?",
+                           arguments: [note.text, note.editedAt, id])
             try Self.markNotesChanged(db, [note.assetId])
             return note
         }
     }
 
-    /// The person finished typing: an empty note is removed (it was never written), any other
-    /// one stays. Returns true when it was removed.
+    /// The person finished typing: a note emptied while typing is removed, any other one stays. Returns true when it was removed.
     @discardableResult
     public func finishNote(_ id: Int64) throws -> Bool {
         try writer.write { db in
@@ -190,8 +184,11 @@ extension Catalog {
         }
     }
 
-    /// SQL that is true when the photo `alias` has at least one note with text.
+    /// SQL that is true when the photo `alias` has a note. It reads only `note.assetId`, so the
+    /// Library's photo list is fetched again when a note is added or deleted, not while one is
+    /// typed (a note is only written once it has text; one emptied while typing still counts
+    /// until typing ends and `finishNote` removes it).
     static func hasNotesCondition(_ alias: String = "asset") -> String {
-        "EXISTS (SELECT 1 FROM note WHERE note.assetId = \(alias).id AND note.text != '')"
+        "EXISTS (SELECT 1 FROM note WHERE note.assetId = \(alias).id)"
     }
 }
