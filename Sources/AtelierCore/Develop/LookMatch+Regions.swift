@@ -188,7 +188,18 @@ public struct LookSkin: Sendable {
     /// Skin and the feature parts, the masks took some shaded teeth and brow edges and left
     /// other pockets out, so the face showed disjointed colors (Rosh, Nov 11, 2026). Now one base
     /// color covers the whole face and the shadow and highlight masks blend in on top of it.
-    static let maskSelection = DevelopSettings.PeopleSelection(parts: [.entireFace], feather: 20)
+    /// With `bodySkin` (the built-in parts model is loaded, so Body Skin is the model's, not a
+    /// color guess that leaks into warm clothes) the neck, arms and hands take the same change:
+    /// a face matched alone left a line at the collar (Rosh, Nov 14, 2026). Skin is still
+    /// measured on Face Skin, so the face decides the change and the neck follows it.
+    static func maskSelection(bodySkin: Bool) -> DevelopSettings.PeopleSelection {
+        DevelopSettings.PeopleSelection(parts: bodySkin ? [.entireFace, .bodySkin] : [.entireFace], feather: 20)
+    }
+
+    /// Taken back out of Match Skin Tone's masks: the eyes' whites and irises. Entire Face
+    /// includes them so the skin has no holes, but a skin color move would tint the whites.
+    /// Protect Skin Tones keeps them in, since it holds the face as it was.
+    static let eyesSelection = DevelopSettings.PeopleSelection(parts: [.eyeSclera, .iris], feather: 5)
 
     /// Select People's face skin on an image, at `width` × `height`, with the faces it found; nil
     /// when it finds no one.
@@ -527,6 +538,9 @@ extension LookMatcher {
             let size = CGSize(width: baseImage.width, height: baseImage.height)
             let space = MaskSpace(sourceSize: session.sourceSize, crop: base.crop ?? .init(),
                                   rect: CGRect(origin: .zero, size: size), outputSize: size)
+            // Body Skin only from the built-in parts model: found by color alone it can take a
+            // warm scarf or coat touching the neck.
+            let bodySkin = skin.usesPeople && PeopleParts.isAvailable
             if options.skinMode == .protect {
                 // Hold the skin at its own colors, tone by tone, with the skin masks, so the rest
                 // of the photo keeps the full look. Only if that can't bring it back inside the
@@ -537,14 +551,15 @@ extension LookMatcher {
                     // The masks may move as far as needed: they undo the look on the face,
                     // rather than paint the face like Match Skin Tone does.
                     _ = fitSkin(skin, to: skin, in: &current, space: space, measure: whole,
-                                limit: protectSkinShift, holdsLightness: true, isCancelled: isCancelled)
+                                limit: protectSkinShift, holdsLightness: true, bodySkin: bodySkin,
+                                isCancelled: isCancelled)
                 }
                 if !isCancelled(), let now = whole(current), !skin.isWithin(now) {
                     protect(skin, in: &current, from: base, asShot: asShot, options: options, measure: whole)
                 }
             } else if let referenceSkin = target.skin {
                 if !fitSkin(skin, to: referenceSkin, in: &current, space: space,
-                            measure: whole, isCancelled: isCancelled) {
+                            measure: whole, bodySkin: bodySkin, isCancelled: isCancelled) {
                     notices.insert(.skinMatchLimited)
                 }
             }

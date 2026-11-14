@@ -13,7 +13,7 @@ extension LookMatcher {
     static func fitSkin(_ skin: LookSkin, to reference: LookSkin, in settings: inout DevelopSettings,
                         space: MaskSpace, measure: (DevelopSettings) -> LookSample?,
                         limit: Double = maxSkinShift, holdsLightness: Bool = false,
-                        isCancelled: () -> Bool) -> Bool {
+                        bodySkin: Bool = false, isCancelled: () -> Bool) -> Bool {
         // Vision's face box is tight: brows to chin, cheek to cheek, no forehead. The ellipse is
         // larger than the box and moved up over the forehead, with a short feather, so the
         // whole face gets the full effect (inside 70% of the radius) and it fades out past the
@@ -27,9 +27,16 @@ extension LookMatcher {
                                         height: face.height * space.rect.height * 0.75, feather: 30)
             return DevelopSettings.MaskComponent(.radial(gradient))
         }
-        // The Entire Face in one piece, so the base color has no holes and takes nothing by
-        // accident; the tone masks below blend in on top of it.
-        let faces = skin.usesPeople ? [DevelopSettings.MaskComponent(.people(LookSkin.maskSelection))] : radials
+        // The Entire Face in one piece (and the body's skin with it, when the parts model found
+        // it), so the base color has no holes and takes nothing by accident; the tone masks below
+        // blend in on top of it. Matching leaves the eyes' whites and irises out.
+        var faces = radials
+        if skin.usesPeople {
+            faces = [DevelopSettings.MaskComponent(.people(LookSkin.maskSelection(bodySkin: bodySkin)))]
+            if !holdsLightness {
+                faces.append(DevelopSettings.MaskComponent(.people(LookSkin.eyesSelection), mode: .subtract))
+            }
+        }
         guard reference.toneColors.count == 3, let start = measure(settings) else {
             // Without tones: one mask, the skin's mean color to the reference's.
             return fitMaskColor(LookMatch.skinMaskName, components: faces,
