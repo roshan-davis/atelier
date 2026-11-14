@@ -144,11 +144,23 @@ extension Culling {
     static func sharedSubject(_ group: [CullSignals]) -> CullSubject? {
         guard group.count > 1, !group.allSatisfy({ $0.subject.kind == .faces }),
               group.allSatisfy({ $0.sharpnessGrid != nil }) else { return nil }
-        let regions = group.map(\.subject).filter { $0.kind == .people || $0.kind == .object || $0.kind == .faces }
-        guard let first = regions.first else { return CullSubject(kind: .wholeFrame) }
-        let union = regions.dropFirst().reduce(first.box) { $0.union($1.box) }
-        let kind: CullSubject.Kind = regions.contains { $0.kind == .people || $0.kind == .faces } ? .people : .object
-        return CullSubject(kind: kind, box: union.intersection(CGRect(x: 0, y: 0, width: 1, height: 1)))
+        // Plain loops: chained closures here were too slow for the type checker (Rosh's build).
+        var union: CGRect? = nil
+        var hasPeople = false
+        for signal in group {
+            let subject: CullSubject = signal.subject
+            if subject.kind == .wholeFrame { continue }
+            if subject.kind != .object { hasPeople = true }
+            if let soFar = union {
+                union = soFar.union(subject.box)
+            } else {
+                union = subject.box
+            }
+        }
+        guard let box = union else { return CullSubject(kind: .wholeFrame) }
+        let frame = CGRect(x: 0, y: 0, width: 1, height: 1)
+        let kind: CullSubject.Kind = hasPeople ? .people : .object
+        return CullSubject(kind: kind, box: box.intersection(frame))
     }
 
     /// The photo to suggest keeping in a group, by `pick`.

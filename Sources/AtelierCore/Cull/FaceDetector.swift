@@ -67,19 +67,29 @@ public enum FaceDetector {
     public static func faces(in image: CGImage, region: CGRect = CGRect(x: 0, y: 0, width: 1, height: 1))
         -> [(box: CGRect, score: Double)] {
         let width = Double(image.width), height = Double(image.height)
-        let pixels = CGRect(x: region.minX * width, y: (1 - region.maxY) * height,
-                            width: region.width * width, height: region.height * height)
-            .intersection(CGRect(x: 0, y: 0, width: width, height: height)).integral
+        // All in Double, step by step: mixed CGFloat/Double sums are slow to type-check.
+        let regionX = Double(region.minX) * width
+        let regionY = (1 - Double(region.maxY)) * height
+        let regionW = Double(region.width) * width
+        let regionH = Double(region.height) * height
+        let whole = CGRect(x: 0, y: 0, width: width, height: height)
+        let pixels = CGRect(x: regionX, y: regionY, width: regionW, height: regionH).intersection(whole).integral
         guard pixels.width >= 8, pixels.height >= 8, let part = image.cropping(to: pixels),
               let input = letterbox(part) else { return [] }
         let side = Double(max(pixels.width, pixels.height))
-        return run(input).map { found -> (box: CGRect, score: Double) in
+        let originX = Double(pixels.minX), originY = Double(pixels.minY)
+        let unit = CGRect(x: 0, y: 0, width: 1, height: 1)
+        var out: [(box: CGRect, score: Double)] = []
+        for found in run(input) {
             // Square coordinates (top-left) to the image's pixels, then to Vision's.
-            let x = pixels.minX + found.box.minX * side, y = pixels.minY + found.box.minY * side
-            let box = CGRect(x: x / width, y: 1 - (y + found.box.height * side) / height,
-                             width: found.box.width * side / width, height: found.box.height * side / height)
-            return (box.intersection(CGRect(x: 0, y: 0, width: 1, height: 1)), found.score)
+            let x: Double = originX + Double(found.box.minX) * side
+            let y: Double = originY + Double(found.box.minY) * side
+            let w: Double = Double(found.box.width) * side
+            let h: Double = Double(found.box.height) * side
+            let box = CGRect(x: x / width, y: 1 - (y + h) / height, width: w / width, height: h / height)
+            out.append((box: box.intersection(unit), score: found.score))
         }
+        return out
     }
 
     /// `image` scaled into the top-left of a black 128 px square, RGB -1...1, rows from the top.
@@ -87,13 +97,14 @@ public enum FaceDetector {
         guard let context = CGContext(data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: size * 4,
                                       space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
                                       bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return nil }
-        let scale = Double(size) / Double(max(image.width, image.height))
-        let drawn = CGSize(width: Double(image.width) * scale, height: Double(image.height) * scale)
+        let scale: Double = Double(size) / Double(max(image.width, image.height))
+        let drawnWidth: Double = Double(image.width) * scale
+        let drawnHeight: Double = Double(image.height) * scale
         context.setFillColor(CGColor(red: 0, green: 0, blue: 0, alpha: 1))
         context.fill(CGRect(x: 0, y: 0, width: size, height: size))
         context.interpolationQuality = .high
         // The context's origin is bottom left: put the picture against the top edge.
-        context.draw(image, in: CGRect(x: 0, y: Double(size) - drawn.height, width: drawn.width, height: drawn.height))
+        context.draw(image, in: CGRect(x: 0, y: Double(size) - drawnHeight, width: drawnWidth, height: drawnHeight))
         guard let data = context.data else { return nil }
         let bytes = data.bindMemory(to: UInt8.self, capacity: size * size * 4)
         var out = [Float](repeating: 0, count: size * size * 3)
@@ -105,13 +116,13 @@ public enum FaceDetector {
 
     /// The model on one input; boxes in the square's 0...1 coordinates (top-left).
     static func run(_ input: [Float]) -> [(box: CGRect, score: Double)] {
-        guard let model = model.model(),
+        guard let network = Self.model.model(),
               let array = try? MLMultiArray(shape: [1, NSNumber(value: size), NSNumber(value: size), 3], dataType: .float32)
         else { return [] }
         let pointer = array.dataPointer.bindMemory(to: Float.self, capacity: input.count)
         input.withUnsafeBufferPointer { pointer.update(from: $0.baseAddress!, count: input.count) }
         guard let provider = try? MLDictionaryFeatureProvider(dictionary: ["image": MLFeatureValue(multiArray: array)]),
-              let output = try? model.prediction(from: provider),
+              let output = try? network.prediction(from: provider),
               let regressors = output.featureValue(for: "regressors")?.multiArrayValue,
               let logits = output.featureValue(for: "classificators")?.multiArrayValue else { return [] }
         return decode(regressors: BundledModel.floats(regressors), logits: BundledModel.floats(logits))
@@ -125,14 +136,16 @@ public enum FaceDetector {
         let n = Double(size)
         var found: [(box: CGRect, score: Double)] = []
         for (i, anchor) in anchors.enumerated() {
-            let logit = Double(max(-80, min(80, logits[i])))
-            let score = 1 / (1 + exp(-logit))
+            let logit: Double = Double(max(-80, min(80, logits[i])))
+            let score: Double = 1 / (1 + exp(-logit))
             guard score >= threshold else { continue }
             let r = i * 16
-            let cx = Double(regressors[r]) / n + anchor.x, cy = Double(regressors[r + 1]) / n + anchor.y
-            let w = Double(regressors[r + 2]) / n, h = Double(regressors[r + 3]) / n
+            let cx: Double = Double(regressors[r]) / n + Double(anchor.x)
+            let cy: Double = Double(regressors[r + 1]) / n + Double(anchor.y)
+            let w: Double = Double(regressors[r + 2]) / n
+            let h: Double = Double(regressors[r + 3]) / n
             guard w > 0, h > 0 else { continue }
-            found.append((CGRect(x: cx - w / 2, y: cy - h / 2, width: w, height: h), score))
+            found.append((box: CGRect(x: cx - w / 2, y: cy - h / 2, width: w, height: h), score: score))
         }
         return suppress(found)
     }
@@ -151,8 +164,10 @@ public enum FaceDetector {
     static func overlap(_ a: CGRect, _ b: CGRect) -> Double {
         let common = a.intersection(b)
         guard !common.isNull else { return 0 }
-        let shared = common.width * common.height
-        let union = a.width * a.height + b.width * b.height - shared
+        let shared: Double = Double(common.width * common.height)
+        let areaA: Double = Double(a.width * a.height)
+        let areaB: Double = Double(b.width * b.height)
+        let union: Double = areaA + areaB - shared
         return union > 0 ? shared / union : 0
     }
 
@@ -160,7 +175,8 @@ public enum FaceDetector {
     /// body box (Vision rectangle), squared up a little so a head isn't cut at the sides.
     static func headRegion(of person: CGRect) -> CGRect {
         let top = CGRect(x: person.minX, y: person.midY, width: person.width, height: person.height / 2)
-        return top.insetBy(dx: -top.width * 0.1, dy: 0).intersection(CGRect(x: 0, y: 0, width: 1, height: 1))
+        let margin: CGFloat = top.width * 0.1
+        return top.insetBy(dx: -margin, dy: 0).intersection(CGRect(x: 0, y: 0, width: 1, height: 1))
     }
 
     /// MediaPipe's faces in `image`: on the whole frame and inside each of `people` (Vision

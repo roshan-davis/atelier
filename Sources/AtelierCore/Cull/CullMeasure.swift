@@ -185,10 +185,12 @@ public struct CullSharpnessGrid: Sendable, Equatable {
     /// touches; 0 when nothing was measured there.
     public func variance(in box: CGRect) -> Double {
         let n = Double(cells)
-        let x0 = max(0, min(cells - 1, Int((box.minX * n).rounded(.down))))
-        let x1 = max(x0, min(cells - 1, Int((box.maxX * n).rounded(.up)) - 1))
-        let y0 = max(0, min(cells - 1, Int(((1 - box.maxY) * n).rounded(.down))))
-        let y1 = max(y0, min(cells - 1, Int(((1 - box.minY) * n).rounded(.up)) - 1))
+        let left = Double(box.minX) * n, right = Double(box.maxX) * n
+        let top = (1 - Double(box.maxY)) * n, bottom = (1 - Double(box.minY)) * n
+        let x0 = clampCell(Int(left.rounded(.down)))
+        let x1 = max(x0, clampCell(Int(right.rounded(.up)) - 1))
+        let y0 = clampCell(Int(top.rounded(.down)))
+        let y1 = max(y0, clampCell(Int(bottom.rounded(.up)) - 1))
         var s = 0.0, q = 0.0, c = 0.0
         for y in y0...y1 {
             for x in x0...x1 {
@@ -201,5 +203,9 @@ public struct CullSharpnessGrid: Sendable, Equatable {
         guard c > 0 else { return 0 }
         let mean = s / c
         return q / c - mean * mean
+    }
+
+    private func clampCell(_ index: Int) -> Int {
+        max(0, min(cells - 1, index))
     }
 }
