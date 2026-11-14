@@ -542,6 +542,25 @@ final class CullModel: ObservableObject, Identifiable {
         _ = try? catalog.setNoteSpot(id, nil)
     }
 
+    /// The focused photo's faces with what culling concluded about each, for the preview's
+    /// Show Subject boxes. Eyes are judged against the photo's group, as for the pick.
+    func previewFaces(of id: Int) -> [CullPreviewFace] {
+        guard photos.indices.contains(id), let signals = photos[id].signals else { return [] }
+        let group = groups.first { $0.contains(id) } ?? [id]
+        let eyes = Culling.eyes(in: group.map { photos[$0].signals?.faces ?? [] })
+        let mine = eyes[group.firstIndex(of: id) ?? 0]
+        return zip(signals.faces, mine).map { face, eyes in
+            CullPreviewFace(box: face.box, eyes: eyes, smile: face.expression?.smile)
+        }
+    }
+
+    /// "Sharpness 82% of the group's best" (the eyes' with Advanced checks), or nil for a photo
+    /// on its own or not measured yet.
+    func sharpnessWords(of id: Int) -> String? {
+        guard let a = assessments[id], let group = groups.first(where: { $0.contains(id) }), group.count > 1 else { return nil }
+        return "\(a.onEyes ? "Eye sharpness" : "Sharpness") \(Int((a.sharpness * 100).rounded()))% of the group's best"
+    }
+
     /// What was measured for the focused photo, for the preview's caption.
     func caption(of id: Int) -> String? {
         guard let assessment = assessments[id] else { return nil }

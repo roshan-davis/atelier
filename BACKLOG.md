@@ -1122,3 +1122,15 @@ So no tool has a private note per photo, and none leaves a readable, editable re
 **Acceptance:** in Cull and in Show Cull Group, double-click, Z, pinch, ⌥-scroll, drag and the zoom buttons work as in Loupe, and the zoom stays when moving to the next photo; Loupe's zoom is unchanged after; Pin to Photo then a click places a numbered marker that follows zoom and pan; Remove Pin and the Note Markers switch work; markers never show in Grid, Loupe, Develop or exports; a culled group's dropped photo with closed eyes shows its reason marker on that face.
 
 **Deferred:** dragging a marker to move it (Pin to Photo again moves it); markers in other views (Rosh chose Cull only).
+
+## AT-061 — Cull preview: Show Subject (what sharpness was measured on)
+
+**Status:** Built, not compiled in the cloud; needs a Mac build and Rosh's acceptance. Approved by Rosh in words (Nov 14, 2026). **Owner:** Claude, chat [Build smarter Cull photo picking](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKBeo6kR8NWm4EtvF5wDHZjJ), branch `claude/project-thread-2n3y8e`. **Depends on:** AT-059, AT-060.
+
+**Evidence:** Rosh (Nov 14, 2026, after testing #133): "Still I see some of the very same images are not in the group and saying subject is this % not sharp and seeing all the shots are sharp - I don't understand what it identified as subject. When it says subject, can it annotate on the preview of cull which one is picked as subject it will help me to test it as well."
+
+**Built:** `CullSignals.subject` (`CullSubject`: faces, Vision's main object, or whole frame, with its box) kept from analysis; Show Subject checkbox (`cull.showSubject`) draws it and each face's eye state on the Cull preview (`CullSubjectOverlay`), with the sharpness against the group's best.
+
+**Suspected cause to confirm with it:** without faces, the subject is Vision's most salient object in each photo on its own, which can be a different object in near-identical shots, so their sharpness is compared on different regions. If Show Subject shows that, the fix is to measure every photo of a group on the same region (proposal, not built). Separately, near-identical shots that aren't grouped are a grouping question (Grouping slider; grouping unchanged by Rosh's decision).
+
+**Acceptance:** Show Subject draws the dashed subject box and face boxes in the right places at Fit and zoomed, labels say what the subject is and the sharpness, and it never shows outside the Cull preview.

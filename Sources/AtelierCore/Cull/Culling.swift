@@ -35,6 +35,8 @@ public struct CullSignals: @unchecked Sendable {
     public var isUtility: Bool
     /// The Advanced checks ran (eyes read from a large copy).
     public var advanced: Bool
+    /// What was taken as the subject for `subjectSharpness`, for the Cull preview to show.
+    public var subject = CullSubject(kind: .wholeFrame)
 
     public init(featurePrint: VNFeaturePrintObservation? = nil, sharpness: Double = 0, faceQuality: Double? = nil,
                 thumbnail: CGImage? = nil, layout: [Float]? = nil, aspect: Float = 1.5, faces: [CullFace] = [],
@@ -63,6 +65,27 @@ public struct CullSignals: @unchecked Sendable {
         let weight = read.reduce(0) { $0 + $1.box.width }
         guard weight > 0 else { return nil }
         return read.reduce(0) { $0 + $1.eyeSharpness! * $1.box.width } / weight
+    }
+}
+
+/// What culling measured as a photo's subject (`CullSignals.subject`).
+public struct CullSubject: Sendable, Equatable {
+    public enum Kind: String, Sendable {
+        /// The faces Vision found (sharpness is read on each face, weighted by size).
+        case faces
+        /// Vision's most salient object (no faces big enough).
+        case object
+        /// Nothing stood out: the whole frame.
+        case wholeFrame
+    }
+
+    public var kind: Kind
+    /// Vision's rectangle (0...1, origin bottom left).
+    public var box: CGRect
+
+    public init(kind: Kind, box: CGRect = CGRect(x: 0, y: 0, width: 1, height: 1)) {
+        self.kind = kind
+        self.box = box
     }
 }
 
@@ -140,7 +163,8 @@ public enum Culling {
         }
         signals.faceQuality = signals.faces.compactMap(\.quality).max()
         if let plane {
-            let subject = subjectRect(faces: signals.faces, saliency: saliency.results?.first, plane: plane)
+            signals.subject = Self.subject(faces: signals.faces, saliency: saliency.results?.first, planeWidth: plane.width)
+            let subject = plane.pixelRect(fromVision: signals.subject.box)
             signals.subjectSharpness = subjectSharpness(faces: signals.faces, fallback: plane.laplacianVariance(in: subject))
             signals.coherence = plane.edgeCoherence(in: subject)
             signals.exposure = plane.exposure()
@@ -203,17 +227,24 @@ public enum Culling {
     /// Where the subject is, in `plane`'s pixels: around the faces, else Vision's most salient
     /// object, else the whole frame.
     static func subjectRect(faces: [CullFace], saliency: VNSaliencyImageObservation?, plane: GrayPlane) -> CGRect {
-        let judged = faces.filter { $0.box.width * Double(plane.width) >= 24 }
+        plane.pixelRect(fromVision: subject(faces: faces, saliency: saliency, planeWidth: plane.width).box)
+    }
+
+    /// The subject as a Vision rectangle (0...1, origin bottom left): around the faces at least
+    /// 24 px wide at the standard size, else Vision's most salient object (unless it covers 90%
+    /// of the frame), else the whole frame.
+    static func subject(faces: [CullFace], saliency: VNSaliencyImageObservation?, planeWidth: Int) -> CullSubject {
+        let judged = faces.filter { $0.box.width * Double(planeWidth) >= 24 }
         if let first = judged.first {
             let union = judged.dropFirst().reduce(first.box) { $0.union($1.box) }
-            return plane.pixelRect(fromVision: union)
+            return CullSubject(kind: .faces, box: union)
         }
         if let objects = saliency?.salientObjects,
            let biggest = objects.max(by: { $0.boundingBox.width * $0.boundingBox.height < $1.boundingBox.width * $1.boundingBox.height }),
            biggest.boundingBox.width * biggest.boundingBox.height < 0.9 {
-            return plane.pixelRect(fromVision: biggest.boundingBox)
+            return CullSubject(kind: .object, box: biggest.boundingBox)
         }
-        return plane.bounds
+        return CullSubject(kind: .wholeFrame)
     }
 
     /// The faces' sharpness weighted by their size (bigger faces are what the photo is of);

@@ -13,6 +13,8 @@ struct CullView: View {
     @AppStorage("cull.listWidth") private var listWidth = 560.0
     /// Notes pinned to a spot show as numbered markers on the preview (Rosh, Nov 14, 2026).
     @AppStorage("cull.noteMarkers") private var showMarkers = true
+    /// Draw what was measured on the preview: the subject and each face's eyes.
+    @AppStorage("cull.showSubject") private var showSubject = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -256,10 +258,24 @@ struct CullView: View {
         }
     }
 
-    /// The note markers over the photo, while Note Markers is on.
+    /// What is drawn over the photo: the measured subject and faces (Show Subject) and the note
+    /// markers (Note Markers), or nil with both off.
     private var markersOverlay: ((PhotoFrame) -> AnyView)? {
-        guard showMarkers, let notes = cull.markerNotes else { return nil }
-        return { frame in AnyView(NoteMarkersOverlay(notes: notes, frame: frame)) }
+        let notes = showMarkers ? cull.markerNotes : nil
+        let measured = showSubject ? cull.focused.flatMap { id in cull.photos[id].signals.map { (id, $0) } } : nil
+        guard notes != nil || measured != nil else { return nil }
+        let faces = measured.map { cull.previewFaces(of: $0.0) } ?? []
+        let sharpness = measured.flatMap { cull.sharpnessWords(of: $0.0) }
+        return { frame in
+            AnyView(ZStack {
+                if let measured {
+                    CullSubjectOverlay(frame: frame, subject: measured.1.subject, faces: faces, sharpness: sharpness)
+                }
+                if let notes {
+                    NoteMarkersOverlay(notes: notes, frame: frame)
+                }
+            })
+        }
     }
 
     /// How to zoom, the Note Markers switch and the zoom buttons, as under Loupe's photo.
@@ -270,6 +286,10 @@ struct CullView: View {
                 .foregroundStyle(cull.placingNote != nil ? Color.accentColor : .secondary)
                 .lineLimit(1)
             Spacer(minLength: 8)
+            Toggle("Show Subject", isOn: $showSubject)
+                .toggleStyle(.checkbox)
+                .help("Draw what Cull measured: a dashed box around the subject its sharpness is read on "
+                      + "(the faces, Vision's main object, or the whole frame) and each face with its eyes")
             Toggle("Note Markers", isOn: $showMarkers)
                 .toggleStyle(.checkbox)
                 .help("Show notes pinned to a spot on the photo as numbered markers. Pin a note with "

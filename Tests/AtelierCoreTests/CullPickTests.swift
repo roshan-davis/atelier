@@ -99,6 +99,17 @@ final class CullPickTests: XCTestCase {
         XCTAssertNil(spots[2], "softness is about the whole photo")
     }
 
+    /// The subject Show Subject draws: the faces big enough to read, else the whole frame
+    /// (Vision's salient object needs a real photo).
+    func testSubjectIsTheFacesElseTheWholeFrame() {
+        let faces = [face(0.1, 0.3), face(0.5, 0.3), CullFace(box: CGRect(x: 0.8, y: 0.1, width: 0.01, height: 0.01))]
+        let subject = Culling.subject(faces: faces, saliency: nil, planeWidth: 1024)
+        XCTAssertEqual(subject.kind, .faces)
+        XCTAssertEqual(subject.box.minX, 0.1, accuracy: 1e-9)
+        XCTAssertEqual(subject.box.maxX, 0.6, accuracy: 1e-9, "the 10 px face is left out")
+        XCTAssertEqual(Culling.subject(faces: [], saliency: nil, planeWidth: 1024), CullSubject(kind: .wholeFrame))
+    }
+
     func testFacesMatchPeopleWhoMoveALittle() {
         let faces: [[CullFace]] = [[face(0.2, 0.3), face(0.6, 0.3)], [face(0.62, 0.3), face(0.23, 0.3)], [face(0.9, 0.3)]]
         XCTAssertEqual(Culling.people(in: faces), [[0, 1], [1, 0], [2]])
