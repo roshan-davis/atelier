@@ -260,7 +260,7 @@ extension LookMatcher {
                 added.append(mask.name)
             }
         }
-        var solver = SkinSolver(masks: masks.map(\.name), tones: tones, limit: limit, settings: best)
+        var solver = SkinSolver(masks: masks.map { $0.name }, tones: tones, limit: limit, settings: best)
         guard let startColors = solver.colors(start) else { return SkinFit(outcome: .unchanged) }
         let startError = SkinSolver.norm(solver.residual(startColors))
         var improved = false
