@@ -11,6 +11,8 @@ struct CullView: View {
     @Environment(\.theme) private var theme
     @State private var keys = CullKeyMonitor()
     @AppStorage("cull.listWidth") private var listWidth = 560.0
+    /// Notes pinned to a spot show as numbered markers on the preview (Rosh, Nov 14, 2026).
+    @AppStorage("cull.noteMarkers") private var showMarkers = true
 
     var body: some View {
         VStack(spacing: 0) {
@@ -128,8 +130,9 @@ struct CullView: View {
                     Toggle("Advanced checks (slower)", isOn: $cull.advanced)
                         .toggleStyle(.checkbox)
                         .help("Reads the eyes of every grouped photo again from a large copy: small faces in group "
-                              + "shots get checked, and Sharpness compares the eyes themselves. Roughly a fifth of a "
-                              + "second more per grouped photo; single shots are skipped.")
+                              + "shots get checked, Sharpness compares the eyes themselves, and a built-in face model "
+                              + "reads blinks and smiles (needed for Best Expression). Roughly a fifth of a second "
+                              + "more per grouped photo; single shots are skipped.")
                 }
             }
         }
@@ -141,7 +144,7 @@ struct CullView: View {
         if cull.isLoading { return "Finding photos…" }
         if cull.isAnalyzing { return "Looking at \(cull.analyzed) of \(cull.photos.count) photos…" }
         if let progress = cull.advancedProgress {
-            return "Advanced checks: reading eyes in \(progress.done) of \(progress.total) grouped photos…"
+            return "Advanced checks: reading eyes and smiles in \(progress.done) of \(progress.total) grouped photos…"
         }
         if cull.isReview {
             return "\(cull.photos.count) shots culled together · \(cull.keptCount) kept"
@@ -210,12 +213,20 @@ struct CullView: View {
         VStack(spacing: 0) {
             ZStack {
                 Color(nsColor: theme.surround)
-                if let image = cull.largeImage {
-                    Image(nsImage: image)
-                        .resizable()
-                        .interpolation(.high)
-                        .aspectRatio(contentMode: .fit)
-                        .padding(16)
+                if let image = cull.fullImage ?? cull.largeImage {
+                    // The same zooming photo view as Loupe and Develop: double-click, Z, pinch,
+                    // ⌥-scroll and the zoom bar zoom; drag moves around.
+                    ZoomableImageView(image: image, pixelSize: cull.pixelSize, zoom: cull.zoom,
+                                      onReport: { report in
+                                          if cull.zoom.report != report {
+                                              cull.zoom.report = report
+                                              cull.zoomChanged()
+                                          }
+                                      },
+                                      menu: { nil },
+                                      onPick: cull.placingNote == nil ? nil : { (point: CGPoint) in cull.placeNote(at: point) },
+                                      overlay: markersOverlay,
+                                      overlayPassesClicks: true)
                 } else if cull.focused != nil {
                     ProgressView()
                 }
@@ -227,13 +238,47 @@ struct CullView: View {
                                  addTargets: { cull.focusedAssetID.map { [$0] } ?? [] },
                                  unavailable: cull.focusedAssetID == nil
                                     ? "Notes can be added once the photos are imported." : nil,
-                                 request: $cull.noteRequest)
+                                 request: $cull.noteRequest,
+                                 pins: NotePins(placing: cull.placingNote,
+                                                place: { note in
+                                                    showMarkers = true
+                                                    cull.placingNote = note.id
+                                                },
+                                                remove: { cull.removePin($0) }))
                 }
             }
+            .onChange(of: cull.focusedAssetID, initial: true) { _, id in cull.markerNotes?.show(id) }
             if let id = cull.focused {
+                Divider()
+                zoomBar
                 previewBar(id)
             }
         }
+    }
+
+    /// The note markers over the photo, while Note Markers is on.
+    private var markersOverlay: ((PhotoFrame) -> AnyView)? {
+        guard showMarkers, let notes = cull.markerNotes else { return nil }
+        return { frame in AnyView(NoteMarkersOverlay(notes: notes, frame: frame)) }
+    }
+
+    /// How to zoom, the Note Markers switch and the zoom buttons, as under Loupe's photo.
+    private var zoomBar: some View {
+        HStack(spacing: 12) {
+            Text(cull.placingNote != nil ? "Click the photo where the note belongs (Esc stops)"
+                                         : "Double-click the photo to zoom, drag to move around")
+                .foregroundStyle(cull.placingNote != nil ? Color.accentColor : .secondary)
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            Toggle("Note Markers", isOn: $showMarkers)
+                .toggleStyle(.checkbox)
+                .help("Show notes pinned to a spot on the photo as numbered markers. Pin a note with "
+                      + "Pin to Photo in the notes panel. Markers show only here, never in exports.")
+            ZoomControls(zoom: cull.zoom)
+        }
+        .font(.callout)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
     }
 
     private func previewBar(_ id: Int) -> some View {
@@ -292,6 +337,15 @@ struct CullView: View {
     /// Space toggles. While the photos are analyzed the arrows already move through them.
     private func handle(_ event: NSEvent) -> Bool {
         if cull.isLoading { return false }
+        // Esc while a note waits to be pinned stops that, not the cull.
+        if event.keyCode == 53, cull.placingNote != nil {
+            cull.placingNote = nil
+            return true
+        }
+        if KeyBindings.action(for: event) == .zoom, cull.focused != nil {
+            cull.toggleZoom()
+            return true
+        }
         switch event.keyCode {
         case 123: cull.move(-1, byRow: false)
         case 124: cull.move(1, byRow: false)

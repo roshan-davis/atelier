@@ -297,6 +297,38 @@ final class NotesTests: XCTestCase {
         XCTAssertEqual(kept.text, Catalog.keptLaterMark + "\nNot kept\n- Highlights clipped")
     }
 
+    // MARK: Spots (the Cull preview's markers)
+
+    func testNoteSpotsSaveCopyAndTravelInTheSidecar() async throws {
+        let (catalog, ids) = try await makeLibrary(["DSC_1.JPG", "DSC_2.JPG"])
+        let note = try XCTUnwrap(try catalog.addNote("Dust on the sensor here", to: [ids[0]]).first)
+        XCTAssertNil(note.spot, "a new note is about the whole photo")
+        let id = try XCTUnwrap(note.id)
+        try catalog.setNoteSpot(id, CGPoint(x: 0.25, y: 1.4))
+        let pinned = try XCTUnwrap(try catalog.notes(for: ids[0]).first)
+        XCTAssertEqual(pinned.spot, CGPoint(x: 0.25, y: 1), "kept on the photo")
+        XCTAssertNil(pinned.editedAt, "pinning isn't editing the text")
+
+        // A virtual copy starts with the spot too.
+        let copy = try catalog.createVirtualCopy(of: ids[0])
+        XCTAssertEqual(try catalog.notes(for: copy).first?.spot, CGPoint(x: 0.25, y: 1))
+
+        // The sidecar keeps it; older sidecars without one still read.
+        let saved = NotesRecovery.Note(pinned)
+        XCTAssertEqual(saved.x, 0.25)
+        XCTAssertEqual(saved.record(assetID: ids[1]).spot, CGPoint(x: 0.25, y: 1))
+        let old = try JSONDecoder().decode(NotesRecovery.Note.self,
+                                           from: Data(#"{"text":"Old","source":"person","created":0}"#.utf8))
+        XCTAssertNil(old.record(assetID: ids[1]).spot)
+
+        try catalog.setNoteSpot(id, nil)
+        XCTAssertNil(try catalog.notes(for: ids[0]).first?.spot)
+
+        // Cull pins its note where it says.
+        try catalog.writeCullNotes(rejected: [ids[1]: "Not kept\n- Eyes closed"], spots: [ids[1]: CGPoint(x: 0.6, y: 0.3)], kept: [])
+        XCTAssertEqual(try catalog.notes(for: ids[1]).first?.spot, CGPoint(x: 0.6, y: 0.3))
+    }
+
     private func makeJPEG(at url: URL) throws {
         let space = CGColorSpace(name: CGColorSpace.sRGB)!
         let context = try XCTUnwrap(CGContext(data: nil, width: 60, height: 40, bitsPerComponent: 8, bytesPerRow: 0,

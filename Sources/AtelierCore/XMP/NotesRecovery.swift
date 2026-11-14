@@ -14,23 +14,32 @@ public enum NotesRecovery {
         public var app: String?
         public var created: Date
         public var edited: Date?
+        /// The note's spot on the photo (0...1 across and down); absent in sidecars from before.
+        public var x: Double?
+        public var y: Double?
 
-        public init(text: String, source: NoteSource, app: String? = nil, created: Date, edited: Date? = nil) {
+        public init(text: String, source: NoteSource, app: String? = nil, created: Date, edited: Date? = nil,
+                    x: Double? = nil, y: Double? = nil) {
             self.text = text
             self.source = source
             self.app = app
             self.created = created
             self.edited = edited
+            self.x = x
+            self.y = y
         }
 
         public init(_ note: PhotoNote) {
             self.init(text: note.text, source: note.source, app: note.appName, created: note.createdAt,
-                      edited: note.editedAt)
+                      edited: note.editedAt, x: note.spotX, y: note.spotY)
         }
 
         /// The catalog record for `assetID`.
         public func record(assetID: Int64) -> PhotoNote {
-            PhotoNote(assetId: assetID, text: text, source: source, appName: app, createdAt: created, editedAt: edited)
+            var note = PhotoNote(assetId: assetID, text: text, source: source, appName: app, createdAt: created, editedAt: edited)
+            note.spotX = x
+            note.spotY = y
+            return note
         }
     }
 

@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// How Cull picks the suggested keeper of each group (the Cull view's Pick By menu). Grouping
@@ -12,10 +13,16 @@ public enum CullPick: String, CaseIterable, Identifiable, Sendable {
     case eyesOpen
     /// The least clipped and closest to the group's usual brightness, then the sharpest.
     case bestExposure
+    /// Eyes open and the most smiles, from MediaPipe Face Landmarker (needs the Advanced checks,
+    /// which choosing it turns on), then the sharpest.
+    case bestExpression
     /// Atelier's pick before Nov 2026: whole-frame sharpness plus the best face's quality.
     case classic
 
     public var id: String { rawValue }
+
+    /// Needs the Advanced checks: expressions are read only there.
+    public var needsAdvanced: Bool { self == .bestExpression }
 
     public var title: String {
         switch self {
@@ -23,6 +30,7 @@ public enum CullPick: String, CaseIterable, Identifiable, Sendable {
         case .sharpestSubject: return "Sharpest Subject"
         case .eyesOpen: return "Everyone's Eyes Open"
         case .bestExposure: return "Best Exposure"
+        case .bestExpression: return "Best Expression"
         case .classic: return "Classic"
         }
     }
@@ -33,6 +41,7 @@ public enum CullPick: String, CaseIterable, Identifiable, Sendable {
         case .sharpestSubject: return "The sharpest faces or main subject, whatever else"
         case .eyesOpen: return "The fewest people with eyes closed or half closed, then the sharpest"
         case .bestExposure: return "The least clipped, closest to the group's usual brightness, then the sharpest"
+        case .bestExpression: return "Eyes open and the most smiles, then the sharpest (turns on Advanced checks)"
         case .classic: return "Atelier's earlier pick: the sharpest whole frame plus the best face"
         }
     }
@@ -59,6 +68,11 @@ public struct CullAssessment: Sendable, Equatable {
     public var coherence = 0.0
     public var aesthetics: Double?
     public var isUtility = false
+    /// Faces with an expression read (Advanced checks), how many of them smile, and their mean
+    /// smile score (0...1); nil without expressions.
+    public var expressions = 0
+    public var smiling = 0
+    public var smile: Double?
 
     public init() {}
 
@@ -101,6 +115,10 @@ extension Culling {
             assessment.coherence = signal.coherence
             assessment.aesthetics = signal.aesthetics
             assessment.isUtility = signal.isUtility
+            let smiles = signal.faces.compactMap { $0.expression?.smile }
+            assessment.expressions = smiles.count
+            assessment.smiling = smiles.filter { $0 >= CullEyes.smiling }.count
+            assessment.smile = smiles.isEmpty ? nil : smiles.reduce(0, +) / Double(smiles.count)
             return assessment
         }
     }
@@ -116,24 +134,33 @@ extension Culling {
     /// A score for each photo, higher is better, by `pick`.
     public static func ranking(_ assessments: [CullAssessment], by pick: CullPick) -> [Double] {
         let hasFaces = assessments.contains { $0.worstFace != nil }
-        return assessments.map { a in
+        return assessments.map { (a: CullAssessment) -> Double in
             switch pick {
             case .balanced, .classic:
                 // A blink costs more than a big drop in sharpness: a soft keeper can be sharpened
                 // a little, a closed eye can't be opened.
                 var score = a.sharpness
                 if hasFaces { score += 0.5 * (a.worstFace ?? 0) }
-                score -= 0.7 * Double(min(a.closed, 3)) + 0.3 * Double(min(a.halfClosed, 3))
+                score -= 0.7 * Double(min(a.closed, 3))
+                score -= 0.3 * Double(min(a.halfClosed, 3))
                 score -= min(0.5, 0.25 * a.exposurePenalty)
                 score += 0.1 * (a.aesthetics ?? 0)
+                // Smiles only break near ties here; Best Expression weighs them properly.
+                score += 0.1 * (a.smile ?? 0)
                 if a.isUtility { score -= 0.5 }
                 return score
             case .sharpestSubject:
                 return a.sharpness + 0.01 * (a.aesthetics ?? 0)
             case .eyesOpen:
-                return -10 * Double(a.closed) - 3 * Double(a.halfClosed) + a.sharpness
+                let eyes: Double = -10 * Double(a.closed) - 3 * Double(a.halfClosed)
+                return eyes + a.sharpness
             case .bestExposure:
                 return -a.exposurePenalty + 0.2 * a.sharpness
+            case .bestExpression:
+                // Without the Advanced checks' expressions this is Everyone's Eyes Open.
+                let eyes: Double = -10 * Double(a.closed) - 3 * Double(a.halfClosed)
+                let smile: Double = 2 * (a.smile ?? 0)
+                return eyes + smile + 0.3 * a.sharpness
             }
         }
     }
@@ -155,6 +182,10 @@ extension Culling {
                 if a.closed > 0 { eyes += ", \(a.closed) closed" }
                 if a.halfClosed > 0 { eyes += ", \(a.halfClosed) half closed" }
                 parts.append(eyes)
+            }
+            if a.expressions > 0 {
+                parts.append(a.expressions == 1 ? (a.smiling == 1 ? "Smiling" : "Not smiling")
+                                                : "Smiling: \(a.smiling) of \(a.expressions)")
             }
         }
         parts.append(exposureWords(a, inGroup: inGroup))
@@ -180,6 +211,10 @@ extension Culling {
         if photo.halfClosed > keeper.halfClosed {
             lines.append("Eyes half closed\(people(photo.halfClosed, photo.judged))")
         }
+        if photo.expressions > 0, keeper.expressions > 0, photo.smiling < keeper.smiling {
+            lines.append(photo.expressions == 1 ? "Not smiling (the keeper is)"
+                         : "Fewer smiles: \(photo.smiling) of \(photo.expressions) people (keeper: \(keeper.smiling))")
+        }
         if keeper.sharpness > 0, photo.sharpness < keeper.sharpness * 0.85 {
             let share = photo.sharpness / keeper.sharpness
             var line = "\(photo.onEyes ? "Eyes" : "Subject") softer: \(percent(share)) of the keeper's sharpness"
@@ -204,6 +239,23 @@ extension Culling {
         }
         if photo.isUtility, !keeper.isUtility { lines.append("Looks like a screenshot or document") }
         return lines
+    }
+
+    /// Where each photo's reason note is pinned (0...1 across and down the photo), or nil: the
+    /// first face with eyes closed, else half closed, else (with fewer smiles than the keeper)
+    /// the first face not smiling. Approximate, for the Cull preview's markers.
+    public static func reasonSpots(_ group: [CullSignals], keeper: Int) -> [CGPoint?] {
+        let eyes = Self.eyes(in: group.map(\.faces))
+        let smiles = group.map { $0.faces.filter { ($0.expression?.smile ?? 0) >= CullEyes.smiling }.count }
+        return group.indices.map { index in
+            let faces = group[index].faces
+            let pick = eyes[index].firstIndex(of: .closed) ?? eyes[index].firstIndex(of: .halfClosed)
+                ?? (keeper < smiles.count && smiles[index] < smiles[keeper]
+                    ? faces.firstIndex { ($0.expression?.smile ?? 1) < CullEyes.smiling } : nil)
+            guard index != keeper, let pick, pick < faces.count else { return nil }
+            let box = faces[pick].box
+            return CGPoint(x: box.midX, y: 1 - box.midY)
+        }
     }
 
     /// The Cull note for a photo not kept: a heading line, then a bullet per reason.

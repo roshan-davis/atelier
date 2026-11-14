@@ -68,6 +68,12 @@
   <li><b>Pick By</b> and <b>Advanced checks (slower)</b>: how the keeper of each group is suggested. See <a href="#pick">Picking the keeper</a>.</li>
 </ol>
 
+<h3 id="zoom">Zoom in on the photo</h3>
+<p>The large photo zooms as in Loupe and Develop: double-click it or press <kbd>Z</kbd> to switch between Fit and 100%, pinch or hold <kbd>⌥</kbd> and scroll to zoom freely, and drag to move around. The bar under the photo has the same <b>Fit</b>, <b>Fill</b>, <b>100%</b> and <b>200%</b> buttons. The zoom stays as you move to the next photo, so you can check the same eyes or the same spot of focus across a group. Zooming here doesn't change Loupe's or Develop's zoom.</p>
+
+<h3 id="markers">Note markers</h3>
+<p>A <a href="notes.html">note</a> can point at a spot on the photo. In the notes panel (<kbd>⌥⌘N</kbd>) click <b>Pin to Photo</b> under a note, then click the photo where it belongs; <kbd>Esc</kbd> stops. The spot shows on the photo as a numbered marker with the note's first words, and the same number shows beside the note. <b>Remove Pin</b> takes it off. Cull pins its own reasons to the face with closed eyes. Turn <b>Note Markers</b> (in the bar under the photo) off to hide them all. Markers show only here, in the Cull view and when you <a href="#review">look at a group again</a>: never in Loupe, Develop or anything you export.</p>
+
 <h2 id="pick">Picking the keeper</h2>
 <p><b>Pick By</b> changes which photo of each group is suggested; the groups stay the same. Changing it suggests again at once, nothing is read again. It's remembered for the next cull.</p>
 <dl class="defs">
@@ -75,12 +81,13 @@
   <dt>Sharpest Subject</dt><dd>The sharpest faces (with Advanced checks, the eyes themselves), or the main subject when there are no faces. Background detail doesn't count, so a busy sharp background can't beat a sharp face on a soft one.</dd>
   <dt>Everyone's Eyes Open</dt><dd>The fewest people with eyes closed, then half closed, then the sharpest.</dd>
   <dt>Best Exposure</dt><dd>The least clipped highlights and crushed shadows, closest to the group's usual brightness, then the sharpest.</dd>
+  <dt>Best Expression</dt><dd>Eyes open first, then the most smiles, then the sharpest. Smiles are read by the <a href="#advanced">Advanced checks</a>, so choosing it turns them on; until they finish it picks like Everyone's Eyes Open.</dd>
   <dt>Classic</dt><dd>Atelier's earlier pick: the sharpest whole frame plus the best face's quality.</dd>
 </dl>
 <h3 id="eyes">How eyes are checked</h3>
 <p>For every face, Atelier measures how open the eyes are and compares each person with <b>the same person in the group's other shots</b>. So naturally narrow eyes, glasses and squinting smiles aren't called closed: only eyes much less open than that person's own widest are. Faces turned away, and faces too small to see at the standard size, are left out and the caption says "not checked".</p>
 <h3 id="advanced">Advanced checks (slower)</h3>
-<p>Off by default. With it on, Atelier reads every photo in a group again from a large copy, three to four times the standard size: small faces in group shots get their eyes checked, and sharpness compares the eyes themselves instead of whole faces. It takes roughly a fifth of a second more per grouped photo, starting with the focused group; single shots are skipped, since they're always kept. The top of the view shows its progress, and switching it off stops it. Your Keep and Drop clicks stay as they are when it finishes.</p>
+<p>Off by default. With it on, Atelier reads every photo in a group again from a large copy, three to four times the standard size: small faces in group shots get their eyes checked, and sharpness compares the eyes themselves instead of whole faces. A face model built into Atelier (Google's MediaPipe Face Landmarker, which runs on your Mac) also reads each face's <b>blinks and smile</b>. Its blink score then decides whether eyes are open, half closed or closed, again against the same person in the group's other shots, and is more reliable than the eye outline on small or squinting faces. The caption adds "Smiling: 3 of 5", and a dropped photo can say "Fewer smiles". It takes roughly a fifth of a second more per grouped photo, starting with the focused group; single shots are skipped, since they're always kept. The top of the view shows its progress, and switching it off stops it. Your Keep and Drop clicks stay as they are when it finishes.</p>
 <h3 id="reasons">Reasons on dropped photos</h3>
 <p>With <b>Write reasons to notes</b> on (the default), finishing the cull gives each photo not kept a <a href="notes.html">note</a> by Cull with a bullet for each measured reason, compared with its group's keeper, for example:</p>
 <pre>Not kept: group of 6 (Similar shots), keeper DSC_0102.NEF.
@@ -95,9 +102,10 @@
   <tr><td><kbd>↑</kbd> <kbd>↓</kbd></td><td>The group above or below, at the same place in the row.</td></tr>
   <tr><td><kbd>P</kbd></td><td>Keep.</td></tr>
   <tr><td><kbd>X</kbd></td><td>Drop.</td></tr>
-  <tr><td><kbd>Space</kbd> or double-click</td><td>Switch between keep and drop.</td></tr>
+  <tr><td><kbd>Space</kbd> or double-click a thumbnail</td><td>Switch between keep and drop.</td></tr>
+  <tr><td><kbd>Z</kbd> or double-click the photo</td><td>Zoom between Fit and 100%.</td></tr>
   <tr><td><kbd>Return</kbd></td><td>Finish.</td></tr>
-  <tr><td><kbd>Esc</kbd></td><td>Cancel.</td></tr>
+  <tr><td><kbd>Esc</kbd></td><td>Cancel (while a note waits to be pinned, stops that instead).</td></tr>
 </table>
 <p>The keys work as soon as the Cull view opens; there's nothing to click first. The list only scrolls when the photo you move to isn't fully in view, and then just enough to show it. Clicking a photo never scrolls.</p>
 <p>A group can keep several shots. A RAW+JPEG pair counts as one shot: keeping or dropping it applies to both.</p>

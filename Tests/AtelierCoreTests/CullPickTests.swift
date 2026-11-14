@@ -47,6 +47,58 @@ final class CullPickTests: XCTestCase {
         XCTAssertEqual(Culling.eyes(in: [[face(0.1, nil, skip: .small)], [face(0.1, 0.12)]]), [[.unknown], [.open]])
     }
 
+    /// With Advanced checks, MediaPipe's blink score decides, each person against their own
+    /// lowest (values from Rosh's group test photo: 0.15 open, 0.6 blinking, 0.33 half closed).
+    func testBlinkScoresDecideWhenRead() {
+        func blinking(_ x: Double, _ blink: Double, smile: Double = 0.8) -> CullFace {
+            var f = face(x, 0.3)
+            f.expression = FaceExpression(blinkLeft: blink, blinkRight: blink, smileLeft: smile, smileRight: smile)
+            return f
+        }
+        let faces: [[CullFace]] = [
+            [blinking(0.1, 0.20), blinking(0.4, 0.15), blinking(0.7, 0.28)],
+            [blinking(0.1, 0.33), blinking(0.4, 0.61), blinking(0.7, 0.30)],
+        ]
+        XCTAssertEqual(Culling.eyes(in: faces), [[.open, .open, .open], [.halfClosed, .closed, .open]])
+        // On its own a photo has nothing to compare with: only a clear blink counts.
+        XCTAssertEqual(Culling.eyes(in: [[blinking(0.1, 0.55), blinking(0.4, 0.77)]]), [[.open, .closed]])
+        // The outline reads closed (0.06), but the blink score wins where it was read.
+        var open = blinking(0.1, 0.12)
+        open.openness = 0.06
+        XCTAssertEqual(Culling.eyes(in: [[open]]), [[.open]])
+    }
+
+    func testBestExpressionPrefersSmilesWithEyesOpen() {
+        func person(_ x: Double, blink: Double, smile: Double) -> CullFace {
+            var f = face(x, 0.3)
+            f.expression = FaceExpression(blinkLeft: blink, blinkRight: blink, smileLeft: smile, smileRight: smile)
+            return f
+        }
+        let serious = photo(faces: [person(0.2, blink: 0.1, smile: 0.1), person(0.6, blink: 0.1, smile: 0.2)], sharpness: 120)
+        let smiling = photo(faces: [person(0.2, blink: 0.1, smile: 0.9), person(0.6, blink: 0.12, smile: 0.85)], sharpness: 100)
+        let blinkingSmile = photo(faces: [person(0.2, blink: 0.7, smile: 0.95), person(0.6, blink: 0.1, smile: 0.9)], sharpness: 130)
+        XCTAssertEqual(Culling.keeper([serious, smiling, blinkingSmile], by: .bestExpression), 1)
+        XCTAssertTrue(CullPick.bestExpression.needsAdvanced)
+        let a = Culling.assess([serious, smiling])
+        XCTAssertEqual(a[1].smiling, 2)
+        XCTAssertEqual(Culling.reasons(a[0], keeper: a[1]).first, "Fewer smiles: 0 of 2 people (keeper: 2)")
+        XCTAssertTrue(Culling.caption(a[1], inGroup: true).contains("Smiling: 2 of 2"))
+    }
+
+    func testReasonNotesArePinnedToTheFaceWithClosedEyes() {
+        let keeper = photo(faces: [face(0.1, 0.30), face(0.5, 0.29)])
+        let blink = photo(faces: [face(0.1, 0.31), face(0.5, 0.05)])
+        let soft = photo(faces: [face(0.1, 0.30), face(0.5, 0.29)], sharpness: 40)
+        let spots = Culling.reasonSpots([keeper, blink, soft], keeper: 0)
+        XCTAssertNil(spots[0], "the keeper gets no note")
+        // The second face's box is x 0.5...0.6, y 0.5...0.65 from the bottom.
+        let spot = spots[1]
+        XCTAssertNotNil(spot)
+        XCTAssertEqual(spot?.x ?? 0, 0.55, accuracy: 1e-9)
+        XCTAssertEqual(spot?.y ?? 0, 1 - 0.575, accuracy: 1e-9, "measured down from the top")
+        XCTAssertNil(spots[2], "softness is about the whole photo")
+    }
+
     func testFacesMatchPeopleWhoMoveALittle() {
         let faces: [[CullFace]] = [[face(0.2, 0.3), face(0.6, 0.3)], [face(0.62, 0.3), face(0.23, 0.3)], [face(0.9, 0.3)]]
         XCTAssertEqual(Culling.people(in: faces), [[0, 1], [1, 0], [2]])

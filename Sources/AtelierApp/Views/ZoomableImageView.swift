@@ -173,6 +173,9 @@ struct ZoomableImageView: NSViewRepresentable {
     /// Set on the view that shows the Develop photo: live slider frames are drawn into it
     /// straight from the GPU instead of arriving as `image` (see `PhotoFeed`).
     var feed: PhotoFeed? = nil
+    /// The overlay only shows something (the Cull preview's note markers): clicks, drags and the
+    /// cursor stay the photo view's own, so zoom and pan work as without it.
+    var overlayPassesClicks = false
 
     func makeNSView(context: Context) -> ZoomScrollView {
         let view = ZoomScrollView()
@@ -216,6 +219,7 @@ struct ZoomableImageView: NSViewRepresentable {
         view.setDimmed(dimmed)
         view.apply(zoom.level)
         view.applyPendingCenter()
+        view.overlayPassesClicks = overlayPassesClicks
         view.setOverlay(overlay?(view.photoFrame))
         view.isUpdating = false
         // Published after this update, not during it.
@@ -279,6 +283,10 @@ final class ZoomScrollView: NSScrollView {
     var isUpdating = false
     let photoFrame = PhotoFrame()
     private var overlayHost: OverlayHostingView?
+    /// The overlay only shows something; see `ZoomableImageView.overlayPassesClicks`.
+    var overlayPassesClicks = false {
+        didSet { overlayHost?.passesClicks = overlayPassesClicks }
+    }
 
     init() {
         super.init(frame: .zero)
@@ -318,6 +326,7 @@ final class ZoomScrollView: NSScrollView {
         } else {
             let host = OverlayHostingView(rootView: view)
             host.scrollView = self
+            host.passesClicks = overlayPassesClicks
             // Cover the whole view, not the overlay's own ideal size, or clicks miss it.
             host.sizingOptions = []
             host.frame = bounds
@@ -328,8 +337,9 @@ final class ZoomScrollView: NSScrollView {
         }
     }
 
-    /// A tool is drawn over the photo; it decides the cursor.
-    var hasOverlay: Bool { overlayHost != nil }
+    /// A tool is drawn over the photo; it decides the cursor and takes the clicks. A display-only
+    /// overlay (note markers) doesn't count.
+    var hasOverlay: Bool { overlayHost != nil && !overlayPassesClicks }
 
     override func tile() {
         super.tile()
@@ -463,7 +473,7 @@ final class ZoomScrollView: NSScrollView {
         if let superview {
             let local = convert(point, from: superview)
             if let visibleWidth, local.x > bounds.width * visibleWidth { return nil }
-            if let overlayHost, bounds.contains(local) { return overlayHost.hitTest(local) ?? overlayHost }
+            if let overlayHost, !overlayPassesClicks, bounds.contains(local) { return overlayHost.hitTest(local) ?? overlayHost }
         }
         return super.hitTest(point)
     }
@@ -635,6 +645,12 @@ final class ZoomScrollView: NSScrollView {
 /// go to the photo view underneath.
 final class OverlayHostingView: NSHostingView<AnyView> {
     weak var scrollView: ZoomScrollView?
+    /// Display only: every click goes to the photo underneath.
+    var passesClicks = false
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        passesClicks ? nil : super.hitTest(point)
+    }
 
     override func scrollWheel(with event: NSEvent) {
         if let scrollView { scrollView.scrollWheel(with: event) } else { super.scrollWheel(with: event) }

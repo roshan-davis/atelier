@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import GRDB
 
@@ -31,9 +32,14 @@ public struct PhotoNote: Codable, Identifiable, Hashable, Sendable, FetchableRec
     public var createdAt: Date
     /// When the text last changed after it was written; nil if never.
     public var editedAt: Date?
+    /// Roughly where on the photo the note is about (0...1 across and down the original, as the
+    /// camera shot it, before any crop); nil for a note about the whole photo. The Cull preview
+    /// shows a marker there (Rosh, Nov 14, 2026).
+    public var spotX: Double?
+    public var spotY: Double?
 
     public init(id: Int64? = nil, assetId: Int64, text: String, source: NoteSource = .person, appName: String? = nil,
-                createdAt: Date = Date(), editedAt: Date? = nil) {
+                createdAt: Date = Date(), editedAt: Date? = nil, spot: CGPoint? = nil) {
         self.id = id
         self.assetId = assetId
         self.text = text
@@ -41,6 +47,20 @@ public struct PhotoNote: Codable, Identifiable, Hashable, Sendable, FetchableRec
         self.appName = appName
         self.createdAt = createdAt
         self.editedAt = editedAt
+        self.spotX = spot.map { Double($0.x) }
+        self.spotY = spot.map { Double($0.y) }
+    }
+
+    /// Where the note's marker goes (0...1 across and down), or nil.
+    public var spot: CGPoint? {
+        get {
+            guard let spotX, let spotY else { return nil }
+            return CGPoint(x: spotX, y: spotY)
+        }
+        set {
+            spotX = newValue.map { min(1, max(0, Double($0.x))) }
+            spotY = newValue.map { min(1, max(0, Double($0.y))) }
+        }
     }
 
     /// "You", "Cull" or the chat app's name, as the panel shows it.
@@ -68,6 +88,13 @@ extension Catalog {
                 t.column("appName", .text)
                 t.column("createdAt", .datetime).notNull()
                 t.column("editedAt", .datetime)
+            }
+        }
+        // A note's spot on the photo (Nov 14, 2026); nil for the notes from before.
+        migrator.registerMigration("v11-note-spots") { db in
+            try db.alter(table: "note") { t in
+                t.add(column: "spotX", .double)
+                t.add(column: "spotY", .double)
             }
         }
     }
@@ -123,6 +150,20 @@ extension Catalog {
         }
     }
 
+    /// Puts a note's marker at `spot` (0...1 across and down the photo), or takes it off with
+    /// nil. Doesn't count as an edit of the text. Returns the note as saved, or nil when it is gone.
+    @discardableResult
+    public func setNoteSpot(_ id: Int64, _ spot: CGPoint?) throws -> PhotoNote? {
+        try writer.write { db in
+            guard var note = try PhotoNote.fetchOne(db, key: id) else { return nil }
+            note.spot = spot
+            try db.execute(sql: "UPDATE note SET spotX = ?, spotY = ? WHERE id = ?",
+                           arguments: [note.spotX, note.spotY, id])
+            try Self.markNotesChanged(db, [note.assetId])
+            return note
+        }
+    }
+
     /// The person finished typing: a note emptied while typing is removed, any other one stays. Returns true when it was removed.
     @discardableResult
     public func finishNote(_ id: Int64) throws -> Bool {
@@ -166,8 +207,8 @@ extension Catalog {
     /// photo that already has notes keeps them).
     static func copyNotes(_ db: Database, from parentID: Int64, to derivedID: Int64) throws {
         try db.execute(sql: """
-            INSERT INTO note (assetId, text, source, appName, createdAt, editedAt)
-            SELECT :derived, text, source, appName, createdAt, editedAt FROM note
+            INSERT INTO note (assetId, text, source, appName, createdAt, editedAt, spotX, spotY)
+            SELECT :derived, text, source, appName, createdAt, editedAt, spotX, spotY FROM note
             WHERE assetId = :parent AND NOT EXISTS (SELECT 1 FROM note WHERE assetId = :derived)
             ORDER BY createdAt, id
             """, arguments: ["parent": parentID, "derived": derivedID])

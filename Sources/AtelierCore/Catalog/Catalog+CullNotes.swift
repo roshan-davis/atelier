@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import GRDB
 
@@ -8,8 +9,11 @@ extension Catalog {
     /// Writes Cull's notes when a cull ends. Each photo in `rejected` gets its reason note,
     /// replacing Cull's earlier note on it unless the person edited that one (then the edited
     /// note stays and the new one is added). A photo in `kept` that has an unedited Cull note
-    /// from an earlier cull keeps it, marked "Kept later". All in one write. Marks the sidecars.
-    public func writeCullNotes(rejected: [Int64: String], kept: [Int64], at date: Date = Date()) throws {
+    /// from an earlier cull keeps it, marked "Kept later". A photo in `spots` gets its note pinned
+    /// there (the face with closed eyes, for example; 0...1 across and down). All in one write.
+    /// Marks the sidecars.
+    public func writeCullNotes(rejected: [Int64: String], spots: [Int64: CGPoint] = [:], kept: [Int64],
+                               at date: Date = Date()) throws {
         guard !rejected.isEmpty || !kept.isEmpty else { return }
         try writer.write { db in
             var changed: [Int64] = []
@@ -20,7 +24,7 @@ extension Catalog {
                     .filter(Column("assetId") == assetID && Column("source") == NoteSource.cull.rawValue
                             && Column("editedAt") == nil)
                     .deleteAll(db)
-                var note = PhotoNote(assetId: assetID, text: text, source: .cull, createdAt: date)
+                var note = PhotoNote(assetId: assetID, text: text, source: .cull, createdAt: date, spot: spots[assetID])
                 try note.insert(db)
                 changed.append(assetID)
             }

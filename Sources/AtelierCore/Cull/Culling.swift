@@ -187,6 +187,12 @@ public enum Culling {
             }
             return face
         }
+        // Blinks and smiles from MediaPipe Face Landmarker, on the same large copy.
+        result.faces = result.faces.map { face in
+            var face = face
+            face.expression = FaceLandmarker.expression(in: image, box: face.box)
+            return face
+        }
         return result
     }
 
@@ -430,6 +436,19 @@ public enum Culling {
     }
 
     // MARK: Measuring
+
+    /// A photo's size in pixels as it is seen (turned upright by its EXIF orientation), without
+    /// decoding it; nil when the file can't be read.
+    public static func pixelSize(at url: URL) -> CGSize? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = (properties[kCGImagePropertyPixelWidth] as? NSNumber)?.doubleValue,
+              let height = (properties[kCGImagePropertyPixelHeight] as? NSNumber)?.doubleValue,
+              width > 0, height > 0 else { return nil }
+        let orientation = (properties[kCGImagePropertyOrientation] as? NSNumber)?.intValue ?? 1
+        // Orientations 5 to 8 turn the picture a quarter.
+        return orientation >= 5 ? CGSize(width: height, height: width) : CGSize(width: width, height: height)
+    }
 
     public static func image(at url: URL, maxPixel: Int) -> CGImage? {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary)

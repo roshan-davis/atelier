@@ -144,6 +144,26 @@ struct NoteRequest: Equatable {
 /// The notes panel floating over a corner of the photo area. It is an overlay, so showing,
 /// hiding, moving or resizing it never changes the photo view's size, zoom, pan or the grid's
 /// scroll position.
+/// Pinning notes to a spot on the photo, offered only by the Cull preview, where the markers
+/// show (Rosh, Nov 14, 2026: "it will only on preview").
+struct NotePins {
+    /// The note waiting for a click on the photo, if any.
+    var placing: Int64?
+    /// Pin to Photo: the next click on the photo places it.
+    let place: (PhotoNote) -> Void
+    let remove: (PhotoNote) -> Void
+
+    /// Each pinned note's marker number, in the panel's order (newest first), so the panel and
+    /// the markers on the photo say the same number.
+    static func numbers(_ notes: [PhotoNote]) -> [Int64: Int] {
+        var numbers: [Int64: Int] = [:]
+        for note in notes where note.spot != nil && !NoteText.cleaned(note.text).isEmpty {
+            if let id = note.id { numbers[id] = numbers.count + 1 }
+        }
+        return numbers
+    }
+}
+
 struct NotesOverlay: View {
     /// The photo whose notes show; nil shows nothing.
     let assetID: Int64?
@@ -155,6 +175,8 @@ struct NotesOverlay: View {
     /// Why the photo can't take notes yet (a photo still being imported), shown instead of them.
     var unavailable: String? = nil
     @Binding var request: NoteRequest?
+    /// Set by the Cull preview only.
+    var pins: NotePins? = nil
     @StateObject private var notes: PhotoNotesModel
 
     @AppStorage(NotesPanel.visibleKey) private var visible = false
@@ -165,7 +187,8 @@ struct NotesOverlay: View {
     @State private var resizeStart: CGSize?
 
     init(catalog: Catalog, assetID: Int64?, subtitle: String, addTargets: @escaping () -> [Int64], unavailable: String? = nil,
-         request: Binding<NoteRequest?> = .constant(nil)) {
+         request: Binding<NoteRequest?> = .constant(nil), pins: NotePins? = nil) {
+        self.pins = pins
         self.assetID = assetID
         self.subtitle = subtitle
         self.addTargets = addTargets
@@ -179,7 +202,7 @@ struct NotesOverlay: View {
             if visible, assetID != nil || unavailable != nil {
                 let size = panelSize(in: proxy.size)
                 NotesPanelView(notes: notes, subtitle: subtitle, unavailable: unavailable,
-                               corner: corner, addTargets: addTargets,
+                               corner: corner, addTargets: addTargets, pins: pins,
                                moved: { drag = $0 }, dropped: { drop($0, area: proxy.size, size: size) },
                                resized: { resize(by: $0, area: proxy.size) }, resizeEnded: { resizeStart = nil },
                                hide: { visible = false })
@@ -238,6 +261,7 @@ struct NotesPanelView: View {
     let unavailable: String?
     let corner: NotesCorner
     let addTargets: () -> [Int64]
+    var pins: NotePins? = nil
     let moved: (CGSize) -> Void
     let dropped: (CGSize) -> Void
     let resized: (CGSize) -> Void
@@ -367,6 +391,7 @@ struct NotesPanelView: View {
                                      toggle: { notes.toggleCheckbox(note, line: $0) },
                                      delete: { notes.delete(note) })
                             meta(note)
+                            if let pins { pinRow(note, pins: pins, number: NotePins.numbers(written)[note.id ?? -1]) }
                             if note.id != written.last?.id {
                                 Divider().overlay(Color(nsColor: palette.faint).opacity(0.3))
                             }
@@ -427,6 +452,33 @@ struct NotesPanelView: View {
             .foregroundStyle(Color(nsColor: palette.faint))
             .lineLimit(1)
             .truncationMode(.tail)
+    }
+
+    /// Cull preview only: where the note is pinned on the photo, and the button to pin or unpin it.
+    private func pinRow(_ note: PhotoNote, pins: NotePins, number: Int?) -> some View {
+        HStack(spacing: 6) {
+            if let number {
+                NoteMarkerBadge(number: number, size: 15)
+                Text("Pinned on the photo").font(.system(size: 10))
+                Spacer(minLength: 4)
+                Button("Remove Pin") { pins.remove(note) }
+                    .help("Take this note's marker off the photo")
+            } else if pins.placing == note.id {
+                Image(systemName: "mappin.and.ellipse").font(.system(size: 10, weight: .semibold))
+                Text("Click the photo where it belongs (Esc stops)").font(.system(size: 10, weight: .semibold))
+                Spacer(minLength: 0)
+            } else {
+                Spacer(minLength: 0)
+                Button { pins.place(note) } label: {
+                    Label("Pin to Photo", systemImage: "mappin")
+                }
+                .help("Then click the photo: a numbered marker shows the spot this note is about")
+            }
+        }
+        .buttonStyle(.plain)
+        .font(.system(size: 10, weight: .semibold))
+        .foregroundStyle(Color(nsColor: palette.ink).opacity(0.8))
+        .cursor(.link)
     }
 
     private var deletedRow: some View {
