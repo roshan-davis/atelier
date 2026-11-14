@@ -630,7 +630,7 @@ struct MasksPanel: View {
                 Text(mask.name)
                     .lineLimit(1)
                     .fontWeight(mask.id == develop.selectedMaskID ? .semibold : .regular)
-                    .onTapGesture(count: 2) { startRename(mask) }
+                    .onDoubleClick { startRename(mask) }
                 if mask.inverted {
                     Text("Inverted").font(.caption2).foregroundStyle(.secondary)
                 }

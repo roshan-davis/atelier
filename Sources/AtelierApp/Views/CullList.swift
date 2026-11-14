@@ -211,8 +211,8 @@ private struct CullTileButton: View {
         CullTile(photo: cull.photos[id], isKept: cull.kept.contains(id),
                  isSuggested: cull.suggested.contains(id), isFocused: cull.focused == id,
                  dimsWhenDropped: !cull.isAnalyzing)
-            .onTapGesture(count: 2) { cull.toggle(id) }
-            .onTapGesture { cull.focus(id) }
+            // A click focuses at once; a double-click focuses, then keeps or drops.
+            .onClick { cull.focus(id) } doubleClick: { cull.toggle(id) }
             .contextMenu {
                 Button(cull.kept.contains(id) ? "Drop" : "Keep") { cull.toggle(id) }
             }

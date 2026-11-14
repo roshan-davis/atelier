@@ -46,7 +46,7 @@ struct ColorGradingPanel: View {
             Text("Adjust")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
-                .onTapGesture(count: 2) { develop.reset(.colorGrading) }
+                .onDoubleClick { develop.reset(.colorGrading) }
                 .help("Double-click to reset all Color Grading")
             Spacer(minLength: 4)
             viewButton("3-Way", help: "Shadows, Midtones and Highlights") { ThreeWayGlyph() }
@@ -118,7 +118,7 @@ private struct WheelBlock: View {
                 Text(region.rawValue)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                    .onTapGesture(count: 2) { develop.resetGrade(region, luminance: true) }
+                    .onDoubleClick { develop.resetGrade(region, luminance: true) }
                     .help("Double-click to reset the \(region.rawValue) wheel")
                 Image(systemName: "eye")
                     .font(.caption)
