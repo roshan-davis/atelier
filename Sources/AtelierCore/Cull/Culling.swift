@@ -39,6 +39,8 @@ public struct CullSignals: @unchecked Sendable {
     public var subject = CullSubject(kind: .wholeFrame)
     /// The Laplacian on a grid, so a group's photos can be measured on one shared region.
     public var sharpnessGrid: CullSharpnessGrid?
+    /// Width in pixels of the copy the faces were measured on (1024 px on the long side).
+    public var planeWidth = 1024
     /// The people Vision found (whole bodies, Vision rectangles), for a subject when no face
     /// is found (sunglasses, turned away).
     public var people: [CGRect] = []
@@ -216,6 +218,7 @@ public enum Culling {
                                                    .both: visionFaces + extra]
         if let plane {
             signals.sharpnessGrid = plane.laplacianGrid()
+            signals.planeWidth = plane.width
             for (kind, found) in faces {
                 let subject = Self.subject(faces: found, people: signals.people, saliency: saliency.results?.first,
                                            planeWidth: plane.width)

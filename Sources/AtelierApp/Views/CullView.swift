@@ -370,7 +370,8 @@ struct CullView: View {
         let assessment = cull.assessments[id]
         return CullSubjectOverlay.describe(subject: assessment?.subject ?? signals.subject,
                                            sharedRegion: assessment?.sharedRegion ?? false,
-                                           faceCount: signals.faces.count)
+                                           faceCount: assessment?.faces ?? signals.faces.count,
+                                           background: assessment?.background ?? 0)
     }
 
     private func previewBar(_ id: Int) -> some View {
