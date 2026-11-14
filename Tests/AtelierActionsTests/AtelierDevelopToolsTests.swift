@@ -27,6 +27,47 @@ final class AtelierDevelopToolsTests: XCTestCase {
         XCTAssertEqual(AtelierAgentTools.runCeiling, .edit)
     }
 
+    // MARK: apply_preset (AT-057)
+
+    let presetCandidates: [PresetCandidate] = [
+        PresetCandidate(id: UUID(), name: "Portra 400", group: "Film", kind: .develop),
+        PresetCandidate(id: UUID(), name: "Matte", group: "Film Process", kind: .toneCurve),
+        PresetCandidate(id: UUID(), name: "Teal & Orange", group: "Cinematic", kind: .colorGrading),
+        PresetCandidate(id: UUID(), name: "Bleach Bypass", group: "Cinematic", kind: .develop),
+        PresetCandidate(id: UUID(), name: "Bleach Bypass", group: "Film Process", kind: .toneCurve),
+    ]
+
+    func testApplyPresetFindsPanelPresetsByNameOrId() throws {
+        let matte = try PresetLookup.find("matte", kind: nil, in: presetCandidates).get()
+        XCTAssertEqual(matte.kind, .toneCurve)
+        let teal = try PresetLookup.find("Teal & Orange", kind: .colorGrading, in: presetCandidates).get()
+        XCTAssertEqual(teal.kind, .colorGrading)
+        let byID = try PresetLookup.find(presetCandidates[0].id.uuidString, kind: nil, in: presetCandidates).get()
+        XCTAssertEqual(byID.name, "Portra 400")
+    }
+
+    func testApplyPresetAsksForKindWhenANameIsInTwoLists() throws {
+        guard case .failure(let problem) = PresetLookup.find("Bleach Bypass", kind: nil, in: presetCandidates) else {
+            return XCTFail("expected a problem")
+        }
+        XCTAssertTrue(problem.message.contains("develop, tone_curve"), problem.message)
+        let curve = try PresetLookup.find("Bleach Bypass", kind: .toneCurve, in: presetCandidates).get()
+        XCTAssertEqual(curve.group, "Film Process")
+    }
+
+    func testApplyPresetKindLimitsTheSearchAndSuggests() {
+        guard case .failure(let problem) = PresetLookup.find("Mate", kind: .toneCurve, in: presetCandidates) else {
+            return XCTFail("expected a problem")
+        }
+        XCTAssertTrue(problem.message.contains("No Tone Curve preset"), problem.message)
+        XCTAssertTrue(problem.message.contains("Did you mean “Matte”"), problem.message)
+        if case .success = PresetLookup.find("Portra 400", kind: .colorGrading, in: presetCandidates) {
+            XCTFail("a Develop preset isn't a Color Grading preset")
+        }
+        let kinds = AtelierAgentTools.applyPreset.inputSchema["properties"]?["kind"]?["enum"]
+        XCTAssertEqual(kinds, .array([.string("develop"), .string("tone_curve"), .string("color_grading")]))
+    }
+
     func testSnakeNames() {
         XCTAssertEqual(AdjustRules.snakeName("exposure"), "exposure")
         XCTAssertEqual(AdjustRules.snakeName("hueRed"), "hue_red")

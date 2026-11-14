@@ -43,6 +43,14 @@ final class ImportFlow: ObservableObject {
     @Published var cullFirst = UserDefaults.standard.bool(forKey: "import.cull") {
         didSet { UserDefaults.standard.set(cullFirst, forKey: "import.cull") }
     }
+    /// Applied after the Develop preset (AT-057): a Tone Curve and a Color Grading panel preset,
+    /// by id ("" is none).
+    @Published var toneCurvePresetID = UserDefaults.standard.string(forKey: "import.toneCurvePreset") ?? "" {
+        didSet { UserDefaults.standard.set(toneCurvePresetID, forKey: "import.toneCurvePreset") }
+    }
+    @Published var colorGradingPresetID = UserDefaults.standard.string(forKey: "import.colorGradingPreset") ?? "" {
+        didSet { UserDefaults.standard.set(colorGradingPresetID, forKey: "import.colorGradingPreset") }
+    }
     /// Settings > Import's default library folder.
     static var defaultLibrary: String {
         FileManager.default.urls(for: .picturesDirectory, in: .userDomainMask)[0]
@@ -56,13 +64,18 @@ final class ImportFlow: ObservableObject {
     @Published private(set) var name = ""
     private var nameEdited = false
 
-    private weak var model: LibraryModel?
+    private(set) weak var model: LibraryModel?
     /// Copies the files to the library while the user culls; handed to the import on Import.
     private var stager: ImportStager?
     private var watch: AnyCancellable?
     /// The photos the copy step shows behind its figures: the culled photos with their
     /// thumbnails, or the photos chosen.
     @Published private(set) var wall: [ImportWallPhoto] = []
+
+    /// The user's Import Presets (AT-057, ImportFlow+Presets.swift).
+    @Published var importPresets: [ImportPreset] = ImportFlow.importPresetStore.all()
+    /// Why a chosen Import Preset couldn't set everything (a preset it named is gone).
+    @Published var importPresetNote: String?
 
     init(model: LibraryModel) {
         self.model = model
@@ -135,7 +148,14 @@ final class ImportFlow: ObservableObject {
             : .reference
         let target: ImportTarget = existingGroup.map { .existingGroup($0) } ?? .newGroup(name: effectiveName)
         return ImportOptions(mode: mode, target: target, keywords: keywords.split(separator: ",").map(String.init),
-                             developPreset: model?.develop.presets.first { $0.id.uuidString == presetID } ?? retiredPreset)
+                             developPreset: model?.develop.presets.first { $0.id.uuidString == presetID } ?? retiredPreset,
+                             toneCurvePreset: sectionPreset(.toneCurve, id: toneCurvePresetID),
+                             colorGradingPreset: sectionPreset(.colorGrading, id: colorGradingPresetID))
+    }
+
+    func sectionPreset(_ kind: SectionPresetKind, id: String) -> DevelopPreset? {
+        guard !id.isEmpty else { return nil }
+        return model?.develop.sectionPresets(kind).first { $0.id.uuidString == id }
     }
 
     /// Import, or with culling on, the Cull step. Both stay in the dialog.

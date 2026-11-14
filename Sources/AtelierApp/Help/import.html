@@ -50,12 +50,13 @@
         <div class="gh" style="margin:0;padding:6px 10px;background:#3a3a3a" data-pin="5">FILE HANDLING</div>
         <div style="padding:6px 10px"><span class="check"><i></i>Leave files where they are</span><br><span class="check"><i class="on" style="border-radius:50%"></i>Copy into my library folder</span></div>
         <div class="gh" style="margin:0;padding:6px 10px;background:#3a3a3a" data-pin="6">APPLY DURING IMPORT</div>
-        <div style="padding:6px 10px"><span class="popup">None</span></div>
+        <div style="padding:6px 10px"><span class="muted">Develop settings</span><br><span class="popup">Portra 400</span><br><span class="muted">Tone Curve preset</span><br><span class="popup">Matte</span><br><span class="muted">Color Grading preset</span><br><span class="popup">None</span></div>
         <div class="gh" style="margin:0;padding:6px 10px;background:#3a3a3a" data-pin="7">CULLING</div>
         <div style="padding:6px 10px"><span class="check"><i></i>Cull before importing</span></div>
       </div>
     </div>
     <div class="row" style="padding:10px 14px;border-top:1px solid #444;gap:8px" data-pin="8">
+      <span>Import Preset: <span class="popup">Zf Field</span></span>
       <span class="muted" style="flex:1">128 photos · 5.9 GB · copied into Atelier Library · into “100NZ6”</span>
       <span class="btn">Cancel</span><span class="btn on">Import 128 Photos</span>
     </div>
@@ -68,10 +69,23 @@
   <li><b>Photos</b>: a thumbnail of every photo found (a RAW and its JPEG once).</li>
   <li><b>Import Into</b>: a new import or an existing one. A new one is named after the first folder; the name is real text, so you can add to it or change it.</li>
   <li><b>File Handling</b>: <b>Leave files where they are</b> (on this Mac or the NAS; nothing is moved) or <b>Copy into my library folder</b>, in dated folders, each copy checked against the original.</li>
-  <li><b>Apply During Import</b>: a develop <a href="presets.html">preset</a> and keywords for every photo.</li>
+  <li><b>Apply During Import</b>: for every photo, a Develop <a href="presets.html">preset</a>, then a <a href="tone-curve.html">Tone Curve</a> preset, then a <a href="color-grading.html">Color Grading</a> preset, and keywords. See <a href="#apply">Presets during import</a>.</li>
   <li><b>Culling</b>: <b>Cull before importing</b> groups similar shots so you pick the keepers first. See <a href="cull.html">Cull</a>.</li>
-  <li>What will happen, and the button, which says how many photos will be imported and stays dimmed until there's at least one. The panels on the right open and close like Develop's and stay as you leave them.</li>
+  <li><b>Import Preset</b> (see <a href="#import-presets">Import Presets</a>), what will happen, and the button, which says how many photos will be imported and stays dimmed until there's at least one. The panels on the right open and close like Develop's and stay as you leave them.</li>
 </ol>
+
+<h3 id="apply">Presets during import</h3>
+<p>The three menus under <span class="path">Apply During Import</span> are applied to every new photo in order: <b>Develop settings</b>, then <b>Tone Curve preset</b>, then <b>Color Grading preset</b>. The Tone Curve and Color Grading lists are the ones in those panels' <b>Preset</b> menus, so a panel preset changes only its panel and leaves the Develop preset's other settings alone. Where two overlap, the later one wins.</p>
+<p>Each one is its own step in the photo's <span class="path">History</span>: <i>Import Preset: Portra 400</i>, <i>Import Tone Curve Preset: Matte</i>, <i>Import Color Grading Preset: Teal &amp; Orange</i>. Click an earlier step to see the photo without the later ones.</p>
+
+<h3 id="import-presets">Import Presets</h3>
+<p>Save the dialog's settings to use again, as in Lightroom Classic. Click <b>Import Preset</b> at the bottom left:</p>
+<ul>
+  <li><b>Save Current Settings as New Preset…</b>: name it. A preset keeps <span class="path">File Handling</span> (and the library folder for copies), <span class="path">Apply During Import</span> and <span class="path">Culling</span>, but not the photos chosen or the import's name. Using a name that's already taken asks before replacing it.</li>
+  <li>Choose a preset by name to set all the panels at once. Change anything and the menu shows <i>(edited)</i>. <b>Update Preset</b> saves the change.</li>
+  <li><b>Rename Preset…</b> and <b>Delete Preset</b> change the chosen preset. <b>None</b> leaves the settings as they are and stops following a preset.</li>
+  <li>If a preset names a Develop, Tone Curve or Color Grading preset you've since deleted, that menu is set to None and the dialog says so.</li>
+</ul>
 
 <h2 id="progress">While it imports</h2>
 <figure>

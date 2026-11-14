@@ -116,27 +116,95 @@ public struct AdjustParameters: ActionParameters, Hashable, PhotoTargeting {
     }
 }
 
+/// Which list `apply_preset` looks in (AT-057): the Presets panel's Develop presets, or a
+/// panel's own Preset menu (Tone Curve, Color Grading), which change only that panel.
+public enum PresetKind: String, AgentEnum {
+    case develop
+    case toneCurve = "tone_curve"
+    case colorGrading = "color_grading"
+
+    /// "Develop", "Tone Curve", "Color Grading".
+    public var title: String {
+        switch self {
+        case .develop: return "Develop"
+        case .toneCurve: return "Tone Curve"
+        case .colorGrading: return "Color Grading"
+        }
+    }
+}
+
 public struct ApplyPresetParameters: ActionParameters, Hashable, PhotoTargeting {
     public var ids: [Int64]?
     public var selection: Bool?
     public var current: Bool?
     public var catalog: String?
     public var preset: String
+    public var kind: PresetKind?
 
     public init(ids: [Int64]? = nil, selection: Bool? = nil, current: Bool? = nil, catalog: String? = nil,
-                preset: String) {
+                preset: String, kind: PresetKind? = nil) {
         self.ids = ids
         self.selection = selection
         self.current = current
         self.catalog = catalog
         self.preset = preset
+        self.kind = kind
     }
 
     public static let example = ApplyPresetParameters(ids: [1], selection: false, current: false,
-                                                      catalog: "Atelier Catalog", preset: "Portra 400")
+                                                      catalog: "Atelier Catalog", preset: "Portra 400", kind: .develop)
     public static let fieldNotes: [String: FieldNote] = PhotoTargetNotes.notes.merging([
         "preset": FieldNote("The preset's id or name, from list_items kind presets."),
+        "kind": FieldNote("develop (a Presets panel preset), tone_curve or color_grading (the Tone Curve or Color "
+                          + "Grading panel's Preset menu, which change only that panel). Left out: the preset is "
+                          + "looked for in all three, and a name found in more than one needs kind."),
     ]) { $1 }
+}
+
+/// A preset as `apply_preset` sees it, whichever list it comes from.
+public struct PresetCandidate: Hashable, Sendable {
+    public var id: UUID
+    public var name: String
+    public var group: String
+    public var kind: PresetKind
+
+    public init(id: UUID, name: String, group: String, kind: PresetKind) {
+        self.id = id
+        self.name = name
+        self.group = group
+        self.kind = kind
+    }
+}
+
+/// How `apply_preset` finds the preset it was named (AT-057): by id, else by name (ignoring
+/// case and accents) in the kind asked for, or in every kind when none is.
+public enum PresetLookup {
+    /// Why no single preset was found, in words for the agent.
+    public struct Problem: Error, Hashable, Sendable {
+        public var message: String
+        public init(_ message: String) { self.message = message }
+    }
+
+    public static func find(_ text: String, kind: PresetKind?, in candidates: [PresetCandidate])
+        -> Result<PresetCandidate, Problem> {
+        let pool = kind.map { kind in candidates.filter { $0.kind == kind } } ?? candidates
+        let wanted = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let id = UUID(uuidString: wanted), let preset = pool.first(where: { $0.id == id }) { return .success(preset) }
+        let named = pool.filter { $0.name.compare(wanted, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }
+        if named.count == 1 { return .success(named[0]) }
+        if named.count > 1 {
+            let kinds = Set(named.map(\.kind))
+            if kinds.count > 1 {
+                let names = PresetKind.allCases.filter(kinds.contains).map(\.rawValue).joined(separator: ", ")
+                return .failure(Problem("“\(wanted)” is a preset in more than one list (\(names)). Say which with kind."))
+            }
+            let groups = named.map { "\($0.group): \($0.id.uuidString)" }.joined(separator: "; ")
+            return .failure(Problem("\(named.count) presets are called “\(wanted)” (\(groups)). Name one by its id."))
+        }
+        let what = kind.map { "\($0.title) preset" } ?? "preset"
+        let hint = Suggest.closest(to: wanted, in: pool.map(\.name)).map { " Did you mean “\($0)”?" } ?? ""
+        return .failure(Problem("No \(what) “\(wanted)”.\(hint) list_items with kind presets lists them."))
+    }
 }
 
 public struct SyncParameters: ActionParameters, Hashable, PhotoTargeting {
@@ -296,9 +364,10 @@ public extension AtelierAgentTools {
         inputSchema: ParameterSchema.of(AdjustParameters.self).json, readOnly: false)
 
     static let applyPreset = MCPTool(
-        name: "apply_preset", title: "Apply a Develop preset",
-        description: "Applies a Develop preset to photos, on top of each photo's own settings (only the parts the preset "
-            + "holds change). One change; undo_change undoes it.",
+        name: "apply_preset", title: "Apply a preset",
+        description: "Applies a Develop preset, or a Tone Curve or Color Grading panel preset, to photos, on top of each "
+            + "photo's own settings (only the parts the preset holds change; a panel preset changes only its panel). "
+            + "One change; undo_change undoes it.",
         inputSchema: ParameterSchema.of(ApplyPresetParameters.self).json, readOnly: false)
 
     static let sync = MCPTool(
