@@ -988,3 +988,23 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 **Scope:** shared `onClick(perform:doubleClick:)` / `onDoubleClick(perform:)` (`Views/ClickGestures.swift`, double-tap as a simultaneous gesture); every `.onTapGesture(count: 2)` in the app moved onto them except the histogram's spatial double-click (no single click there); `ClickGestureTests` fails on a new one; AGENTS.md rule; PRD Culling and Filmstrip lines.
 
 **Acceptance:** Mac build and tests of the exact head, then Rosh: Cull tiles and Filmstrip cells respond at once to a click, double-click still keeps/drops and opens Loupe; double-click to reset slider names, group headings, Color Grading labels, Effects/HDR row names, preset Amount; double-click a mask name renames (and selects it). Not in scope: AppKit views (Grid already uses `clickCount`).
+
+## AT-057 — Import with presets, Auto-Cull and Auto Import, then over MCP from the field
+
+**Status:** Proposed / discuss. Research and proposal only; nothing approved or built. **Owner:** Claude (Cl). **Chat:** [Propose batch import with presets via MCP](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKXQv1cazVRfR98PNVAP8z7A). **Branch:** `claude/project-thread-kbohj6`. **Depends on:** AT-055 (section presets), AT-050d/j (edit tools, batches); step 4 on AT-050e and AT-050f.
+
+**Evidence:** Rosh (Nov 14, 2026): "calling import with processing with presets or certain sectional presets - so while I am in the field, I can remotely do this operations through mcp. before that, from the UI there has to be able to do that and that can be part of the mcp command list." Report: project files `reports/batch-import-presets-mcp-2026-11-14.md` (Easel's Actions and Batch, Lightroom Classic, Capture One, Photo Mechanic, Narrative, Aftershoot and others, with sources).
+
+**Today (main at `b0c8297`):** Apply During Import takes one Develop preset and keywords. The PRD's metadata preset on import and watch folder (Import modes, 3) aren't built. `file.importPhotos` only opens the dialog; `library.cullImport` only opens the Cull view; `apply_preset` doesn't reach Tone Curve or Color Grading presets; there are no job tools for long work.
+
+**Proposed steps (one PR each):**
+1. **Import Presets (UI).** Save the Import dialog's right column as a named preset. Apply During Import becomes a fixed-order stack: Auto Settings, Develop preset, Tone Curve preset, Color Grading preset; plus a metadata preset (creator, copyright, keywords) and Culling: none, Cull before importing, or **Auto-Cull** (suggested keepers Picked, the rest Rejected, all kept in the entry, nothing removed).
+2. **Auto Import (UI).** File > Auto Import: watch folders (local or megham, subfolders optional, need not be empty), each with an Import Preset; import a file once it has stopped changing for 30 s, RAW waits for its JPEG; on a network share, list the folder every minute rather than rely on FSEvents (to be verified on a Mac).
+3. **MCP, local.** `list_import_presets`, `list_presets` (kind), `import_photos` (asks first, returns a job), shared `get_job` / `cancel_job` in `AgentMCP`, `auto_cull` (one undoable change), `set_auto_import`, and `apply_preset` taking section presets. All built from registry actions.
+4. **Remote (Rosh's call, with AT-050f).** HTTP listener on localhost published with Tailscale Serve (tailnet only, never Funnel) plus Atelier's token and request keys; a standing Allow per Import Preset ("Agents may run this", limited to its folders) in Settings > Agents.
+
+**Easel (AT-050g):** its Actions and Batch (EA-049) become `play_action` and `run_batch` under the same jobs and standing-Allow rules from the shared module.
+
+**To decide:** (a) the standing Allow changes the AT-050 rule that file writes always ask in Atelier's window; (b) Auto-Cull keeps unkept photos in the entry, unlike Cull before importing; (c) whether to open remote access at all (PRD Privacy row).
+
+**Acceptance (per step, once approved):** step 1, an Import Preset with Film + a Tone Curve preset + a Color Grading preset + Auto-Cull imports a folder with one history step per preset and Picked/Rejected flags; step 2, photos copied onto megham by another device import by themselves with the preset; step 3, a chat app imports a folder with a preset, follows the job and cancels it; step 4, the same from a phone or laptop on the tailnet without anyone at the Mac.
