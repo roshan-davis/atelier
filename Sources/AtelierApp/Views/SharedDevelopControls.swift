@@ -23,8 +23,7 @@ struct GroupHeading: View {
                 .foregroundStyle(keys.option ? Color.accentColor : Color.secondary)
                 .padding(.top, 4)
                 .contentShape(Rectangle())
-                .onTapGesture(count: 2) { reset() }
-                .onTapGesture { if NSEvent.modifierFlags.contains(.option) { reset() } }
+                .onClick { if NSEvent.modifierFlags.contains(.option) { reset() } } doubleClick: { reset() }
                 .help("Double-click to reset \(title), or ⌥-click")
         } else {
             Text(title)
@@ -138,7 +137,7 @@ struct SliderRow: View {
                 .lineLimit(1)
                 .frame(width: labelWidth, alignment: .leading)
                 .contentShape(Rectangle())
-                .onTapGesture(count: 2) {
+                .onDoubleClick {
                     if NSEvent.modifierFlags.contains(.shift), let auto {
                         auto()
                     } else if let reset {

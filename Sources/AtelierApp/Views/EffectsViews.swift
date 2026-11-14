@@ -55,7 +55,7 @@ private struct StyleRow: View {
             Text(parameter.label)
                 .frame(width: 78, alignment: .leading)
                 .contentShape(Rectangle())
-                .onTapGesture(count: 2) { develop.reset(parameter) }
+                .onDoubleClick { develop.reset(parameter) }
             Picker(parameter.label, selection: Binding(get: { Int(develop.value(parameter).rounded()) },
                                                       set: { develop.set(parameter, to: Double($0)) })) {
                 ForEach(options, id: \.0) { option in

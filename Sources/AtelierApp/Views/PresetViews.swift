@@ -505,7 +505,7 @@ private struct AmountRow: View {
                 Text("Amount")
                     .frame(width: 56, alignment: .leading)
                     .contentShape(Rectangle())
-                    .onTapGesture(count: 2) { develop.setPresetAmount(100) }
+                    .onDoubleClick { develop.setPresetAmount(100) }
                     .help("Double-click to reset to 100%")
                 DevelopSlider(value: Binding(get: { develop.presetAmount?.amount ?? 100 },
                                              set: { develop.setPresetAmount($0) }),

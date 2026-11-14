@@ -594,6 +594,7 @@ private struct HistogramView: View {
                 }
                 .onEnded { _ in drag = nil }
         )
+        // double-click only: nothing here or around it takes a single click, so no click waits.
         .onTapGesture(count: 2, coordinateSpace: .local) { point in
             guard canAdjust else { return }
             develop.reset(ToneRegion.at(point.x / max(1, width)).parameter)

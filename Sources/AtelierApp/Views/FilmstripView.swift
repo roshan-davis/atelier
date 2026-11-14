@@ -64,12 +64,12 @@ struct FilmstripView: View {
                                                                 isSelected: model.selection.contains(row.id)),
                                           revision: previewRevision.value)
                                 .id(row.id)
-                                .onTapGesture(count: 2) {
+                                // A click selects at once; a double-click selects, then opens the photo.
+                                .onClick { select(row.id) } doubleClick: {
                                     model.selection = [row.id]
                                     model.focusedID = row.id
                                     if model.mode == .grid { model.openLoupe() }
                                 }
-                                .onTapGesture { select(row.id) }
                                 .overlay(RightClickMenu { model.filmstripMenu(for: row.id) })
                         }
                     }

@@ -501,7 +501,7 @@ struct HueRangeRow: View {
                 .lineLimit(1)
                 .frame(width: 78, alignment: .leading)
                 .contentShape(Rectangle())
-                .onTapGesture(count: 2) { develop.resetHueRange(color) }
+                .onDoubleClick { develop.resetHueRange(color) }
                 .help("Double-click to reset")
             HueRangeSlider(color: color, low: low, high: high,
                            onChange: { newLow, newHigh, moving in

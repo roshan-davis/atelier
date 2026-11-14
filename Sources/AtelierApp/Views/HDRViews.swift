@@ -204,7 +204,7 @@ struct HDRPanel: View {
             Text("Method")
                 .frame(width: 94, alignment: .leading)
                 .contentShape(Rectangle())
-                .onTapGesture(count: 2) { hdr.methodBinding.wrappedValue = HDRSettings().method }
+                .onDoubleClick { hdr.methodBinding.wrappedValue = HDRSettings().method }
             Picker("Method", selection: hdr.methodBinding) {
                 Text("Natural").tag(HDRMethod.direct)
                 Text("Fusion").tag(HDRMethod.fusion)
