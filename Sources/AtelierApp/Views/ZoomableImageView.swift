@@ -331,6 +331,9 @@ final class ZoomScrollView: NSScrollView {
             host.sizingOptions = []
             host.frame = bounds
             host.autoresizingMask = [.width, .height]
+            // Nothing an overlay draws may spill past the photo view onto the bars around it.
+            host.wantsLayer = true
+            host.layer?.masksToBounds = true
             addSubview(host, positioned: .above, relativeTo: nil)
             overlayHost = host
             Cursors.shared.refresh()

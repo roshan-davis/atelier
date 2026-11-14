@@ -70,6 +70,31 @@ public struct GrayPlane: Sendable {
         return sumSquares / count - mean * mean
     }
 
+    /// The Laplacian's sums on a `cells` × `cells` grid, so the sharpness of any region can be
+    /// worked out later without the pixels (`CullSharpnessGrid.variance(in:)`): every photo of a
+    /// group is then measured on the same region.
+    public func laplacianGrid(cells: Int = 16) -> CullSharpnessGrid {
+        var grid = CullSharpnessGrid(cells: cells)
+        guard width > 2, height > 2 else { return grid }
+        pixels.withUnsafeBufferPointer { gray in
+            for y in 1..<(height - 1) {
+                let row = y * width
+                let cy = min(cells - 1, y * cells / height)
+                for x in 1..<(width - 1) {
+                    let center = Double(gray[row + x]) * 4
+                    let around = Double(gray[row + x - 1]) + Double(gray[row + x + 1])
+                        + Double(gray[row - width + x]) + Double(gray[row + width + x])
+                    let value = around - center
+                    let cell = cy * cells + min(cells - 1, x * cells / width)
+                    grid.sum[cell] += value
+                    grid.squares[cell] += value * value
+                    grid.count[cell] += 1
+                }
+            }
+        }
+        return grid
+    }
+
     /// How much the edges inside `rect` run one way (0 all ways, 1 one way), from the structure
     /// tensor. Motion blur wipes out the edges across the motion and raises it; missed focus
     /// softens every edge alike. Only meaningful against another shot of the same scene.
@@ -138,5 +163,43 @@ public struct CullExposure: Sendable, Equatable {
     /// Stops brighter (positive) or darker than `other`.
     public func stops(from other: CullExposure) -> Double {
         log2(max(brightness, 1e-4) / max(other.brightness, 1e-4))
+    }
+}
+
+/// The Laplacian's sums per cell of a grid over the frame (rows from the top), from
+/// `GrayPlane.laplacianGrid`.
+public struct CullSharpnessGrid: Sendable, Equatable {
+    public let cells: Int
+    var sum: [Double]
+    var squares: [Double]
+    var count: [Double]
+
+    public init(cells: Int) {
+        self.cells = cells
+        sum = [Double](repeating: 0, count: cells * cells)
+        squares = sum
+        count = sum
+    }
+
+    /// Variance of the Laplacian over the cells a Vision rectangle (0...1, origin bottom left)
+    /// touches; 0 when nothing was measured there.
+    public func variance(in box: CGRect) -> Double {
+        let n = Double(cells)
+        let x0 = max(0, min(cells - 1, Int((box.minX * n).rounded(.down))))
+        let x1 = max(x0, min(cells - 1, Int((box.maxX * n).rounded(.up)) - 1))
+        let y0 = max(0, min(cells - 1, Int(((1 - box.maxY) * n).rounded(.down))))
+        let y1 = max(y0, min(cells - 1, Int(((1 - box.minY) * n).rounded(.up)) - 1))
+        var s = 0.0, q = 0.0, c = 0.0
+        for y in y0...y1 {
+            for x in x0...x1 {
+                let i = y * cells + x
+                s += sum[i]
+                q += squares[i]
+                c += count[i]
+            }
+        }
+        guard c > 0 else { return 0 }
+        let mean = s / c
+        return q / c - mean * mean
     }
 }

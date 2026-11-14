@@ -17,6 +17,8 @@ struct CullPreviewFace {
 struct CullSubjectOverlay: View {
     @ObservedObject var frame: PhotoFrame
     let subject: CullSubject
+    /// Every photo of the group was measured on this same region.
+    var sharedRegion = false
     let faces: [CullPreviewFace]
     /// "Sharpness 82% of the group's best", or nil for a photo on its own.
     let sharpness: String?
@@ -24,40 +26,58 @@ struct CullSubjectOverlay: View {
     private let subjectColor = Color(red: 1, green: 0.62, blue: 0.1)
 
     var body: some View {
-        let rect = frame.rect
-        ZStack(alignment: .topLeading) {
-            Color.clear
-            if rect.width > 0 {
-                ForEach(faces.indices, id: \.self) { index in
-                    let face = faces[index]
-                    let box = Self.place(face.box, in: rect)
-                    Rectangle()
-                        .stroke(color(face.eyes), lineWidth: 1.5)
-                        .frame(width: box.width, height: box.height)
-                        .offset(x: box.minX, y: box.minY)
-                    tag(words(face), color: color(face.eyes))
-                        .offset(x: box.minX, y: box.maxY + 3)
-                }
-                let box = Self.place(subject.box, in: rect).insetBy(dx: -3, dy: -3)
-                Rectangle()
-                    .stroke(subjectColor, style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
-                    .frame(width: box.width, height: box.height)
-                    .offset(x: box.minX, y: box.minY)
-                tag(title, color: subjectColor)
-                    .offset(x: max(rect.minX, box.minX), y: max(rect.minY + 2, box.minY - 22))
-            }
+        GeometryReader { view in
+            content(visible: frame.rect.intersection(CGRect(origin: .zero, size: view.size)))
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .clipped()
         .allowsHitTesting(false)
     }
 
+    /// `visible` is the part of the photo on screen: boxes are cut to it, so nothing is drawn
+    /// past the photo onto the bars (Rosh, Nov 14, 2026).
+    @ViewBuilder
+    private func content(visible rect: CGRect) -> some View {
+        ZStack(alignment: .topLeading) {
+            Color.clear
+            if !rect.isNull, rect.width > 0, rect.height > 0 {
+                ForEach(faces.indices, id: \.self) { index in
+                    let face = faces[index]
+                    let box = Self.place(face.box, in: frame.rect).intersection(rect)
+                    if !box.isNull {
+                        Rectangle()
+                            .stroke(color(face.eyes), lineWidth: 1.5)
+                            .frame(width: box.width, height: box.height)
+                            .offset(x: box.minX, y: box.minY)
+                        tag(words(face), color: color(face.eyes))
+                            .offset(x: box.minX, y: min(box.maxY + 3, rect.maxY - 20))
+                    }
+                }
+                let placed = Self.place(subject.box, in: frame.rect).intersection(rect)
+                if !placed.isNull {
+                    // Inset by half the line so the dashes stay inside the photo.
+                    let box = placed.insetBy(dx: 1, dy: 1)
+                    Rectangle()
+                        .stroke(subjectColor, style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
+                        .frame(width: max(box.width, 0), height: max(box.height, 0))
+                        .offset(x: box.minX, y: box.minY)
+                    // Inside the box's top left corner, so it never leaves the photo.
+                    tag(title, color: subjectColor)
+                        .offset(x: box.minX + 4, y: box.minY + 4)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
     private var title: String {
-        let what: String
+        var what: String
         switch subject.kind {
         case .faces: what = faces.count == 1 ? "Subject: the face" : "Subject: \(faces.count) faces"
+        case .people: what = "Subject: the people (no face found)"
         case .object: what = "Subject: Vision's main object"
         case .wholeFrame: what = "Subject: whole frame (nothing stood out)"
         }
+        if sharedRegion && subject.kind != .wholeFrame { what += ", same area in every shot" }
         return [what, sharpness].compactMap { $0 }.joined(separator: " · ")
     }
 

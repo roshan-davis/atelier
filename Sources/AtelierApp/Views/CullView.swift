@@ -266,10 +266,12 @@ struct CullView: View {
         guard notes != nil || measured != nil else { return nil }
         let faces = measured.map { cull.previewFaces(of: $0.0) } ?? []
         let sharpness = measured.flatMap { cull.sharpnessWords(of: $0.0) }
+        let assessment = measured.flatMap { cull.assessments[$0.0] }
         return { frame in
             AnyView(ZStack {
                 if let measured {
-                    CullSubjectOverlay(frame: frame, subject: measured.1.subject, faces: faces, sharpness: sharpness)
+                    CullSubjectOverlay(frame: frame, subject: assessment?.subject ?? measured.1.subject,
+                                       sharedRegion: assessment?.sharedRegion ?? false, faces: faces, sharpness: sharpness)
                 }
                 if let notes {
                     NoteMarkersOverlay(notes: notes, frame: frame)
@@ -278,27 +280,54 @@ struct CullView: View {
         }
     }
 
-    /// How to zoom, the Note Markers switch and the zoom buttons, as under Loupe's photo.
+    /// The hint, the two display switches side by side and the zoom buttons, laid out like
+    /// Loupe's bar: the hint goes first when room runs out, the switches never wrap.
     private var zoomBar: some View {
-        HStack(spacing: 12) {
-            Text(cull.placingNote != nil ? "Click the photo where the note belongs (Esc stops)"
-                                         : "Double-click the photo to zoom, drag to move around")
-                .foregroundStyle(cull.placingNote != nil ? Color.accentColor : .secondary)
-                .lineLimit(1)
-            Spacer(minLength: 8)
-            Toggle("Show Subject", isOn: $showSubject)
-                .toggleStyle(.checkbox)
-                .help("Draw what Cull measured: a dashed box around the subject its sharpness is read on "
-                      + "(the faces, Vision's main object, or the whole frame) and each face with its eyes")
-            Toggle("Note Markers", isOn: $showMarkers)
-                .toggleStyle(.checkbox)
-                .help("Show notes pinned to a spot on the photo as numbered markers. Pin a note with "
-                      + "Pin to Photo in the notes panel. Markers show only here, never in exports.")
-            ZoomControls(zoom: cull.zoom)
+        AdaptiveControlBar(sizingKey: cull.placingNote != nil) {
+            HStack(spacing: 12) {
+                zoomHint
+                Spacer(minLength: 16)
+                displaySwitches
+                ZoomControls(zoom: cull.zoom)
+            }
+        } compact: {
+            HStack(spacing: 12) {
+                displaySwitches
+                Spacer(minLength: 8)
+                ZoomControls(zoom: cull.zoom)
+            }
+        } minimum: {
+            HStack(spacing: 8) {
+                displaySwitches
+                Spacer(minLength: 0)
+                ZoomControls(zoom: cull.zoom, compact: true)
+            }
         }
         .font(.callout)
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
+    }
+
+    private var zoomHint: some View {
+        Text(cull.placingNote != nil ? "Click the photo where the note belongs (Esc stops)"
+                                     : "Double-click the photo to zoom, drag to move around")
+            .foregroundStyle(cull.placingNote != nil ? Color.accentColor : .secondary)
+            .lineLimit(1)
+            .fixedSize()
+    }
+
+    /// What to draw on the photo: one group, read left to right.
+    private var displaySwitches: some View {
+        HStack(spacing: 14) {
+            Toggle("Show Subject", isOn: $showSubject)
+                .help("Draw what Cull measured: a dashed box around the area its sharpness is read on "
+                      + "(the faces, the people, Vision's main object or the whole frame) and each face with its eyes")
+            Toggle("Note Markers", isOn: $showMarkers)
+                .help("Show notes pinned to a spot on the photo as numbered markers. Pin a note with "
+                      + "Pin to Photo in the notes panel. Markers show only here, never in exports.")
+        }
+        .toggleStyle(.checkbox)
+        .fixedSize()
     }
 
     private func previewBar(_ id: Int) -> some View {

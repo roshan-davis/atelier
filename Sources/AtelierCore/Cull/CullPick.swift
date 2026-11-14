@@ -59,6 +59,10 @@ public struct CullAssessment: Sendable, Equatable {
     /// `sharpness` was measured on the eyes from a large copy (Advanced checks, every photo of
     /// the group).
     public var onEyes = false
+    /// What `sharpness` was measured on: the faces, or one region shared by the whole group.
+    public var subject = CullSubject(kind: .wholeFrame)
+    /// `subject` is one region every photo of the group was measured on (no faces in every shot).
+    public var sharedRegion = false
     /// Stops brighter (positive) or darker than the group's middle photo.
     public var stops = 0.0
     public var highlights = 0.0
@@ -95,7 +99,15 @@ extension Culling {
         // The eyes from the Advanced checks only when every photo has them: sizes differ.
         let eyeValues = group.map(\.eyeSharpness)
         let onEyes = eyeValues.allSatisfy { $0 != nil }
-        let values = onEyes ? eyeValues.map { $0! } : group.map(\.subjectSharpness)
+        let shared = onEyes ? nil : sharedSubject(group)
+        let values: [Double]
+        if onEyes {
+            values = eyeValues.map { $0! }
+        } else if let shared {
+            values = group.map { $0.sharpnessGrid?.variance(in: shared.box) ?? $0.subjectSharpness }
+        } else {
+            values = group.map(\.subjectSharpness)
+        }
         let best = max(values.max() ?? 0, .leastNonzeroMagnitude)
         let brightness = group.map(\.exposure.brightness).sorted()
         let middle = CullExposure(brightness: brightness[brightness.count / 2])
@@ -108,6 +120,8 @@ extension Culling {
             assessment.halfClosed = eyes[index].filter { $0 == .halfClosed }.count
             assessment.sharpness = values[index] / best
             assessment.onEyes = onEyes
+            assessment.subject = shared ?? signal.subject
+            assessment.sharedRegion = shared != nil
             assessment.stops = signal.exposure.stops(from: middle)
             assessment.highlights = signal.exposure.highlights
             assessment.shadows = signal.exposure.shadows
@@ -121,6 +135,20 @@ extension Culling {
             assessment.smile = smiles.isEmpty ? nil : smiles.reduce(0, +) / Double(smiles.count)
             return assessment
         }
+    }
+
+    /// One region to measure every photo of a group on, when they aren't all measured on faces:
+    /// the union of their subjects (people, main object), else the whole frame. Measuring each
+    /// shot on its own main object compared different things (Rosh, Nov 14, 2026: near-identical
+    /// shots called "Subject softer: 37%"). nil when every photo has faces (each face is read).
+    static func sharedSubject(_ group: [CullSignals]) -> CullSubject? {
+        guard group.count > 1, !group.allSatisfy({ $0.subject.kind == .faces }),
+              group.allSatisfy({ $0.sharpnessGrid != nil }) else { return nil }
+        let regions = group.map(\.subject).filter { $0.kind == .people || $0.kind == .object || $0.kind == .faces }
+        guard let first = regions.first else { return CullSubject(kind: .wholeFrame) }
+        let union = regions.dropFirst().reduce(first.box) { $0.union($1.box) }
+        let kind: CullSubject.Kind = regions.contains { $0.kind == .people || $0.kind == .faces } ? .people : .object
+        return CullSubject(kind: kind, box: union.intersection(CGRect(x: 0, y: 0, width: 1, height: 1)))
     }
 
     /// The photo to suggest keeping in a group, by `pick`.

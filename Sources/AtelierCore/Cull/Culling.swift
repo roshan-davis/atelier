@@ -37,6 +37,11 @@ public struct CullSignals: @unchecked Sendable {
     public var advanced: Bool
     /// What was taken as the subject for `subjectSharpness`, for the Cull preview to show.
     public var subject = CullSubject(kind: .wholeFrame)
+    /// The Laplacian on a grid, so a group's photos can be measured on one shared region.
+    public var sharpnessGrid: CullSharpnessGrid?
+    /// The people Vision found (whole bodies, Vision rectangles), for a subject when no face
+    /// is found (sunglasses, turned away).
+    public var people: [CGRect] = []
 
     public init(featurePrint: VNFeaturePrintObservation? = nil, sharpness: Double = 0, faceQuality: Double? = nil,
                 thumbnail: CGImage? = nil, layout: [Float]? = nil, aspect: Float = 1.5, faces: [CullFace] = [],
@@ -73,7 +78,9 @@ public struct CullSubject: Sendable, Equatable {
     public enum Kind: String, Sendable {
         /// The faces Vision found (sharpness is read on each face, weighted by size).
         case faces
-        /// Vision's most salient object (no faces big enough).
+        /// The people Vision found, when it found no face (sunglasses, turned away, small).
+        case people
+        /// Vision's most salient object (no faces or people).
         case object
         /// Nothing stood out: the whole frame.
         case wholeFrame
@@ -142,8 +149,11 @@ public enum Culling {
         let print = VNGenerateImageFeaturePrintRequest()
         let landmarks = VNDetectFaceLandmarksRequest()
         let saliency = VNGenerateObjectnessBasedSaliencyImageRequest()
+        let humans = VNDetectHumanRectanglesRequest()
+        humans.upperBodyOnly = false
         let handler = VNImageRequestHandler(cgImage: image)
-        try? handler.perform([print, landmarks, saliency])
+        try? handler.perform([print, landmarks, saliency, humans])
+        signals.people = (humans.results ?? []).filter { $0.confidence >= 0.5 }.map(\.boundingBox)
         signals.featurePrint = print.results?.first
         // Capture quality for the same faces, so each face has both.
         let found = landmarks.results ?? []
@@ -163,7 +173,9 @@ public enum Culling {
         }
         signals.faceQuality = signals.faces.compactMap(\.quality).max()
         if let plane {
-            signals.subject = Self.subject(faces: signals.faces, saliency: saliency.results?.first, planeWidth: plane.width)
+            signals.subject = Self.subject(faces: signals.faces, people: signals.people,
+                                           saliency: saliency.results?.first, planeWidth: plane.width)
+            signals.sharpnessGrid = plane.laplacianGrid()
             let subject = plane.pixelRect(fromVision: signals.subject.box)
             signals.subjectSharpness = subjectSharpness(faces: signals.faces, fallback: plane.laplacianVariance(in: subject))
             signals.coherence = plane.edgeCoherence(in: subject)
@@ -227,17 +239,22 @@ public enum Culling {
     /// Where the subject is, in `plane`'s pixels: around the faces, else Vision's most salient
     /// object, else the whole frame.
     static func subjectRect(faces: [CullFace], saliency: VNSaliencyImageObservation?, plane: GrayPlane) -> CGRect {
-        plane.pixelRect(fromVision: subject(faces: faces, saliency: saliency, planeWidth: plane.width).box)
+        plane.pixelRect(fromVision: subject(faces: faces, people: [], saliency: saliency, planeWidth: plane.width).box)
     }
 
     /// The subject as a Vision rectangle (0...1, origin bottom left): around the faces at least
-    /// 24 px wide at the standard size, else Vision's most salient object (unless it covers 90%
-    /// of the frame), else the whole frame.
-    static func subject(faces: [CullFace], saliency: VNSaliencyImageObservation?, planeWidth: Int) -> CullSubject {
+    /// 24 px wide at the standard size, else around the people Vision found, else Vision's most
+    /// salient object (unless it covers 90% of the frame), else the whole frame.
+    static func subject(faces: [CullFace], people: [CGRect], saliency: VNSaliencyImageObservation?,
+                        planeWidth: Int) -> CullSubject {
         let judged = faces.filter { $0.box.width * Double(planeWidth) >= 24 }
         if let first = judged.first {
             let union = judged.dropFirst().reduce(first.box) { $0.union($1.box) }
             return CullSubject(kind: .faces, box: union)
+        }
+        if let first = people.first {
+            let union = people.dropFirst().reduce(first) { $0.union($1) }
+            return CullSubject(kind: .people, box: union.intersection(CGRect(x: 0, y: 0, width: 1, height: 1)))
         }
         if let objects = saliency?.salientObjects,
            let biggest = objects.max(by: { $0.boundingBox.width * $0.boundingBox.height < $1.boundingBox.width * $1.boundingBox.height }),

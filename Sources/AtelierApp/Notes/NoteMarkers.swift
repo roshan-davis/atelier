@@ -47,6 +47,7 @@ struct NoteMarkersOverlay: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .clipped()
         .allowsHitTesting(false)
     }
 

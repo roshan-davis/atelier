@@ -103,11 +103,61 @@ final class CullPickTests: XCTestCase {
     /// (Vision's salient object needs a real photo).
     func testSubjectIsTheFacesElseTheWholeFrame() {
         let faces = [face(0.1, 0.3), face(0.5, 0.3), CullFace(box: CGRect(x: 0.8, y: 0.1, width: 0.01, height: 0.01))]
-        let subject = Culling.subject(faces: faces, saliency: nil, planeWidth: 1024)
+        let subject = Culling.subject(faces: faces, people: [], saliency: nil, planeWidth: 1024)
         XCTAssertEqual(subject.kind, .faces)
         XCTAssertEqual(subject.box.minX, 0.1, accuracy: 1e-9)
         XCTAssertEqual(subject.box.maxX, 0.6, accuracy: 1e-9, "the 10 px face is left out")
-        XCTAssertEqual(Culling.subject(faces: [], saliency: nil, planeWidth: 1024), CullSubject(kind: .wholeFrame))
+        XCTAssertEqual(Culling.subject(faces: [], people: [], saliency: nil, planeWidth: 1024), CullSubject(kind: .wholeFrame))
+    }
+
+    /// No face found (sunglasses, turned away): the people Vision found are the subject.
+    func testSubjectIsThePeopleWhenNoFaceIsFound() {
+        let people = [CGRect(x: 0.2, y: 0.1, width: 0.2, height: 0.6), CGRect(x: 0.5, y: 0.1, width: 0.2, height: 0.95)]
+        let subject = Culling.subject(faces: [], people: people, saliency: nil, planeWidth: 1024)
+        XCTAssertEqual(subject.kind, .people)
+        XCTAssertEqual(subject.box.minX, 0.2, accuracy: 1e-9)
+        XCTAssertEqual(subject.box.maxX, 0.7, accuracy: 1e-9)
+        XCTAssertEqual(subject.box.maxY, 1, accuracy: 1e-9, "kept inside the frame")
+    }
+
+    /// The grid gives the same variance as measuring the pixels of a region directly, and rows
+    /// are counted from the top (a Vision box's maxY is the top).
+    func testSharpnessGridMeasuresARegion() {
+        let side = 64
+        var pixels = [UInt8](repeating: 128, count: side * side)
+        // Noise in the top half only.
+        var seed: UInt32 = 7
+        for y in 0..<(side / 2) {
+            for x in 0..<side {
+                seed = seed &* 1_664_525 &+ 1_013_904_223
+                pixels[y * side + x] = UInt8(truncatingIfNeeded: seed >> 24)
+            }
+        }
+        let plane = GrayPlane(width: side, height: side, pixels: pixels)
+        let grid = plane.laplacianGrid(cells: 16)
+        let top = grid.variance(in: CGRect(x: 0, y: 0.5, width: 1, height: 0.5))
+        let bottom = grid.variance(in: CGRect(x: 0, y: 0, width: 1, height: 0.5))
+        XCTAssertGreaterThan(top, bottom * 100)
+        XCTAssertEqual(grid.variance(in: CGRect(x: 0, y: 0, width: 1, height: 1)), plane.laplacianVariance(), accuracy: plane.laplacianVariance() * 1e-9)
+    }
+
+    /// Without faces in every shot, a group is measured on one region (the union of the
+    /// subjects), so near-identical shots compare the same pixels.
+    func testGroupWithoutFacesSharesOneRegion() {
+        var a = photo(), b = photo()
+        a.subject = CullSubject(kind: .object, box: CGRect(x: 0.1, y: 0.1, width: 0.3, height: 0.3))
+        b.subject = CullSubject(kind: .people, box: CGRect(x: 0.3, y: 0.2, width: 0.4, height: 0.5))
+        XCTAssertNil(Culling.sharedSubject([a, b]), "needs the grids")
+        a.sharpnessGrid = CullSharpnessGrid(cells: 4)
+        b.sharpnessGrid = CullSharpnessGrid(cells: 4)
+        let shared = Culling.sharedSubject([a, b])
+        XCTAssertEqual(shared?.kind, .people)
+        XCTAssertEqual(shared?.box.minX ?? 0, 0.1, accuracy: 1e-9)
+        XCTAssertEqual(shared?.box.maxY ?? 0, 0.7, accuracy: 1e-9)
+        var c = photo(faces: [face(0.1, 0.3)]), d = photo(faces: [face(0.1, 0.3)])
+        c.subject = CullSubject(kind: .faces); d.subject = CullSubject(kind: .faces)
+        c.sharpnessGrid = CullSharpnessGrid(cells: 4); d.sharpnessGrid = CullSharpnessGrid(cells: 4)
+        XCTAssertNil(Culling.sharedSubject([c, d]), "faces are read face by face")
     }
 
     func testFacesMatchPeopleWhoMoveALittle() {
