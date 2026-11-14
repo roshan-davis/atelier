@@ -134,14 +134,15 @@ extension Culling {
     /// A score for each photo, higher is better, by `pick`.
     public static func ranking(_ assessments: [CullAssessment], by pick: CullPick) -> [Double] {
         let hasFaces = assessments.contains { $0.worstFace != nil }
-        return assessments.map { a in
+        return assessments.map { (a: CullAssessment) -> Double in
             switch pick {
             case .balanced, .classic:
                 // A blink costs more than a big drop in sharpness: a soft keeper can be sharpened
                 // a little, a closed eye can't be opened.
                 var score = a.sharpness
                 if hasFaces { score += 0.5 * (a.worstFace ?? 0) }
-                score -= 0.7 * Double(min(a.closed, 3)) + 0.3 * Double(min(a.halfClosed, 3))
+                score -= 0.7 * Double(min(a.closed, 3))
+                score -= 0.3 * Double(min(a.halfClosed, 3))
                 score -= min(0.5, 0.25 * a.exposurePenalty)
                 score += 0.1 * (a.aesthetics ?? 0)
                 // Smiles only break near ties here; Best Expression weighs them properly.
@@ -151,12 +152,15 @@ extension Culling {
             case .sharpestSubject:
                 return a.sharpness + 0.01 * (a.aesthetics ?? 0)
             case .eyesOpen:
-                return -10 * Double(a.closed) - 3 * Double(a.halfClosed) + a.sharpness
+                let eyes: Double = -10 * Double(a.closed) - 3 * Double(a.halfClosed)
+                return eyes + a.sharpness
             case .bestExposure:
                 return -a.exposurePenalty + 0.2 * a.sharpness
             case .bestExpression:
                 // Without the Advanced checks' expressions this is Everyone's Eyes Open.
-                return -10 * Double(a.closed) - 3 * Double(a.halfClosed) + 2 * (a.smile ?? 0) + 0.3 * a.sharpness
+                let eyes: Double = -10 * Double(a.closed) - 3 * Double(a.halfClosed)
+                let smile: Double = 2 * (a.smile ?? 0)
+                return eyes + smile + 0.3 * a.sharpness
             }
         }
     }
