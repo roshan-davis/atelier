@@ -79,6 +79,24 @@ final class BuiltInLookReferenceTests: XCTestCase {
         }
     }
 
+    /// `LookSkin.studySkinBaseline` is the four portrait studies' mean drawn skin saturation per tone.
+    func testStudySkinBaselineMatchesTheDrawings() throws {
+        var sums = [0.0, 0.0, 0.0]
+        var count = 0.0
+        for study in BuiltInLookReference.allCases where study.scene == .portrait {
+            let image = try XCTUnwrap(study.image())
+            let target = try XCTUnwrap(LookTarget(image: image, areas: .wholePhoto, skinMode: .match,
+                                                  authoredSkinTones: study.skinToneRegions, colorStudy: true))
+            let tones = try XCTUnwrap(target.skin).relativeToneColors
+            XCTAssertEqual(tones.count, 3, study.name)
+            for k in 0..<3 { sums[k] += (tones[k] * tones[k]).sum().squareRoot() }
+            count += 1
+        }
+        for k in 0..<3 {
+            XCTAssertEqual(sums[k] / count, LookSkin.studySkinBaseline[k], accuracy: 0.004, "tone \(k)")
+        }
+    }
+
     func testPortraitStudiesMatchFaceColorWithEditableMasks() throws {
         let fixtures = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Scripts/presets/fixtures")
@@ -107,11 +125,17 @@ final class BuiltInLookReferenceTests: XCTestCase {
             // Skin is compared tone by tone: the photo's darkest, middle and brightest thirds of
             // skin against the study's drawn skin shadows, midtones and highlights, as color
             // relative to brightness (what Match Skin Tone matches).
+            // A study's target is its hue with the photo's own skin saturation scaled
+            // (`LookSkin.studyTarget`).
             XCTAssertEqual(reference.relativeToneColors.count, 3, study.name)
             let groups = LookSkin.toneSplit(source, skin.pixels).groups
+            let targets = try (0..<3).map { k in
+                LookSkin.studyTarget(study: reference.relativeToneColors[k],
+                                     photo: try XCTUnwrap(LookSkin.relativeAB(source, groups[k])), tone: k)
+            }
             func error(_ settings: DevelopSettings) throws -> Double {
                 let sample = try XCTUnwrap(fit.renderSRGB(settings).flatMap { LookSample(image: $0) })
-                return try zip(groups, reference.relativeToneColors).reduce(0) { sum, pair in
+                return try zip(groups, targets).reduce(0) { sum, pair in
                     let d = try XCTUnwrap(LookSkin.relativeAB(sample, pair.0)) - pair.1
                     return sum + (d * d).sum().squareRoot()
                 }

@@ -334,6 +334,22 @@ final class LookMatchTests: XCTestCase {
         XCTAssertTrue(big.allSatisfy { abs($0) <= 30 })
     }
 
+    /// A built-in study's skin target keeps the study's hue but scales the photo's own skin
+    /// saturation, so drawn skin doesn't oversaturate a photo's near-gray skin.
+    func testStudySkinTargetScalesThePhotosSaturation() {
+        let photo = SIMD2<Double>(0.05, 0.05)              // hue 45°, length about 0.071
+        let rich = SIMD2<Double>(0.0, 0.18)                // hue 90°, twice the midtone baseline
+        let target = LookSkin.studyTarget(study: rich, photo: photo, tone: 1)
+        XCTAssertEqual(atan2(target.y, target.x) * 180 / .pi, 90, accuracy: 1e-9)
+        let photoLength = (photo * photo).sum().squareRoot()
+        XCTAssertEqual((target * target).sum().squareRoot(), photoLength * 1.6, accuracy: 1e-9)  // capped
+        let pale = LookSkin.studyTarget(study: SIMD2(0.0455, 0), photo: photo, tone: 1)
+        XCTAssertEqual((pale * pale).sum().squareRoot(), photoLength * 0.5, accuracy: 1e-9)
+        // Nearly gray skin still takes some of the study's color.
+        let gray = LookSkin.studyTarget(study: SIMD2(0.0, 0.091), photo: SIMD2(0.001, 0), tone: 1)
+        XCTAssertEqual((gray * gray).sum().squareRoot(), 0.03, accuracy: 1e-9)
+    }
+
     func testProtectSkinTonesKeepsSkinInsideItsLimits() throws {
         let session = try XCTUnwrap(DevelopRenderer.shared.session(for: try samplePhoto(), maxPixelSize: LookSample.size))
         // A strong teal look that turns orange skin green and grey.

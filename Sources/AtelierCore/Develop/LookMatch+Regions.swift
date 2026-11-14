@@ -180,6 +180,27 @@ public struct LookSkin: Sendable {
         return ab / lightness
     }
 
+    /// The built-in studies' mean drawn skin saturation (`relativeAB` length) for shadows,
+    /// midtones and highlights, over the four portrait studies. `BuiltInLookReferenceTests`
+    /// checks these against the drawings.
+    static let studySkinBaseline = [0.111, 0.091, 0.068]
+
+    /// A built-in study's skin target for one tone on this photo: the study's hue, and the
+    /// photo's own skin saturation scaled by how much more or less saturated this study's skin is
+    /// than the studies' average. Flat drawn skin is more colorful than skin in a photo, which
+    /// reads close to gray (Rosh, Nov 14, 2026), so the drawn saturation itself pushed photos too
+    /// far; what a study says is its hue and whether its skin is paler or richer than usual
+    /// (Thrones about half, Fury Road about 1.4 ×). The scale stays within 0.5 to 1.6.
+    static func studyTarget(study: SIMD2<Double>, photo: SIMD2<Double>, tone: Int) -> SIMD2<Double> {
+        let studyLength = (study * study).sum().squareRoot()
+        let photoLength = (photo * photo).sum().squareRoot()
+        guard studyLength > 1e-6, studySkinBaseline.indices.contains(tone) else { return study }
+        let scale = min(1.6, max(0.5, studyLength / studySkinBaseline[tone]))
+        // Skin with almost no color still takes some of the study's, or a look couldn't show.
+        let length = max(photoLength, 0.03) * scale
+        return study / studyLength * length
+    }
+
     /// The skin's shadows, midtones and highlights as `relativeAB` measures them; empty unless
     /// both the colors and the lightness of all three tones are known.
     var relativeToneColors: [SIMD2<Double>] {
@@ -226,7 +247,7 @@ public struct LookSkin: Sendable {
     /// color guess that leaks into warm clothes) the neck, arms and hands take the same change:
     /// a face matched alone left a line at the collar (Rosh, Nov 14, 2026). Skin is still
     /// measured on Face Skin, so the face decides the change and the neck follows it.
-    static func maskSelection(bodySkin: Bool) -> DevelopSettings.PeopleSelection {
+    public static func maskSelection(bodySkin: Bool) -> DevelopSettings.PeopleSelection {
         DevelopSettings.PeopleSelection(parts: bodySkin ? [.entireFace, .bodySkin] : [.entireFace], feather: 20)
     }
 
@@ -595,7 +616,8 @@ extension LookMatcher {
             } else if let referenceSkin = target.skin {
                 let limit = target.whole.isColorStudy ? studySkinShift : maxSkinShift
                 let fit = fitSkin(skin, to: referenceSkin, in: &current, space: space, measure: whole,
-                                  limit: limit, bodySkin: bodySkin, isCancelled: isCancelled)
+                                  limit: limit, bodySkin: bodySkin, study: target.whole.isColorStudy,
+                                  isCancelled: isCancelled)
                 switch fit.outcome {
                 case .unchanged: notices.insert(.skinMatchLimited)
                 case .partial: notices.insert(.skinMatchPartial)

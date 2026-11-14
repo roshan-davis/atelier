@@ -185,7 +185,7 @@ extension LookMatcher {
     static func fitSkin(_ skin: LookSkin, to reference: LookSkin, in settings: inout DevelopSettings,
                         space: MaskSpace, measure: (DevelopSettings) -> LookSample?,
                         limit: Double = maxSkinShift, holdsLightness: Bool = false,
-                        bodySkin: Bool = false, isCancelled: () -> Bool) -> SkinFit {
+                        bodySkin: Bool = false, study: Bool = false, isCancelled: () -> Bool) -> SkinFit {
         // Vision's face box is tight: brows to chin, cheek to cheek, no forehead. The ellipse is
         // larger than the box and moved up over the forehead, with a short feather, so the
         // whole face gets the full effect (inside 70% of the radius) and it fades out past the
@@ -234,7 +234,13 @@ extension LookMatcher {
             masks = [(LookMatch.skinShadowsMaskName, faces + [range(0, low)]),
                      (LookMatch.skinMaskName, faces),
                      (LookMatch.skinHighlightsMaskName, faces + [range(high, 100)])]
-            tones = (0..<3).map { SkinSolver.Tone(pixels: split.groups[$0], target: targets[$0], relative: true) }
+            tones = (0..<3).map { k in
+                var target = targets[k]
+                if study, let photo = LookSkin.relativeAB(start, split.groups[k]) {
+                    target = LookSkin.studyTarget(study: targets[k], photo: photo, tone: k)
+                }
+                return SkinSolver.Tone(pixels: split.groups[k], target: target, relative: true)
+            }
             lightnessTargets = (0..<3).map {
                 holdsLightness && reference.toneLightness.count == 3 ? reference.toneLightness[$0] : nil
             }
@@ -294,23 +300,37 @@ extension LookMatcher {
             // Already there: nothing to add.
             return SkinFit(outcome: .matched)
         }
+        // The slopes are measured once (one try per slider, nine for three masks) and reused:
+        // the response is close to linear over this range. They are measured again only when a
+        // round finds no step that helps. Measuring them every round doubled the match's time.
+        var fresh = false
         for _ in 0..<skinRounds where error >= solver.closeEnough && !isCancelled() {
-            solver.measureJacobian(at: best, colors: colors, measure: measure, isCancelled: isCancelled)
-            guard let delta = solver.step(solver.residual(colors)) else { break }
+            if solver.jacobian.isEmpty {
+                solver.measureJacobian(at: best, colors: colors, measure: measure, isCancelled: isCancelled)
+                fresh = true
+            }
             var stepped = false
-            for fraction in [1.0, 0.5, 0.25] where !isCancelled() {
-                let trial = solver.applying(delta, fraction: fraction, to: best)
-                guard trial != best, let sample = measure(trial), let next = solver.colors(sample) else { continue }
-                let nextError = SkinSolver.norm(solver.residual(next))
-                guard nextError < error else { continue }
-                best = trial
-                colors = next
-                error = nextError
-                stepped = true
-                improved = true
-                break
+            while !stepped && !isCancelled() {
+                guard let delta = solver.step(solver.residual(colors)) else { break }
+                for fraction in [1.0, 0.5, 0.25] where !isCancelled() {
+                    let trial = solver.applying(delta, fraction: fraction, to: best)
+                    guard trial != best, let sample = measure(trial), let next = solver.colors(sample) else { continue }
+                    let nextError = SkinSolver.norm(solver.residual(next))
+                    guard nextError < error else { continue }
+                    best = trial
+                    colors = next
+                    error = nextError
+                    stepped = true
+                    improved = true
+                    break
+                }
+                if stepped || fresh { break }
+                // Old slopes led nowhere: measure them here and try once more.
+                solver.measureJacobian(at: best, colors: colors, measure: measure, isCancelled: isCancelled)
+                fresh = true
             }
             if !stepped { break }
+            fresh = false
         }
 
         guard improved, !isCancelled() else { return SkinFit(outcome: .unchanged, solver: solver, startError: startError) }
@@ -331,7 +351,8 @@ extension LookMatcher {
               let colors = solver.colors(sample) else { return nil }
         var error = SkinSolver.norm(solver.residual(colors))
         if error >= solver.closeEnough, let delta = solver.step(solver.residual(colors)) {
-            for fraction in [1.0, 0.5] {
+            // One real render for the step: real renders are the slow part of a match.
+            for fraction in [1.0] {
                 let trial = solver.applying(delta, fraction: fraction, to: settings)
                 guard trial != settings, let next = measure(trial).flatMap(solver.colors) else { continue }
                 let nextError = SkinSolver.norm(solver.residual(next))

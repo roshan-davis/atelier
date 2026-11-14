@@ -1,7 +1,8 @@
 import AppKit
 import AtelierCore
 
-/// Show Skin in the Match Look dialog: the face and body skin Select People finds, tinted red over
+/// Show Skin in the Match Look dialog: the skin Match Look changes (face, and neck, arms and hands
+/// when the parts model is loaded), tinted red over
 /// the photo and the reference, so a poor selection is visible before Apply.
 extension MatchLookModel {
     /// Whether the tint shows: Show Skin is on and a skin treatment is chosen.
@@ -16,7 +17,11 @@ extension MatchLookModel {
         let needsReference = referenceSkinOverlay == nil && reference != nil
         guard needsPhoto || needsReference else { return }
         DispatchQueue.global(qos: .userInitiated).async {
-            let photo = needsPhoto ? session?.peopleMask(settings, selection: LookSkin.matchSelection).flatMap { Self.tinted($0) } : nil
+            // What the skin masks change (Entire Face, with Body Skin when the parts model is
+            // loaded), not only the face skin they measure: showing the face alone looked as if
+            // the neck were left out (Rosh, Nov 14, 2026).
+            let selection = LookSkin.maskSelection(bodySkin: PeopleParts.isAvailable)
+            let photo = needsPhoto ? session?.peopleMask(settings, selection: selection).flatMap { Self.tinted($0) } : nil
             var referenceOverlay: CGImage?
             if needsReference, let reference {
                 if let study {
