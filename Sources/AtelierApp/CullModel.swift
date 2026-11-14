@@ -75,6 +75,39 @@ final class CullModel: ObservableObject, Identifiable {
         }
     }
     static let modeKey = "cull.mode"
+    /// How the suggested keeper of each group is picked; remembered between culls. Changing it
+    /// suggests again (as the Grouping slider does), without analyzing again.
+    @Published var pickBy: CullPick = CullPick(rawValue: UserDefaults.standard.string(forKey: CullModel.pickKey) ?? "")
+        ?? .balanced {
+        didSet {
+            UserDefaults.standard.set(pickBy.rawValue, forKey: Self.pickKey)
+            if pickBy != oldValue, !isAnalyzing { regroup() }
+        }
+    }
+    static let pickKey = "cull.pickBy"
+    /// Advanced checks (slower): each grouped photo's eyes read again from a large copy.
+    /// Off by default, remembered.
+    @Published var advanced = UserDefaults.standard.bool(forKey: CullModel.advancedKey) {
+        didSet {
+            guard advanced != oldValue else { return }
+            UserDefaults.standard.set(advanced, forKey: Self.advancedKey)
+            if advanced { runAdvanced() } else { stopAdvanced() }
+        }
+    }
+    static let advancedKey = "cull.advanced"
+    /// Advanced checks' progress: photos done and to do; nil when not running.
+    @Published private(set) var advancedProgress: (done: Int, total: Int)?
+    /// Write each dropped photo's reasons to its notes when the cull ends (AT-058); on by
+    /// default, remembered.
+    @Published var writeReasons = UserDefaults.standard.object(forKey: CullModel.reasonsKey) as? Bool ?? true {
+        didSet { UserDefaults.standard.set(writeReasons, forKey: Self.reasonsKey) }
+    }
+    static let reasonsKey = "cull.writeReasons"
+    /// Each photo measured against its group (key: photo id), for the caption and the notes.
+    @Published private(set) var assessments: [Int: CullAssessment] = [:]
+    private var advancedTask: Task<Void, Never>?
+    /// The person kept or dropped something since the keepers were last suggested.
+    private var choicesChanged = false
     /// Measurements between each photo and the next (key: the first's id), made after analysis.
     private var neighbors: [Int: CullComparison] = [:]
     /// Measurements between a group's first shot and later ones, made as grouping needs them.
@@ -188,7 +221,7 @@ final class CullModel: ObservableObject, Identifiable {
                 var pending = jobs.makeIterator()
                 for _ in 0..<workers {
                     guard let (id, url) = pending.next() else { break }
-                    group.addTask { (id, url.map(Culling.analyze) ?? CullSignals()) }
+                    group.addTask { (id, await Self.analyze(url)) }
                 }
                 for await (id, signals) in group {
                     if Task.isCancelled { return }
@@ -200,7 +233,7 @@ final class CullModel: ObservableObject, Identifiable {
                         self.analyzed += 1
                     }
                     if let (nextID, url) = pending.next() {
-                        group.addTask { (nextID, url.map(Culling.analyze) ?? CullSignals()) }
+                        group.addTask { (nextID, await Self.analyze(url)) }
                     }
                 }
             }
@@ -223,10 +256,16 @@ final class CullModel: ObservableObject, Identifiable {
         }
     }
 
+    nonisolated private static func analyze(_ url: URL?) async -> CullSignals {
+        guard let url else { return CullSignals() }
+        return await Culling.analyze(url)
+    }
+
     private func analysisFinished(_ neighbors: [Int: CullComparison]) {
         self.neighbors = neighbors
         isAnalyzing = false
         regroup()
+        if advanced { runAdvanced() }
         // The list starts again at the top with the groups, so the keys do too: the first
         // photo of the first group, not wherever capture order left off.
         focused = rows.first?.first
@@ -257,7 +296,9 @@ final class CullModel: ObservableObject, Identifiable {
         group.count > 1 && zip(group, group.dropFirst()).allSatisfy { link($0, $1) == .sameFrame }
     }
 
-    func regroup() {
+    /// Groups again and suggests keepers; `keepingChoices` keeps the person's Keep and Drop
+    /// clicks (when the Advanced checks finish in the background) once they've made any.
+    func regroup(keepingChoices: Bool = false) {
         if isReview {
             groups = [photos.map(\.id)]
         } else {
@@ -268,24 +309,88 @@ final class CullModel: ObservableObject, Identifiable {
         }
         var suggested: Set<Int> = []
         var kept: Set<Int> = []
+        var assessments: [Int: CullAssessment] = [:]
         let flags = currentFlags()
         for group in groups {
+            let signals = group.map { photos[$0].signals ?? CullSignals() }
+            for (id, assessment) in zip(group, Culling.assess(signals)) { assessments[id] = assessment }
             guard group.count > 1 else {
                 kept.formUnion(group)
                 continue
             }
-            let signals = group.map { photos[$0].signals ?? CullSignals() }
-            if let best = Culling.suggestedKeeper(signals) { suggested.insert(group[best]) }
+            let best = Culling.keeper(signals, by: pickBy)
+            if let best { suggested.insert(group[best]) }
             // Photos already picked stay the keepers; otherwise the suggestion.
             let picked = group.filter { flags[$0] == .picked }
             if !picked.isEmpty {
                 kept.formUnion(picked)
-            } else if let best = Culling.suggestedKeeper(signals) {
+            } else if let best {
                 kept.insert(group[best])
             }
         }
         self.suggested = suggested
-        self.kept = kept
+        if !(keepingChoices && choicesChanged) {
+            self.kept = kept
+            choicesChanged = false
+        }
+        self.assessments = assessments
+        if advanced { runAdvanced() }
+    }
+
+    // MARK: Advanced checks
+
+    /// Reads the eyes of every photo in a group of two or more again from a large copy (single
+    /// shots are always kept, so they're skipped), the focused photo's group first. Picks again
+    /// when done. Photos already read keep their result, so moving the Grouping slider only
+    /// reads the new ones.
+    private func runAdvanced() {
+        guard !isAnalyzing, advancedTask == nil else { return }
+        let focusedGroup = focused.flatMap { id in multiGroups.first { $0.contains(id) } } ?? []
+        let ids = (focusedGroup + multiGroups.flatMap { $0 })
+            .reduce(into: [Int]()) { if !$0.contains($1) { $0.append($1) } }
+            .filter { photos[$0].signals.map { !$0.advanced } ?? false }
+        guard !ids.isEmpty else { return }
+        let jobs = ids.map { ($0, photos[$0].url, photos[$0].signals ?? CullSignals()) }
+        advancedProgress = (0, jobs.count)
+        advancedTask = Task.detached(priority: .utility) { [weak self] in
+            // Fewer at once than the standard pass: each large copy takes a lot of memory.
+            let workers = max(2, min(4, ProcessInfo.processInfo.activeProcessorCount / 3))
+            await withTaskGroup(of: (Int, CullSignals).self) { group in
+                var pending = jobs.makeIterator()
+                for _ in 0..<workers {
+                    guard let (id, url, signals) = pending.next() else { break }
+                    group.addTask { (id, Self.advanced(url, signals)) }
+                }
+                for await (id, signals) in group {
+                    if Task.isCancelled { return }
+                    await MainActor.run {
+                        guard let self else { return }
+                        self.photos[id].signals = signals
+                        if let progress = self.advancedProgress { self.advancedProgress = (progress.done + 1, progress.total) }
+                    }
+                    if let (nextID, url, signals) = pending.next() {
+                        group.addTask { (nextID, Self.advanced(url, signals)) }
+                    }
+                }
+            }
+            await MainActor.run {
+                guard let self, !Task.isCancelled else { return }
+                self.advancedTask = nil
+                self.advancedProgress = nil
+                self.regroup(keepingChoices: true)
+            }
+        }
+    }
+
+    nonisolated private static func advanced(_ url: URL?, _ signals: CullSignals) -> CullSignals {
+        guard let url, !Task.isCancelled else { return signals }
+        return Culling.analyzeAdvanced(url, signals: signals)
+    }
+
+    private func stopAdvanced() {
+        advancedTask?.cancel()
+        advancedTask = nil
+        advancedProgress = nil
     }
 
     private func currentFlags() -> [Int: Flag] {
@@ -301,13 +406,18 @@ final class CullModel: ObservableObject, Identifiable {
 
     func toggle(_ id: Int) {
         if kept.contains(id) { kept.remove(id) } else { kept.insert(id) }
+        choicesChanged = true
     }
 
     func setKept(_ id: Int, _ keep: Bool) {
         if keep { kept.insert(id) } else { kept.remove(id) }
+        choicesChanged = true
     }
 
-    func keepAll() { kept = Set(photos.map(\.id)) }
+    func keepAll() {
+        kept = Set(photos.map(\.id))
+        choicesChanged = true
+    }
 
     func focus(_ id: Int) {
         guard focused != id else { return }
@@ -372,12 +482,44 @@ final class CullModel: ObservableObject, Identifiable {
         }
     }
 
-    /// Sharpness relative to the sharpest photo of its group, for the preview's caption.
-    func relativeSharpness(of id: Int) -> Double? {
-        guard let group = groups.first(where: { $0.contains(id) }), group.count > 1,
-              let value = photos[id].signals?.sharpness else { return nil }
-        let best = group.compactMap { photos[$0].signals?.sharpness }.max() ?? 0
-        return best > 0 ? value / best : nil
+    /// What was measured for the focused photo, for the preview's caption.
+    func caption(of id: Int) -> String? {
+        guard let assessment = assessments[id] else { return nil }
+        let inGroup = groups.first { $0.contains(id) }.map { $0.count > 1 } ?? false
+        return Culling.caption(assessment, inGroup: inGroup)
+    }
+
+    /// Why a photo isn't kept so far, one line per reason, for the preview; nil when it is kept
+    /// or alone.
+    func reasons(of id: Int) -> [String]? {
+        guard !kept.contains(id), let group = groups.first(where: { $0.contains(id) }), group.count > 1,
+              let keeper = self.keeper(of: group), let mine = assessments[id], let theirs = assessments[keeper] else { return nil }
+        return Culling.reasons(mine, keeper: theirs)
+    }
+
+    /// The kept photo a dropped one is compared with: the best of the group's kept photos by
+    /// the current Pick By.
+    func keeper(of group: [Int]) -> Int? {
+        let keptIDs = group.filter { kept.contains($0) }
+        guard !keptIDs.isEmpty else { return nil }
+        let scores = Culling.ranking(keptIDs.map { assessments[$0] ?? CullAssessment() }, by: pickBy)
+        return scores.indices.max { scores[$0] < scores[$1] }.map { keptIDs[$0] }
+    }
+
+    /// The Cull note for each photo dropped from a group of two or more (key: photo id).
+    func reasonNotes() -> [Int: String] {
+        var notes: [Int: String] = [:]
+        for group in multiGroups {
+            guard let keeper = self.keeper(of: group), let theirs = assessments[keeper] else { continue }
+            for id in group where !kept.contains(id) {
+                notes[id] = Culling.reasonNote(
+                    name: photos[keeper].name, groupSize: group.count, sameFrame: isSameFrame(group),
+                    keeperChosenByYou: !suggested.contains(keeper),
+                    reasons: assessments[id].map { Culling.reasons($0, keeper: theirs) } ?? [],
+                    droppedSuggestion: suggested.contains(id))
+            }
+        }
+        return notes
     }
 
     // MARK: Finishing
@@ -395,12 +537,18 @@ final class CullModel: ObservableObject, Identifiable {
         loadTask?.cancel()
         analysisTask?.cancel()
         largeTask?.cancel()
+        stopAdvanced()
     }
 
     func finish() {
         guard let model else { return }
         analysisTask?.cancel()
+        stopAdvanced()
         let groups = self.groups, kept = self.kept, photos = self.photos
+        // Reasons for the photos not kept (AT-058), and the kept ones whose old Cull note says
+        // "Kept later".
+        let notes = writeReasons ? reasonNotes() : [:]
+        let keptInGroups = writeReasons ? groups.filter { $0.count > 1 }.flatMap { $0 }.filter { kept.contains($0) } : []
         switch source {
         case .importing(_, let options):
             // Everything is cataloged so rejects can be reviewed later; only keepers join the entry.
@@ -414,12 +562,14 @@ final class CullModel: ObservableObject, Identifiable {
                 try? model.catalog.removeAssets(rejectFiles, fromImportGroup: entry)
                 try? model.catalog.applyCull(groups: groups.map { $0.compactMap(id) },
                                              keepers: Set(kept.compactMap(id)))
+                try? model.catalog.writeCullNotes(rejected: Self.byAsset(notes, id), kept: keptInGroups.compactMap(id))
                 model.status = "Imported \(kept.count) kept photo\(kept.count == 1 ? "" : "s"); \(rejects.count) culled shot\(rejects.count == 1 ? " is" : "s are") in Show Cull Group"
             }
         case .photos:
             let id = { (index: Int) in photos[index].assetID }
             do {
                 try model.catalog.applyCull(groups: groups.map { $0.compactMap(id) }, keepers: Set(kept.compactMap(id)))
+                try model.catalog.writeCullNotes(rejected: Self.byAsset(notes, id), kept: keptInGroups.compactMap(id))
                 let culled = groups.filter { $0.count > 1 }.flatMap { $0 }
                 let rejected = culled.filter { !kept.contains($0) }.count
                 model.status = isReview ? "Cull group updated"
@@ -430,6 +580,13 @@ final class CullModel: ObservableObject, Identifiable {
             }
         }
         if let onClose { onClose(true) } else { model.cullSession = nil }
+    }
+
+    /// Notes keyed by photo id, re-keyed by catalog id (photos without one are left out).
+    nonisolated static func byAsset(_ notes: [Int: String], _ id: (Int) -> Int64?) -> [Int64: String] {
+        var result: [Int64: String] = [:]
+        for (photo, text) in notes { if let asset = id(photo) { result[asset] = text } }
+        return result
     }
 }
 

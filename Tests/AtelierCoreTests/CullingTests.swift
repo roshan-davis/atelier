@@ -92,14 +92,15 @@ final class CullingTests: XCTestCase {
         XCTAssertEqual(Culling.suggestedKeeper([sharpClosed, softOpen]), 1)
     }
 
-    func testSharpnessDropsWithBlur() throws {
+    func testSharpnessDropsWithBlur() async throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("AtelierCull-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
         let sharpURL = dir.appendingPathComponent("sharp.png"), softURL = dir.appendingPathComponent("soft.png")
         try writeCheckerboard(to: sharpURL, blur: false)
         try writeCheckerboard(to: softURL, blur: true)
-        let sharp = Culling.analyze(sharpURL), soft = Culling.analyze(softURL)
+        let sharp = await Culling.analyze(sharpURL), soft = await Culling.analyze(softURL)
+        XCTAssertGreaterThan(sharp.subjectSharpness, soft.subjectSharpness * 2, "no faces: the subject is the frame or its main object")
         XCTAssertGreaterThan(sharp.sharpness, soft.sharpness * 2)
         XCTAssertNotNil(sharp.thumbnail)
         if let distance = Culling.distance(sharp, soft) {

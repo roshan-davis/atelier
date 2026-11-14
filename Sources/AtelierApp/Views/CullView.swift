@@ -89,27 +89,48 @@ struct CullView: View {
                     .monospacedDigit()
             }
             Spacer()
-            if !cull.isReview {
-                Picker("Match", selection: $cull.mode) {
-                    Text("Same Frame").tag(CullMode.sameFrame)
-                    Text("Similar Shots").tag(CullMode.similarShots)
-                }
-                .pickerStyle(.segmented)
-                .fixedSize()
-                .disabled(cull.isAnalyzing)
-                .help(cull.mode == .sameFrame
-                      ? "Same Frame: only shots framed alike, where people moved a little or blinked"
-                      : "Similar Shots: also slight zooms and recomposing, people moving in the background, a change of focus")
-                HStack(spacing: 8) {
-                    Text("Grouping").foregroundStyle(.secondary)
-                    Text("Tight").font(.caption).foregroundStyle(.secondary)
-                    DevelopSlider(value: $cull.looseness, range: 0...1, step: 0, origin: 0, gradient: nil,
-                                  name: "Grouping")
-                        .frame(width: 160)
+            VStack(alignment: .trailing, spacing: 8) {
+                if !cull.isReview {
+                    HStack(spacing: 16) {
+                        Picker("Match", selection: $cull.mode) {
+                            Text("Same Frame").tag(CullMode.sameFrame)
+                            Text("Similar Shots").tag(CullMode.similarShots)
+                        }
+                        .pickerStyle(.segmented)
+                        .fixedSize()
                         .disabled(cull.isAnalyzing)
-                    Text("Loose").font(.caption).foregroundStyle(.secondary)
+                        .help(cull.mode == .sameFrame
+                              ? "Same Frame: only shots framed alike, where people moved a little or blinked"
+                              : "Similar Shots: also slight zooms and recomposing, people moving in the background, a change of focus")
+                        HStack(spacing: 8) {
+                            Text("Grouping").foregroundStyle(.secondary)
+                            Text("Tight").font(.caption).foregroundStyle(.secondary)
+                            DevelopSlider(value: $cull.looseness, range: 0...1, step: 0, origin: 0, gradient: nil,
+                                          name: "Grouping")
+                                .frame(width: 160)
+                                .disabled(cull.isAnalyzing)
+                            Text("Loose").font(.caption).foregroundStyle(.secondary)
+                        }
+                        .help("How alike shots must look to be grouped")
+                    }
                 }
-                .help("How alike shots must look to be grouped")
+                // Which photo of each group is suggested; grouping doesn't change with it.
+                HStack(spacing: 16) {
+                    Picker("Pick By", selection: $cull.pickBy) {
+                        ForEach(CullPick.allCases) { pick in
+                            Text(pick.title).tag(pick)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .fixedSize()
+                    .disabled(cull.isAnalyzing)
+                    .help("How the suggested keeper of each group is chosen. \(cull.pickBy.title): \(cull.pickBy.help)")
+                    Toggle("Advanced checks (slower)", isOn: $cull.advanced)
+                        .toggleStyle(.checkbox)
+                        .help("Reads the eyes of every grouped photo again from a large copy: small faces in group "
+                              + "shots get checked, and Sharpness compares the eyes themselves. Roughly a fifth of a "
+                              + "second more per grouped photo; single shots are skipped.")
+                }
             }
         }
         .padding(.horizontal, 20)
@@ -119,6 +140,9 @@ struct CullView: View {
     private var subtitle: String {
         if cull.isLoading { return "Finding photos…" }
         if cull.isAnalyzing { return "Looking at \(cull.analyzed) of \(cull.photos.count) photos…" }
+        if let progress = cull.advancedProgress {
+            return "Advanced checks: reading eyes in \(progress.done) of \(progress.total) grouped photos…"
+        }
         if cull.isReview {
             return "\(cull.photos.count) shots culled together · \(cull.keptCount) kept"
         }
@@ -135,6 +159,11 @@ struct CullView: View {
                 Text("Click to look · Space or double-click keeps or drops · P keep · X drop · arrows move")
             }
         } buttons: {
+            if !cull.isReview || cull.photos.count > 1 {
+                Toggle("Write reasons to notes", isOn: $cull.writeReasons)
+                    .toggleStyle(.checkbox)
+                    .help("When you finish, each photo not kept gets a note saying why (eyes closed, softer than the keeper…)")
+            }
             Button("Keep All") { cull.keepAll() }
                 .disabled(cull.isAnalyzing)
             if let back = cull.onBack {
@@ -223,16 +252,23 @@ struct CullView: View {
                             .foregroundStyle(.yellow)
                     }
                 }
-                HStack(spacing: 10) {
-                    if let sharpness = cull.relativeSharpness(of: id) {
-                        Text("Sharpness \(Int((sharpness * 100).rounded()))% of the group's best")
-                    }
-                    if let face = photo.signals?.faceQuality {
-                        Text("Face quality \(Int((face * 100).rounded()))%")
-                    }
+                if let caption = cull.caption(of: id) {
+                    Text(caption)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .help(caption)
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                // Why it isn't kept, as its note will say when the cull ends.
+                if let reasons = cull.reasons(of: id), !reasons.isEmpty {
+                    Text("Not kept: " + reasons.joined(separator: " · "))
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .help(reasons.joined(separator: "\n"))
+                }
             }
             Spacer()
             Picker("", selection: Binding(get: { kept }, set: { cull.setKept(id, $0) })) {
@@ -367,7 +403,7 @@ struct CullTile: View {
                 .frame(width: Self.width)
         }
         .contentShape(Rectangle())
-        .help(isSuggested ? "Suggested keeper: sharpest, best faces" : photo.name)
+        .help(isSuggested ? "Suggested keeper (see Pick By)" : photo.name)
     }
 }
 
