@@ -20,7 +20,7 @@ public struct CullSignals: @unchecked Sendable {
     public var layout: [Float]?
     /// Width over height.
     public var aspect: Float
-    /// Every face Vision found, with eye openness and sharpness.
+    /// Every face found (by `finder`), with eye openness and sharpness.
     public var faces: [CullFace]
     /// Sharpness where the subject is: the faces (weighted by size), else Vision's most
     /// salient object, else the whole frame. Same scale as `sharpness`.
@@ -42,6 +42,25 @@ public struct CullSignals: @unchecked Sendable {
     /// The people Vision found (whole bodies, Vision rectangles), for a subject when no face
     /// is found (sunglasses, turned away).
     public var people: [CGRect] = []
+    /// The face finder `faces`, `subject` and the subject's sharpness come from.
+    public private(set) var finder: CullFaceFinder = .vision
+    /// What each face finder found, so Find Faces can switch without reading the photos again.
+    public var faceSets: [CullFaceFinder: CullFaceSet] = [:]
+
+    /// These signals with `finder`'s faces (and the subject and sharpness that follow from
+    /// them). A different finder's faces haven't had the Advanced checks yet.
+    public func using(_ finder: CullFaceFinder) -> CullSignals {
+        guard finder != self.finder, let set = faceSets[finder] else { return self }
+        var signals = self
+        signals.finder = finder
+        signals.faces = set.faces
+        signals.faceQuality = set.faces.compactMap(\.quality).max()
+        signals.subject = set.subject
+        signals.subjectSharpness = set.subjectSharpness
+        signals.coherence = set.coherence
+        signals.advanced = false
+        return signals
+    }
 
     public init(featurePrint: VNFeaturePrintObservation? = nil, sharpness: Double = 0, faceQuality: Double? = nil,
                 thumbnail: CGImage? = nil, layout: [Float]? = nil, aspect: Float = 1.5, faces: [CullFace] = [],
@@ -73,10 +92,25 @@ public struct CullSignals: @unchecked Sendable {
     }
 }
 
+/// What one face finder found in a photo, and the subject and its sharpness that follow.
+public struct CullFaceSet: Sendable {
+    public var faces: [CullFace]
+    public var subject: CullSubject
+    public var subjectSharpness: Double
+    public var coherence: Double
+
+    public init(faces: [CullFace], subject: CullSubject, subjectSharpness: Double, coherence: Double) {
+        self.faces = faces
+        self.subject = subject
+        self.subjectSharpness = subjectSharpness
+        self.coherence = coherence
+    }
+}
+
 /// What culling measured as a photo's subject (`CullSignals.subject`).
 public struct CullSubject: Sendable, Equatable {
     public enum Kind: String, Sendable {
-        /// The faces Vision found (sharpness is read on each face, weighted by size).
+        /// The faces found (sharpness is read on each face, weighted by size).
         case faces
         /// The people Vision found, when it found no face (sunglasses, turned away, small).
         case people
@@ -141,7 +175,7 @@ public enum Culling {
     /// Reads a photo at 1024 px (the embedded preview for RAW files) and measures it: what
     /// grouping needs (feature print, layout) and what picking needs (sharpness on the subject,
     /// faces and their eyes, exposure, Apple's aesthetics score).
-    public static func analyze(_ url: URL) async -> CullSignals {
+    public static func analyze(_ url: URL, finder: CullFaceFinder = .both) async -> CullSignals {
         guard let image = image(at: url, maxPixel: 1024) else { return CullSignals() }
         let plane = GrayPlane(image)
         var signals = CullSignals(sharpness: plane?.laplacianVariance() ?? 0, thumbnail: scaled(image, maxPixel: 320),
@@ -155,32 +189,58 @@ public enum Culling {
         try? handler.perform([print, landmarks, saliency, humans])
         signals.people = (humans.results ?? []).filter { $0.confidence >= 0.5 }.map(\.boundingBox)
         signals.featurePrint = print.results?.first
-        // Capture quality for the same faces, so each face has both.
-        let found = landmarks.results ?? []
-        var qualities: [VNFaceObservation] = []
-        if !found.isEmpty {
-            let quality = VNDetectFaceCaptureQualityRequest()
-            quality.inputFaceObservations = found
-            try? handler.perform([quality])
-            qualities = quality.results ?? []
-        }
         let size = CGSize(width: image.width, height: image.height)
-        signals.faces = found.map { observation in
-            var face = CullFaceReading.face(observation, imageSize: size, plane: plane)
-            let match = qualities.min { distance($0.boundingBox, observation.boundingBox) < distance($1.boundingBox, observation.boundingBox) }
-            face.quality = match?.faceCaptureQuality.map(Double.init)
-            return face
+        // Vision's faces, and MediaPipe's (whole frame and inside each person) with Vision's
+        // landmarks read at MediaPipe's boxes, so eyes are judged the same way for both.
+        let visionFaces = read(landmarks.results ?? [], handler: handler, size: size, plane: plane)
+        let boxes = FaceDetector.faces(in: image, people: signals.people)
+        var mediaPipeFaces: [CullFace] = []
+        if !boxes.isEmpty {
+            let placed = VNDetectFaceLandmarksRequest()
+            placed.inputFaceObservations = boxes.map { VNFaceObservation(boundingBox: $0) }
+            try? handler.perform([placed])
+            let found = placed.results ?? []
+            // Each box with Vision's landmarks where it gave them, else the bare box (eyes then
+            // "not checked" until the Advanced checks read them).
+            let observations = boxes.map { box -> VNFaceObservation in
+                found.first { distance($0.boundingBox, box) < 0.02 } ?? VNFaceObservation(boundingBox: box)
+            }
+            mediaPipeFaces = read(observations, handler: handler, size: size, plane: plane).map { face in
+                var face = face
+                face.byMediaPipe = true
+                return face
+            }
         }
-        signals.faceQuality = signals.faces.compactMap(\.quality).max()
+        let extra = mediaPipeFaces.filter { face in !visionFaces.contains { sameFace($0.box, face.box) } }
+        let faces: [CullFaceFinder: [CullFace]] = [.vision: visionFaces, .mediaPipe: mediaPipeFaces,
+                                                   .both: visionFaces + extra]
         if let plane {
-            signals.subject = Self.subject(faces: signals.faces, people: signals.people,
-                                           saliency: saliency.results?.first, planeWidth: plane.width)
             signals.sharpnessGrid = plane.laplacianGrid()
-            let subject = plane.pixelRect(fromVision: signals.subject.box)
-            signals.subjectSharpness = subjectSharpness(faces: signals.faces, fallback: plane.laplacianVariance(in: subject))
-            signals.coherence = plane.edgeCoherence(in: subject)
+            for (kind, found) in faces {
+                let subject = Self.subject(faces: found, people: signals.people, saliency: saliency.results?.first,
+                                           planeWidth: plane.width)
+                let rect = plane.pixelRect(fromVision: subject.box)
+                signals.faceSets[kind] = CullFaceSet(
+                    faces: found, subject: subject,
+                    subjectSharpness: subjectSharpness(faces: found, fallback: plane.laplacianVariance(in: rect)),
+                    coherence: plane.edgeCoherence(in: rect))
+            }
             signals.exposure = plane.exposure()
+        } else {
+            for (kind, found) in faces {
+                signals.faceSets[kind] = CullFaceSet(faces: found, subject: CullSubject(kind: .wholeFrame),
+                                                     subjectSharpness: signals.sharpness, coherence: 0)
+            }
         }
+        // `finder` starts as .vision; switch to the asked one (or keep .vision's set).
+        signals.faces = visionFaces
+        signals.faceQuality = visionFaces.compactMap(\.quality).max()
+        if let set = signals.faceSets[.vision] {
+            signals.subject = set.subject
+            signals.subjectSharpness = set.subjectSharpness
+            signals.coherence = set.coherence
+        }
+        signals = signals.using(finder)
         if let scores = try? await CalculateImageAestheticsScoresRequest().perform(on: image) {
             signals.aesthetics = Double(scores.overallScore)
             signals.isUtility = scores.isUtility
@@ -230,6 +290,29 @@ public enum Culling {
             return face
         }
         return result
+    }
+
+    /// Faces read from Vision observations (with landmarks): eyes, sharpness, and capture
+    /// quality for the same faces.
+    static func read(_ observations: [VNFaceObservation], handler: VNImageRequestHandler, size: CGSize,
+                     plane: GrayPlane?) -> [CullFace] {
+        guard !observations.isEmpty else { return [] }
+        let quality = VNDetectFaceCaptureQualityRequest()
+        quality.inputFaceObservations = observations
+        try? handler.perform([quality])
+        let qualities = quality.results ?? []
+        return observations.map { observation in
+            var face = CullFaceReading.face(observation, imageSize: size, plane: plane)
+            let match = qualities.min { distance($0.boundingBox, observation.boundingBox) < distance($1.boundingBox, observation.boundingBox) }
+            face.quality = match?.faceCaptureQuality.map(Double.init)
+            return face
+        }
+    }
+
+    /// Two finders' boxes for the same face: they overlap, or one's center is inside the other.
+    static func sameFace(_ a: CGRect, _ b: CGRect) -> Bool {
+        FaceDetector.overlap(a, b) >= 0.2 || a.contains(CGPoint(x: b.midX, y: b.midY))
+            || b.contains(CGPoint(x: a.midX, y: a.midY))
     }
 
     static func distance(_ a: CGRect, _ b: CGRect) -> Double {

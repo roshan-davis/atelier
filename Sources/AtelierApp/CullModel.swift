@@ -88,6 +88,22 @@ final class CullModel: ObservableObject, Identifiable {
         }
     }
     static let pickKey = "cull.pickBy"
+    /// Which face finder Cull uses: Apple Vision, MediaPipe or both (the default); remembered.
+    /// Every photo is read with each finder, so switching only picks again (AT-061).
+    @Published var faceFinder: CullFaceFinder = CullFaceFinder(rawValue: UserDefaults.standard.string(forKey: CullModel.finderKey) ?? "")
+        ?? .both {
+        didSet {
+            guard faceFinder != oldValue else { return }
+            UserDefaults.standard.set(faceFinder.rawValue, forKey: Self.finderKey)
+            guard !isAnalyzing else { return }
+            // The other finder's faces haven't had the Advanced checks: read them again.
+            stopAdvanced()
+            useFaceFinder()
+            regroup(keepingChoices: true)
+            if advanced { runAdvanced() }
+        }
+    }
+    static let finderKey = "cull.faceFinder"
     /// Advanced checks (slower): each grouped photo's eyes read again from a large copy, and
     /// blinks and smiles read with MediaPipe Face Landmarker.
     /// Off by default, remembered.
@@ -232,13 +248,14 @@ final class CullModel: ObservableObject, Identifiable {
     private func analyze() {
         analysisStarted = Date()
         let jobs = photos.map { ($0.id, $0.url) }
+        let finder = faceFinder
         analysisTask = Task.detached(priority: .userInitiated) { [weak self] in
             let workers = max(2, ProcessInfo.processInfo.activeProcessorCount / 2)
             await withTaskGroup(of: (Int, CullSignals).self) { group in
                 var pending = jobs.makeIterator()
                 for _ in 0..<workers {
                     guard let (id, url) = pending.next() else { break }
-                    group.addTask { (id, await Self.analyze(url)) }
+                    group.addTask { (id, await Self.analyze(url, finder)) }
                 }
                 for await (id, signals) in group {
                     if Task.isCancelled { return }
@@ -250,7 +267,7 @@ final class CullModel: ObservableObject, Identifiable {
                         self.analyzed += 1
                     }
                     if let (nextID, url) = pending.next() {
-                        group.addTask { (nextID, await Self.analyze(url)) }
+                        group.addTask { (nextID, await Self.analyze(url, finder)) }
                     }
                 }
             }
@@ -273,14 +290,23 @@ final class CullModel: ObservableObject, Identifiable {
         }
     }
 
-    nonisolated private static func analyze(_ url: URL?) async -> CullSignals {
+    nonisolated private static func analyze(_ url: URL?, _ finder: CullFaceFinder) async -> CullSignals {
         guard let url else { return CullSignals() }
-        return await Culling.analyze(url)
+        return await Culling.analyze(url, finder: finder)
+    }
+
+    /// Every photo's faces from the chosen finder.
+    private func useFaceFinder() {
+        for index in photos.indices {
+            photos[index].signals = photos[index].signals?.using(faceFinder)
+        }
     }
 
     private func analysisFinished(_ neighbors: [Int: CullComparison]) {
         self.neighbors = neighbors
         isAnalyzing = false
+        // Find Faces may have changed while the photos were read.
+        useFaceFinder()
         regroup()
         if advanced { runAdvanced() }
         // The list starts again at the top with the groups, so the keys do too: the first
@@ -550,7 +576,7 @@ final class CullModel: ObservableObject, Identifiable {
         let eyes = Culling.eyes(in: group.map { photos[$0].signals?.faces ?? [] })
         let mine = eyes[group.firstIndex(of: id) ?? 0]
         return zip(signals.faces, mine).map { face, eyes in
-            CullPreviewFace(box: face.box, eyes: eyes, smile: face.expression?.smile)
+            CullPreviewFace(box: face.box, eyes: eyes, smile: face.expression?.smile, byMediaPipe: face.byMediaPipe)
         }
     }
 

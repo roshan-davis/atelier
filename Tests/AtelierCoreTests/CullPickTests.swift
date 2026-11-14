@@ -160,6 +160,58 @@ final class CullPickTests: XCTestCase {
         XCTAssertNil(Culling.sharedSubject([c, d]), "faces are read face by face")
     }
 
+    /// MediaPipe's face detector: anchors in the model's order, a box from one anchor's
+    /// offsets, and overlapping boxes reduced to the best.
+    func testFaceDetectorDecodesBoxes() {
+        XCTAssertEqual(FaceDetector.anchors.count, 896)
+        XCTAssertEqual(FaceDetector.anchors[0].x, 0.5 / 16, accuracy: 1e-9)
+        XCTAssertEqual(FaceDetector.anchors[512].x, 0.5 / 8, accuracy: 1e-9, "the 8 x 8 grid starts after 16 x 16 x 2")
+        var regressors = [Float](repeating: 0, count: 896 * 16)
+        var logits = [Float](repeating: -10, count: 896)
+        // Anchor 0 of cell (8, 8) on the 16 grid: center (8.5/16, 8.5/16).
+        let i = (8 * 16 + 8) * 2
+        regressors[i * 16] = 6.4; regressors[i * 16 + 1] = -6.4      // +0.05, -0.05
+        regressors[i * 16 + 2] = 25.6; regressors[i * 16 + 3] = 32    // 0.2 x 0.25
+        logits[i] = 3
+        // A weaker box on the same face, and one far away under the threshold.
+        regressors[(i + 1) * 16 + 2] = 25.6; regressors[(i + 1) * 16 + 3] = 32
+        logits[i + 1] = 1
+        logits[0] = -1
+        let found = FaceDetector.decode(regressors: regressors, logits: logits)
+        XCTAssertEqual(found.count, 1)
+        XCTAssertEqual(found[0].box.midX, 8.5 / 16 + 0.05, accuracy: 1e-6)
+        XCTAssertEqual(found[0].box.midY, 8.5 / 16 - 0.05, accuracy: 1e-6)
+        XCTAssertEqual(found[0].box.width, 0.2, accuracy: 1e-6)
+        XCTAssertEqual(found[0].score, 1 / (1 + exp(-3)), accuracy: 1e-6)
+    }
+
+    /// MediaPipe looks for a head in the top half of each person.
+    func testFaceDetectorLooksAtThePersonsTopHalf() {
+        let head = FaceDetector.headRegion(of: CGRect(x: 0.4, y: 0.1, width: 0.2, height: 0.8))
+        XCTAssertEqual(head.minY, 0.5, accuracy: 1e-9)
+        XCTAssertEqual(head.maxY, 0.9, accuracy: 1e-9)
+        XCTAssertEqual(head.minX, 0.38, accuracy: 1e-9)
+        XCTAssertTrue(Culling.sameFace(CGRect(x: 0.4, y: 0.6, width: 0.1, height: 0.1), CGRect(x: 0.42, y: 0.62, width: 0.05, height: 0.05)))
+        XCTAssertFalse(Culling.sameFace(CGRect(x: 0.1, y: 0.6, width: 0.1, height: 0.1), CGRect(x: 0.5, y: 0.6, width: 0.1, height: 0.1)))
+    }
+
+    /// Find Faces switches to another finder's faces and subject without reading again, and
+    /// those faces need the Advanced checks again.
+    func testFindFacesSwitchesFaceSets() {
+        var signals = photo(faces: [face(0.1, 0.3)])
+        signals.advanced = true
+        let mediaPipe = [face(0.1, 0.3), face(0.5, 0.3)]
+        signals.faceSets[.vision] = CullFaceSet(faces: signals.faces, subject: CullSubject(kind: .faces), subjectSharpness: 100, coherence: 0)
+        signals.faceSets[.mediaPipe] = CullFaceSet(faces: mediaPipe, subject: CullSubject(kind: .faces), subjectSharpness: 80, coherence: 0.2)
+        let switched = signals.using(.mediaPipe)
+        XCTAssertEqual(switched.finder, .mediaPipe)
+        XCTAssertEqual(switched.faces.count, 2)
+        XCTAssertEqual(switched.subjectSharpness, 80)
+        XCTAssertFalse(switched.advanced)
+        XCTAssertEqual(signals.using(.vision).advanced, true, "the same finder changes nothing")
+        XCTAssertEqual(signals.using(.both).faces.count, 1, "a finder that wasn't read changes nothing")
+    }
+
     func testFacesMatchPeopleWhoMoveALittle() {
         let faces: [[CullFace]] = [[face(0.2, 0.3), face(0.6, 0.3)], [face(0.62, 0.3), face(0.23, 0.3)], [face(0.9, 0.3)]]
         XCTAssertEqual(Culling.people(in: faces), [[0, 1], [1, 0], [2]])

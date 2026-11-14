@@ -9,8 +9,9 @@ anything; run this again only to rebuild them.
     pip install "coremltools==8.3.0" tflite "numpy<2.2" ai-edge-litert pillow   # litert, pillow: --check only
     python3 Scripts/models/convert_mediapipe_face_landmarker.py [--check]
 
-face_landmarker.task is a zip of three TFLite models. Atelier finds faces with Vision, so it
-skips the face detector and converts the other two, rebuilding each graph op by op with
+face_landmarker.task is a zip of three TFLite models. Atelier finds faces with Vision and, when
+Vision misses one, with the task's own face detector inside each person Vision found; all three
+are converted, rebuilding each graph op by op with
 coremltools' MIL builder (there is no direct TFLite converter), as
 convert_mediapipe_multiclass.py does. --check runs the same graphs in NumPy and compares them
 with Google's own TFLite runtime on random and real inputs, so the translation is verified even
@@ -23,6 +24,11 @@ FaceMesh.mlpackage
 FaceBlendshapes.mlpackage
     Input "points": 1 x 146 x 2, the x and y of the 146 landmarks in `SUBSET` (pixels).
     Output "blendshapes": 52 scores 0...1 in the order of `NAMES` (ARKit's names).
+FaceDetector.mlpackage (BlazeFace short range, Cull's Find Faces > MediaPipe, Nov 14, 2026)
+    Input "image": RGB 128 x 128, values -1...1 (letterboxed).
+    Outputs "regressors": 1 x 896 x 16, per anchor the box (center x, y offsets, width, height)
+            and six key points, in input pixels; "classificators": 1 x 896 x 1, face logits.
+    Anchors: a 16 x 16 grid with 2 per cell, then an 8 x 8 grid with 6 per cell, centered.
 """
 import argparse
 import hashlib
@@ -135,6 +141,8 @@ def walk(graph, backend, inputs):
         elif name in ("NEG", "SQRT", "RSQRT", "LOGISTIC"):
             x = get(ins[0])
             y = NumpyBackend().unary(name, x) if fold(x) else backend.unary(name, x)
+        elif name == "RELU":
+            y = backend.relu(get(ins[0]), six=False)
         elif name == "PRELU":
             y = backend.prelu(get(ins[0]), const(ins[1]))
         elif name == "MAX_POOL_2D":
@@ -384,6 +392,22 @@ def build_blendshapes(graph):
     return describe(model, "MediaPipe Blendshape V2: 52 expression scores (" + ", ".join(NAMES) + ")")
 
 
+def build_detector(graph):
+    import coremltools as ct
+    from coremltools.converters.mil import Builder as mb
+
+    @mb.program(input_specs=[mb.TensorSpec(shape=(1, 128, 128, 3))], opset_version=ct.target.macOS15)
+    def program(image):
+        regressors, classificators = walk(graph, MILBackend(mb), [image])
+        return (mb.identity(x=regressors, name="regressors"), mb.identity(x=classificators, name="classificators"))
+
+    model = ct.convert(program, convert_to="mlprogram", minimum_deployment_target=ct.target.macOS15,
+                       compute_precision=ct.precision.FLOAT16,
+                       inputs=[ct.TensorType(name="image", shape=(1, 128, 128, 3))],
+                       outputs=[ct.TensorType(name="regressors"), ct.TensorType(name="classificators")])
+    return describe(model, "MediaPipe BlazeFace (short range): face boxes in a 128 px image")
+
+
 def describe(model, text):
     model.short_description = text + ". Google, Apache License 2.0; converted for Atelier's Cull."
     model.license = "Apache License 2.0"
@@ -414,6 +438,29 @@ def portrait():
     except Exception as error:  # Pillow is optional
         print("skipping the real portrait:", error)
         return None
+
+
+def check_detector(folder, detector, model=None):
+    tf = interpreter(os.path.join(folder, "face_detector.tflite"))
+    rng = np.random.default_rng(2)
+    images = [rng.random((1, 128, 128, 3), dtype=np.float32) * 2 - 1]
+    image = portrait()
+    if image is not None:
+        images.append(np.asarray(image.resize((128, 128)), np.float32)[None] / 127.5 - 1)
+    worst = 0.0
+    for x in images:
+        expected = run_tflite(tf, [x])
+        got = walk(detector, NumpyBackend(), [x])
+        for name, e, g in zip(("regressors", "classificators"), expected, got):
+            diff = float(np.abs(e - g).max())
+            print(f"Face detector {name}: NumPy vs TFLite max diff {diff:.2e}")
+            worst = max(worst, diff / max(1.0, float(np.abs(e).max())))
+        print(f"  best face logit {float(expected[1].max()):.2f}")
+        if sys.platform == "darwin" and model is not None:
+            out = model.predict({"image": x})
+            print(f"Core ML detector vs TFLite: max logit diff "
+                  f"{np.abs(out['classificators'].ravel() - expected[1].ravel()).max():.2e}")
+    return worst
 
 
 def check(folder, mesh, blend, mesh_model=None, blend_model=None):
@@ -462,7 +509,9 @@ def main():
     folder = download(args.cache)
     mesh = Graph2(os.path.join(folder, "face_landmarks_detector.tflite"))
     blend = Graph2(os.path.join(folder, "face_blendshapes.tflite"))
-    models = {"FaceMesh": build_mesh(mesh), "FaceBlendshapes": build_blendshapes(blend)}
+    detector = Graph2(os.path.join(folder, "face_detector.tflite"))
+    models = {"FaceMesh": build_mesh(mesh), "FaceBlendshapes": build_blendshapes(blend),
+              "FaceDetector": build_detector(detector)}
     for name, model in models.items():
         path = os.path.join(args.out, name + ".mlpackage")
         if os.path.exists(path):
@@ -472,6 +521,7 @@ def main():
         print("saved", os.path.normpath(path))
     if args.check:
         worst = check(folder, mesh, blend, models["FaceMesh"], models["FaceBlendshapes"])
+        worst = max(worst, check_detector(folder, detector, models["FaceDetector"]))
         if worst > 2e-3:
             sys.exit("the translated graphs do not match TFLite")
 

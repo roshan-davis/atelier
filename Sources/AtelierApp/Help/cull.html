@@ -87,6 +87,8 @@
   <dt>Best Expression</dt><dd>Eyes open first, then the most smiles, then the sharpest. Smiles are read by the <a href="#advanced">Advanced checks</a>, so choosing it turns them on; until they finish it picks like Everyone's Eyes Open.</dd>
   <dt>Classic</dt><dd>Atelier's earlier pick: the sharpest whole frame plus the best face's quality.</dd>
 </dl>
+<h3 id="find-faces">Find Faces</h3>
+<p><b>Find Faces</b>, beside Pick By, chooses which face detector finds the faces Cull checks: <b>Apple Vision</b> (built into macOS), <b>MediaPipe</b> (Google's detector, built into Atelier; it looks inside each person found, so it can catch a face behind sunglasses or a small one), or <b>Both</b>, the default: Vision first, then MediaPipe inside any person Vision found no face for. Every photo is read with each, so switching only suggests again. With <a href="#subject">Show Subject</a> on, a face MediaPipe found says "found by MediaPipe".</p>
 <h3 id="eyes">How eyes are checked</h3>
 <p>For every face, Atelier measures how open the eyes are and compares each person with <b>the same person in the group's other shots</b>. So naturally narrow eyes, glasses and squinting smiles aren't called closed: only eyes much less open than that person's own widest are. Faces turned away, and faces too small to see at the standard size, are left out and the caption says "not checked".</p>
 <h3 id="advanced">Advanced checks (slower)</h3>

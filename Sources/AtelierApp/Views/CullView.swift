@@ -129,6 +129,15 @@ struct CullView: View {
                     .fixedSize()
                     .disabled(cull.isAnalyzing)
                     .help("How the suggested keeper of each group is chosen. \(cull.pickBy.title): \(cull.pickBy.help)")
+                    Picker("Find Faces", selection: $cull.faceFinder) {
+                        ForEach(CullFaceFinder.allCases) { finder in
+                            Text(finder.title).tag(finder)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .fixedSize()
+                    .help("Which face detector finds the faces Cull checks. \(cull.faceFinder.title): \(cull.faceFinder.help). "
+                          + "Every photo is read with each, so switching only picks again.")
                     Toggle("Advanced checks (slower)", isOn: $cull.advanced)
                         .toggleStyle(.checkbox)
                         .help("Reads the eyes of every grouped photo again from a large copy: small faces in group "

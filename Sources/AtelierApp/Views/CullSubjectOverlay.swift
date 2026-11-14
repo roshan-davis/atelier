@@ -8,6 +8,8 @@ struct CullPreviewFace {
     let eyes: CullEyes
     /// MediaPipe's smile score (Advanced checks), or nil.
     let smile: Double?
+    /// Found by MediaPipe's face detector, not Apple Vision's.
+    var byMediaPipe = false
 }
 
 /// What Cull measured on the focused photo, drawn on it for checking (Rosh, Nov 14, 2026: "when
@@ -90,6 +92,7 @@ struct CullSubjectOverlay: View {
         case .unknown: text = "Not checked"
         }
         if let smile = face.smile { text += smile >= CullEyes.smiling ? " · smiling" : " · not smiling" }
+        if face.byMediaPipe { text += " · found by MediaPipe" }
         return text
     }
 

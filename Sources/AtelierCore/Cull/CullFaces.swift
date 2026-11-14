@@ -20,6 +20,8 @@ public struct CullFace: Sendable, Equatable {
     /// Advanced checks: blinks, squints and smile from MediaPipe Face Landmarker
     /// (`FaceLandmarker`); nil when it didn't run or found no face in the box.
     public var expression: FaceExpression?
+    /// Found by MediaPipe's face detector, not Vision's (Find Faces), for Show Subject's label.
+    public var byMediaPipe = false
 
     public init(box: CGRect, quality: Double? = nil, openness: Double? = nil, skip: CullFaceSkip? = nil,
                 sharpness: Double? = nil, eyeSharpness: Double? = nil, expression: FaceExpression? = nil) {
