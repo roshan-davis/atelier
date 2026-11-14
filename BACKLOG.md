@@ -697,7 +697,7 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 ## AT-048 — Match Look: one base color over the whole face, skin tones blend seamlessly
 
-**Status:** PR #108 was closed unmerged (no reason given); its commit is carried, rebased, as the first commit of AT-062's PR #136 (branch `claude/match-look-skin-gaps`). Never compiled. **Owner:** Claude. **Chat:** [Improve Match Colors quality](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKF2JPu63ZaHgkVxXXo1FmSC). **Branch:** `claude/match-look-face-base`. **PR:** [#108](https://github.com/roshan-davis/atelier/pull/108) (closed). **Baseline:** `b19a792`. **Dependencies:** AT-047 (merged).
+**Status:** PR #108 was closed unmerged (no reason given); its commit is carried, rebased, as the first commit of AT-063's PR #136 (branch `claude/match-look-skin-gaps`). Never compiled. **Owner:** Claude. **Chat:** [Improve Match Colors quality](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKF2JPu63ZaHgkVxXXo1FmSC). **Branch:** `claude/match-look-face-base`. **PR:** [#108](https://github.com/roshan-davis/atelier/pull/108) (closed). **Baseline:** `b19a792`. **Dependencies:** AT-047 (merged).
 
 **Evidence:** Rosh (2026-11-11), after AT-047: the skin masks take some shaded teeth and the eyebrow area for the color change ("we would need a base color and the matching colors on top instead of leaving something unattended"; "overlap has to be gradual and seamless instead of disjointed colors"). Source review: the masks were unions of separate parts (Face Skin minus grown feature holes, Lips, Teeth by a lightness/chroma test, Vision brow bands); shaded teeth fail the Teeth test and fall in the Face Skin hole, misplaced brows likewise, so patches were left out or in. The tone masks' Luminance Range smoothness 30 gave visible steps.
 
@@ -1145,7 +1145,7 @@ So no tool has a private note per photo, and none leaves a readable, editable re
 
 **Acceptance:** Show Subject draws the dashed subject box and face boxes in the right places at Fit and zoomed, never past the photo, labels say what the subject is and the sharpness, and it never shows outside the Cull preview.
 
-## AT-062 — Match Look: skin covers the neck, has no holes, and reaches the study's color
+## AT-063 — Match Look: skin covers the neck, has no holes, and reaches the study's color
 
 **Status:** In review; never compiled (cloud, no macOS toolchain; CI billing-blocked). Needs a Mac build, tests and Rosh's test. **Owner:** Claude. **Chat:** [Analyze Match Look skin matching gaps](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKNa3pxZsTY6t8uNKnYc1sgY). **Branch:** `claude/match-look-skin-gaps`. **PR:** [#136](https://github.com/roshan-davis/atelier/pull/136). **Baseline:** `9dbe5dd`. **Dependencies:** AT-047 (merged), AT-048 (carried in this PR).
 
