@@ -291,6 +291,49 @@ final class LookMatchTests: XCTestCase {
         XCTAssertGreaterThan((shadow * shadow).sum(), (mid * mid).sum())
     }
 
+    /// The skin tone thirds are cut on the brightness a mask's Luminance Range reads: for a gray
+    /// that is the gray's own encoded value.
+    func testSkinToneCutsUseTheLuminanceRangeBrightness() {
+        let width = 3, height = 1
+        let grays: [UInt8] = [60, 128, 200]
+        var pixels = [UInt8](repeating: 255, count: width * height * 4)
+        for (x, gray) in grays.enumerated() {
+            pixels[x * 4] = gray
+            pixels[x * 4 + 1] = gray
+            pixels[x * 4 + 2] = gray
+        }
+        let sample = LookSample(pixels: pixels, width: width, height: height)
+        for (i, gray) in grays.enumerated() {
+            XCTAssertEqual(LookSkin.rangeLuma(sample, i), Double(gray) / 255, accuracy: 0.003)
+        }
+        let split = LookSkin.toneSplit(sample, [2, 0, 1])
+        XCTAssertEqual(split.groups, [[0], [1], [2]])
+        XCTAssertEqual(split.cuts.0, 128.0 / 255, accuracy: 0.003)
+        XCTAssertEqual(split.cuts.1, 200.0 / 255, accuracy: 0.003)
+    }
+
+    /// The joint skin fit's solver: exact on a well-posed system, and damped least squares shares
+    /// a move between two sliders that do the same thing instead of fighting.
+    func testSkinSolverSolvesTogether() throws {
+        let x = try XCTUnwrap(SkinSolver.solve([[2, 1, 0], [1, 3, 1], [0, 1, 4]], [3, 5, 5]))
+        XCTAssertEqual(x[0], 1, accuracy: 1e-9)
+        XCTAssertEqual(x[1], 1, accuracy: 1e-9)
+        XCTAssertEqual(x[2], 1, accuracy: 1e-9)
+        XCTAssertNil(SkinSolver.solve([[1, 1], [1, 1]], [1, 2]))
+
+        var solver = SkinSolver(masks: ["A"], tones: [SkinSolver.Tone(pixels: [], target: .zero, relative: true)],
+                                limit: 35, settings: .neutral)
+        // Temp and Tint move a and b separately; Saturation moves a like Temp does.
+        solver.jacobian = [[0.001, 0, 0.001], [0, 0.002, 0]]
+        let step = try XCTUnwrap(solver.step([0.01, 0.01]))
+        XCTAssertEqual(step[0], step[2], accuracy: 0.5)
+        XCTAssertGreaterThan(step[0], 3)
+        XCTAssertEqual(step[1], 5, accuracy: 0.5)
+        // Moves are capped per step.
+        let big = try XCTUnwrap(solver.step([1, 1]))
+        XCTAssertTrue(big.allSatisfy { abs($0) <= 30 })
+    }
+
     func testProtectSkinTonesKeepsSkinInsideItsLimits() throws {
         let session = try XCTUnwrap(DevelopRenderer.shared.session(for: try samplePhoto(), maxPixelSize: LookSample.size))
         // A strong teal look that turns orange skin green and grey.

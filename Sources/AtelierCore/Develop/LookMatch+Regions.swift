@@ -133,14 +133,26 @@ public struct LookSkin: Sendable {
         return (y0..<y1).flatMap { y in (x0..<x1).map { y * sample.width + $0 } }
     }
 
-    /// The pixels split into their darkest, middle and brightest thirds by brightness (luma),
-    /// with the two brightness levels between them (0 to 1).
+    /// The pixels split into their darkest, middle and brightest thirds by brightness, with the
+    /// two brightness levels between them (0 to 1). Brightness is measured as a mask's Luminance
+    /// Range reads it (`rangeLuma`), so the skin tone masks' ranges cut where the thirds do.
     static func toneSplit(_ sample: LookSample, _ pixels: [Int]) -> (groups: [[Int]], cuts: (Double, Double)) {
-        let sorted = pixels.filter { $0 < sample.count }.sorted { sample.luma[$0] < sample.luma[$1] }
+        let valid = pixels.filter { $0 < sample.count }
+        let brightness = Dictionary(uniqueKeysWithValues: Set(valid).map { ($0, rangeLuma(sample, $0)) })
+        let sorted = valid.sorted { brightness[$0, default: 0] < brightness[$1, default: 0] }
         guard sorted.count >= 3 else { return ([], (1.0 / 3, 2.0 / 3)) }
         let first = sorted.count / 3, second = sorted.count * 2 / 3
         let groups = [Array(sorted[..<first]), Array(sorted[first..<second]), Array(sorted[second...])]
-        return (groups, (Double(sample.luma[sorted[first]]), Double(sample.luma[sorted[second]])))
+        return (groups, (brightness[sorted[first], default: 0], brightness[sorted[second], default: 0]))
+    }
+
+    /// A pixel's brightness as a mask's Luminance Range reads it: the linear luminance, sRGB
+    /// encoded (`MaskRenderer.luminanceMask`). The sample's own `luma` is luma of the encoded
+    /// values, a few percent off on skin, so the ranges sat off the thirds they were fitted for.
+    static func rangeLuma(_ sample: LookSample, _ i: Int) -> Double {
+        let rgb = Oklab.toLinear(SIMD3(Double(sample.lightness[i]), Double(sample.a[i]), Double(sample.b[i])))
+        let luminance = 0.2126 * rgb.x + 0.7152 * rgb.y + 0.0722 * rgb.z
+        return Oklab.encoded(min(1, max(0, luminance)))
     }
 
     /// Mean Oklab lightness of the pixels.
@@ -578,10 +590,9 @@ extension LookMatcher {
                     protect(skin, in: &current, from: base, asShot: asShot, options: options, measure: whole)
                 }
             } else if let referenceSkin = target.skin {
-                if !fitSkin(skin, to: referenceSkin, in: &current, space: space,
-                            measure: whole, bodySkin: bodySkin, isCancelled: isCancelled) {
-                    notices.insert(.skinMatchLimited)
-                }
+                let fit = fitSkin(skin, to: referenceSkin, in: &current, space: space,
+                                  measure: whole, bodySkin: bodySkin, isCancelled: isCancelled)
+                if fit.outcome == .unchanged { notices.insert(.skinMatchLimited) }
             }
         }
         // The stand-in is close but not exact: check with a real render, and settle Exposure
