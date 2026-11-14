@@ -35,6 +35,19 @@ public enum LibrarySort: String, CaseIterable, Codable, Sendable {
     }
 }
 
+/// Library's Notes filter (AT-058).
+public enum NotesFilter: String, CaseIterable, Codable, Sendable {
+    case hasNotes, noNotes, openCheckboxes
+
+    public var title: String {
+        switch self {
+        case .hasNotes: return "Has Notes"
+        case .noNotes: return "No Notes"
+        case .openCheckboxes: return "Unticked Checkboxes"
+        }
+    }
+}
+
 /// The filter bar plus sidebar scope. Conditions combine with AND.
 public struct LibraryFilter: Hashable, Sendable {
     public var scope: LibraryScope = .all
@@ -43,7 +56,9 @@ public struct LibraryFilter: Hashable, Sendable {
     public var colorLabel: ColorLabel?
     /// True shows only photos with Develop edits, false only unedited ones, nil both.
     public var edited: Bool?
-    /// Matches filename, title, caption or keyword.
+    /// Photos with notes, without, or with a checkbox still to tick (AT-058).
+    public var notes: NotesFilter?
+    /// Matches filename, title, caption, keyword or note.
     public var text: String = ""
     /// Shows a RAW+JPEG pair as its RAW alone (see `FilePairs`).
     public var groupsRawPairs: Bool = true
@@ -55,13 +70,15 @@ public struct LibraryFilter: Hashable, Sendable {
     public var showsPrivate: Bool { privacy != .hidden }
 
     public init(scope: LibraryScope = .all, minRating: Int = 0, flag: Flag? = nil,
-                colorLabel: ColorLabel? = nil, edited: Bool? = nil, text: String = "", groupsRawPairs: Bool = true,
-                sort: LibrarySort = .captureTime, ascending: Bool = true, privacy: PrivateVisibility = .hidden) {
+                colorLabel: ColorLabel? = nil, edited: Bool? = nil, notes: NotesFilter? = nil, text: String = "",
+                groupsRawPairs: Bool = true, sort: LibrarySort = .captureTime, ascending: Bool = true,
+                privacy: PrivateVisibility = .hidden) {
         self.scope = scope
         self.minRating = minRating
         self.flag = flag
         self.colorLabel = colorLabel
         self.edited = edited
+        self.notes = notes
         self.text = text
         self.groupsRawPairs = groupsRawPairs
         self.sort = sort
@@ -71,7 +88,7 @@ public struct LibraryFilter: Hashable, Sendable {
 
     /// Whether any rule hides photos (the scope and the order aside).
     public var isFiltering: Bool {
-        minRating > 0 || flag != nil || colorLabel != nil || edited != nil
+        minRating > 0 || flag != nil || colorLabel != nil || edited != nil || notes != nil
             || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
@@ -88,6 +105,7 @@ public struct LibraryFilter: Hashable, Sendable {
         if minRating > 0 { parts.append(minRating >= 5 ? "★5" : "★\(minRating)+") }
         if let colorLabel { parts.append(colorLabel.rawValue) }
         if let edited { parts.append(edited ? "Edited" : "Unedited") }
+        if let notes { parts.append(notes.title) }
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if !text.isEmpty { parts.append("“\(text)”") }
         return parts
@@ -116,6 +134,7 @@ extension Catalog {
                    \(hasEdits) AS hasEdits,
                    (develop.json IS NOT NULL AND json_type(develop.json, '$.crop') IS NOT NULL) AS isCropped,
                    (develop.json IS NOT NULL AND IFNULL(json_array_length(develop.json, '$.masks'), 0) > 0) AS hasMasks,
+                   \(hasNotesCondition()) AS hasNotes,
                    IFNULL((SELECT NOT volume.isOnline FROM folder JOIN volume ON volume.id = folder.volumeId
                            WHERE folder.id = asset.folderId), 0) AS isOffline
             FROM asset
@@ -157,6 +176,13 @@ extension Catalog {
         if let edited = filter.edited {
             conditions.append(edited ? hasEdits : "NOT \(hasEdits)")
         }
+        switch filter.notes {
+        case .hasNotes?: conditions.append(hasNotesCondition())
+        case .noNotes?: conditions.append("NOT " + hasNotesCondition())
+        case .openCheckboxes?:
+            conditions.append("EXISTS (SELECT 1 FROM note WHERE note.assetId = asset.id AND note.text LIKE '%- [ ] %')")
+        case nil: break
+        }
         if let label = filter.colorLabel {
             conditions.append("metadata.colorLabel = ?")
             arguments.append(label.rawValue)
@@ -168,9 +194,10 @@ extension Catalog {
                 (asset.filename LIKE ? OR metadata.title LIKE ? OR metadata.caption LIKE ?
                  OR asset.id IN (SELECT assetKeyword.assetId FROM assetKeyword
                                  JOIN keyword ON keyword.id = assetKeyword.keywordId
-                                 WHERE keyword.name LIKE ?))
+                                 WHERE keyword.name LIKE ?)
+                 OR asset.id IN (SELECT note.assetId FROM note WHERE note.text LIKE ?))
                 """)
-            arguments.append(contentsOf: [pattern, pattern, pattern, pattern])
+            arguments.append(contentsOf: [pattern, pattern, pattern, pattern, pattern])
         }
         if !conditions.isEmpty {
             sql += " WHERE " + conditions.joined(separator: " AND ")

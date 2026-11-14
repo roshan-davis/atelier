@@ -69,6 +69,14 @@ struct ContentView: View {
                                 EmptyLibraryView()
                             }
                         }
+                        // The focused photo's sticky notes (View > Show Notes, AT-058). An overlay,
+                        // so it never changes the photo's zoom and pan or the grid's scroll.
+                        .overlay {
+                            NotesOverlay(catalog: model.catalog,
+                                         assetID: model.mode == .hdr || model.rows.isEmpty ? nil : model.focusedID,
+                                         subtitle: model.notesSubtitle, addTargets: { model.noteTargets },
+                                         request: $model.noteRequest)
+                        }
                         // A chat app's change, with Undo (Settings > Agents, AT-050c).
                         .overlay(alignment: .bottom) { AgentNoticeView(agents: model.agents) }
                         Divider()

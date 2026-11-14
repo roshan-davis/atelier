@@ -63,6 +63,10 @@ public enum AtelierAction {
     public static let showFilmstrip = Action<NoParameters>(
         "view.showFilmstrip", "Show Filmstrip", place: "View > Show Filmstrip",
         summary: "Shows or hides the Filmstrip.", kind: .view, shortcut: KeyShortcut("F6", []))
+    public static let showNotes = Action<NoParameters>(
+        "view.showNotes", "Show Notes", place: "View > Show Notes",
+        summary: "Shows or hides the sticky notes panel over the photo (AT-058).", kind: .view,
+        shortcut: KeyShortcut("n", [.command, .option]))
     public static let privatePhotos = Action<PrivacyParameters>(
         "view.privatePhotos", "Private Photos", place: "View > Hide, Show, Show Only Private Photos",
         summary: "Hides or shows private imports and collections.", kind: .view,
@@ -108,6 +112,11 @@ public enum AtelierAction {
         "photo.remove", "Remove Photo…", place: "Photo > Remove Photo… (Delete), photo menu",
         summary: "Asks, then removes the photos from the catalog or moves them to the Trash.",
         kind: .deletes, targets: .photos)
+    public static let addNote = Action<NoParameters>(
+        "photo.addNote", "Add Note…", place: "Photo > Add Note…, photo menu",
+        summary: "Opens a new note to type on the photo; the text also goes to the other selected photos.",
+        kind: .edit, targets: .photos, shortcut: KeyShortcut("n", [.command, .option, .shift]),
+        hidden: "Opens a note for the person to type in; agents add notes with set_metadata's add_note.")
     public static let showCullGroup = Action<NoParameters>(
         "photo.showCullGroup", "Show Cull Group", place: "Photo > Show Cull Group, photo menu",
         summary: "Shows the other shots of the focused photo's burst or similar group.",
@@ -257,10 +266,10 @@ public enum AtelierAction {
         importPhotos.descriptor, export.descriptor, saveHDR.descriptor, saveHDRAsNew.descriptor,
         undo.descriptor, redo.descriptor, zoomIn.descriptor, zoomOut.descriptor, zoomToFit.descriptor,
         zoomTo100.descriptor, toggleZoom.descriptor, setZoom.descriptor, showFilmstrip.descriptor,
-        privatePhotos.descriptor, grid.descriptor, loupe.descriptor, develop.descriptor,
+        showNotes.descriptor, privatePhotos.descriptor, grid.descriptor, loupe.descriptor, develop.descriptor,
         cullImport.descriptor, writeXMP.descriptor, writeAllXMP.descriptor, refreshVolumes.descriptor,
         createVirtualCopy.descriptor, removeVirtualCopy.descriptor, removePhoto.descriptor,
-        showCullGroup.descriptor, hdr.descriptor, editIn.descriptor, editInOther.descriptor,
+        addNote.descriptor, showCullGroup.descriptor, hdr.descriptor, editIn.descriptor, editInOther.descriptor,
         matchLook.descriptor, ai.descriptor, showInFinder.descriptor, setRating.descriptor,
         setFlag.descriptor, toggleLabel.descriptor, addToCollection.descriptor,
         removeFromCollection.descriptor, removeFromImport.descriptor, resetSettings.descriptor,

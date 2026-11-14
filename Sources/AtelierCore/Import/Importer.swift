@@ -373,6 +373,11 @@ public final class Importer: Sendable {
             ).insert(db)
 
             try Catalog.addKeywords(db, names: metadata.xmp.keywords + options.keywords, to: [assetID])
+            // Notes saved in the sidecar's `atelier:Notes` (AT-058) come back with the photo.
+            for note in metadata.xmp.notes ?? [] {
+                var record = note.record(assetID: assetID)
+                try record.insert(db)
+            }
             if let settings = initialSettings,
                let versionID = try Catalog.masterVersionID(db, assetID: assetID, create: true) {
                 var history = recovery?.history ?? DevelopHistory()

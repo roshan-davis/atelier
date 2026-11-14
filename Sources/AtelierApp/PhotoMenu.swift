@@ -30,6 +30,7 @@ extension LibraryModel {
         if ids.count == 1, let size = rows.first(where: { $0.id == ids[0] })?.cullGroupSize, size > 1 {
             menu.addItem(item(AtelierAction.showCullGroup, "Show Cull Group (\(size) Shots)"))
         }
+        menu.addItem(item(AtelierAction.addNote, ids.count > 1 ? "Add Note\(count)…" : "Add Note…"))
         menu.addItem(submenu("Edit In", editInMenu(targets: ids)))
         let ai = NSMenu()
         for recipe in AIRecipe.allCases {

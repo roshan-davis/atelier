@@ -9,15 +9,21 @@ public struct XMPFields: Sendable, Hashable {
     public var keywords: [String] = []
     public var title: String?
     public var caption: String?
+    /// The photo's notes, in Atelier's own `atelier:Notes` field (AT-058), oldest first. Nil
+    /// leaves the field alone when writing; on reading, nil means the sidecar has none for
+    /// this file (or no filename was given).
+    public var notes: [NotesRecovery.Note]?
 
     public init(rating: Int? = nil, flag: Flag? = nil, colorLabel: ColorLabel? = nil,
-                keywords: [String] = [], title: String? = nil, caption: String? = nil) {
+                keywords: [String] = [], title: String? = nil, caption: String? = nil,
+                notes: [NotesRecovery.Note]? = nil) {
         self.rating = rating
         self.flag = flag
         self.colorLabel = colorLabel
         self.keywords = keywords
         self.title = title
         self.caption = caption
+        self.notes = notes
     }
 }
 
@@ -69,13 +75,14 @@ public enum XMPSidecar {
 
     // MARK: Reading
 
-    public static func read(sidecar url: URL) -> XMPFields? {
+    /// `filename` (the original's, with its extension) also reads that file's notes.
+    public static func read(sidecar url: URL, filename: String? = nil) -> XMPFields? {
         guard let data = try? Data(contentsOf: url),
               let metadata = CGImageMetadataCreateFromXMPData(data as CFData) else { return nil }
-        return fields(from: metadata)
+        return fields(from: metadata, filename: filename)
     }
 
-    public static func fields(from metadata: CGImageMetadata) -> XMPFields {
+    public static func fields(from metadata: CGImageMetadata, filename: String? = nil) -> XMPFields {
         var fields = XMPFields()
         if let rating = string(metadata, "xmp:Rating"), let value = Int(rating) {
             // Lightroom writes -1 for rejected photos.
@@ -101,6 +108,12 @@ public enum XMPSidecar {
                                                       atelierPrefix as CFString, nil)
             if let flag = string(mutable, "atelier:Flag"), let value = Int(flag) {
                 fields.flag = Flag(rawValue: value)
+            }
+            // Notes that can't be read are left out rather than failing the import; writing
+            // refuses to replace them (see `write`).
+            if let filename, let json = string(mutable, NotesRecovery.path),
+               let packet = try? NotesRecovery.packet(json), let notes = packet.files[filename], !notes.isEmpty {
+                fields.notes = notes
             }
         }
         return fields
@@ -154,6 +167,22 @@ public enum XMPSidecar {
                 set(metadata, HistoryRecovery.path, String(decoding: try encoder.encode(histories), as: UTF8.self))
             } else {
                 CGImageMetadataRemoveTagWithPath(metadata, nil, HistoryRecovery.path as CFString)
+            }
+        }
+
+        if let notes = fields.notes, let filename {
+            // Other files' notes in a shared sidecar stay; an unreadable or newer packet is never replaced.
+            var packet = try recoveryJSON(metadata, path: NotesRecovery.path).map(NotesRecovery.packet)
+                ?? NotesRecovery.Packet()
+            if notes.isEmpty {
+                packet.files.removeValue(forKey: filename)
+            } else {
+                packet.files[filename] = notes
+            }
+            if packet.files.isEmpty {
+                CGImageMetadataRemoveTagWithPath(metadata, nil, NotesRecovery.path as CFString)
+            } else {
+                set(metadata, NotesRecovery.path, try NotesRecovery.json(packet))
             }
         }
 

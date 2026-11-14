@@ -106,6 +106,7 @@ private struct ReadyLibraryCommands: Commands {
                 actions.button(AtelierAction.toggleZoom)
                 Divider()
                 actions.toggle(AtelierAction.showFilmstrip)
+                actions.toggle(AtelierAction.showNotes)
                 Divider()
                 // Only when an import or collection is private. Leaving Hide asks for Touch ID or
                 // the login password (see PrivatePhotos).
@@ -141,6 +142,8 @@ private struct ReadyLibraryCommands: Commands {
                 actions.button(AtelierAction.removePhoto, title: "Remove Photo… (Delete)")
                 Divider()
                 actions.button(AtelierAction.showCullGroup)
+                Divider()
+                actions.button(AtelierAction.addNote)
                 Divider()
                 // Lightroom's key for Photo Merge > HDR.
                 actions.button(AtelierAction.hdr)

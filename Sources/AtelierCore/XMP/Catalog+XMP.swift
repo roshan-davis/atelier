@@ -26,7 +26,8 @@ extension Catalog {
                 }
                 let m = detail.metadata
                 let fields = XMPFields(rating: m.rating, flag: m.flag, colorLabel: m.colorLabel,
-                                       keywords: detail.keywords, title: m.title, caption: m.caption)
+                                       keywords: detail.keywords, title: m.title, caption: m.caption,
+                                       notes: try Self.sidecarNotes(db, assetID: id))
                 let versionID = try Self.masterVersionID(db, assetID: id, create: false)
                 let record = try versionID.flatMap { try DevelopSettingsRecord.fetchOne(db, key: $0) }
                 jobs.append((id, detail.fileURL, fields, record))
@@ -51,7 +52,8 @@ extension Catalog {
                     guard let detail = try Self.fetchDetail(db, assetID: id) else { return }
                     let m = detail.metadata
                     let current = XMPFields(rating: m.rating, flag: m.flag, colorLabel: m.colorLabel,
-                                            keywords: detail.keywords, title: m.title, caption: m.caption)
+                                            keywords: detail.keywords, title: m.title, caption: m.caption,
+                                            notes: try Self.sidecarNotes(db, assetID: id))
                     let version = try Self.masterVersionID(db, assetID: id, create: false)
                     let record = try version.flatMap { try DevelopSettingsRecord.fetchOne(db, key: $0) }
                     if current == fields && record == saved {
@@ -68,5 +70,12 @@ extension Catalog {
             try AssetMetadata.filter(keys: copies).updateAll(db, Column("xmpDirty").set(to: false))
         }
         return result
+    }
+
+    /// A photo's notes as the sidecar keeps them: oldest first, empty ones left out.
+    static func sidecarNotes(_ db: Database, assetID: Int64) throws -> [NotesRecovery.Note] {
+        try fetchNotes(db, assetID: assetID).reversed()
+            .filter { !NoteText.cleaned($0.text).isEmpty }
+            .map { NotesRecovery.Note($0) }
     }
 }

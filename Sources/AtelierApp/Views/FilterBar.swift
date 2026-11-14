@@ -14,11 +14,13 @@ struct FilterBar: View {
         let flag: Flag?
         let label: ColorLabel?
         let edited: Bool?
+        let notes: NotesFilter?
     }
 
     var body: some View {
         let key = SizingKey(showsSizeSlider: model.mode == .grid, rating: model.filter.minRating,
-                            flag: model.filter.flag, label: model.filter.colorLabel, edited: model.filter.edited)
+                            flag: model.filter.flag, label: model.filter.colorLabel, edited: model.filter.edited,
+                            notes: model.filter.notes)
         AdaptiveControlBar(sizingKey: key) {
             HStack(spacing: 14) {
                 search.frame(minWidth: 180, idealWidth: 180, maxWidth: 320)
@@ -26,6 +28,7 @@ struct FilterBar: View {
                 flagPicker.fixedSize()
                 labelPicker.fixedSize()
                 editedPicker.fixedSize()
+                notesPicker.fixedSize()
                 Spacer(minLength: 0)
                 sizeSlider
             }
@@ -37,6 +40,7 @@ struct FilterBar: View {
                     flagPicker
                     labelPicker
                     editedPicker
+                    notesPicker
                 } label: {
                     Label(activeCount == 0 ? "Filters" : "Filters (\(activeCount))",
                           systemImage: "line.3.horizontal.decrease.circle")
@@ -54,11 +58,11 @@ struct FilterBar: View {
 
     private var activeCount: Int {
         (model.filter.minRating > 0 ? 1 : 0) + (model.filter.flag != nil ? 1 : 0) + (model.filter.colorLabel != nil ? 1 : 0)
-            + (model.filter.edited != nil ? 1 : 0)
+            + (model.filter.edited != nil ? 1 : 0) + (model.filter.notes != nil ? 1 : 0)
     }
 
     private var search: some View {
-        TextField("Search filename, title, caption, keyword", text: $model.filter.text)
+        TextField("Search filename, title, caption, keyword, note", text: $model.filter.text)
             .textFieldStyle(.roundedBorder)
     }
 
@@ -85,6 +89,15 @@ struct FilterBar: View {
             Text("Any").tag(Bool?.none)
             Text("Edited").tag(Bool?.some(true))
             Text("Unedited").tag(Bool?.some(false))
+        }
+    }
+
+    private var notesPicker: some View {
+        Picker("Notes", selection: $model.filter.notes) {
+            Text("Any").tag(NotesFilter?.none)
+            ForEach(NotesFilter.allCases, id: \.self) { choice in
+                Text(choice.title).tag(NotesFilter?.some(choice))
+            }
         }
     }
 

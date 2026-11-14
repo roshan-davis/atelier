@@ -195,6 +195,8 @@ final class LibraryModel: ObservableObject {
         set { zoomState.report = newValue }
     }
     @Published var showingShortcuts = false
+    /// Photo > Add Note… asks the notes panel for a new note (AT-058).
+    @Published var noteRequest: NoteRequest?
     /// The Cull view, while open.
     @Published var cullSession: CullModel?
     /// The library window, which receives the single-key commands.
@@ -993,6 +995,8 @@ final class LibraryModel: ObservableObject {
         if event.modifierFlags.contains(.command) { return false }
         // Only the library window; never Settings or other windows.
         guard let window = NSApp.keyWindow, window === mainWindow, window.attachedSheet == nil else { return false }
+        // A note being typed keeps every key, Tab and Esc included (AT-058).
+        if window.firstResponder is NoteTextView { return false }
         // ⌃Tab moves between areas from anywhere in Develop, even from a text field (the Mac's
         // own ⌃Tab leaves a text field), so it never gets stuck.
         if usesPanelKeys, let action = KeyBindings.action(for: event),

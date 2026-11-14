@@ -62,6 +62,10 @@ extension LibraryModel {
         r.bind(AtelierAction.showFilmstrip, isOn: { _ in Filmstrip.isVisible }) { _, _, _ in
             Filmstrip.isVisible.toggle()
         }
+        r.bind(AtelierAction.showNotes, enabled: { $0.mode != .hdr || $0.cullSession != nil },
+               isOn: { _ in NotesPanel.isVisible }) { _, _, _ in
+            NotesPanel.isVisible.toggle()
+        }
         // Leaving Hide asks for Touch ID or the login password (see PrivatePhotos).
         r.bind(AtelierAction.privatePhotos) { model, parameters, _ in
             model.privatePhotos.choose(PrivateVisibility(parameters.visibility))
@@ -105,6 +109,9 @@ extension LibraryModel {
         }
         r.bind(AtelierAction.removeVirtualCopy, enabled: { $0.targetsIncludeVirtualCopy }) { model, _, ids in
             model.withTargets(ids) { model.removeVirtualCopies() }
+        }
+        r.bind(AtelierAction.addNote, enabled: { $0.canAddNote }) { model, _, ids in
+            model.addNote(to: ids)
         }
         r.bind(AtelierAction.removePhoto, enabled: { !$0.targetIDs.isEmpty }) { model, _, ids in
             model.withTargets(ids) { model.beginRemovePhotos() }

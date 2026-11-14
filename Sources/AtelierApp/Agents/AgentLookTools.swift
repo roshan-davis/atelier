@@ -42,9 +42,9 @@ struct AgentLookTools: Sendable {
     static let searchPhotos = MCPTool(
         name: "search_photos", title: "Search photos",
         description: "Finds photos in the catalog, like the Library filter bar. Returns ids and the basics (file name, capture time, "
-            + "rating, flag, label, edited). All conditions must match. Use get_photo for one photo's full details.",
+            + "rating, flag, label, edited, has_notes). All conditions must match. Use get_photo for one photo's full details.",
         inputSchema: objectSchema([
-            "text": property("string", "Words in the file name, title, caption or keywords."),
+            "text": property("string", "Words in the file name, title, caption, keywords or notes."),
             "collection_id": property("integer", "Only this collection (ids from list_items kind collections)."),
             "import_id": property("integer", "Only this import entry (ids from list_items kind imports)."),
             "folder_id": property("integer", "Only this folder (ids from list_items kind folders)."),
@@ -53,6 +53,7 @@ struct AgentLookTools: Sendable {
             "flag": enumProperty(["picked", "rejected", "unflagged"], "Only photos with this flag."),
             "label": enumProperty(ColorLabel.allCases.map { $0.rawValue.lowercased() }, "Only photos with this color label."),
             "edited": property("boolean", "true: only photos with Develop edits; false: only unedited ones."),
+            "has_notes": property("boolean", "true: only photos with notes; false: only photos without."),
             "sort": enumProperty(LibrarySort.allCases.map(\.agentName), "Order of the results (default capture_time)."),
             "descending": property("boolean", "Newest, highest or last first."),
             "limit": .object(["type": .string("integer"), "minimum": .int(1), "maximum": .int(500),
@@ -65,7 +66,7 @@ struct AgentLookTools: Sendable {
     static let getPhoto = MCPTool(
         name: "get_photo", title: "Photo details",
         description: "One photo's details: file and folder, camera and lens, size, capture time, rating, flag, label, title, "
-            + "caption, keywords, whether it has edits, and its cull group. Location only when Atelier allows it.",
+            + "caption, keywords, notes, whether it has edits, and its cull group. Location only when Atelier allows it.",
         inputSchema: objectSchema(["id": property("integer", "The photo id (from search_photos or get_context).")], required: ["id"]),
         readOnly: true, idempotent: true)
 
@@ -167,6 +168,10 @@ struct AgentLookTools: Sendable {
             guard let value = edited.boolValue else { throw ArgumentProblem("edited is true or false.") }
             filter.edited = value
         }
+        if let notes = arguments["has_notes"] {
+            guard let value = notes.boolValue else { throw ArgumentProblem("has_notes is true or false.") }
+            filter.notes = value ? .hasNotes : .noNotes
+        }
         if let sort = arguments["sort"] {
             guard let match = LibrarySort.allCases.first(where: { $0.agentName == sort.stringValue }) else {
                 let names = LibrarySort.allCases.map(\.agentName)
@@ -229,6 +234,18 @@ struct AgentLookTools: Sendable {
         photo["has_edits"] = .bool(!settings.isNeutral)
         let group = try publicMembers(of: catalog.cullGroup(of: id))
         if !group.isEmpty { photo["cull_group_size"] = .int(group.count) }
+        // Newest first, as the notes panel shows them (AT-058).
+        let notes = try catalog.notes(for: id).filter { !NoteText.cleaned($0.text).isEmpty }
+        if !notes.isEmpty {
+            photo["notes"] = .array(notes.map { note in
+                var entry: [String: JSONValue] = [
+                    "text": .string(note.text), "author": .string(note.author),
+                    "created": .string(Self.date(note.createdAt)),
+                ]
+                if let edited = note.editedAt { entry["edited"] = .string(Self.date(edited)) }
+                return .object(entry)
+            })
+        }
         return .json(.object(photo))
     }
 
@@ -395,6 +412,7 @@ struct AgentLookTools: Sendable {
         if row.isCropped { members["cropped"] = .bool(true) }
         if row.hasMasks { members["masks"] = .bool(true) }
         if row.isOffline { members["offline"] = .bool(true) }
+        if row.hasNotes { members["has_notes"] = .bool(true) }
         if let parent = row.stackParentId { members["stacked_on"] = .int(Int(parent)) }
         if let kind = row.stackKind { members["version_kind"] = .string(kind.rawValue) }
         if let name = row.stackName { members["version_name"] = .string(name) }

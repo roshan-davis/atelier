@@ -62,7 +62,10 @@ public enum MetadataReader {
                 result.xmp = XMPSidecar.fields(from: embedded)
             }
         }
-        if let sidecar = XMPSidecar.read(sidecar: XMPSidecar.sidecarURL(for: sidecarFor ?? url)) {
+        // Notes (AT-058) are kept per file name in the sidecar Atelier writes.
+        let original = sidecarFor ?? url
+        if let sidecar = XMPSidecar.read(sidecar: XMPSidecar.sidecarURL(for: original),
+                                         filename: original.lastPathComponent) {
             result.xmp = sidecar
         }
         return result

@@ -2,7 +2,7 @@ import Foundation
 import GRDB
 
 /// What a photo's library fields are at one moment: rating, flag, label, title, caption,
-/// keywords and collections. Agent changes (AT-050c) record it before and after, so an agent's
+/// keywords, collections and notes. Agent changes (AT-050c) record it before and after, so an agent's
 /// change can be undone only while it is still the latest one on those photos.
 public struct LibraryState: Hashable, Sendable {
     public var rating: Int
@@ -13,9 +13,12 @@ public struct LibraryState: Hashable, Sendable {
     /// Sorted, compared without case.
     public var keywords: [String]
     public var collectionIDs: Set<Int64>
+    /// Its notes (AT-058), oldest first, as stored.
+    public var notes: [PhotoNote]
 
     public init(rating: Int = 0, flag: Flag = .none, colorLabel: ColorLabel? = nil, title: String? = nil,
-                caption: String? = nil, keywords: [String] = [], collectionIDs: Set<Int64> = []) {
+                caption: String? = nil, keywords: [String] = [], collectionIDs: Set<Int64> = [],
+                notes: [PhotoNote] = []) {
         self.rating = rating
         self.flag = flag
         self.colorLabel = colorLabel
@@ -23,6 +26,7 @@ public struct LibraryState: Hashable, Sendable {
         self.caption = caption
         self.keywords = keywords
         self.collectionIDs = collectionIDs
+        self.notes = notes
     }
 }
 
@@ -49,6 +53,9 @@ extension Catalog {
             }
             for membership in try CollectionAsset.filter(ids.contains(Column("assetId"))).fetchAll(db) {
                 states[membership.assetId]?.collectionIDs.insert(membership.collectionId)
+            }
+            for note in try PhotoNote.filter(ids.contains(Column("assetId"))).order(Column("id")).fetchAll(db) {
+                states[note.assetId]?.notes.append(note)
             }
             for id in ids {
                 states[id]?.keywords.sort { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
@@ -78,6 +85,7 @@ extension Catalog {
                 for collectionID in state.collectionIDs where liveCollections.contains(collectionID) {
                     try CollectionAsset(collectionId: collectionID, assetId: assetID).insert(db, onConflict: .ignore)
                 }
+                try Self.replaceNotes(db, of: assetID, with: state.notes)
             }
         }
     }

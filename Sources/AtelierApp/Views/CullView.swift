@@ -191,6 +191,16 @@ struct CullView: View {
                     ProgressView()
                 }
             }
+            // The same sticky notes as Library (AT-058), for the focused shot.
+            .overlay {
+                if let catalog = cull.catalog, let id = cull.focused {
+                    NotesOverlay(catalog: catalog, assetID: cull.focusedAssetID, subtitle: cull.photos[id].name,
+                                 addTargets: { cull.focusedAssetID.map { [$0] } ?? [] },
+                                 unavailable: cull.focusedAssetID == nil
+                                    ? "Notes can be added once the photos are imported." : nil,
+                                 request: $cull.noteRequest)
+                }
+            }
             if let id = cull.focused {
                 previewBar(id)
             }
