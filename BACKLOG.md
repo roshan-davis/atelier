@@ -1122,4 +1122,3 @@ So no tool has a private note per photo, and none leaves a readable, editable re
 **Acceptance:** in Cull and in Show Cull Group, double-click, Z, pinch, ⌥-scroll, drag and the zoom buttons work as in Loupe, and the zoom stays when moving to the next photo; Loupe's zoom is unchanged after; Pin to Photo then a click places a numbered marker that follows zoom and pan; Remove Pin and the Note Markers switch work; markers never show in Grid, Loupe, Develop or exports; a culled group's dropped photo with closed eyes shows its reason marker on that face.
 
 **Deferred:** dragging a marker to move it (Pin to Photo again moves it); markers in other views (Rosh chose Cull only).
-
