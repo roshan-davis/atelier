@@ -10,7 +10,8 @@ public struct CullSignals: @unchecked Sendable {
     /// Variance of the Laplacian on a 1024 px copy: higher is sharper. Only comparable
     /// between photos of the same scene.
     public var sharpness: Double
-    /// The best face's capture quality (0...1; eyes open, in focus); nil without faces.
+    /// The best face's capture quality (0...1; eyes open, in focus); nil without faces. Only
+    /// Pick By Classic uses it; the others read each face (`faces`).
     public var faceQuality: Double?
     /// A small picture for the Cull view.
     public var thumbnail: CGImage?
@@ -19,15 +20,49 @@ public struct CullSignals: @unchecked Sendable {
     public var layout: [Float]?
     /// Width over height.
     public var aspect: Float
+    /// Every face Vision found, with eye openness and sharpness.
+    public var faces: [CullFace]
+    /// Sharpness where the subject is: the faces (weighted by size), else Vision's most
+    /// salient object, else the whole frame. Same scale as `sharpness`.
+    public var subjectSharpness: Double
+    /// How much the subject's edges run one way (`GrayPlane.edgeCoherence`), to tell motion
+    /// blur from missed focus.
+    public var coherence: Double
+    public var exposure: CullExposure
+    /// Apple's aesthetics score (-1...1); nil where Vision can't give one.
+    public var aesthetics: Double?
+    /// Apple's "utility" label: screenshots, receipts, documents.
+    public var isUtility: Bool
+    /// The Advanced checks ran (eyes read from a large copy).
+    public var advanced: Bool
 
     public init(featurePrint: VNFeaturePrintObservation? = nil, sharpness: Double = 0, faceQuality: Double? = nil,
-                thumbnail: CGImage? = nil, layout: [Float]? = nil, aspect: Float = 1.5) {
+                thumbnail: CGImage? = nil, layout: [Float]? = nil, aspect: Float = 1.5, faces: [CullFace] = [],
+                subjectSharpness: Double? = nil, coherence: Double = 0, exposure: CullExposure = CullExposure(),
+                aesthetics: Double? = nil, isUtility: Bool = false, advanced: Bool = false) {
         self.featurePrint = featurePrint
         self.sharpness = sharpness
         self.faceQuality = faceQuality
         self.thumbnail = thumbnail
         self.layout = layout
         self.aspect = aspect
+        self.faces = faces
+        self.subjectSharpness = subjectSharpness ?? sharpness
+        self.coherence = coherence
+        self.exposure = exposure
+        self.aesthetics = aesthetics
+        self.isUtility = isUtility
+        self.advanced = advanced
+    }
+
+    /// Eye sharpness from the Advanced checks: the faces' eyes, weighted by face size; nil when
+    /// they didn't run or found no eyes.
+    public var eyeSharpness: Double? {
+        let read = faces.filter { $0.eyeSharpness != nil }
+        guard advanced, !read.isEmpty else { return nil }
+        let weight = read.reduce(0) { $0 + $1.box.width }
+        guard weight > 0 else { return nil }
+        return read.reduce(0) { $0 + $1.eyeSharpness! * $1.box.width } / weight
     }
 }
 
@@ -73,18 +108,115 @@ public enum CullLink: Sendable, Equatable {
 }
 
 public enum Culling {
-    /// Reads a photo at 1024 px (the embedded preview for RAW files) and measures it.
-    public static func analyze(_ url: URL) -> CullSignals {
+    /// Reads a photo at 1024 px (the embedded preview for RAW files) and measures it: what
+    /// grouping needs (feature print, layout) and what picking needs (sharpness on the subject,
+    /// faces and their eyes, exposure, Apple's aesthetics score).
+    public static func analyze(_ url: URL) async -> CullSignals {
         guard let image = image(at: url, maxPixel: 1024) else { return CullSignals() }
-        var signals = CullSignals(sharpness: sharpness(of: image), thumbnail: scaled(image, maxPixel: 320),
+        let plane = GrayPlane(image)
+        var signals = CullSignals(sharpness: plane?.laplacianVariance() ?? 0, thumbnail: scaled(image, maxPixel: 320),
                                   layout: layout(of: image), aspect: Float(image.width) / Float(max(image.height, 1)))
         let print = VNGenerateImageFeaturePrintRequest()
-        let faces = VNDetectFaceCaptureQualityRequest()
+        let landmarks = VNDetectFaceLandmarksRequest()
+        let saliency = VNGenerateObjectnessBasedSaliencyImageRequest()
         let handler = VNImageRequestHandler(cgImage: image)
-        try? handler.perform([print, faces])
+        try? handler.perform([print, landmarks, saliency])
         signals.featurePrint = print.results?.first
-        signals.faceQuality = faces.results?.compactMap { $0.faceCaptureQuality.map(Double.init) }.max()
+        // Capture quality for the same faces, so each face has both.
+        let found = landmarks.results ?? []
+        var qualities: [VNFaceObservation] = []
+        if !found.isEmpty {
+            let quality = VNDetectFaceCaptureQualityRequest()
+            quality.inputFaceObservations = found
+            try? handler.perform([quality])
+            qualities = quality.results ?? []
+        }
+        let size = CGSize(width: image.width, height: image.height)
+        signals.faces = found.map { observation in
+            var face = CullFaceReading.face(observation, imageSize: size, plane: plane)
+            let match = qualities.min { distance($0.boundingBox, observation.boundingBox) < distance($1.boundingBox, observation.boundingBox) }
+            face.quality = match?.faceCaptureQuality.map(Double.init)
+            return face
+        }
+        signals.faceQuality = signals.faces.compactMap(\.quality).max()
+        if let plane {
+            let subject = subjectRect(faces: signals.faces, saliency: saliency.results?.first, plane: plane)
+            signals.subjectSharpness = subjectSharpness(faces: signals.faces, fallback: plane.laplacianVariance(in: subject))
+            signals.coherence = plane.edgeCoherence(in: subject)
+            signals.exposure = plane.exposure()
+        }
+        if let scores = try? await CalculateImageAestheticsScoresRequest().perform(on: image) {
+            signals.aesthetics = Double(scores.overallScore)
+            signals.isUtility = scores.isUtility
+        }
         return signals
+    }
+
+    /// The Advanced checks for one photo: reads a large copy (up to `maxPixel`, three to four
+    /// times the standard size) and, for each face found before, reads the eyes again there:
+    /// openness for faces too small to judge before, and the eyes' sharpness at real detail.
+    public static func analyzeAdvanced(_ url: URL, signals: CullSignals, maxPixel: Int = 4096) -> CullSignals {
+        var result = signals
+        result.advanced = true
+        guard !signals.faces.isEmpty, let image = image(at: url, maxPixel: maxPixel) else { return result }
+        let width = Double(image.width), height = Double(image.height)
+        result.faces = signals.faces.map { face in
+            var face = face
+            // The face with room around it, in pixels (CGImage cropping is top-left based).
+            let margin = face.box.width * 0.4
+            let box = face.box.insetBy(dx: -margin, dy: -margin)
+                .intersection(CGRect(x: 0, y: 0, width: 1, height: 1))
+            let crop = CGRect(x: box.minX * width, y: (1 - box.maxY) * height,
+                              width: box.width * width, height: box.height * height).integral
+            guard crop.width >= 32, crop.height >= 32, let cropped = image.cropping(to: crop) else { return face }
+            let request = VNDetectFaceLandmarksRequest()
+            try? VNImageRequestHandler(cgImage: cropped).perform([request])
+            // The face nearest the middle of the crop is this one.
+            guard let found = request.results?.min(by: {
+                hypot($0.boundingBox.midX - 0.5, $0.boundingBox.midY - 0.5) < hypot($1.boundingBox.midX - 0.5, $1.boundingBox.midY - 0.5)
+            }) else { return face }
+            let size = CGSize(width: cropped.width, height: cropped.height)
+            // A face that was too small is judged now; its size here is what counts.
+            let read = CullFaceReading.face(found, imageSize: size, plane: nil, minimumPixels: 0)
+            if face.openness == nil || face.skip == .small {
+                face.openness = read.openness
+                face.skip = read.skip
+            }
+            if let eyes = CullFaceReading.eyeRegion(found, imageSize: size), let plane = GrayPlane(cropped, maxPixel: 4096) {
+                face.eyeSharpness = plane.laplacianVariance(in: plane.pixelRect(fromVision: eyes))
+            }
+            return face
+        }
+        return result
+    }
+
+    static func distance(_ a: CGRect, _ b: CGRect) -> Double {
+        hypot(a.midX - b.midX, a.midY - b.midY)
+    }
+
+    /// Where the subject is, in `plane`'s pixels: around the faces, else Vision's most salient
+    /// object, else the whole frame.
+    static func subjectRect(faces: [CullFace], saliency: VNSaliencyImageObservation?, plane: GrayPlane) -> CGRect {
+        let judged = faces.filter { $0.box.width * Double(plane.width) >= 24 }
+        if let first = judged.first {
+            let union = judged.dropFirst().reduce(first.box) { $0.union($1.box) }
+            return plane.pixelRect(fromVision: union)
+        }
+        if let objects = saliency?.salientObjects,
+           let biggest = objects.max(by: { $0.boundingBox.width * $0.boundingBox.height < $1.boundingBox.width * $1.boundingBox.height }),
+           biggest.boundingBox.width * biggest.boundingBox.height < 0.9 {
+            return plane.pixelRect(fromVision: biggest.boundingBox)
+        }
+        return plane.bounds
+    }
+
+    /// The faces' sharpness weighted by their size (bigger faces are what the photo is of);
+    /// `fallback` without faces big enough to read.
+    static func subjectSharpness(faces: [CullFace], fallback: Double) -> Double {
+        let read = faces.filter { $0.sharpness != nil && $0.skip != .small }
+        let weight = read.reduce(0) { $0 + $1.box.width }
+        guard weight > 0 else { return fallback }
+        return read.reduce(0) { $0 + $1.sharpness! * $1.box.width } / weight
     }
 
     /// How different two photos look; 0 is identical. nil when either has no feature print.
@@ -321,31 +453,8 @@ public enum Culling {
         return context.makeImage()
     }
 
-    /// Variance of the Laplacian of the gray image: blur and missed focus lower it.
+    /// Variance of the Laplacian of the gray image at 1024 px: blur and missed focus lower it.
     public static func sharpness(of image: CGImage) -> Double {
-        let scale = min(1, 1024 / Double(max(image.width, image.height)))
-        let width = max(3, Int(Double(image.width) * scale)), height = max(3, Int(Double(image.height) * scale))
-        var gray = [UInt8](repeating: 0, count: width * height)
-        guard let context = CGContext(data: &gray, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width,
-                                      space: CGColorSpaceCreateDeviceGray(),
-                                      bitmapInfo: CGImageAlphaInfo.none.rawValue) else { return 0 }
-        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
-        var sum = 0.0, sumSquares = 0.0
-        var count = 0.0
-        for y in 1..<(height - 1) {
-            let row = y * width
-            for x in 1..<(width - 1) {
-                let center = Double(gray[row + x]) * 4
-                let around = Double(gray[row + x - 1]) + Double(gray[row + x + 1])
-                    + Double(gray[row - width + x]) + Double(gray[row + width + x])
-                let value = around - center
-                sum += value
-                sumSquares += value * value
-                count += 1
-            }
-        }
-        guard count > 0 else { return 0 }
-        let mean = sum / count
-        return sumSquares / count - mean * mean
+        GrayPlane(image)?.laplacianVariance() ?? 0
     }
 }

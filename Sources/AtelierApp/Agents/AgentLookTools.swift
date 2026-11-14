@@ -93,7 +93,8 @@ struct AgentLookTools: Sendable {
     static let cullGroups = MCPTool(
         name: "cull_groups", title: "Cull group",
         description: "The photos culled together with a photo (a burst or similar shots, from Library > Cull Import), "
-            + "in capture order, with their rating and flag.",
+            + "in capture order, with their rating and flag, and for photos the cull didn't keep, Cull's note "
+            + "saying why (eyes closed, softer than the keeper, exposure).",
         inputSchema: objectSchema(["id": property("integer", "Any photo in the group.")], required: ["id"]),
         readOnly: true, idempotent: true, ui: AtelierPhotoCarousel.link)
 
@@ -298,13 +299,18 @@ struct AgentLookTools: Sendable {
         }
         let summaries: [JSONValue] = try members.compactMap { member in
             guard let detail = try catalog.detail(for: member) else { return nil }
-            return .object([
+            var summary: [String: JSONValue] = [
                 "id": .int(Int(member)),
                 "filename": .string(detail.asset.filename),
                 "capture_time": Self.text(detail.asset.captureTime.map(Self.date)),
                 "rating": .int(detail.metadata.rating),
                 "flag": .string(detail.metadata.flag.agentName),
-            ])
+            ]
+            // The newest note by Cull: its reasons for not keeping the photo (AT-058).
+            if let reason = try catalog.notes(for: member).first(where: { $0.source == .cull }) {
+                summary["cull_note"] = .string(reason.text)
+            }
+            return .object(summary)
         }
         return .json(.object(["id": .int(Int(id)), "photos": .array(summaries)]))
     }

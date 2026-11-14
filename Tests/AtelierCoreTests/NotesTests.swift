@@ -266,6 +266,37 @@ final class NotesTests: XCTestCase {
         XCTAssertEqual(NoteText.plain("- **Eyes** closed\n1. *soft*"), "Eyes closed\nsoft")
     }
 
+    // MARK: Cull's reasons (AT-058 step 3)
+
+    func testCullNotesReplaceUneditedOnesAndMarkKeptLater() async throws {
+        let (catalog, ids) = try await makeLibrary(["DSC_1.JPG", "DSC_2.JPG", "DSC_3.JPG"])
+        let first = Date(timeIntervalSince1970: 1_800_000_000)
+        try catalog.writeCullNotes(rejected: [ids[0]: "Not kept: group of 3\n- Eyes closed", ids[1]: "Not kept\n- Softer"],
+                                   kept: [ids[2]], at: first)
+        XCTAssertEqual(try catalog.notes(for: ids[0]).map(\.source), [.cull])
+        XCTAssertEqual(try catalog.notes(for: ids[0]).first?.author, "Cull")
+        XCTAssertTrue(try catalog.notes(for: ids[2]).isEmpty, "kept photos get no note")
+
+        // The person edits the second photo's note; a person's own note stays whatever happens.
+        let edited = try XCTUnwrap(try catalog.notes(for: ids[1]).first?.id)
+        try catalog.updateNote(edited, text: "Not kept\n- Softer\n- but I like the light", at: first.addingTimeInterval(5))
+        try catalog.addNote("Print this one?", to: [ids[0]], at: first.addingTimeInterval(6))
+
+        // Culled again: the unedited Cull note is replaced, the edited one kept beside the new one.
+        let second = first.addingTimeInterval(60)
+        try catalog.writeCullNotes(rejected: [ids[0]: "Not kept\n- Highlights clipped", ids[1]: "Not kept\n- Eyes half closed"],
+                                   kept: [], at: second)
+        XCTAssertEqual(try catalog.notes(for: ids[0]).map(\.text), ["Not kept\n- Highlights clipped", "Print this one?"])
+        XCTAssertEqual(try catalog.notes(for: ids[1]).map(\.text),
+                       ["Not kept\n- Eyes half closed", "Not kept\n- Softer\n- but I like the light"])
+
+        // Kept on re-review: the old Cull note stays, marked once.
+        try catalog.writeCullNotes(rejected: [:], kept: [ids[0]], at: second)
+        try catalog.writeCullNotes(rejected: [:], kept: [ids[0]], at: second)
+        let kept = try XCTUnwrap(try catalog.notes(for: ids[0]).first { $0.source == .cull })
+        XCTAssertEqual(kept.text, Catalog.keptLaterMark + "\nNot kept\n- Highlights clipped")
+    }
+
     private func makeJPEG(at url: URL) throws {
         let space = CGColorSpace(name: CGColorSpace.sRGB)!
         let context = try XCTUnwrap(CGContext(data: nil, width: 60, height: 40, bitsPerComponent: 8, bytesPerRow: 0,

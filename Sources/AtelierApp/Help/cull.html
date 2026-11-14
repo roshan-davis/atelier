@@ -30,6 +30,9 @@
       <span style="flex:1"></span><span>Grouping</span><span style="color:#999">Tight</span>
       <span style="width:90px;height:3px;background:#5a5a5a;border-radius:2px;position:relative"><i style="position:absolute;left:0;top:-4px;width:11px;height:11px;border-radius:50%;background:#fff"></i></span><span style="color:#999">Loose</span>
     </div>
+    <div class="filter" style="height:28px;gap:10px;justify-content:flex-end;padding-right:30px" data-pin="5">
+      <span>Pick By</span><span class="tb-btn">Balanced ▾</span><span>☐ Advanced checks (slower)</span>
+    </div>
     <div class="body" style="grid-template-columns: 1fr 1fr;height:330px">
       <div class="side" style="background:#232323;padding:10px;display:flex;flex-direction:column;gap:10px">
         <div data-pin="2"><div style="color:#aaa;margin-bottom:4px">Similar shots · 4 photos</div>
@@ -50,19 +53,41 @@
       <div class="photo" style="flex-direction:column;gap:6px" data-pin="3" data-pin-side="right">
         <img src="images/thumbs/eagle.jpg" alt="" style="max-height:220px">
         <div style="display:flex;gap:6px"><span class="badge" style="background:#0a84ff">Suggested</span><span class="badge">Keep</span></div>
-        <div style="color:#aaa">Sharpness 100% of the group's best · Face quality —</div>
+        <div style="color:#aaa">Sharpness 100% of the group's best · Exposure OK</div>
       </div>
     </div>
-    <div class="bar" style="height:34px" data-pin="4"><span>Click to look · Space or double-click keeps or drops · P keep · X drop · arrows move</span><span><span class="tb-btn">Cancel</span> <span class="tb-btn" style="background:#0a84ff;color:#fff">Import 5 Photos</span></span></div>
+    <div class="bar" style="height:34px" data-pin="4"><span>Click to look · Space or double-click keeps or drops · P keep · X drop · arrows move</span><span>☑ Write reasons to notes <span class="tb-btn">Cancel</span> <span class="tb-btn" style="background:#0a84ff;color:#fff">Import 5 Photos</span></span></div>
   </div>
   </div>
 </figure>
 <ol class="legend">
   <li><b>Match</b> and <b>Grouping</b> at the top. <b>Same Frame</b> groups only shots framed alike (someone blinked, moved slightly). <b>Similar Shots</b> (the default) also groups the same scene reframed or zoomed a little. The <b>Grouping</b> slider, from Tight to Loose, regroups instantly. It starts at Tight, so only shots that really match are grouped; slide toward Loose to group more.</li>
   <li><b>Groups</b> as rows. Keepers have a check; dropped shots are dimmed. Single shots are listed last and kept. Drag the line between the groups and the large photo to make the list wider or narrower; the photos wrap to fit.</li>
-  <li>The focused photo, large, with its <b>sharpness</b> and, when there are faces, <b>face quality</b> (eyes open, in focus). Atelier marks the best one <b>Suggested</b> and starts it as the keeper.</li>
-  <li>Keys, and <b>Cancel</b> and <b>Import N Photos</b> (or <b>Done</b> when culling an import). Before importing, this line shows the photos being <a href="import.html#ahead">copied to your library while you cull</a>.</li>
+  <li>The focused photo, large, with what was measured: its <b>sharpness</b> against the group's best (on the faces, or the main subject), how many people have their <b>eyes</b> open, and its <b>exposure</b>. Atelier marks the best one by <a href="#pick">Pick By</a> <b>Suggested</b> and starts it as the keeper. A dropped photo also says why, in orange: the same reasons its note will get.</li>
+  <li>Keys, <b>Write reasons to notes</b>, and <b>Cancel</b> and <b>Import N Photos</b> (or <b>Done</b> when culling an import). Before importing, this line shows the photos being <a href="import.html#ahead">copied to your library while you cull</a>.</li>
+  <li><b>Pick By</b> and <b>Advanced checks (slower)</b>: how the keeper of each group is suggested. See <a href="#pick">Picking the keeper</a>.</li>
 </ol>
+
+<h2 id="pick">Picking the keeper</h2>
+<p><b>Pick By</b> changes which photo of each group is suggested; the groups stay the same. Changing it suggests again at once, nothing is read again. It's remembered for the next cull.</p>
+<dl class="defs">
+  <dt>Balanced</dt><dd>The default. Fewest people with eyes closed, then a sharp subject, good faces and exposure; Apple's aesthetics score breaks a tie. A closed eye counts for more than a small loss of sharpness: a soft photo can be sharpened a little, a closed eye can't be opened.</dd>
+  <dt>Sharpest Subject</dt><dd>The sharpest faces (with Advanced checks, the eyes themselves), or the main subject when there are no faces. Background detail doesn't count, so a busy sharp background can't beat a sharp face on a soft one.</dd>
+  <dt>Everyone's Eyes Open</dt><dd>The fewest people with eyes closed, then half closed, then the sharpest.</dd>
+  <dt>Best Exposure</dt><dd>The least clipped highlights and crushed shadows, closest to the group's usual brightness, then the sharpest.</dd>
+  <dt>Classic</dt><dd>Atelier's earlier pick: the sharpest whole frame plus the best face's quality.</dd>
+</dl>
+<h3 id="eyes">How eyes are checked</h3>
+<p>For every face, Atelier measures how open the eyes are and compares each person with <b>the same person in the group's other shots</b>. So naturally narrow eyes, glasses and squinting smiles aren't called closed: only eyes much less open than that person's own widest are. Faces turned away, and faces too small to see at the standard size, are left out and the caption says "not checked".</p>
+<h3 id="advanced">Advanced checks (slower)</h3>
+<p>Off by default. With it on, Atelier reads every photo in a group again from a large copy, three to four times the standard size: small faces in group shots get their eyes checked, and sharpness compares the eyes themselves instead of whole faces. It takes roughly a fifth of a second more per grouped photo, starting with the focused group; single shots are skipped, since they're always kept. The top of the view shows its progress, and switching it off stops it. Your Keep and Drop clicks stay as they are when it finishes.</p>
+<h3 id="reasons">Reasons on dropped photos</h3>
+<p>With <b>Write reasons to notes</b> on (the default), finishing the cull gives each photo not kept a <a href="notes.html">note</a> by Cull with a bullet for each measured reason, compared with its group's keeper, for example:</p>
+<pre>Not kept: group of 6 (Similar shots), keeper DSC_0102.NEF.
+- Eyes closed: 2 of 5 people (keeper: none)
+- Subject softer: 58% of the keeper's sharpness, looks like motion blur
+- 1.3 stops darker than the keeper</pre>
+<p>Only what was measured is written. Kept photos get no note. Culling again replaces Cull's note, unless you edited it: then yours stays and the new one is added. A photo kept later on <a href="#review">another look</a> keeps its note, marked <b>Kept later</b>.</p>
 
 <h2 id="keys">Keys</h2>
 <table class="keys">
