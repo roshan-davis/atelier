@@ -195,9 +195,10 @@ final class AgentServer: ObservableObject {
         case AgentLookTools.listItems.name:
             switch arguments["kind"]?.stringValue {
             case "presets":
-                let presets: [JSONValue] = model.develop.visiblePresets.map { preset -> JSONValue in
+                let presets: [JSONValue] = Self.agentPresets(model).map { preset, kind -> JSONValue in
                     .object(["id": .string(preset.id.uuidString), "name": .string(preset.name),
-                             "group": .string(preset.group), "built_in": .bool(preset.isBuiltIn)])
+                             "group": .string(preset.group), "built_in": .bool(preset.isBuiltIn),
+                             "kind": .string(kind.rawValue)])
                 }
                 return .json(.object(["kind": .string("presets"), "items": .array(presets)]))
             case "editors":

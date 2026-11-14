@@ -199,6 +199,7 @@ private struct ImportChooseStep: View {
                 .background(Color(nsColor: theme.panel))
             }
             ImportFooter {
+                ImportPresetMenu(flow: flow)
                 Text(summary)
             } buttons: {
                 Button("Cancel", role: .cancel, action: close)
@@ -372,6 +373,12 @@ private struct ImportChooseStep: View {
 
     private var applyPanel: some View {
         VStack(alignment: .leading, spacing: 10) {
+            if let note = flow.importPresetNote {
+                Label(note, systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             VStack(alignment: .leading, spacing: 4) {
                 Text("Develop settings").font(.caption).foregroundStyle(.secondary)
                 Picker("Develop settings", selection: $flow.presetID) {
@@ -389,6 +396,12 @@ private struct ImportChooseStep: View {
                 }
                 .labelsHidden()
             }
+            sectionPresetPicker(.toneCurve, selection: $flow.toneCurvePresetID)
+            sectionPresetPicker(.colorGrading, selection: $flow.colorGradingPresetID)
+            Text("Applied in this order, after the camera's look; each is a step in the photo's History.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             VStack(alignment: .leading, spacing: 4) {
                 Text("Keywords").font(.caption).foregroundStyle(.secondary)
                 TextField("Keywords", text: $flow.keywords, prompt: Text("Comma separated"))
@@ -410,6 +423,38 @@ private struct ImportChooseStep: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .panelPadding()
+    }
+
+    /// A Tone Curve or Color Grading panel preset to apply after the Develop preset (AT-057),
+    /// grouped as in the panel's own Preset menu.
+    private func sectionPresetPicker(_ kind: SectionPresetKind, selection: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("\(kind.title) preset").font(.caption).foregroundStyle(.secondary)
+            Picker("\(kind.title) preset", selection: selection) {
+                Text("None").tag("")
+                ForEach(sectionGroups(kind), id: \.0) { group in
+                    Section(group.0) {
+                        ForEach(group.1) { preset in
+                            Text(preset.name).tag(preset.id.uuidString)
+                        }
+                    }
+                }
+            }
+            .labelsHidden()
+        }
+    }
+
+    private func sectionGroups(_ kind: SectionPresetKind) -> [(String, [DevelopPreset])] {
+        var result: [(String, [DevelopPreset])] = []
+        // The panel's neutral preset (Linear, None) is the same as choosing None here.
+        for preset in model.develop.sectionPresets(kind) where preset.name != kind.neutralName || !preset.isBuiltIn {
+            if let index = result.firstIndex(where: { $0.0 == preset.group }) {
+                result[index].1.append(preset)
+            } else {
+                result.append((preset.group, [preset]))
+            }
+        }
+        return result
     }
 
     /// The presets by group, as in the Presets panel, keeping a hidden pack's preset if it is the

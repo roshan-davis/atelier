@@ -104,27 +104,36 @@ extension AgentServer {
 
     private func applyPreset(_ parameters: ApplyPresetParameters, _ client: AgentClient,
                              _ model: LibraryModel) throws -> MCPToolResult {
-        let preset = try findPreset(parameters.preset, model)
-        let title = "Preset: \(preset.name)"
+        let (preset, kind) = try findPreset(parameters.preset, kind: parameters.kind, model)
+        // The same step names as the Presets panel and the panels' Preset menus.
+        let title = kind == .develop ? "Preset: \(preset.name)" : "\(kind.title) Preset: \(preset.name)"
         let result = try write(parameters, title: title, client, model, kind: .develop) { named, _ in
             let current = try model.develop.currentSettings(for: named)
             try model.develop.apply(each: current.mapValues { preset.applied(to: $0) }, step: "\(title) (\(client.name))")
         }
-        return adding(["preset": .string(preset.id.uuidString)], to: result)
+        return adding(["preset": .string(preset.id.uuidString), "kind": .string(kind.rawValue)], to: result)
     }
 
-    private func findPreset(_ text: String, _ model: LibraryModel) throws -> DevelopPreset {
-        let presets = model.develop.visiblePresets
-        let wanted = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let id = UUID(uuidString: wanted), let preset = presets.first(where: { $0.id == id }) { return preset }
-        let named = presets.filter { $0.name.compare(wanted, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }
-        if named.count == 1 { return named[0] }
-        if named.count > 1 {
-            let groups = named.map { "\($0.group): \($0.id.uuidString)" }.joined(separator: "; ")
-            throw ArgumentProblem("\(named.count) presets are called “\(wanted)” (\(groups)). Name one by its id.")
+    /// Every preset an agent can name: the Presets panel's (hidden packs left out), then the
+    /// Tone Curve and Color Grading panels' Preset menus (AT-057).
+    static func agentPresets(_ model: LibraryModel) -> [(DevelopPreset, PresetKind)] {
+        model.develop.visiblePresets.map { ($0, PresetKind.develop) }
+            + model.develop.sectionPresets(.toneCurve).map { ($0, PresetKind.toneCurve) }
+            + model.develop.sectionPresets(.colorGrading).map { ($0, PresetKind.colorGrading) }
+    }
+
+    private func findPreset(_ text: String, kind: PresetKind?, _ model: LibraryModel) throws -> (DevelopPreset, PresetKind) {
+        let presets = Self.agentPresets(model)
+        let candidates = presets.map { PresetCandidate(id: $0.0.id, name: $0.0.name, group: $0.0.group, kind: $0.1) }
+        switch PresetLookup.find(text, kind: kind, in: candidates) {
+        case .failure(let problem):
+            throw ArgumentProblem(problem.message)
+        case .success(let found):
+            guard let match = presets.first(where: { $0.0.id == found.id && $0.1 == found.kind }) else {
+                throw ArgumentProblem("The preset “\(found.name)” is gone.")
+            }
+            return match
         }
-        let hint = Suggest.closest(to: wanted, in: presets.map(\.name)).map { " Did you mean “\($0)”?" } ?? ""
-        throw ArgumentProblem("No Develop preset “\(wanted)”.\(hint) list_items with kind presets lists them.")
     }
 
     // MARK: sync

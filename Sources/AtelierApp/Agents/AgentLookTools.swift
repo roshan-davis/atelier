@@ -81,8 +81,8 @@ struct AgentLookTools: Sendable {
 
     static let listItems = MCPTool(
         name: "list_items", title: "List library items",
-        description: "Lists collections, import entries, folders, drives, Develop presets, Edit In apps or AI recipes, with the ids "
-            + "other tools take.",
+        description: "Lists collections, import entries, folders, drives, presets (Develop, "
+            + "Tone Curve and Color Grading, each with its kind), Edit In apps or AI recipes, with the ids other tools take.",
         inputSchema: objectSchema([
             "kind": enumProperty(["collections", "imports", "folders", "volumes", "presets", "editors", "ai_recipes"],
                                  "What to list."),

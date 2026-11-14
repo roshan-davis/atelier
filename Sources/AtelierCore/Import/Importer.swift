@@ -26,14 +26,52 @@ public struct ImportOptions: Sendable {
     public var buildPreviews: Bool
     /// Develop preset applied to newly imported photos.
     public var developPreset: DevelopPreset?
+    /// Then a Tone Curve preset and a Color Grading preset (AT-057), each changing only its panel.
+    public var toneCurvePreset: DevelopPreset?
+    public var colorGradingPreset: DevelopPreset?
 
     public init(mode: ImportMode = .reference, target: ImportTarget = .newGroup(name: ""),
-                keywords: [String] = [], buildPreviews: Bool = true, developPreset: DevelopPreset? = nil) {
+                keywords: [String] = [], buildPreviews: Bool = true, developPreset: DevelopPreset? = nil,
+                toneCurvePreset: DevelopPreset? = nil, colorGradingPreset: DevelopPreset? = nil) {
         self.mode = mode
         self.target = target
         self.keywords = keywords
         self.buildPreviews = buildPreviews
         self.developPreset = developPreset
+        self.toneCurvePreset = toneCurvePreset
+        self.colorGradingPreset = colorGradingPreset
+    }
+
+    /// What import applies, in order, with the history step each one records: the Develop
+    /// preset ("Import Preset: Portra 400"), then the Tone Curve preset ("Import Tone Curve
+    /// Preset: Matte"), then the Color Grading preset. A later one wins where they overlap, as a
+    /// preset applied by hand afterwards would.
+    public var developSteps: [(name: String, preset: DevelopPreset)] {
+        var steps: [(String, DevelopPreset)] = []
+        if let developPreset { steps.append(("Import Preset: \(developPreset.name)", developPreset)) }
+        if let toneCurvePreset {
+            steps.append(("Import \(SectionPresetKind.toneCurve.title) Preset: \(toneCurvePreset.name)", toneCurvePreset))
+        }
+        if let colorGradingPreset {
+            steps.append(("Import \(SectionPresetKind.colorGrading.title) Preset: \(colorGradingPreset.name)",
+                          colorGradingPreset))
+        }
+        return steps
+    }
+
+    /// The settings a new photo starts with, and its history, one step per preset; nil when
+    /// import applies nothing.
+    public func initialDevelop() -> (settings: DevelopSettings, history: DevelopHistory)? {
+        let steps = developSteps
+        guard !steps.isEmpty else { return nil }
+        var settings = DevelopSettings.neutral
+        var history = DevelopHistory()
+        for step in steps {
+            let previous = settings
+            settings = step.preset.applied(to: settings)
+            history.record(step.name, settings: settings, previous: previous)
+        }
+        return (settings, history)
     }
 }
 
@@ -264,7 +302,8 @@ public final class Importer: Sendable {
         // substitute a preset or neutral edits for damaged/unsupported recovery settings.
         let recovery = try XMPSidecar.readDevelopRecovery(for: source)
         let recovered = recovery?.settings
-        let initialSettings = recovered ?? options.developPreset.map { $0.applied(to: .neutral) }
+        let initialDevelop = options.initialDevelop()
+        let initialSettings = recovered ?? initialDevelop?.settings
         let hash: String
         var fileURL = source
 
@@ -340,9 +379,8 @@ public final class Importer: Sendable {
                 if recovered != nil, recovery?.history == nil {
                     history.steps = [DevelopHistory.Step(name: "Recovered from XMP", settings: settings)]
                     history.position = 0
-                } else if recovered == nil {
-                    history.record("Import Preset: \(options.developPreset?.name ?? "Preset")",
-                                   settings: settings, previous: .neutral)
+                } else if recovered == nil, let initialDevelop {
+                    history = initialDevelop.history
                 }
                 try DevelopSettingsRecord(versionId: versionID, schemaVersion: settings.schemaVersion,
                     json: settings.encoded(), historyJson: history.encoded(), updatedAt: Date()).save(db)

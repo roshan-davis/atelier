@@ -746,6 +746,16 @@ enum LayoutSnapshots {
         await capture(AnyView(ImportSheet(model: model).environmentObject(model)), size: ImportSheet.size,
                       to: folder.appendingPathComponent("import-retired-preset.png"))
         UserDefaults.standard.set(savedPreset, forKey: importPresetKey)
+        // Apply During Import with a Tone Curve and a Color Grading preset after the Develop one (AT-057).
+        let sectionKeys = ["import.toneCurvePreset", "import.colorGradingPreset"]
+        let savedSections = sectionKeys.map { UserDefaults.standard.string(forKey: $0) }
+        let matte = SectionPresetKind.toneCurve.builtIn.first { $0.name == "Matte" }
+        let teal = SectionPresetKind.colorGrading.builtIn.first { $0.name == "Teal & Orange" }
+        UserDefaults.standard.set(matte?.id.uuidString ?? "", forKey: sectionKeys[0])
+        UserDefaults.standard.set(teal?.id.uuidString ?? "", forKey: sectionKeys[1])
+        await capture(AnyView(ImportSheet(model: model).environmentObject(model)), size: ImportSheet.size,
+                      to: folder.appendingPathComponent("import-section-presets.png"))
+        for (key, value) in zip(sectionKeys, savedSections) { UserDefaults.standard.set(value, forKey: key) }
         model.pendingImportSources = []
         let cull = CullModel(source: .importing(sources: files, options: ImportOptions(target: .newGroup(name: "Cull Test"))),
                              title: "Cull Before Importing \u{201C}Cull Test\u{201D}", model: model)
