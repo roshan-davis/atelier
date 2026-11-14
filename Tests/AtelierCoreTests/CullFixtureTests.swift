@@ -5,7 +5,8 @@ import XCTest
 /// Eyes closed on Rosh's test photos (generated with Gemini, Nov 14, 2026; see `labels.md` in the
 /// folder). They aren't in the repository: the test reads `ATELIER_CULL_FIXTURES`, else
 /// ~/RoshProjects/Atelier/TestPhotos/Cull, and is skipped when neither exists. It prints every
-/// face's eye openness and each photo's analysis time, for tuning `CullEyes`.
+/// face's eye openness, MediaPipe's blink and smile scores, and each photo's analysis time, for
+/// tuning `CullEyes`.
 final class CullFixtureTests: XCTestCase {
     private func folder() throws -> URL {
         let path = ProcessInfo.processInfo.environment["ATELIER_CULL_FIXTURES"]
@@ -29,7 +30,10 @@ final class CullFixtureTests: XCTestCase {
             signal = Culling.analyzeAdvanced(url, signals: signal)
             let advanced = Date().timeIntervalSince(start) - standard
             signal.faces.sort { $0.box.minX < $1.box.minX }
-            let openness = signal.faces.map { face in face.openness.map { String(format: "%.3f", $0) } ?? (face.skip?.rawValue ?? "-") }
+            let openness = signal.faces.map { (face: CullFace) -> String in
+                (face.openness.map { String(format: "%.3f", $0) } ?? (face.skip?.rawValue ?? "-"))
+                    + (face.expression.map { String(format: " (blink %.2f smile %.2f)", $0.blink, $0.smile) } ?? "")
+            }
             print(String(format: "cull fixture %@/%@: standard %.0f ms, advanced %.0f ms, aesthetics %@, eyes %@",
                          set, name, standard * 1000, advanced * 1000,
                          signal.aesthetics.map { String(format: "%.2f", $0) } ?? "-", openness.joined(separator: " ")))

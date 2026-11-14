@@ -17,15 +17,19 @@ public struct CullFace: Sendable, Equatable {
     public var sharpness: Double?
     /// Advanced checks: sharpness of the eyes, read from a large copy of the photo.
     public var eyeSharpness: Double?
+    /// Advanced checks: blinks, squints and smile from MediaPipe Face Landmarker
+    /// (`FaceLandmarker`); nil when it didn't run or found no face in the box.
+    public var expression: FaceExpression?
 
     public init(box: CGRect, quality: Double? = nil, openness: Double? = nil, skip: CullFaceSkip? = nil,
-                sharpness: Double? = nil, eyeSharpness: Double? = nil) {
+                sharpness: Double? = nil, eyeSharpness: Double? = nil, expression: FaceExpression? = nil) {
         self.box = box
         self.quality = quality
         self.openness = openness
         self.skip = skip
         self.sharpness = sharpness
         self.eyeSharpness = eyeSharpness
+        self.expression = expression
     }
 
     public var center: CGPoint { CGPoint(x: box.midX, y: box.midY) }
@@ -61,6 +65,22 @@ public enum CullEyes: Sendable, Equatable {
     public static let halfShare = 0.72
     /// Faces narrower than this many pixels at the standard size aren't judged.
     public static let minimumFacePixels = 40.0
+
+    // With Advanced checks, MediaPipe's blink score (0 open ... 1 shut) decides instead of the
+    // outline. Measured on Rosh's test photos (Nov 14, 2026): open eyes 0.1 to 0.3 (smiling
+    // squints up to 0.3), closed 0.5 to 0.8, the half-closed shot 0.33 against 0.2 open.
+
+    /// A blink at least this high, and `blinkRise` above the same person's lowest in the group,
+    /// is closed.
+    public static let blinkClosed = 0.45
+    public static let blinkRise = 0.25
+    /// At least this, and `blinkHalfRise` above the person's lowest: half closed.
+    public static let blinkHalf = 0.3
+    public static let blinkHalfRise = 0.12
+    /// Closed whatever the group shows (a photo on its own, or someone blinking in every shot).
+    public static let blinkAlone = 0.7
+    /// A smile score at least this high counts the person as smiling.
+    public static let smiling = 0.5
 }
 
 public enum CullFaceReading {
@@ -151,18 +171,30 @@ extension Culling {
     /// Eyes open, half closed or closed for each face of each photo in a group, comparing each
     /// person with the same person in the group's other shots (so narrow eyes, glasses and
     /// squinting smiles aren't read as closed), and with a fixed floor.
+    /// With Advanced checks, MediaPipe's blink scores decide where they were read, compared the
+    /// same way with the person's lowest blink in the group.
     public static func eyes(in faces: [[CullFace]]) -> [[CullEyes]] {
         let people = Self.people(in: faces)
         var widest: [Int: Double] = [:]
+        var lowestBlink: [Int: Double] = [:]
         for (photo, photoFaces) in faces.enumerated() {
             for (index, face) in photoFaces.enumerated() {
-                guard let openness = face.openness else { continue }
                 let person = people[photo][index]
+                if let blink = face.expression?.blink { lowestBlink[person] = min(lowestBlink[person] ?? 1, blink) }
+                guard let openness = face.openness else { continue }
                 widest[person] = max(widest[person] ?? 0, openness)
             }
         }
         return faces.enumerated().map { photo, photoFaces in
             photoFaces.enumerated().map { index, face in
+                if let blink = face.expression?.blink {
+                    let rise = blink - (lowestBlink[people[photo][index]] ?? blink)
+                    if blink >= CullEyes.blinkAlone || (blink >= CullEyes.blinkClosed && rise >= CullEyes.blinkRise) {
+                        return .closed
+                    }
+                    if blink >= CullEyes.blinkHalf, rise >= CullEyes.blinkHalfRise { return .halfClosed }
+                    return .open
+                }
                 guard let openness = face.openness else { return .unknown }
                 if openness < CullEyes.closedOpenness { return .closed }
                 guard let best = widest[people[photo][index]], best >= CullEyes.referenceOpenness else { return .open }

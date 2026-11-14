@@ -128,8 +128,9 @@ struct CullView: View {
                     Toggle("Advanced checks (slower)", isOn: $cull.advanced)
                         .toggleStyle(.checkbox)
                         .help("Reads the eyes of every grouped photo again from a large copy: small faces in group "
-                              + "shots get checked, and Sharpness compares the eyes themselves. Roughly a fifth of a "
-                              + "second more per grouped photo; single shots are skipped.")
+                              + "shots get checked, Sharpness compares the eyes themselves, and a built-in face model "
+                              + "reads blinks and smiles (needed for Best Expression). Roughly a fifth of a second "
+                              + "more per grouped photo; single shots are skipped.")
                 }
             }
         }
@@ -141,7 +142,7 @@ struct CullView: View {
         if cull.isLoading { return "Finding photos…" }
         if cull.isAnalyzing { return "Looking at \(cull.analyzed) of \(cull.photos.count) photos…" }
         if let progress = cull.advancedProgress {
-            return "Advanced checks: reading eyes in \(progress.done) of \(progress.total) grouped photos…"
+            return "Advanced checks: reading eyes and smiles in \(progress.done) of \(progress.total) grouped photos…"
         }
         if cull.isReview {
             return "\(cull.photos.count) shots culled together · \(cull.keptCount) kept"

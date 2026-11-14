@@ -187,6 +187,12 @@ public enum Culling {
             }
             return face
         }
+        // Blinks and smiles from MediaPipe Face Landmarker, on the same large copy.
+        result.faces = result.faces.map { face in
+            var face = face
+            face.expression = FaceLandmarker.expression(in: image, box: face.box)
+            return face
+        }
         return result
     }
 

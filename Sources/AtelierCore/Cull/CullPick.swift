@@ -12,10 +12,16 @@ public enum CullPick: String, CaseIterable, Identifiable, Sendable {
     case eyesOpen
     /// The least clipped and closest to the group's usual brightness, then the sharpest.
     case bestExposure
+    /// Eyes open and the most smiles, from MediaPipe Face Landmarker (needs the Advanced checks,
+    /// which choosing it turns on), then the sharpest.
+    case bestExpression
     /// Atelier's pick before Nov 2026: whole-frame sharpness plus the best face's quality.
     case classic
 
     public var id: String { rawValue }
+
+    /// Needs the Advanced checks: expressions are read only there.
+    public var needsAdvanced: Bool { self == .bestExpression }
 
     public var title: String {
         switch self {
@@ -23,6 +29,7 @@ public enum CullPick: String, CaseIterable, Identifiable, Sendable {
         case .sharpestSubject: return "Sharpest Subject"
         case .eyesOpen: return "Everyone's Eyes Open"
         case .bestExposure: return "Best Exposure"
+        case .bestExpression: return "Best Expression"
         case .classic: return "Classic"
         }
     }
@@ -33,6 +40,7 @@ public enum CullPick: String, CaseIterable, Identifiable, Sendable {
         case .sharpestSubject: return "The sharpest faces or main subject, whatever else"
         case .eyesOpen: return "The fewest people with eyes closed or half closed, then the sharpest"
         case .bestExposure: return "The least clipped, closest to the group's usual brightness, then the sharpest"
+        case .bestExpression: return "Eyes open and the most smiles, then the sharpest (turns on Advanced checks)"
         case .classic: return "Atelier's earlier pick: the sharpest whole frame plus the best face"
         }
     }
@@ -59,6 +67,11 @@ public struct CullAssessment: Sendable, Equatable {
     public var coherence = 0.0
     public var aesthetics: Double?
     public var isUtility = false
+    /// Faces with an expression read (Advanced checks), how many of them smile, and their mean
+    /// smile score (0...1); nil without expressions.
+    public var expressions = 0
+    public var smiling = 0
+    public var smile: Double?
 
     public init() {}
 
@@ -101,6 +114,10 @@ extension Culling {
             assessment.coherence = signal.coherence
             assessment.aesthetics = signal.aesthetics
             assessment.isUtility = signal.isUtility
+            let smiles = signal.faces.compactMap { $0.expression?.smile }
+            assessment.expressions = smiles.count
+            assessment.smiling = smiles.filter { $0 >= CullEyes.smiling }.count
+            assessment.smile = smiles.isEmpty ? nil : smiles.reduce(0, +) / Double(smiles.count)
             return assessment
         }
     }
@@ -126,6 +143,8 @@ extension Culling {
                 score -= 0.7 * Double(min(a.closed, 3)) + 0.3 * Double(min(a.halfClosed, 3))
                 score -= min(0.5, 0.25 * a.exposurePenalty)
                 score += 0.1 * (a.aesthetics ?? 0)
+                // Smiles only break near ties here; Best Expression weighs them properly.
+                score += 0.1 * (a.smile ?? 0)
                 if a.isUtility { score -= 0.5 }
                 return score
             case .sharpestSubject:
@@ -134,6 +153,9 @@ extension Culling {
                 return -10 * Double(a.closed) - 3 * Double(a.halfClosed) + a.sharpness
             case .bestExposure:
                 return -a.exposurePenalty + 0.2 * a.sharpness
+            case .bestExpression:
+                // Without the Advanced checks' expressions this is Everyone's Eyes Open.
+                return -10 * Double(a.closed) - 3 * Double(a.halfClosed) + 2 * (a.smile ?? 0) + 0.3 * a.sharpness
             }
         }
     }
@@ -155,6 +177,10 @@ extension Culling {
                 if a.closed > 0 { eyes += ", \(a.closed) closed" }
                 if a.halfClosed > 0 { eyes += ", \(a.halfClosed) half closed" }
                 parts.append(eyes)
+            }
+            if a.expressions > 0 {
+                parts.append(a.expressions == 1 ? (a.smiling == 1 ? "Smiling" : "Not smiling")
+                                                : "Smiling: \(a.smiling) of \(a.expressions)")
             }
         }
         parts.append(exposureWords(a, inGroup: inGroup))
@@ -179,6 +205,10 @@ extension Culling {
         }
         if photo.halfClosed > keeper.halfClosed {
             lines.append("Eyes half closed\(people(photo.halfClosed, photo.judged))")
+        }
+        if photo.expressions > 0, keeper.expressions > 0, photo.smiling < keeper.smiling {
+            lines.append(photo.expressions == 1 ? "Not smiling (the keeper is)"
+                         : "Fewer smiles: \(photo.smiling) of \(photo.expressions) people (keeper: \(keeper.smiling))")
         }
         if keeper.sharpness > 0, photo.sharpness < keeper.sharpness * 0.85 {
             let share = photo.sharpness / keeper.sharpness

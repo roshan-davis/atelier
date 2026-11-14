@@ -81,11 +81,15 @@ final class CullModel: ObservableObject, Identifiable {
         ?? .balanced {
         didSet {
             UserDefaults.standard.set(pickBy.rawValue, forKey: Self.pickKey)
+            // Best Expression reads expressions, which only the Advanced checks do; regrouping
+            // again when they finish picks with them.
+            if pickBy.needsAdvanced, !advanced { advanced = true }
             if pickBy != oldValue, !isAnalyzing { regroup() }
         }
     }
     static let pickKey = "cull.pickBy"
-    /// Advanced checks (slower): each grouped photo's eyes read again from a large copy.
+    /// Advanced checks (slower): each grouped photo's eyes read again from a large copy, and
+    /// blinks and smiles read with MediaPipe Face Landmarker.
     /// Off by default, remembered.
     @Published var advanced = UserDefaults.standard.bool(forKey: CullModel.advancedKey) {
         didSet {
