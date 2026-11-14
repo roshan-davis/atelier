@@ -1015,3 +1015,75 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 **Easel (AT-050g):** its Actions and Batch (EA-049) become `play_action` and `run_batch`, using the same shared jobs.
 
 **Acceptance (per step, once started):** step 1, an Import Preset with Film + a Tone Curve preset + a Color Grading preset imports a folder with one history step per preset and the metadata set; step 2, a chat app applies a Tone Curve preset by name with one undo; step 3, a chat app imports a folder with an Import Preset after Rosh's Allow, follows the job and cancels it, keeping the photos already in.
+
+## AT-058 — Photo notes: a sticky note on each photo, with culling's reasons
+
+**Status:** Proposed / discuss. Requirement only; nothing built. Rosh decides the open questions below before step 1 starts, and the PRD gets its "Photo notes" section in the first build PR. **Owner/chat/branch/PR:** unassigned (requirement written by Claude in [Add photo sticky notes requirement](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKWkRUXPM7xxcv1bPGTT7uWg)). **Depends on:** nothing for steps 1 and 2; step 3 on the Cull view; step 4 on AT-050c/d (Organize and edit tools).
+
+**Evidence:** Rosh (Nov 14, 2026): "would it be a good idea to have a notes section hideable and showable in each image (like a sticky note section - may be that type of font too), may be i can put my notes on so far on that image (may be culling can add the rejection reasons says eyes closed on blurrier in the set etc). does any of the tools like lightroom has it?"
+
+**Today (main at `dadb39b`):** a photo has a Title and Caption (Inspector > Title and Caption, written to XMP as `dc:title` / `dc:description`, and into exported files). There is nowhere private to write "why". Culling measures sharpness (variance of the Laplacian) and Vision face capture quality per photo (`AtelierCore/Cull/Culling.swift`) and shows them for the focused photo, but forgets them once the cull is done, so a rejected photo never says why it was rejected. Nothing measures eyes closed on its own: face capture quality mixes focus, pose and blinks.
+
+### What other tools offer (the gap)
+
+| Tool | Per-photo notes | Why a photo was rejected |
+|---|---|---|
+| Lightroom Classic | None. A per-photo notes request has been open for voting since May 2011; people misuse the IPTC Instructions, EXIF User Comment or Caption fields. | Assisted Culling (2026 early access) flags eyes closed, eye and subject focus, exposure, severe blur and misfires, with several reject reasons per photo; Adobe's page doesn't say the reason stays on the photo or reaches metadata. |
+| Capture One | None; users keep a document in the session folder or use IPTC fields. | No culling reasons. |
+| Photo Mechanic | IPTC fields only (Caption, Special Instructions); public, travel with the file. | No AI culling reasons. |
+| Aftershoot | None. | Groups duplicates, flags closed eyes and blur by genre, with a Warning label; no written per-photo reason. |
+| Excire Foto / Search | None; it writes keywords. | Sharpness, Eyes Open and Smile filters and an aesthetic score in a Culling Project; no note of why. |
+
+So no tool has a private note per photo, and none leaves a readable, editable reason on a rejected photo. Atelier would have both.
+
+### Requirement
+
+**1. Notes on a photo**
+- A photo has a list of notes. Each note has its text, the time it was written and, if edited, when; and who wrote it: You, Cull, or a chat app by name ("Claude"). Newest first.
+- **Minimal formatting (Rosh, Nov 14, 2026: "the notes can have bullet points and minimal formatting right?"):** bullet lists, numbered lists, checkboxes, **bold**, *italic* and links; nothing else (no headings, fonts, colors, tables or pictures). A note is stored as plain text in a small Markdown subset (`- ` bullet, `1. ` numbered, `- [ ] ` / `- [x] ` checkbox, `**bold**`, `*italic*`, URLs), so XMP, search and chat apps read and write ordinary text, and a note still reads well where the formatting isn't drawn.
+  - **Shown formatted, typed naturally:** the panel draws bullets, numbers, checkboxes and bold/italic, never the raw markers (as Apple Notes does). Typing `- ` or `* ` at a line's start begins a bullet, `1. ` a numbered list, `[] ` a checkbox; Return continues the list, Return on an empty item ends it; Tab and ⇧Tab indent and outdent one level (two levels at most). ⌘B and ⌘I bold and italicize the selection; Format > List (⌘⇧7 bullet, ⌘⇧L checkbox, as in Notes) does the same from the menu. Clicking a checkbox ticks it without entering edit mode.
+  - **Pasting** keeps only these: bullets and numbered lists, bold, italic and links survive, everything else becomes plain text.
+  - **Search** matches the words, not the markers (searching "eyes" finds "**eyes** closed"); Library's Notes filter adds "Has unticked checkboxes" for to-do notes.
+  - Cull's reason notes use a bullet per reason.
+- **Per virtual copy (decision proposed):** each catalog photo, virtual copies included, has its own notes, and a new virtual copy starts with a copy of the original's notes, as it does with title, caption and keywords (PRD Virtual copies). Why: a copy is a separate treatment ("B&W version for the shop, crop tighter") and the PRD already makes rating, keywords and develop independent per copy; sharing would make a note about one treatment show on all of them. A RAW+JPEG pair shown as one photo keeps its notes on the RAW, like its other edits. Stacked Edit In and AI results start with the source's notes, like title and caption.
+- Notes are private: they are never written into exported files, Edit In or AI renders, or the IPTC/Dublin Core fields (Caption, Instructions, User Comment). Notes of private photos are hidden whenever private photos are.
+
+**2. The notes panel**
+- **Look:** a sticky note: pale yellow paper with a soft shadow and a folded corner, one per photo, toned down in the dark theme so it doesn't glare. Text uses Noteworthy, the handwriting-style font that ships with macOS (nothing bundled, no license), at a size that reads at a glance; Settings > Appearance > Notes Font: Handwriting (default) or System, for anyone who finds it harder to read. Times and author are in the system font, small and gray, under each note.
+- **Where:** the same panel in Library (Grid and Loupe), Cull and Develop, for the selected photo (Grid, Filmstrip: the primary selection; Cull: the focused photo). It floats over the corner of the photo area as an overlay, so showing, hiding, resizing or moving it never changes the photo view's size, zoom, pan or the zoomed spot (`ZoomViewport`), nor the grid's scroll position. Drag it by its top strip to any corner; drag its edge to resize; it remembers its corner, size and shown or hidden state in one place for every view (PRD UX principle 10), and across launches with session restore.
+- **Show and hide:** View > Show Notes / Hide Notes, ⌥⌘N, customizable in Settings > Keyboard; also a note button in the toolbar. Hidden, a photo with notes shows a small folded-note badge on its thumbnail (Grid, Filmstrip, Cull) and in the photo's corner, and clicking the badge shows the panel. Hiding the panel never deletes anything.
+- **Writing:** Photo > Add Note… (⇧⌥⌘N; not ⌥⌘M, which is macOS Minimize All) and right-click photo > Add Note… show the panel with a new empty note focused. Click a note to edit it in place; the edit is saved as you type (no Save button). Return adds a line; ⌘Return or Esc finishes and gives the keyboard back to the photo, so P, X, arrows and the Cull keys work again (PRD Keyboard focus in Develop). While a note is being typed in, single-letter keys type, never rate or flag.
+- **Selections:** with several photos selected, Add Note adds the same note to each (one note per photo, so each can be edited later), and the panel says "Adding to 12 photos". Showing notes for several photos lists only the primary photo's.
+- **Delete:** a note's ⋯ menu > Delete Note, or select it and press Delete; no confirmation, `DeleteFeedback.play(.remove)`, and Edit > Undo puts it back while the panel has focus.
+- **Lightroom-or-better checks:** the panel uses the shared pieces (cursors from `Cursors.swift`, clicks from `ClickGestures.swift`, actions from the registry); a single click acts at once; works the same in all four views.
+
+**3. Culling writes its reasons**
+- When a cull finishes (Done, or Import N Photos), each photo not kept gets one note by Cull with the measured reasons, compared with the keeper of its group, for example: "Not kept in a group of 6 (Similar shots). Softer than DSC_0102, the keeper (42% of its sharpness). Eyes closed." Only what was measured is written: sharpness relative to the keeper, eyes closed, face quality lower than the keeper's, "you dropped it" when the person dropped a photo Atelier suggested keeping. Kept photos get no note.
+- **Eyes closed** is a new measurement: eye openness from Vision face landmarks (the eye outline's height against its width, as `PeopleSkin` already reads landmarks), per face, so a group of people can say "one face has eyes closed". Below a tested threshold it is reported; otherwise the note doesn't mention eyes. Needs test photos (open, closed, half-closed, sunglasses, profile) from Rosh's shoots.
+- Culling again replaces Cull's earlier note on that photo with the new one, unless the person edited it: then the edited note stays and the new one is added. Re-review from Show Cull Group (⇧⌘G) does the same. A photo kept on re-review keeps its old note, marked "Kept later".
+- The Cull view gets a checkbox "Write reasons to notes" (on by default, remembered). The focused photo's reasons also show in the Cull view's notes panel while culling, before anything is written.
+
+**4. Finding photos by notes**
+- Library's filter bar gets a Notes field: Has Notes, No Notes, Text contains…, Written by (You, Cull, a chat app). Full-text search (PRD Search) covers notes with keywords, titles and captions. A smart collection can use the same rules.
+
+**5. XMP (decision proposed)**
+- Notes go to XMP sidecars only in Atelier's own namespace, `atelier:Notes`: a format-version-1 JSON list of notes (text as written, Markdown subset included; created, edited, author) keyed by exact filename, like `atelier:DevelopRecovery`. They are never mapped onto Caption (`dc:description`), IPTC Instructions or EXIF User Comment, so other apps and exports never see or overwrite them, and Rosh's real captions stay untouched. Written with the rest of the metadata (on demand or automatically per Settings > Metadata) and read back on import into a new catalog, so the sidecar is the recovery path as for everything else. Virtual copies' notes stay in the catalog only, as with their develop settings (sidecars are written for the original only).
+
+**6. Chat apps (MCP)**
+- Notes are commands in the action registry, so the menus and the MCP catalog get them together: `photo.addNote` (kind `edit`), `view.toggleNotes` (kind `view`), `photo.editNote` (edit; changes a note's text). Delete Note is kind `deletes`, so it is never offered to agents.
+- Agent tools: `get_photo` / `search_photos` return each photo's notes (text in the same Markdown subset, times, author; text outside the subset that an app sends is kept as plain text) and take a `notes` filter (has notes, text contains, author); `add_note` (photo ids, text) for Organize or more; `edit_note` only on notes the same app wrote. Each call is one change with Undo in the agent notice, as other Organize tools. A chat app's note says its name as author. Notes of private photos are never returned while they are hidden.
+
+### Steps (one PR each, once approved)
+1. **Core:** `notes` table (GRDB migration: id, assetId, text, author, createdAt, editedAt, source cull/manual/agent), `Catalog+Notes.swift`, copy rules for virtual copies, stacks and pairs, search and filter, `atelier:Notes` XMP write and read. Tests in AtelierCoreTests.
+2. **Panel:** the overlay in Library, Loupe, Cull and Develop; menu items, keys, badges; Settings > Appearance font choice; layout snapshots; Help page `notes.html`; PRD "Photo notes" section.
+3. **Cull reasons:** keep each photo's measurements until the cull finishes, eye openness from landmarks, the reason note, re-cull rules, "Write reasons to notes"; tests on fixtures.
+4. **Agents:** the actions and tools above, regenerated `agent-actions-catalog.json`, Help > Connect a chat app.
+
+### Open questions for Rosh
+- Per virtual copy (proposed) or one set of notes shared by the original and its copies?
+- XMP in `atelier:Notes` (proposed), or keep notes in the catalog only?
+- Should Cull also write a short note on kept photos ("Keeper of 6, sharpest"), or only on rejected ones (proposed)?
+
+**Acceptance (once built):** notes added in Grid show in Loupe, Cull and Develop; ⌥⌘N toggles the panel in each view without moving zoom, pan or grid scroll (checked at 100% and Fit, and while zoomed into a corner); the panel's place and state survive a mode switch and relaunch; a cull of a burst writes reasons that match the measured sharpness and eyes; Library finds photos by note text; a new catalog importing the folder gets the notes back from XMP; an export contains no note text; a chat app reads and adds a note with one Undo and can't delete one.
+
+**Sources (secondary, user forums and reviews):** [Adobe: Add text notes to photos (feature request, open since 2011)](https://community.adobe.com/t5/lightroom-classic-ideas/p-add-text-notes-to-photos-stacks-folders-directories-collections/idi-p/12249965/page/3); [Adobe: Assisted Culling early access (Lightroom Classic)](https://community.adobe.com/questions-675/early-access-assisted-culling-lrclassic-983825); [Capture One community: Notes attached to sessions or images](https://support.captureone.com/hc/es/community/posts/360009407477-Notes-attached-to-sessions-or-images); [Photo Mechanic: IPTC template map](https://docs.camerabits.com/support/solutions/articles/48001174616) (vendor docs); [Aftershoot: culling genres](https://support.aftershoot.com/en/articles/10570203-aftershoot-culling-genres) (vendor docs); [Digital Camera World: Excire Foto 2025 review](https://www.digitalcameraworld.com/tech/software/excire-foto-2025-review).
