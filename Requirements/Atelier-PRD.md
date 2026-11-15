@@ -207,6 +207,16 @@ Rosh asked for Lightroom's graduated, radial and brush adjustments, edited throu
 - **History and storage:** every change is a history step (New Mask: Linear Gradient, Mask 1 Exposure +0.50, Edit Mask 1). Masks are saved in the develop settings JSON with the photo, copied by Copy and Paste Settings and by virtual copies, and optional in presets (the Masks part, off by default, as Lightroom's Masking checkbox). They render in previews, exports, Edit In and AI.
 - **Later:** Select Sky and Background, color range, and Lightroom's Auto Mask for the brush.
 
+### Remove tool: Content-Aware Remove, Heal, Clone (AT-066, proposed Nov 15, 2026)
+
+Rosh asked for the Lightroom gaps in the backlog, starting with this one (Nov 15, 2026). Status: design waiting for Rosh's OK. Steps and acceptance are in BACKLOG AT-066.
+
+- **Open:** a Remove button (eraser) in the tool strip under the histogram, between Crop and Masking, or Q. It closes Crop, Masking and AI. Esc or Q closes it; Return is Done.
+- **Panel:** Mode (Content-Aware Remove, the default; Heal; Clone), Size, Feather (Heal and Clone), Opacity, Visualize Spots (A, with a threshold slider; a black-and-white edge view where dust stands out), Show Overlay, Reset, Done.
+- **On the photo:** click for a round spot, drag to paint a stroke. Heal and Clone pick a nearby source automatically, drawn as a second outline joined by a line. Drag it to move it, or press / for a new one. Click a spot to select it; Delete removes it. [ ] resize, ⇧[ ⇧] feather. The photo zooms and pans as in every mode. Cursors and the overlay follow Masking's shared pieces.
+- **Modes:** Clone copies the source with a feathered edge. Heal copies the source's texture and matches the colors around the spot's edge. Content-Aware Remove fills from texture found nearby (PatchMatch) and blends the edge like Heal. Later, a Generative AI checkbox sends a stroke to ComfyUI Remove Object and keeps the result as that spot's fill.
+- **Non-destructive:** spots are settings (`spots`, decoded with an empty default), in the same source coordinates as masks. They apply after RAW decode and lens corrections, before Transform and the tone and color steps, so tone edits never refill them. Content-Aware fills are computed once in the background and cached. Each spot change is one history step. Copy/Paste and Sync have a Spot Removal checkbox, off by default. Presets never carry spots.
+
 ### Camera-matched RAW look (decided Oct 27, 2026)
 
 Rosh saw a selected photo appear with one look, then turn darker a moment later. The first image was the JPEG preview the camera embeds in the RAW (Nikon Zf and Z6: Picture Control and Active D-Lighting); the second was Apple's RAW engine at default settings, which has none of that processing.
