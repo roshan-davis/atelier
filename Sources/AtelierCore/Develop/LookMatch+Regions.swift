@@ -628,7 +628,13 @@ extension LookMatcher {
                       return emulator != nil
                   }, isCancelled: isCancelled)
 
-        if let subjectFocus, let subjectReference = target.subject, !isCancelled() {
+        // A built-in study's drawn person sets no color of its own: everything but the skin takes
+        // the look fitted on the background, as a film grade does, and the skin has its own
+        // masks. Copying the drawn clothes and hair with a "Match Look: Subject" mask pinned
+        // Temp at +60 to turn a denim jacket toward Fury Road's brown one, and the hair, which
+        // shares the mask, went maroon (Rosh, Nov 14, 2026: "anything other than skin can go
+        // along with the tone of the background").
+        if let subjectFocus, let subjectReference = target.subject, !target.whole.isColorStudy, !isCancelled() {
             // With Match Skin Tone the skin has its own masks: the subject is measured without
             // it and its mask leaves it out, so the subject's Saturation (fitted to a study's
             // dark, grey clothes) doesn't drain the face first (Rosh, Nov 14, 2026: Matrix and
@@ -642,18 +648,8 @@ extension LookMatcher {
             }
             let leaveOut = matchesSkin && skin?.usesPeople == true
                 ? LookSkin.maskSelection(bodySkin: PeopleParts.isAvailable) : nil
-            // A built-in study's person is a nudge from the photo's own subject, as it was before
-            // the match (without an earlier match's Subject mask), not a color to copy.
-            var own: LookSample?
-            if target.whole.isColorStudy {
-                var unedited = base
-                if let index = unedited.masks.firstIndex(where: { $0.name == LookMatch.subjectMaskName }) {
-                    for parameter in options.subjectFitParameters { unedited.masks[index][parameter] = 0 }
-                }
-                own = subjectSample(unedited)
-            }
             fitSubject(&current, options: options, reference: subjectReference, leavingOut: leaveOut,
-                       own: own, measure: subjectSample)
+                       measure: subjectSample)
         }
 
         var skinFit: SkinFit?
@@ -732,27 +728,14 @@ extension LookMatcher {
     static let maxSubjectExposure = 1.5
     static let maxSubjectSaturation = 60.0
 
-    /// For a built-in study, how far the subject's color moves from its own toward the drawn
-    /// person's, and how far its mask's Temp, Tint and Saturation may go. A study's clothes are
-    /// a drawn color, not one a real jacket should be dyed to: copied, a blue denim jacket
-    /// against Fury Road's brown one pinned Temp at +60 with Tint +30, and the hair, which
-    /// shares the mask, went maroon (Rosh, Nov 14, 2026).
-    static let studySubjectLean = 1.0 / 3
-    static let maxStudySubjectShift = 20.0
-
     /// Adds a "Match Look: Subject" mask (Select Subject) and fits its Temp, Tint, Exposure and
     /// Saturation so the photo's subject matches the reference's, once the background matches.
     /// The slopes are measured by rendering a nudge of each slider, as the global fit does.
     /// `leavingOut`: Select People parts subtracted from the subject (the skin, when Match Skin
-    /// Tone gives it its own masks). `own`: for a built-in study, the photo's subject before the
-    /// match; the target is then its color leaned a third of the way toward the reference's, and
-    /// the sliders stay within ±20 (`studySubjectLean`, `maxStudySubjectShift`).
+    /// Tone gives it its own masks).
     static func fitSubject(_ settings: inout DevelopSettings, options: LookMatchOptions, reference: LookSample,
-                           leavingOut: DevelopSettings.PeopleSelection? = nil, own: LookSample? = nil,
+                           leavingOut: DevelopSettings.PeopleSelection? = nil,
                            measure: (DevelopSettings) -> LookSample?) {
-        let maxTemp = own == nil ? maxSubjectTemp : maxStudySubjectShift
-        let maxTint = own == nil ? maxSubjectTint : maxStudySubjectShift
-        let maxSaturation = own == nil ? maxSubjectSaturation : maxStudySubjectShift
         let earlier = settings.masks.firstIndex { $0.name == LookMatch.subjectMaskName }
         let index = earlier ?? settings.masks.count
         if earlier == nil {
@@ -774,8 +757,7 @@ extension LookMatcher {
         }
 
         if options.whiteBalance {
-            var target = reference.midtoneAB
-            if let own { target = own.midtoneAB + (target - own.midtoneAB) * studySubjectLean }
+            let target = reference.midtoneAB
             var temp = 0.0, tint = 0.0
             for _ in 0..<3 {
                 guard let photo = measure(with([(.temperature, temp), (.tint, tint)])) else { break }
@@ -788,8 +770,8 @@ extension LookMatcher {
                 guard abs(det) > 1e-12 else { break }
                 let dTemp = (error.x * j2.y - j2.x * error.y) / det
                 let dTint = (j1.x * error.y - error.x * j1.y) / det
-                temp = min(maxTemp, max(-maxTemp, temp + min(30, max(-30, dTemp))))
-                tint = min(maxTint, max(-maxTint, tint + min(30, max(-30, dTint))))
+                temp = min(maxSubjectTemp, max(-maxSubjectTemp, temp + min(30, max(-30, dTemp))))
+                tint = min(maxSubjectTint, max(-maxSubjectTint, tint + min(30, max(-30, dTint))))
             }
             settings.masks[index][.temperature] = temp.rounded()
             settings.masks[index][.tint] = tint.rounded()
@@ -810,8 +792,7 @@ extension LookMatcher {
         }
 
         if options.color, reference.meanChroma > 0.005 {
-            var target = reference.meanChroma
-            if let own, own.meanChroma > 0.005 { target = own.meanChroma + (target - own.meanChroma) * studySubjectLean }
+            let target = reference.meanChroma
             var saturation = 0.0
             for _ in 0..<2 {
                 guard let photo = measure(with([(.saturation, saturation)])), photo.meanChroma > 0.005,
@@ -820,7 +801,7 @@ extension LookMatcher {
                 if abs(error) < 0.02 * target { break }
                 let slope = (probed.meanChroma - photo.meanChroma) / 20
                 guard slope > 1e-6 else { break }
-                saturation = min(maxSaturation, max(-maxSaturation, saturation + error / slope))
+                saturation = min(maxSubjectSaturation, max(-maxSubjectSaturation, saturation + error / slope))
             }
             settings.masks[index][.saturation] = saturation.rounded()
         }

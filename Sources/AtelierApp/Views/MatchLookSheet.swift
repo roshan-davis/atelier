@@ -248,7 +248,7 @@ struct MatchLookSheet: View {
         switch match.areaMode {
         case .wholePhoto: return "The whole reference sets the look for the whole photo."
         case .subject where match.builtInReference != nil:
-            return "The study's background matches your background; its drawn person, your subject."
+            return "The study's background sets the look; your hair and clothes take it too."
         case .subject: return "Background matches background; a Match Look: Subject mask matches the subject."
         case .boxes: return "Drag each box over the parts that should match. Drag a corner to resize."
         }
