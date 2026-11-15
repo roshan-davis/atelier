@@ -29,9 +29,11 @@ enum ColorRangeSpace {
             let v = (row * c).sum()
             return v < 0 ? -cbrt(-v) : cbrt(v)
         }
-        return SIMD3(0.2104542553 * lms[0] + 0.7936177850 * lms[1] - 0.0040720468 * lms[2],
-                     1.9779984951 * lms[0] - 2.4285922050 * lms[1] + 0.4505937099 * lms[2],
-                     0.0259040371 * lms[0] + 0.7827717662 * lms[1] - 0.8086757660 * lms[2])
+        let l: Double = lms[0], m: Double = lms[1], s: Double = lms[2]
+        let okL: Double = 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s
+        let okA: Double = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s
+        let okB: Double = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s
+        return SIMD3<Double>(okL, okA, okB)
     }
 
     /// The pick for `box` (top-left fractions of `image`, which starts at the origin): the
@@ -60,14 +62,30 @@ enum ColorRangeSpace {
             context.render(source, toBitmap: buffer.baseAddress!, rowBytes: width * 16, bounds: bounds,
                            format: .RGBAf, colorSpace: nil)
         }
-        let labs = (0..<(width * height)).map {
-            oklab(fromWorking: SIMD3(Double(pixels[$0 * 4]), Double(pixels[$0 * 4 + 1]), Double(pixels[$0 * 4 + 2])))
-        }.filter { $0.x.isFinite && $0.y.isFinite && $0.z.isFinite }
+        // Plain loops: the chained map/filter/reduce was too slow for the type checker.
+        var labs: [SIMD3<Double>] = []
+        labs.reserveCapacity(width * height)
+        for i in 0..<(width * height) {
+            let r = Double(pixels[i * 4]), g = Double(pixels[i * 4 + 1]), b = Double(pixels[i * 4 + 2])
+            let lab = oklab(fromWorking: SIMD3<Double>(r, g, b))
+            if lab.x.isFinite, lab.y.isFinite, lab.z.isFinite { labs.append(lab) }
+        }
         guard !labs.isEmpty else { return nil }
-        let mean = labs.reduce(SIMD3<Double>(0, 0, 0), +) / Double(labs.count)
-        let isClick = box.width * Double(extent.width) < 5 && box.height * Double(extent.height) < 5
-        let spread = isClick ? 0 : (labs.reduce(0) { $0 + pow(DevelopSettings.ColorSample.distance($1, mean), 2) }
-            / Double(labs.count)).squareRoot()
+        let count = Double(labs.count)
+        var sum = SIMD3<Double>(0, 0, 0)
+        for lab in labs { sum += lab }
+        let mean = sum / count
+        let clickWidth: Double = box.width * Double(extent.width)
+        let clickHeight: Double = box.height * Double(extent.height)
+        var spread = 0.0
+        if clickWidth >= 5 || clickHeight >= 5 {
+            var squares = 0.0
+            for lab in labs {
+                let d = DevelopSettings.ColorSample.distance(lab, mean)
+                squares += d * d
+            }
+            spread = (squares / count).squareRoot()
+        }
         return DevelopSettings.ColorSample(box: box, lab: mean, spread: min(spread, 0.15))
     }
 }
@@ -86,12 +104,14 @@ extension DevelopSettings.ColorSample {
     /// The pick's color as sRGB (0...1, encoded), for its swatch and its marker on the photo.
     /// It is the photo's color before tone and color sliders, as the mask sees it.
     public var displaySRGB: SIMD3<Double> {
-        let l = pow(self.l + 0.3963377774 * a + 0.2158037573 * b, 3)
-        let m = pow(self.l - 0.1055613458 * a - 0.0638541728 * b, 3)
-        let s = pow(self.l - 0.0894841775 * a - 1.2914855480 * b, 3)
-        let linear = SIMD3(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
-                           -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
-                           -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s)
+        let l0: Double = self.l + 0.3963377774 * a + 0.2158037573 * b
+        let m0: Double = self.l - 0.1055613458 * a - 0.0638541728 * b
+        let s0: Double = self.l - 0.0894841775 * a - 1.2914855480 * b
+        let l: Double = l0 * l0 * l0, m: Double = m0 * m0 * m0, s: Double = s0 * s0 * s0
+        let red: Double = 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s
+        let green: Double = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s
+        let blue: Double = -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s
+        let linear = SIMD3<Double>(red, green, blue)
         return SIMD3(DevelopRenderer.srgbEncode(min(max(linear.x, 0), 1)),
                      DevelopRenderer.srgbEncode(min(max(linear.y, 0), 1)),
                      DevelopRenderer.srgbEncode(min(max(linear.z, 0), 1)))

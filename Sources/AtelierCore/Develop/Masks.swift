@@ -424,7 +424,8 @@ extension DevelopSettings {
 
         /// How far (in Oklab) from a pick the mask is still full, and where it has faded out.
         public func reach(of sample: ColorSample) -> (full: Double, zero: Double) {
-            let zero = 0.012 + min(max(refine, 0), 100) / 100 * 0.14 + sample.spread
+            let amount: Double = min(max(refine, 0), 100) / 100
+            let zero: Double = 0.012 + amount * 0.14 + sample.spread
             return (zero * 0.45, zero)
         }
 
@@ -434,7 +435,8 @@ extension DevelopSettings {
             for sample in samples.prefix(Self.maxSamples) {
                 let (full, zero) = reach(of: sample)
                 let distance = ColorSample.distance(lab, sample.lab)
-                let t = max(0, min(1, (zero - distance) / max(zero - full, 1e-6)))
+                let ramp: Double = (zero - distance) / max(zero - full, 1e-6)
+                let t: Double = max(0, min(1, ramp))
                 best = max(best, t * t * (3 - 2 * t))
             }
             return best
@@ -467,7 +469,9 @@ extension DevelopSettings {
         /// (a red in shade is still the red), as Lightroom's picks behave.
         public static func distance(_ x: SIMD3<Double>, _ y: SIMD3<Double>) -> Double {
             let d = x - y
-            return (d.y * d.y + d.z * d.z + 0.25 * d.x * d.x).squareRoot()
+            let chroma: Double = d.y * d.y + d.z * d.z
+            let lightness: Double = 0.25 * d.x * d.x
+            return (chroma + lightness).squareRoot()
         }
     }
 
