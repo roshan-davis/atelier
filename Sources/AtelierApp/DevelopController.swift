@@ -2065,7 +2065,7 @@ final class DevelopController: ObservableObject {
         if let point = parameter.pointColor { return "Point Color \(point.swatch + 1) \(point.setting.label)" }
         if let band = parameter.grayBand { return "B&W \(band.rawValue)" }
         switch parameter.panel {
-        case .colorGrading, .detail, .effects, .toneCurve, .lensCorrections:
+        case .colorGrading, .detail, .effects, .toneCurve, .lensCorrections, .calibration:
             return "\(parameter.group) \(parameter.label)"
         default:
             return parameter.label == "Temp" ? "Temperature" : parameter.label

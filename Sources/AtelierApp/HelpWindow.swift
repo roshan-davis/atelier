@@ -35,6 +35,7 @@ final class HelpWindow: NSObject, WKNavigationDelegate {
         case "Lens Corrections": return ("lens-corrections", nil)
         case "Transform": return ("transform", nil)
         case "Effects": return ("effects", nil)
+        case "Calibration": return ("calibration", nil)
         case "Crop & Straighten": return ("crop", nil)
         case "Masking": return ("masking", nil)
         case "AI": return ("ai", nil)

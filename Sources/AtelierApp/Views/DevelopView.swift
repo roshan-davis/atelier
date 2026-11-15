@@ -870,6 +870,10 @@ private struct ParameterSliderRow: View, Equatable {
                   onOption: preview.map { preview in { (held: Bool) in develop.sliderPreview = held ? preview : nil } })
     }
 
+    private func hue(_ degrees: Double) -> Color {
+        Color(hue: degrees.truncatingRemainder(dividingBy: 360) / 360, saturation: 0.8, brightness: 0.9)
+    }
+
     /// Colored tracks where Lightroom has them.
     private var trackGradient: [Color]? {
         if let pair = parameter.hslBand {
@@ -897,6 +901,14 @@ private struct ParameterSliderRow: View, Equatable {
         case .temperature: return [Color(red: 0.3, green: 0.5, blue: 1), Color(red: 1, green: 0.85, blue: 0.3)]
         case .tint: return [Color(red: 0.3, green: 0.8, blue: 0.3), Color(red: 0.85, green: 0.3, blue: 0.85)]
         case .vibrance, .saturation: return [Color.gray, Color(red: 1, green: 0.4, blue: 0.2), Color(red: 0.3, green: 0.6, blue: 1)]
+        // Calibration, as Lightroom colors it: Hue runs from one neighbor to the other.
+        case .calibrationShadowsTint: return [Color(red: 0.3, green: 0.8, blue: 0.3), Color(red: 0.85, green: 0.3, blue: 0.85)]
+        case .calibrationRedHue: return [hue(330), hue(0), hue(30)]
+        case .calibrationGreenHue: return [hue(80), hue(120), hue(170)]
+        case .calibrationBlueHue: return [hue(195), hue(235), hue(275)]
+        case .calibrationRedSat: return [Color.gray, hue(0)]
+        case .calibrationGreenSat: return [Color.gray, hue(120)]
+        case .calibrationBlueSat: return [Color.gray, hue(235)]
         default: return nil
         }
     }

@@ -7,7 +7,7 @@ public struct DevelopPreset: Codable, Hashable, Sendable, Identifiable {
     /// panel order.
     public enum Part: String, Codable, CaseIterable, Sendable {
         case profile, treatment, whiteBalance, exposure, tone, presence, toneCurve, hsl, colorGrading, detail
-        case lensCorrections, transform, effects, crop, masks
+        case lensCorrections, transform, effects, calibration, crop, masks
 
         public var title: String {
             switch self {
@@ -24,6 +24,7 @@ public struct DevelopPreset: Codable, Hashable, Sendable, Identifiable {
             case .lensCorrections: return "Lens Corrections"
             case .transform: return "Transform"
             case .effects: return "Effects"
+            case .calibration: return "Calibration"
             case .crop: return "Crop & Straighten"
             case .masks: return "Masks"
             }
@@ -55,6 +56,7 @@ public struct DevelopPreset: Codable, Hashable, Sendable, Identifiable {
             case .colorGrading: return DevelopSettings.Panel.colorGrading.parameters
             case .detail: return DevelopSettings.Panel.detail.parameters
             case .effects: return DevelopSettings.Panel.effects.parameters
+            case .calibration: return DevelopSettings.Panel.calibration.parameters
             case .lensCorrections: return DevelopSettings.Panel.lensCorrections.parameters
             case .transform: return DevelopSettings.Panel.transform.parameters
             case .profile, .crop, .masks: return []
@@ -69,6 +71,7 @@ public struct DevelopPreset: Codable, Hashable, Sendable, Identifiable {
             case .colorGrading: return .colorGrading
             case .detail: return .detail
             case .effects: return .effects
+            case .calibration: return .calibration
             case .lensCorrections: return .lensCorrections
             case .transform: return .transform
             default: return nil

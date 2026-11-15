@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calibration · Atelier Help</title>
+<link rel="stylesheet" href="assets/help.css">
+<script src="assets/toc.js" defer></script>
+<script src="assets/help.js" defer></script>
+</head>
+<body>
+<main class="page">
+
+<div class="eyebrow">Develop panel</div>
+<h1>Calibration</h1>
+<p class="lede">Reshapes the red, green and blue the photo's colors are made of. One move shifts every color in the photo at once, so it's the place for a film-like palette or a camera whose colors you want to nudge in every shot.</p>
+
+<div class="chips"><a href="#primaries">Red, Green and Blue Primary</a><a href="#shadows-tint">Shadows Tint</a><a href="#order">Where it works</a></div>
+
+<figure>
+  <div class="panel narrow" style="margin:0 auto">
+    <div class="ph"><span class="chev">›</span>Calibration<span class="dot"></span><span class="grow"></span><span class="reset">↺</span><span class="switch"></span></div>
+    <div class="pb">
+      <div class="gh">Shadows</div>
+      <div class="sl" data-name="Tint" data-value="0" data-at="0.5" data-gradient="tint"></div>
+      <div class="gh">Red Primary</div>
+      <div class="sl" data-name="Hue" data-value="+25" data-at="0.625" data-def="0.5" data-gradient="hue-0"></div>
+      <div class="sl" data-name="Saturation" data-value="0" data-at="0.5" data-gradient="sat-0"></div>
+      <div class="gh">Green Primary</div>
+      <div class="sl" data-name="Hue" data-value="0" data-at="0.5" data-gradient="hue-120"></div>
+      <div class="sl" data-name="Saturation" data-value="0" data-at="0.5" data-gradient="sat-120"></div>
+      <div class="gh">Blue Primary</div>
+      <div class="sl" data-name="Hue" data-value="0" data-at="0.5" data-gradient="hue-235"></div>
+      <div class="sl" data-name="Saturation" data-value="+60" data-at="0.8" data-def="0.5" data-gradient="sat-235"></div>
+    </div>
+  </div>
+</figure>
+
+<h2 id="primaries">Red, Green and Blue Primary</h2>
+<p>Every color in the photo is a mix of three primaries. Moving one primary moves every color that has some of it in the mix, which is why a small change here reaches further than the same change in <a href="hsl.html">HSL / Color</a>. White, grays and black stay neutral whatever you do.</p>
+<dl class="defs">
+  <dt>Hue</dt><dd>Turns the primary toward its neighbours. Red moves toward orange (right) or magenta (left), green toward cyan (right) or yellow (left), blue toward purple (right) or cyan (left). The track shows where it goes.</dd>
+  <dt>Saturation</dt><dd>Makes everything that has this primary in it richer (right) or more muted (left).</dd>
+</dl>
+<figure>
+  <div class="frame compare" data-before="redwoods-flat.jpg" data-after="calibration-after.jpg" data-labels="Before|Red Hue +25, Blue Saturation +60"></div>
+  <figcaption>A well-known trick: Blue Primary Saturation up makes the whole photo richer and warmer, not just its blues, with fewer of the garish colors Saturation in Basic can give.</figcaption>
+</figure>
+
+<h2 id="shadows-tint">Shadows Tint</h2>
+<p>Adds green (left) or magenta (right) to the shadows only, keeping their brightness. It's strongest in the deepest shadows and fades out before the midtones, so it can fix a camera that renders blacks a little green or magenta without changing the white balance of the rest of the photo.</p>
+
+<h2 id="order">Where it works</h2>
+<p>Calibration comes first among the color and tone panels, right after the profile and white balance, as in Lightroom. So <a href="basic.html">Basic</a>, <a href="hsl.html">HSL / Color</a> and <a href="color-grading.html">Color Grading</a> all work on the reshaped colors, and <a href="masking.html#color">Color Range</a> masks still pick colors from the photo before it.</p>
+<ul>
+  <li>Turn the panel off with the switch in its header to compare, as with any panel.</li>
+  <li>New presets have a <b>Calibration</b> part, ticked by default; Copy and Paste Settings carry it too.</li>
+  <li>Masks don't have Calibration sliders: it changes the whole photo.</li>
+</ul>
+
+</main>
+</body>
+</html>

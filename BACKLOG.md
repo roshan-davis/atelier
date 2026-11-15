@@ -1308,11 +1308,15 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 
 ## AT-069 — Develop: Calibration panel
 
-**Status:** Proposed / discuss. **Owner:** unassigned. **Dependencies:** camera-matched RAW look (PRD).
+**Status:** Approved (Rosh, Nov 15, 2026: "pick the next", Calibration recommended on the decision card) / implemented, not yet built or accepted. **Owner:** Claude (project thread "Lightroom gaps"). **Branch:** `claude/develop-calibration`. **PR:** opened from this branch. **Dependencies:** camera-matched RAW look (PRD).
 
-**Evidence:** the comparison's gap 4. The PRD lists Calibration as "Next" with no ID. Lightroom's Calibration has Shadows Tint and Red, Green and Blue Primary Hue and Saturation, and sits last in the panel stack with an on/off switch.
+**Evidence:** the comparison's gap 4. The PRD listed Calibration as "Next" with no ID. Lightroom's Calibration has Shadows Tint and Red, Green and Blue Primary Hue and Saturation, and sits last in the panel stack with an on/off switch.
 
-**Questions to agree:** how the primaries map onto Atelier's camera-match profile and Oklab color steps, and whether existing photos must stay unchanged (neutral defaults: yes).
+**As built:** seven parameters (`calibrationShadowsTint`, `calibration{Red,Green,Blue}{Hue,Sat}`) in a new `Panel.calibration` (last, with the shared switch, groups Shadows / Red / Green / Blue Primary, colored tracks). `Calibration.swift`: primaries turned around the gray axis in linear Rec. 2020 (±30°) and scaled from gray (±60%), one white-preserving 3 × 3 matrix; Shadows Tint green/magenta with a cube-root shadow weight, brightness kept; one Metal kernel. Applied first in `applyAdjustments` (after `corrected()`), so the corrected cache, mask source and Color Range are untouched and no `PreviewCache.version` bump is needed. Preset part `Calibration` (default on), agent `DevelopPart.calibration`; agents set the sliders through AdjustParameters `other` (e.g. `calibration_blue_sat=50`). Help page `calibration.html`.
+
+**Validation:** Swift unbuilt (cloud); math checked with a Python port; `CalibrationTests` added. Needs a Mac build, `swift test` and Rosh's acceptance.
+
+**Limits / later:** Lightroom's exact primaries math isn't published, so the same numbers won't give exactly Lightroom's result; the direction and rough strength match.
 
 ## AT-070 — Lens Blur, Adaptive presets and Panorama merge
 

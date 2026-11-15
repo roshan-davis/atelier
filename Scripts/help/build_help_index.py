@@ -45,6 +45,7 @@ GROUPS = [
         ("lens-corrections.html", "Lens Corrections"),
         ("transform.html", "Transform"),
         ("effects.html", "Effects"),
+        ("calibration.html", "Calibration"),
     ]),
     ("Tools", [
         ("crop.html", "Crop & Straighten"),
