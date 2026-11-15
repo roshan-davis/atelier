@@ -20,7 +20,8 @@ final class PipelineWarmUpTests: XCTestCase {
 
     func testWarmUpRendersEveryVariant() {
         let settings = DevelopSettings()
-        XCTAssertEqual(DevelopRenderer.shared.warmUp(settings, scale: 0.25), DevelopRenderer.warmUpVariants(settings).count)
+        XCTAssertTrue(DevelopRenderer.warmsLensBlur(settings), "Lens Blur's programs are built before its first Apply")
+        XCTAssertEqual(DevelopRenderer.shared.warmUp(settings, scale: 0.25), DevelopRenderer.warmUpVariants(settings).count + 1)
         XCTAssertEqual(DevelopRenderer.shared.warmUp(settings, scale: 0.25, isCurrent: { false }), 0, "stops when told")
     }
 

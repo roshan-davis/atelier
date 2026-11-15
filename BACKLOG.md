@@ -1331,7 +1331,19 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 
 **Evidence:** the comparison's gap 6. Lightroom has Lens Blur (AI depth, bokeh shapes, focus range), Adaptive presets (presets with Sky, Subject, Portrait or Landscape masks that adapt per photo) and Photo Merge > Panorama and HDR Panorama. Atelier presets can carry masks, but there are no adaptive packs. Panorama is PRD "Later".
 
-**Questions to agree:** which first; each gets its own ID when picked.
+**Questions to agree:** which first; each gets its own ID when picked. Lens Blur picked Nov 15, 2026: AT-072.
+
+## AT-072 — Develop: Lens Blur
+
+**Status:** Built, awaiting Mac build and Rosh's acceptance. **Owner:** Claude (project thread). **Branch:** `claude/develop-lens-blur`. **Dependencies:** AT-068 Depth Range (the depth model and `depthMap`), Select Subject. Split out of AT-070; Rosh picked it on Nov 15, 2026.
+
+**Scope (step 1):** Lightroom's Lens Blur panel: Apply, Blur Amount, Bokeh (Circle, Bubble, 5-Blade, Ring, Anamorphic), Cat Eye, Boost, Focal Range (Near/Far on a depth strip, focus picker, Subject), Visualize Depth. **Step 2 (later):** the Focus and Blur refine brushes, Area (drag) focus.
+
+**As built:** parameters `lensBlurApply`, `lensBlurAmount`, `lensBlurBokeh`, `lensBlurCatEye`, `lensBlurBoost`, `lensBlurFocusNear`, `lensBlurFocusFar` in a new `Panel.lensBlur` (after Effects, with the shared switch). `LensBlur.swift`: CoC, Boost, gather and composite Metal kernels; run in `DevelopSession.image(with:)` on `source` before the crop, cached as an intermediate; a warm-up render with a stand-in depth ramp (`PipelineWarmUp`). `SliderPreview.visualizeDepth`. `DevelopSession.focusDepths(at:)`, `subjectDepths(settings:)`; controller `setLensBlurApplied`, `focusLensBlurOnSubject`, `pickLensFocus`, `PhotoPicker.lensFocus`. `LensBlurPanel` reuses `ParameterSlider`, `GroupHeading`, `IconSegmentedControl`, `PickerButton`, `DepthModelGate` and `DepthStrip` (now shared). Preset part Lens Blur (unticked by default), agent `DevelopPart.lensBlur` (`lens_blur`). Help page `lens-blur.html`, pictures from the Python port and the real depth map of the redwoods splash photo (`Scripts/help/data`). No `PreviewCache.version` bump: photos without Lens Blur render as before.
+
+**Validation:** Swift unbuilt (cloud). The algorithm was checked in a Python port with the real depth model on six photos (portrait, football player with crowd, Rosh's Eiffel Tower couple, two people indoors, the redwoods splash, a plant) and on synthetic bokeh points for every shape. The first Boost (up to 4× from 70% luma) blew sunlit logs into flat blobs, so it now acts only on near-clipped highlights (up to 3×). `LensBlurTests` (settings, focal range, a near half stays sharp and a far half blurs on a checker, no far spill onto the sharp edge) added; the warm-up test updated. Needs a Mac build, `swift test`, a Frame Diagnostics check of a Blur Amount drag, and Rosh's acceptance.
+
+**Limits:** depth is relative per photo, so Blur Amount 100 isn't a fixed f-number; fine hair can blur a little where the depth model's edge is soft; the gather can show a faint pattern at Blur Amount 100 on fine foliage.
 
 ## AT-071 — Cull: compare the suggested keeper and runner-up with linked zoom
 

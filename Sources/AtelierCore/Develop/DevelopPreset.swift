@@ -7,7 +7,7 @@ public struct DevelopPreset: Codable, Hashable, Sendable, Identifiable {
     /// panel order.
     public enum Part: String, Codable, CaseIterable, Sendable {
         case profile, treatment, whiteBalance, exposure, tone, presence, toneCurve, hsl, colorGrading, detail
-        case lensCorrections, transform, effects, calibration, crop, masks
+        case lensCorrections, transform, effects, lensBlur, calibration, crop, masks
 
         public var title: String {
             switch self {
@@ -24,6 +24,7 @@ public struct DevelopPreset: Codable, Hashable, Sendable, Identifiable {
             case .lensCorrections: return "Lens Corrections"
             case .transform: return "Transform"
             case .effects: return "Effects"
+            case .lensBlur: return "Lens Blur"
             case .calibration: return "Calibration"
             case .crop: return "Crop & Straighten"
             case .masks: return "Masks"
@@ -39,10 +40,11 @@ public struct DevelopPreset: Codable, Hashable, Sendable, Identifiable {
             }
         }
 
-        /// Most presets are a look; the profile, white balance, lens corrections, transform, crop
-        /// and masks depend on the photo, so they are left out unless chosen.
+        /// Most presets are a look; the profile, white balance, lens corrections, transform, Lens
+        /// Blur (its focal range is the photo's subject), crop and masks depend on the photo, so
+        /// they are left out unless chosen.
         public static let defaults: Set<Part> = Set(allCases)
-            .subtracting([.profile, .whiteBalance, .lensCorrections, .transform, .crop, .masks])
+            .subtracting([.profile, .whiteBalance, .lensCorrections, .transform, .lensBlur, .crop, .masks])
 
         var parameters: [DevelopSettings.Parameter] {
             switch self {
@@ -56,6 +58,7 @@ public struct DevelopPreset: Codable, Hashable, Sendable, Identifiable {
             case .colorGrading: return DevelopSettings.Panel.colorGrading.parameters
             case .detail: return DevelopSettings.Panel.detail.parameters
             case .effects: return DevelopSettings.Panel.effects.parameters
+            case .lensBlur: return DevelopSettings.Panel.lensBlur.parameters
             case .calibration: return DevelopSettings.Panel.calibration.parameters
             case .lensCorrections: return DevelopSettings.Panel.lensCorrections.parameters
             case .transform: return DevelopSettings.Panel.transform.parameters
@@ -71,6 +74,7 @@ public struct DevelopPreset: Codable, Hashable, Sendable, Identifiable {
             case .colorGrading: return .colorGrading
             case .detail: return .detail
             case .effects: return .effects
+            case .lensBlur: return .lensBlur
             case .calibration: return .calibration
             case .lensCorrections: return .lensCorrections
             case .transform: return .transform

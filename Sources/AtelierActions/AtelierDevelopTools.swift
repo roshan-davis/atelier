@@ -25,7 +25,9 @@ public enum DevelopPart: String, AgentEnum {
     case colorGrading = "color_grading"
     case detail
     case lensCorrections = "lens_corrections"
-    case transform, effects, calibration, crop, masks
+    case transform, effects
+    case lensBlur = "lens_blur"
+    case calibration, crop, masks
 
     /// Lightroom's Sync Settings leaves crop and masks off unless asked.
     public static let syncDefault: [DevelopPart] = allCases.filter { $0 != .crop && $0 != .masks }

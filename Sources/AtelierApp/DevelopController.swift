@@ -128,6 +128,8 @@ final class DevelopController: ObservableObject {
     enum PhotoPicker {
         case whiteBalance, fringe, gradeColor, pointColor
         case targetCurve, targetColor, targetGray
+        /// Lens Blur's focus picker: the click sets the Focal Range.
+        case lensFocus
 
         var hint: String {
             switch self {
@@ -138,6 +140,7 @@ final class DevelopController: ObservableObject {
             case .targetCurve: return "Drag up or down on a tone to lighten or darken it. Esc when done."
             case .targetColor: return "Drag up or down on a color to change it. Esc when done."
             case .targetGray: return "Drag up or down on a color to make its gray lighter or darker. Esc when done."
+            case .lensFocus: return "Click the part of the photo to keep in focus. Esc to cancel."
             }
         }
 
@@ -162,6 +165,8 @@ final class DevelopController: ObservableObject {
     }
     /// Why the last click with the picker that is out set nothing.
     @Published var pickerMessage: String?
+    /// Why Lens Blur's Subject focus set nothing, for its panel.
+    @Published var lensBlurMessage: String?
 
     /// The HSL channel the Targeted Adjustment Tool changes (HSL / Color's view, or the one
     /// chosen from its menu in the All view).
@@ -171,6 +176,14 @@ final class DevelopController: ObservableObject {
     /// The Point Color swatch (0...3) the panel shows and the eyedropper fills.
     @Published var pointColorSwatch = 0 {
         didSet { if pointColorSwatch != oldValue, visualizesPointRange { sliderPreview = .pointColorRange(pointColorSwatch) } }
+    }
+    /// Lens Blur's Visualize Depth: the depth in color instead of the photo.
+    @Published var visualizesDepth = false {
+        didSet {
+            guard visualizesDepth != oldValue else { return }
+            if visualizesDepth { visualizesPointRange = false }
+            sliderPreview = visualizesDepth ? .visualizeDepth : nil
+        }
     }
     /// Point Color's Visualize Range: the photo gray except the colors the swatch selects.
     @Published var visualizesPointRange = false {
@@ -2079,6 +2092,13 @@ final class DevelopController: ObservableObject {
         switch parameter.panel {
         case .colorGrading, .detail, .effects, .toneCurve, .lensCorrections, .calibration:
             return "\(parameter.group) \(parameter.label)"
+        case .lensBlur:
+            switch parameter {
+            case .lensBlurAmount: return "Lens Blur Amount"
+            case .lensBlurFocusNear: return "Focal Range Near"
+            case .lensBlurFocusFar: return "Focal Range Far"
+            default: return "Lens Blur \(parameter.label)"
+            }
         default:
             return parameter.label == "Temp" ? "Temperature" : parameter.label
         }
@@ -3007,6 +3027,74 @@ extension DevelopController {
                     self.maskMessage = nil
                     component.shape = .depth(picked)
                     self.updateComponent(component, step: "\(adding ? "Add Depth" : "Pick Depth"): \(mask.name)")
+                }
+            }
+        }
+    }
+
+    // MARK: Lens Blur
+
+    /// Lens Blur's Apply. Turned on with the Focal Range at its default, it first focuses on the
+    /// subject, as Lightroom's Apply does (one history step either way).
+    func setLensBlurApplied(_ on: Bool) {
+        guard assetID != nil else { return }
+        let atDefault = settings[.lensBlurFocusNear] == DevelopSettings.Parameter.lensBlurFocusNear.defaultValue
+            && settings[.lensBlurFocusFar] == DevelopSettings.Parameter.lensBlurFocusFar.defaultValue
+        setValues([.lensBlurApply: on ? 1 : 0], step: on ? "Lens Blur: Apply" : "Lens Blur: Off")
+        if on, atDefault { focusLensBlurOnSubject() }
+    }
+
+    /// Lens Blur's Subject focus: the Focal Range from the depths under the subject Select Subject
+    /// finds. Read in the background (the first time on a photo it finds the depth, then the
+    /// subject, in about a second).
+    func focusLensBlurOnSubject() {
+        guard let session, let assetID else { return }
+        guard DepthMap.isInstalled else {
+            lensBlurMessage = "Lens Blur needs the depth model: click Download in the Lens Blur panel."
+            return
+        }
+        lensBlurMessage = nil
+        let settings = self.settings
+        queue.async {
+            let depths = session.subjectDepths(settings: settings)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard self.assetID == assetID else { return }
+                    guard let depths, let range = LensBlur.focalRange(for: depths) else {
+                        self.lensBlurMessage = DepthMap.failure
+                            ?? "No subject found. Click the focus picker, then the part of the photo to keep sharp."
+                        return
+                    }
+                    self.setValues([.lensBlurFocusNear: range.near, .lensBlurFocusFar: range.far],
+                                   step: "Lens Blur: Subject Focus")
+                }
+            }
+        }
+    }
+
+    /// Lens Blur's focus picker: the Focal Range from the depths around `point` (0...1 from the
+    /// top left of the cropped photo). The picker stays out, so another click moves the focus.
+    func pickLensFocus(at point: CGPoint) {
+        guard let session, let assetID else { return }
+        guard DepthMap.isInstalled else {
+            pickerMessage = "Lens Blur needs the depth model: click Download in the Lens Blur panel."
+            return
+        }
+        let settings = self.settings
+        queue.async {
+            let depths = session.focusDepths(at: point, settings: settings)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard self.assetID == assetID, self.picker == .lensFocus else { return }
+                    guard let depths, let range = LensBlur.focalRange(for: depths) else {
+                        self.pickerMessage = DepthMap.failure ?? "No depth was found for this photo."
+                        return
+                    }
+                    self.pickerMessage = nil
+                    var values: [DevelopSettings.Parameter: Double] = [.lensBlurFocusNear: range.near,
+                                                                        .lensBlurFocusFar: range.far]
+                    if self.settings[.lensBlurApply] < 0.5 { values[.lensBlurApply] = 1 }
+                    self.setValues(values, step: "Lens Blur: Focus")
                 }
             }
         }

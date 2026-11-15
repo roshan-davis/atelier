@@ -33,7 +33,24 @@ extension DevelopRenderer {
             _ = try? task.waitUntilCompleted()
             count += 1
         }
+        // Lens Blur runs before the adjustments, on the depth map, so it gets a render of its own
+        // (with a stand-in depth ramp) when the photo doesn't use it yet.
+        if Self.warmsLensBlur(settings), isCurrent() {
+            let image = LensBlur.apply(input, depth: LensBlur.warmUpDepth(input.extent), settings: LensBlur.warmUpSettings)
+            let destination = CIRenderDestination(ioSurface: surface)
+            destination.colorSpace = Self.displaySpace
+            destination.isFlipped = Self.surfaceNeedsFlip
+            if let task = try? context.startTask(toRender: image, from: input.extent, to: destination, at: .zero) {
+                _ = try? task.waitUntilCompleted()
+                count += 1
+            }
+        }
         return count
+    }
+
+    /// Whether the warm-up builds Lens Blur's programs: when the photo doesn't use it yet.
+    static func warmsLensBlur(_ settings: DevelopSettings) -> Bool {
+        !LensBlur.isOn(settings.applyingPanelSwitches())
     }
 
     /// The photo's settings without its masks (they need the photo itself), then once for each

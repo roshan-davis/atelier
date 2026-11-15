@@ -299,7 +299,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
 
     /// The Develop panels, in Lightroom's order.
     public enum Panel: String, CaseIterable, Sendable, Codable {
-        case basic, toneCurve, hsl, colorGrading, detail, lensCorrections, transform, effects, calibration
+        case basic, toneCurve, hsl, colorGrading, detail, lensCorrections, transform, effects, lensBlur, calibration
 
         /// Every panel but Basic has an on/off switch in its header, as in Lightroom.
         public var hasSwitch: Bool { self != .basic }
@@ -314,6 +314,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             case .lensCorrections: return "Lens Corrections"
             case .transform: return "Transform"
             case .effects: return "Effects"
+            case .lensBlur: return "Lens Blur"
             case .calibration: return "Calibration"
             }
         }
@@ -479,6 +480,11 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         case vignette, vignetteMidpoint, grain, grainSize, grainRoughness, grainType
         case vignetteStyle, vignetteRoundness, vignetteFeather, vignetteHighlights
         case glowAmount, glowStyle, glowRange, glowSpread, glowWarmth
+        /// Lens Blur (AT-072): Apply (0 or 1), Blur Amount, Bokeh (a `LensBlur.Bokeh`), Cat Eye,
+        /// Boost, and the Focal Range kept sharp (Near and Far, 0 nearest to 100 farthest on the
+        /// photo's own depth). See `LensBlur`.
+        case lensBlurApply, lensBlurAmount, lensBlurBokeh, lensBlurCatEye, lensBlurBoost
+        case lensBlurFocusNear, lensBlurFocusFar
         /// Calibration (AT-069), each -100...100: Shadows Tint, then each primary's Hue and
         /// Saturation. See `Calibration`.
         case calibrationShadowsTint
@@ -517,7 +523,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         public var blendsLinearly: Bool {
             switch self {
             case .gradeShadowsHue, .gradeMidtonesHue, .gradeHighlightsHue, .gradeGlobalHue, .vignetteStyle, .glowStyle,
-                 .grainType:
+                 .grainType, .lensBlurApply, .lensBlurBokeh, .lensBlurFocusNear, .lensBlurFocusFar:
                 return false
             default:
                 return pointColor.map { !$0.setting.isTarget } ?? true
@@ -544,6 +550,8 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             case .curveMidtoneSplit: return 50
             case .curveHighlightSplit: return 75
             case .grainSize: return 25
+            case .lensBlurAmount, .lensBlurBoost: return 50
+            case .lensBlurFocusFar: return 20
             case .lensDefringePurpleHueLow: return 30
             case .lensDefringePurpleHueHigh: return 70
             case .lensDefringeGreenHueLow: return 40
@@ -575,6 +583,9 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
                 return 0...100
             case .vignetteStyle, .glowStyle: return 0...2
             case .grainType: return 0...3
+            case .lensBlurApply: return 0...1
+            case .lensBlurBokeh: return 0...4
+            case .lensBlurAmount, .lensBlurCatEye, .lensBlurBoost, .lensBlurFocusNear, .lensBlurFocusFar: return 0...100
             default:
                 switch pointColor?.setting {
                 case .hue: return 0...360
@@ -628,6 +639,13 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             case .glowRange: return "Range"
             case .glowSpread: return "Spread"
             case .glowWarmth: return "Warmth"
+            case .lensBlurApply: return "Apply"
+            case .lensBlurAmount: return "Blur Amount"
+            case .lensBlurBokeh: return "Bokeh"
+            case .lensBlurCatEye: return "Cat Eye"
+            case .lensBlurBoost: return "Boost"
+            case .lensBlurFocusNear: return "Near"
+            case .lensBlurFocusFar: return "Far"
             case .calibrationShadowsTint: return "Tint"
             case .calibrationRedHue, .calibrationGreenHue, .calibrationBlueHue: return "Hue"
             case .calibrationRedSat, .calibrationGreenSat, .calibrationBlueSat: return "Saturation"
@@ -648,6 +666,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             if hslBand != nil || grayBand != nil || pointColor != nil { return .hsl }
             if rawValue.hasPrefix("grade") { return .colorGrading }
             if rawValue.hasPrefix("curve") { return .toneCurve }
+            if rawValue.hasPrefix("lensBlur") { return .lensBlur }
             if rawValue.hasPrefix("lens") { return .lensCorrections }
             if rawValue.hasPrefix("transform") { return .transform }
             if rawValue.hasPrefix("calibration") { return .calibration }
@@ -686,6 +705,9 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             case .transformVertical, .transformHorizontal, .transformRotate, .transformAspect, .transformScale,
                  .transformOffsetX, .transformOffsetY: return "Transform"
             case .gradeBlending, .gradeBalance: return "Blend"
+            case .lensBlurApply, .lensBlurAmount: return "Blur"
+            case .lensBlurBokeh, .lensBlurCatEye, .lensBlurBoost: return "Bokeh"
+            case .lensBlurFocusNear, .lensBlurFocusFar: return "Focal Range"
             case .calibrationShadowsTint: return "Shadows"
             case .calibrationRedHue, .calibrationRedSat: return "Red Primary"
             case .calibrationGreenHue, .calibrationGreenSat: return "Green Primary"

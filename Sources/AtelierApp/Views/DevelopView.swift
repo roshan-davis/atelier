@@ -166,6 +166,7 @@ struct DevelopImageView: View {
         case .fringe: return { point in develop.pickFringe(at: point) }
         case .gradeColor: return { point in develop.pickGradeColor(at: point) }
         case .pointColor: return { point in develop.pickPointColor(at: point) }
+        case .lensFocus: return { point in develop.pickLensFocus(at: point) }
         case .targetCurve, .targetColor, .targetGray, nil: return nil
         }
     }
@@ -479,6 +480,8 @@ struct DevelopPanel: View {
                                 ColorGradingPanel(develop: develop)
                             case .effects:
                                 EffectsPanel(develop: develop)
+                            case .lensBlur:
+                                LensBlurPanel(develop: develop)
                             default:
                                 VStack(alignment: .leading, spacing: 7) {
                                     ForEach(groups(in: panel), id: \.0) { group in

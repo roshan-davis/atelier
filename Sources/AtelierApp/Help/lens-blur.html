@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lens Blur · Atelier Help</title>
+<link rel="stylesheet" href="assets/help.css">
+<script src="assets/toc.js" defer></script>
+<script src="assets/help.js" defer></script>
+</head>
+<body>
+<main class="page">
+
+<div class="eyebrow">Develop panel</div>
+<h1>Lens Blur</h1>
+<p class="lede">Blurs the photo as a wide-open lens would, from how far away each part is: the background melts away, a foreground can go soft too, and bright points turn into bokeh. Use it to make a subject stand out from a busy scene, or to give a phone or small-sensor photo the look of a fast lens.</p>
+
+<div class="chips"><a href="#apply">Apply and Blur Amount</a><a href="#bokeh">Bokeh</a><a href="#focal-range">Focal Range</a><a href="#visualize">Visualize Depth</a><a href="#depth-model">The depth model</a><a href="#notes">Good to know</a></div>
+
+<figure>
+  <div class="panel narrow" style="margin:0 auto">
+    <div class="ph"><span class="chev">›</span>Lens Blur<span class="dot"></span><span class="grow"></span><span class="reset">↺</span><span class="switch"></span></div>
+    <div class="pb">
+      <div class="row"><span>☑ Apply</span></div>
+      <div class="sl" data-name="Blur Amount" data-value="50" data-at="0.5" data-def="0.5"></div>
+      <div class="gh">Bokeh</div>
+      <div class="row"><span class="name">Bokeh</span><span class="seg"><span class="sel">●</span><span>○</span><span>⬟</span><span>◎</span><span>⬮</span></span></div>
+      <div class="sl" data-name="Cat Eye" data-value="0" data-at="0" data-def="0"></div>
+      <div class="sl" data-name="Boost" data-value="50" data-at="0.5" data-def="0.5"></div>
+      <div class="gh">Focal Range</div>
+      <div class="row"><span style="flex:1;height:10px;border-radius:2px;background:linear-gradient(90deg,#fff,#000);position:relative"><span style="position:absolute;left:70%;width:10%;top:0;bottom:0;outline:2px solid var(--accent, #3d8bfd)"></span></span></div>
+      <div class="sl" data-name="Near" data-value="70" data-at="0.7" data-def="0"></div>
+      <div class="sl" data-name="Far" data-value="80" data-at="0.8" data-def="0.2"></div>
+      <div class="row"><span style="color:var(--app-text-2)">⌖</span> <span class="btn">Subject</span><span class="grow" style="flex:1"></span><span>☐ Visualize Depth</span></div>
+    </div>
+  </div>
+</figure>
+
+<figure>
+  <div class="frame compare" data-before="redwoods.jpg" data-after="lens-blur-after.jpg" data-labels="Before|Lens Blur, focused on the hiker"></div>
+  <figcaption>Focal Range on the hiker (Near 70, Far 80) and Blur Amount 50: the logs in front go soft, and the trees behind him a little, as they would through a fast lens.</figcaption>
+</figure>
+
+<h2 id="apply">Apply and Blur Amount</h2>
+<p>Tick <b>Apply</b> to turn Lens Blur on. The first time on a photo, Atelier focuses on its subject for you (see <a href="#focal-range">Focal Range</a>). <b>Blur Amount</b> sets how strong the blur is for the parts farthest from the focus: 100 is about the blur of a portrait lens wide open. The blur is measured against the photo's size, so the preview and an export look the same.</p>
+
+<h2 id="bokeh">Bokeh</h2>
+<p>The shape that bright out-of-focus points take, as in Lightroom. Hover over a shape for its name.</p>
+<dl class="defs">
+  <dt>Circle</dt><dd>Round and even, like a modern lens wide open. The default.</dd>
+  <dt>Bubble</dt><dd>Round with a bright rim, like a soap bubble.</dd>
+  <dt>5-Blade</dt><dd>Five-sided, like a lens with a five-blade aperture stopped down a little.</dd>
+  <dt>Ring</dt><dd>Bright rings with a dark middle, like a mirror (catadioptric) lens.</dd>
+  <dt>Anamorphic</dt><dd>Tall ovals, like an anamorphic cinema lens.</dd>
+  <dt>Cat Eye</dt><dd>Cuts the shapes toward the photo's edges into cat's-eye shapes, as many older and fast lenses do. Higher gives the swirl a stronger pull.</dd>
+  <dt>Boost</dt><dd>Brightens the brightest highlights (those near white) before they are blurred, so they spread as bright bokeh instead of dull gray spots. It leaves the rest of the photo's light tones alone.</dd>
+</dl>
+
+<h2 id="focal-range">Focal Range</h2>
+<p>The part of the photo kept sharp, as two depths from <b>0</b> (the nearest part of the photo) to <b>100</b> (the farthest). The strip above the sliders runs from near (white) to far (black) with the range outlined. Parts outside the range blur more the farther they are from it, in front of it as well as behind it, as a real lens does.</p>
+<table class="keys">
+  <tr><td>⌖ Focus picker</td><td>Click the button, then click the part of the photo to keep in focus. The range becomes the depths around that spot. The picker stays out, so another click moves the focus; press Esc or click the button again when done.</td></tr>
+  <tr><td>Subject</td><td>Keeps the photo's subject in focus, as <a href="masking.html#subject">Select Subject</a> finds it. This is also what Apply does the first time.</td></tr>
+  <tr><td>Near, Far</td><td>Fine-tune the range by hand. A narrow range gives a thin plane of focus; a wide one keeps more of the scene sharp.</td></tr>
+</table>
+
+<h2 id="visualize">Visualize Depth</h2>
+<p>Shows the photo's depth instead of the photo: warm colors are near, cool colors far, and the parts inside the Focal Range are drawn lighter. Use it to see what the focus covers while you move Near and Far. It turns off when you leave the panel.</p>
+<figure>
+  <img src="images/lens-blur-depth.jpg" alt="The redwoods photo shown as depth: orange logs in front, purple ground, blue trees behind, and the hiker's distance drawn light">
+  <figcaption>Visualize Depth on the photo above: the hiker and the ground at his distance are inside the Focal Range.</figcaption>
+</figure>
+
+<h2 id="depth-model">The depth model</h2>
+<p>Lens Blur uses the same depth model as <a href="masking.html#depth">Depth Range</a> and <a href="masking.html#sky">Select Sky</a>, <b>Depth Anything V2 Small</b> (Apache 2.0 license). If it isn't downloaded yet, the panel offers it (50 MB); it then runs on your Mac in under a second per photo, and photos are never sent anywhere. While the depth is being found the photo shows without the blur for a moment.</p>
+
+<h2 id="notes">Good to know</h2>
+<ul>
+  <li>Lens Blur works on the whole, uncropped photo in linear light before the tone and color panels, so highlights spread as light does and your other edits apply to the blurred photo. Masks still select from the sharp photo.</li>
+  <li>Edges of the subject stay as sharp as in the photo; something in front of the subject blurs over it, as through a lens. Where the depth model is unsure (fine hair, thin branches) the edge can blur a little; widen the Focal Range or lower Blur Amount.</li>
+  <li>Turn the panel off with the switch in its header to compare, as with any panel.</li>
+  <li>New presets have a <b>Lens Blur</b> part, unticked by default, because the focus belongs to the photo it was set on. Copy and Paste Settings and Sync Settings carry it.</li>
+  <li>Lightroom's Focus and Blur refine brushes are not here yet.</li>
+</ul>
+
+</main>
+</body>
+</html>

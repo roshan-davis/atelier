@@ -1151,15 +1151,26 @@ private struct LuminanceStrip: View {
     }
 }
 
-/// Near (light) to far (dark) with the chosen range marked, above the Depth Range sliders, as
-/// Lightroom shows depth.
-private struct DepthStrip: View {
-    let range: DevelopSettings.DepthRange
+/// Near (light) to far (dark) with the chosen range marked, above the Depth Range sliders and
+/// Lens Blur's Focal Range, as Lightroom shows depth. `low` and `high` are 0...100.
+struct DepthStrip: View {
+    let low: Double
+    let high: Double
+
+    init(range: DevelopSettings.DepthRange) {
+        low = range.low
+        high = range.high
+    }
+
+    init(low: Double, high: Double) {
+        self.low = low
+        self.high = high
+    }
 
     var body: some View {
         GeometryReader { geometry in
             let width = geometry.size.width
-            let low = min(range.low, range.high) / 100, high = max(range.low, range.high) / 100
+            let low = min(self.low, self.high) / 100, high = max(self.low, self.high) / 100
             ZStack(alignment: .leading) {
                 LinearGradient(colors: [.white, .black], startPoint: .leading, endPoint: .trailing)
                 Rectangle()
