@@ -858,9 +858,11 @@ struct AISettingsTab: View {
     }
 }
 
-/// Settings > AI > Masking Models: the built-in people model and the two optional Fine Edges models.
+/// Settings > AI > Masking Models: the built-in people model, the two optional Fine Edges models
+/// and the optional depth model.
 private struct MaskingModelsSection: View {
     @ObservedObject private var download = FineEdgesDownload.shared
+    @ObservedObject private var depth = DepthModelDownload.shared
 
     var body: some View {
         SettingsSection("Masking Models") {
@@ -888,6 +890,24 @@ private struct MaskingModelsSection: View {
                     Text(model.detail)
                 }
             }
+            LabeledContent {
+                if depth.installed {
+                    HStack {
+                        Text("Downloaded").foregroundStyle(.secondary)
+                        Button("Remove") { depth.remove() }
+                    }
+                } else if let progress = depth.progress {
+                    HStack {
+                        ProgressView(value: progress).frame(width: 120)
+                        Button("Cancel") { depth.cancel() }
+                    }
+                } else {
+                    Button("Download (\(DepthMap.downloadSize))") { depth.download() }
+                }
+            } label: {
+                Text("Depth Range")
+                Text("\(DepthMap.modelName): how far away each part of the photo is")
+            }
             if download.anyInstalled {
                 LabeledContent("Fine Edges uses") {
                     HStack {
@@ -908,12 +928,12 @@ private struct MaskingModelsSection: View {
                     }
                 }
             }
-            if let error = download.error {
+            if let error = download.error ?? depth.error {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange).font(.callout).fixedSize(horizontal: false, vertical: true)
             }
         } footer: {
-            Text("Select People's parts come from Google's MediaPipe model, built into Atelier. Fine Edges (BiRefNet, MIT license) redraws the edges of Select Subject, Select Object and Select People down to strands of hair; turn it on in each selection's settings. Download either model or both: Fast takes a few seconds, Hair Detail about half a minute for finer hair. When both are downloaded, choose which one runs here or in the mask panel. All of them run on this Mac; photos are never sent anywhere.")
+            Text("Select People's parts come from Google's MediaPipe model, built into Atelier. Fine Edges (BiRefNet, MIT license) redraws the edges of Select Subject, Select Object and Select People down to strands of hair; turn it on in each selection's settings. Download either model or both: Fast takes a few seconds, Hair Detail about half a minute for finer hair. When both are downloaded, choose which one runs here or in the mask panel. Depth Range masks use Depth Anything V2 Small (Apache 2.0 license), a 50 MB download. All of them run on this Mac; photos are never sent anywhere.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

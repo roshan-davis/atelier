@@ -181,7 +181,7 @@ private struct MaskOverlay: View {
             context.stroke(outline, with: .color(.white), style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
             pinShape(in: &context, at: space.viewPoint(pin), filled: true)
         case .color(let range): drawColorPicks(range, in: &context, space: space)
-        case .luminance, .people: break
+        case .luminance, .people, .depth: break
         }
     }
 
@@ -211,10 +211,14 @@ private struct MaskOverlay: View {
         return range.samples.indices.last { distance(point, space.viewPoint(range.samples[$0].center)) < 9 }
     }
 
-    /// A Color Range part is selected and no tool is waiting: clicks on the photo pick colors.
+    /// A Color Range or Depth Range part is selected and no tool is waiting: clicks on the photo
+    /// pick colors or depths.
     private var isPickingColor: Bool {
-        guard develop.maskTool == nil, case .color = develop.selectedComponent?.shape else { return false }
-        return true
+        guard develop.maskTool == nil else { return false }
+        switch develop.selectedComponent?.shape {
+        case .color?, .depth?: return true
+        default: return false
+        }
     }
 
     private func drawDrafts(in context: inout GraphicsContext, space: MaskSpace) {
@@ -427,10 +431,15 @@ private struct MaskOverlay: View {
             }
         case .pickColor(let start, let adding):
             let end = clamped(drag.location, to: space.rect)
-            let box = abs(end.x - start.x) > 4 && abs(end.y - start.y) > 4
+            let area = abs(end.x - start.x) > 4 && abs(end.y - start.y) > 4
+            let box = area
                 ? DevelopSettings.MaskRect(space.maskPoint(start), space.maskPoint(end))
                 : DevelopSettings.MaskRect(space.maskPoint(start), space.maskPoint(start))
-            develop.pickColorRange(in: box, adding: adding)
+            if develop.maskTool == nil, case .depth = develop.selectedComponent?.shape {
+                develop.pickDepthRange(in: box, area: area, adding: adding)
+            } else {
+                develop.pickColorRange(in: box, adding: adding)
+            }
         case .removeColor(let index) where moved < 3:
             develop.removeColorSample(index)
         case .selectPin(let mask, let component):
@@ -469,7 +478,7 @@ private struct MaskOverlay: View {
             case .object: return .drawBox(start: point)
             case .brush: return painting
             case .color: return .pickColor(start: point, adding: false)
-            case .luminance, .subject, .background, .people: return .none
+            case .luminance, .depth, .subject, .background, .people: return .none
             }
         }
         if let component = develop.selectedComponent {
@@ -579,7 +588,7 @@ struct MasksPanel: View {
             maskList
             HStack(spacing: 6) {
                 kindMenu(develop.masks.isEmpty ? "Create New Mask" : "New Mask") { develop.createMask($0) }
-                    .help("Make a new mask: Brush (K), Linear Gradient (M), Radial Gradient (⇧M), Luminance Range, Color Range (⇧J), Select Subject or Select Background")
+                    .help("Make a new mask: Brush (K), Linear Gradient (M), Radial Gradient (⇧M), Luminance Range, Color Range (⇧J), Depth Range, Select Subject or Select Background")
                 if develop.selectedMask != nil {
                     kindMenu("Add") { develop.addComponent($0, mode: .add) }
                         .help("Add a part to the selected mask")
@@ -853,6 +862,8 @@ struct MasksPanel: View {
             peopleSettings(component, selection)
         case .color(let range):
             colorRangeSettings(component, range)
+        case .depth(let range):
+            depthRangeSettings(component, range)
         case .brush:
             invertToggle(component)
         }
@@ -890,6 +901,37 @@ struct MasksPanel: View {
                       trackHelp: "Left keeps only colors close to the picks, right reaches further")
             Text("Click on the photo to pick a new color, or drag over an area. ⇧-click adds a color (up to five); ⌥-click a marker removes it.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            invertToggle(component)
+        }
+    }
+
+    /// Depth Range: the range of depths and its soft edge, like Lightroom's Depth Range; without
+    /// the depth model, how to get it.
+    private func depthRangeSettings(_ component: DevelopSettings.MaskComponent,
+                                    _ range: DevelopSettings.DepthRange) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            GroupHeading(title: "Depth Range")
+            DepthModelGate {
+                DepthStrip(range: range)
+                    .frame(height: 10)
+                SliderRow(label: "From", value: Binding(get: { range.low }, set: { value in
+                    var changed = range
+                    changed.low = value
+                    update(component, .depth(changed))
+                }), range: 0...100, step: 1, origin: 0, trackHelp: "0 is the nearest part of the photo, 100 the farthest")
+                SliderRow(label: "To", value: Binding(get: { range.high }, set: { value in
+                    var changed = range
+                    changed.high = value
+                    update(component, .depth(changed))
+                }), range: 0...100, step: 1, origin: 30, trackHelp: "0 is the nearest part of the photo, 100 the farthest")
+                SliderRow(label: "Smoothness", value: Binding(get: { range.smoothness }, set: { value in
+                    var changed = range
+                    changed.smoothness = value
+                    update(component, .depth(changed))
+                }), range: 0...100, step: 1, origin: 50)
+                Text("Click on the photo to pick a depth, or drag over an area to pick its range. ⇧-click widens the range.")
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
             invertToggle(component)
         }
     }
@@ -1078,6 +1120,28 @@ private struct LuminanceStrip: View {
             }
             .clipShape(RoundedRectangle(cornerRadius: 2))
         }
+    }
+}
+
+/// Near (light) to far (dark) with the chosen range marked, above the Depth Range sliders, as
+/// Lightroom shows depth.
+private struct DepthStrip: View {
+    let range: DevelopSettings.DepthRange
+
+    var body: some View {
+        GeometryReader { geometry in
+            let width = geometry.size.width
+            let low = min(range.low, range.high) / 100, high = max(range.low, range.high) / 100
+            ZStack(alignment: .leading) {
+                LinearGradient(colors: [.white, .black], startPoint: .leading, endPoint: .trailing)
+                Rectangle()
+                    .stroke(Color.accentColor, lineWidth: 2)
+                    .frame(width: max(2, width * (high - low)))
+                    .offset(x: width * low)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 2))
+        }
+        .help("Near on the left, far on the right")
     }
 }
 

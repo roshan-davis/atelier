@@ -87,6 +87,18 @@ final class AtelierEditToolsTests: XCTestCase {
         XCTAssertEqual(added.title, "Subtract Radial Gradient: Sky")
     }
 
+    func testDepthMaskTakesARangeOfDepths() throws {
+        let plan = try MaskRules.plan(AddMaskParameters(current: true, kind: .depth), sliders: maskSliders).get()
+        XCTAssertEqual(plan.range, [0, 30], "the nearest part of the photo by default")
+        XCTAssertEqual(plan.title, "New Mask: Depth Range")
+        let far = try MaskRules.plan(AddMaskParameters(current: true, kind: .depth, range: [60, 100], smoothness: 20),
+                                     sliders: maskSliders).get()
+        XCTAssertEqual(far.range, [60, 100])
+        XCTAssertEqual(far.smoothness, 20)
+        let wrong = MaskRules.plan(AddMaskParameters(current: true, kind: .depth, box: [0.1, 0.1, 0.2, 0.2]), sliders: maskSliders)
+        guard case .failure = wrong else { return XCTFail("box isn't a depth field") }
+    }
+
     func testMaskSettingsAreChecked() throws {
         let plan = try MaskRules.plan(AddMaskParameters(current: true, kind: .subject,
                                                         settings: ["exposure=+0.5", "Clarity = -20"]),

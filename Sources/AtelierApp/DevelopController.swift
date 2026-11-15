@@ -726,6 +726,11 @@ final class DevelopController: ObservableObject {
                                                                    queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.scheduleRender() }
         }
+        // So does Depth Range's depth map (until then the mask is empty).
+        depthObserver = NotificationCenter.default.addObserver(forName: DepthMap.ready, object: nil,
+                                                               queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.scheduleRender() }
+        }
         // So does Content-Aware Remove's fill (until then the spot shows Heal).
         spotFillObserver = NotificationCenter.default.addObserver(forName: ContentAwareFill.fillReady, object: nil,
                                                                   queue: .main) { [weak self] _ in
@@ -744,6 +749,7 @@ final class DevelopController: ObservableObject {
     }
 
     private var fineEdgesObserver: NSObjectProtocol?
+    private var depthObserver: NSObjectProtocol?
     private var spotFillObserver: NSObjectProtocol?
     private var aiDenoiseObservers: [NSObjectProtocol] = []
     /// Counts AI Denoise's status changes, so the Detail panel shows the new one.
@@ -2821,7 +2827,7 @@ struct MaskTool: Equatable {
         case .brush: return "Paint on the photo. Hold ⌥ to erase; [ and ] change the size."
         case .object: return "Drag a box around the object to select it."
         case .color: return "Click a color on the photo, or drag over an area to pick its range of colors."
-        case .luminance, .subject, .background, .people: return ""
+        case .luminance, .depth, .subject, .background, .people: return ""
         }
     }
 }
@@ -2883,6 +2889,7 @@ extension DevelopController {
         switch kind {
         case .luminance: return .luminance(DevelopSettings.LuminanceRange(low: 50, high: 100))
         case .color: return .color(DevelopSettings.ColorRange())
+        case .depth: return .depth(DevelopSettings.DepthRange())
         case .subject: return .subject(DevelopSettings.Selection())
         case .background: return .subject(DevelopSettings.Selection(background: true))
         case .object: return .subject(DevelopSettings.Selection(box: .init(x: 0.3, y: 0.3, width: 0.4, height: 0.4)))
@@ -2967,6 +2974,37 @@ extension DevelopController {
                     }
                     component.shape = .color(range)
                     self.updateComponent(component, step: "\(adding ? "Add Color" : "Pick Color"): \(mask.name)")
+                }
+            }
+        }
+    }
+
+    /// Depth Range: sets the selected part's range from the depths in `box` (top-left fractions
+    /// of the upright, uncropped photo; a click is an empty box at the point): a click takes the
+    /// depth there, a drag the depths under it, and ⇧ (`adding`) widens the range to take them in,
+    /// as Lightroom's Depth Range picker does. Read in the background; the first pick on a photo
+    /// waits for its depth (under a second).
+    func pickDepthRange(in box: DevelopSettings.MaskRect, area: Bool, adding: Bool) {
+        guard let session, let assetID, let target = selectedComponentID,
+              case .depth = selectedComponent?.shape else { return }
+        guard DepthMap.isInstalled else {
+            maskMessage = "Depth Range needs the depth model: click Download in the Depth Range settings below."
+            return
+        }
+        let settings = self.settings
+        queue.async {
+            let depths = session.depths(in: box, settings: settings)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard self.assetID == assetID, var component = self.selectedComponent, component.id == target,
+                          case .depth(let range) = component.shape, let mask = self.selectedMask else { return }
+                    guard let depths, let picked = range.picking(depths, area: area, adding: adding) else {
+                        self.maskMessage = DepthMap.failure ?? "No depth was found for this photo."
+                        return
+                    }
+                    self.maskMessage = nil
+                    component.shape = .depth(picked)
+                    self.updateComponent(component, step: "\(adding ? "Add Depth" : "Pick Depth"): \(mask.name)")
                 }
             }
         }

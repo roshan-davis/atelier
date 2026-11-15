@@ -185,7 +185,7 @@ extension DevelopSettings {
         }
 
         public enum Kind: String, Codable, CaseIterable, Sendable {
-            case brush, linear, radial, luminance, color, subject, background, object, people
+            case brush, linear, radial, luminance, color, depth, subject, background, object, people
 
             public var title: String {
                 switch self {
@@ -194,6 +194,7 @@ extension DevelopSettings {
                 case .radial: return "Radial Gradient"
                 case .luminance: return "Luminance Range"
                 case .color: return "Color Range"
+                case .depth: return "Depth Range"
                 case .subject: return "Select Subject"
                 case .background: return "Select Background"
                 case .object: return "Select Object"
@@ -208,6 +209,7 @@ extension DevelopSettings {
                 case .radial: return "circle.dashed.inset.filled"
                 case .luminance: return "sun.max"
                 case .color: return "eyedropper"
+                case .depth: return "square.3.layers.3d.down.backward"
                 case .subject: return "person.crop.rectangle"
                 case .background: return "person.and.background.dotted"
                 case .object: return "viewfinder"
@@ -228,6 +230,8 @@ extension DevelopSettings {
             case luminance(LuminanceRange)
             /// Color Range (AT-068): the colors picked on the photo.
             case color(ColorRange)
+            /// Depth Range (AT-068): how far away, from the depth model.
+            case depth(DepthRange)
             /// Select Subject (no box), Select Object (inside a box) or Select Background (the
             /// subject turned inside out), found by Vision.
             case subject(Selection)
@@ -241,6 +245,7 @@ extension DevelopSettings {
                 case .radial: return .radial
                 case .luminance: return .luminance
                 case .color: return .color
+                case .depth: return .depth
                 case .subject(let selection):
                     if selection.background { return .background }
                     return selection.box == nil ? .subject : .object
@@ -271,12 +276,12 @@ extension DevelopSettings {
             case .subject(let selection):
                 return selection.box.map { MaskPoint(x: $0.x + $0.width / 2, y: $0.y + $0.height / 2) }
             case .color(let range): return range.samples.first?.center
-            case .luminance, .people: return nil
+            case .luminance, .people, .depth: return nil
             }
         }
 
         private enum CodingKeys: String, CodingKey {
-            case id, mode, inverted, kind, strokes, linear, radial, luminance, color, selection, people
+            case id, mode, inverted, kind, strokes, linear, radial, luminance, color, depth, selection, people
         }
 
         public init(from decoder: Decoder) throws {
@@ -290,6 +295,7 @@ extension DevelopSettings {
             case .radial: shape = .radial(try c.decode(RadialGradient.self, forKey: .radial))
             case .luminance: shape = .luminance(try c.decodeIfPresent(LuminanceRange.self, forKey: .luminance) ?? LuminanceRange())
             case .color: shape = .color(try c.decodeIfPresent(ColorRange.self, forKey: .color) ?? ColorRange())
+            case .depth: shape = .depth(try c.decodeIfPresent(DepthRange.self, forKey: .depth) ?? DepthRange())
             case .subject: shape = .subject(try c.decodeIfPresent(Selection.self, forKey: .selection) ?? Selection(feather: 0))
             case .background:
                 var selection = try c.decodeIfPresent(Selection.self, forKey: .selection) ?? Selection()
@@ -312,6 +318,7 @@ extension DevelopSettings {
             case .radial(let gradient): try c.encode(gradient, forKey: .radial)
             case .luminance(let range): try c.encode(range, forKey: .luminance)
             case .color(let range): try c.encode(range, forKey: .color)
+            case .depth(let range): try c.encode(range, forKey: .depth)
             case .subject(let selection): try c.encode(selection, forKey: .selection)
             case .people(let selection): try c.encode(selection, forKey: .people)
             }
@@ -455,6 +462,58 @@ extension DevelopSettings {
             let distance = x < lo ? lo - x : x > hi ? x - hi : 0
             let t = max(0, 1 - distance / soft)
             return t * t * (3 - 2 * t)
+        }
+    }
+
+    /// Depth Range (AT-068, Lightroom's Depth Range mask): how far away, from 0 (the nearest
+    /// part of the photo) to 100 (the farthest), with a soft edge of `smoothness`, from the depth
+    /// model (`DepthMap`). Depth is relative to each photo's own nearest and farthest parts.
+    public struct DepthRange: Codable, Hashable, Sendable {
+        public var low = 0.0
+        public var high = 30.0
+        public var smoothness = 50.0
+
+        public init(low: Double = 0, high: Double = 30, smoothness: Double = 50) {
+            self.low = low
+            self.high = high
+            self.smoothness = smoothness
+        }
+
+        /// How much of the mask is kept at depth `x` (0...1): the same soft edge as Luminance
+        /// Range's.
+        public func weight(at x: Double) -> Double {
+            LuminanceRange(low: low, high: high, smoothness: smoothness).weight(at: x)
+        }
+
+        /// The range for depths picked on the photo (0...1): a click (one depth) takes 8 on each
+        /// side of it; a dragged area takes its depths from the 5th to the 95th percentile, so a
+        /// stray edge pixel doesn't stretch it. `adding` (⇧) widens the current range to take
+        /// them in too. Nil when nothing was picked.
+        public func picking(_ depths: [Float], area: Bool, adding: Bool) -> DepthRange? {
+            let sorted = depths.filter(\.isFinite).sorted()
+            guard !sorted.isEmpty else { return nil }
+            var lo: Double, hi: Double
+            if area, sorted.count >= 4 {
+                lo = Double(sorted[sorted.count * 5 / 100]) * 100
+                hi = Double(sorted[min(sorted.count - 1, sorted.count * 95 / 100)]) * 100
+            } else {
+                let middle = Double(sorted[sorted.count / 2]) * 100
+                lo = middle
+                hi = middle
+            }
+            if hi - lo < 16 {
+                let center = (lo + hi) / 2
+                lo = center - 8
+                hi = center + 8
+            }
+            if adding {
+                lo = min(lo, min(low, high))
+                hi = max(hi, max(low, high))
+            }
+            var picked = self
+            picked.low = max(0, lo.rounded())
+            picked.high = min(100, hi.rounded())
+            return picked
         }
     }
 

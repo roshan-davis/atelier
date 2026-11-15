@@ -76,11 +76,14 @@ extension DevelopRenderer {
     /// People's skin there.
     /// `guide` is the photo on the same frame, which Refine Edge snaps AI selections to; `fine`
     /// gives the Fine Edges model's foreground matte around a selection's outline on that frame
-    /// (covering a square around it; nil when not downloaded).
+    /// (covering a square around it; nil when not downloaded). `depth` gives the photo's depth
+    /// on that frame, 0 nearest to 1 farthest (nil when the depth model isn't downloaded or its
+    /// map isn't ready yet).
     static func sourceMask(_ component: DevelopSettings.MaskComponent, extent: CGRect,
                            subject: ((DevelopSettings.MaskRect?) -> CIImage?)?,
                            people: ((DevelopSettings.PeopleSelection) -> CIImage?)? = nil,
                            fine: ((CIImage) -> CIImage?)? = nil,
+                           depth: (() -> CIImage?)? = nil,
                            guide: CIImage? = nil,
                            brushCache: BrushCache?) -> CIImage? {
         let width = extent.width, height = extent.height
@@ -148,6 +151,9 @@ extension DevelopRenderer {
             // Found on the corrected photo itself, so tone and color sliders don't move it.
             guard let guide else { return nil }
             return colorRangeMask(range, from: guide)?.cropped(to: extent)
+        case .depth(let range):
+            guard let map = depth?() else { return nil }
+            return depthRangeMask(range, from: map)?.cropped(to: extent)
         case .luminance:
             return nil
         }
@@ -315,6 +321,34 @@ extension DevelopRenderer {
         return kernel.apply(extent: image.extent, roiCallback: { _, rect in rect }, arguments: arguments)?
             .cropped(to: image.extent)
     }
+
+    /// White where the depth map's values (0 nearest to 1 farthest, in the red channel) are in
+    /// the range (`DepthRange.weight`), on the GPU.
+    static func depthRangeMask(_ range: DevelopSettings.DepthRange, from map: CIImage) -> CIImage? {
+        guard let kernel = depthRangeKernel else { return nil }
+        let lo = min(range.low, range.high) / 100, hi = max(range.low, range.high) / 100
+        let soft = max(0.002, range.smoothness / 100 * 0.3)
+        return kernel.apply(extent: map.extent, roiCallback: { _, rect in rect },
+                            arguments: [map, CIVector(x: CGFloat(lo), y: CGFloat(hi), z: CGFloat(soft))])?
+            .cropped(to: map.extent)
+    }
+
+    /// Whether the Depth Range kernel built, for tests.
+    static var depthRangeKernelAvailable: Bool { depthRangeKernel != nil }
+
+    private static let depthRangeKernel: CIKernel? = RuntimeKernels.build("""
+        #include <CoreImage/CoreImage.h>
+        using namespace metal;
+
+        // range: (low, high, soft) on 0...1; the same soft edge as LuminanceRange.weight.
+        [[stitchable]] float4 atelierDepthRange(coreimage::sampler map, float3 range, coreimage::destination dest) {
+            float x = map.sample(map.transform(dest.coord())).r;
+            float distance = x < range.x ? range.x - x : (x > range.y ? x - range.y : 0.0);
+            float t = clamp(1.0 - distance / range.z, 0.0, 1.0);
+            float w = t * t * (3.0 - 2.0 * t);
+            return float4(w, w, w, 1.0);
+        }
+        """)?["atelierDepthRange"]
 
     /// Whether the Color Range kernel built, for tests.
     static var colorRangeKernelAvailable: Bool { colorRangeKernel != nil }

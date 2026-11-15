@@ -511,6 +511,11 @@ public final class DevelopSession: @unchecked Sendable {
     private var finePending: Set<FineRegion> = []
     private var fineKey: DevelopSettings?
     private var fineModel: FineEdges.Model?
+    /// Depth Range's depth of the corrected photo, found once per lens geometry (nil inside when
+    /// the model failed), its map on the photo's frame, and whether it is being found in the
+    /// background (interactive sessions).
+    private var depthFound: (key: DevelopSettings, field: DepthMap.Field?, map: CIImage?)?
+    private var depthPending: DevelopSettings?
     /// Pipeline step 1's results for the settings they were made from (see `CorrectedKey`), so a
     /// slider on any later panel doesn't decode the RAW and redo the lens corrections again.
     /// Two are kept, most recent last, so the Before view and the edit don't push each other out.
@@ -611,6 +616,7 @@ public final class DevelopSession: @unchecked Sendable {
                                                         subject: { self.subject(of: source, key: key, box: $0) },
                                                         people: { self.people(of: source, key: key, selection: $0) },
                                                         fine: { self.fineMatte(of: source, key: key, outline: $0) },
+                                                        depth: { self.depthMap(of: source, key: key) },
                                                         guide: source, brushCache: brushCache) else { return nil }
             guard let crop else { return mask }
             return DevelopRenderer.applyGeometry(crop, to: mask, cropping: cropping)
@@ -944,6 +950,86 @@ public final class DevelopSession: @unchecked Sendable {
             DispatchQueue.main.async { NotificationCenter.default.post(name: FineEdges.matteReady, object: nil) }
         }
         return nil
+    }
+
+    /// Depth Range's depth map of the corrected photo on its frame (0 nearest to 1 farthest),
+    /// with its edges moved onto the photo's own edges (the model sees the photo at about 518
+    /// pixels, so its edges are soft). Found once per lens geometry: in interactive sessions in
+    /// the background (the mask is empty until `DepthMap.ready` asks for a new render), in
+    /// exports right away. Nil when the model isn't downloaded or failed. Call with the lock held.
+    private func depthMap(of source: CIImage, key: DevelopSettings) -> CIImage? {
+        guard DepthMap.isInstalled else { return nil }
+        if let depthFound, depthFound.key == key { return depthFound.map }
+        guard interactive else {
+            let field = estimateDepth(of: source)
+            let map = field.flatMap { Self.placedDepth($0, on: source) }
+            depthFound = (key, field, map)
+            return map
+        }
+        if depthPending == key { return nil }
+        depthPending = key
+        guard let cgImage = depthInput(of: source) else { return nil }
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let field = DepthMap.estimate(cgImage)
+            guard let self else { return }
+            self.lock.lock()
+            if self.depthPending == key {
+                self.depthPending = nil
+                self.depthFound = (key, field, field.flatMap { Self.placedDepth($0, on: source) })
+            }
+            self.lock.unlock()
+            DispatchQueue.main.async { NotificationCenter.default.post(name: DepthMap.ready, object: nil) }
+        }
+        return nil
+    }
+
+    /// The photo the depth model sees: the corrected photo at about 1036 pixels on its long edge
+    /// (the model shrinks it to its own size), as sRGB.
+    private func depthInput(of source: CIImage) -> CGImage? {
+        let extent = source.extent
+        let factor = min(1, 1036 / max(extent.width, extent.height))
+        let small = source.transformed(by: CGAffineTransform(translationX: -extent.minX, y: -extent.minY))
+            .transformed(by: CGAffineTransform(scaleX: factor, y: factor))
+        return renderer.context.createCGImage(small, from: small.extent.integral, format: .RGBA8,
+                                              colorSpace: DevelopRenderer.sRGB)
+    }
+
+    private func estimateDepth(of source: CIImage) -> DepthMap.Field? {
+        depthInput(of: source).flatMap(DepthMap.estimate)
+    }
+
+    /// `field` stretched over the photo's frame, its edges snapped to the photo's (Refine Edge's
+    /// guided filter, radius 0.5% of the long edge), kept as a cached intermediate so a slider
+    /// drag doesn't redo it.
+    private static func placedDepth(_ field: DepthMap.Field, on source: CIImage) -> CIImage? {
+        let extent = source.extent
+        guard let map = field.image(on: extent) else { return nil }
+        let longEdge = Double(max(extent.width, extent.height))
+        let refined = MaskGuidedFilter.apply(mask: map, guide: source, radius: max(1, 0.005 * longEdge), epsilon: 0.0004,
+                                             extent: extent) ?? map
+        return refined.cropped(to: extent).insertingIntermediate(cache: true)
+    }
+
+    /// The depths inside `box` (top-left fractions of the upright, uncropped photo), 0 nearest
+    /// to 1 farthest, for a Depth Range pick; finds the depth first if needed (under a second),
+    /// so call it off the main thread. Nil when the model isn't downloaded or failed.
+    public func depths(in box: DevelopSettings.MaskRect, settings: DevelopSettings) -> [Float]? {
+        guard DepthMap.isInstalled, let source = maskSourceImage(settings) else { return nil }
+        let key = settings.applyingPanelSwitches().lensGeometryKey
+        lock.lock()
+        let known = depthFound?.key == key ? depthFound?.field : nil
+        let wasFound = depthFound?.key == key
+        lock.unlock()
+        if wasFound { return known?.values(in: box) }
+        guard let field = estimateDepth(of: source) else { return nil }
+        lock.lock()
+        if depthFound?.key != key {
+            depthFound = (key, field, Self.placedDepth(field, on: source))
+            if depthPending == key { depthPending = nil }
+        }
+        lock.unlock()
+        DispatchQueue.main.async { NotificationCenter.default.post(name: DepthMap.ready, object: nil) }
+        return field.values(in: box)
     }
 
     /// The model's values as a mask over `region` of the photo's frame; nil stays nil.

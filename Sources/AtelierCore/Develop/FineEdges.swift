@@ -1,5 +1,4 @@
 import CoreGraphics
-import CryptoKit
 import Foundation
 import ImageIO
 import OnnxRuntimeBindings
@@ -129,41 +128,11 @@ public enum FineEdges {
     /// Downloads `model`, checks it, puts it in place and picks it. `progress` gets 0...1 on any
     /// thread.
     public static func install(_ model: Model, progress: @escaping @Sendable (Double) -> Void) async throws {
-        let holder = ObservationHolder()
-        let downloaded: URL = try await withTaskCancellationHandler {
-          try await withCheckedThrowingContinuation { continuation in
-            let task = URLSession.shared.downloadTask(with: model.downloadURL) { url, response, error in
-                holder.observation = nil
-                if let error { return continuation.resume(throwing: error) }
-                if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
-                    return continuation.resume(throwing: URLError(.badServerResponse))
-                }
-                guard let url else { return continuation.resume(throwing: URLError(.cannotOpenFile)) }
-                // The file is removed when this returns: move it somewhere of ours first.
-                let kept = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".onnx")
-                do {
-                    try FileManager.default.moveItem(at: url, to: kept)
-                    continuation.resume(returning: kept)
-                } catch {
-                    continuation.resume(throwing: error)
-                }
-            }
-            holder.observation = task.progress.observe(\.fractionCompleted) { value, _ in
-                progress(value.fractionCompleted)
-            }
-            holder.task = task
-            task.resume()
-          }
-        } onCancel: {
-            holder.task?.cancel()
+        do {
+            try await ModelDownload.fetch(model.downloadURL, sha256: model.sha256, to: model.modelURL, progress: progress)
+        } catch is ModelDownload.ChecksumMismatch {
+            throw Failure.checksum
         }
-        defer { try? FileManager.default.removeItem(at: downloaded) }
-        try Task.checkCancellation()
-        guard try checksum(of: downloaded) == model.sha256 else { throw Failure.checksum }
-        let folder = model.modelURL.deletingLastPathComponent()
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        try? FileManager.default.removeItem(at: model.modelURL)
-        try FileManager.default.moveItem(at: downloaded, to: model.modelURL)
         forgetSession()
         removeOldModels()
         chosen = model
@@ -196,19 +165,8 @@ public enum FineEdges {
         modelsChanged()
     }
 
-    /// The file's SHA-256, lowercase hex, read in 4 MB pieces.
-    static func checksum(of url: URL) throws -> String {
-        let handle = try FileHandle(forReadingFrom: url)
-        defer { try? handle.close() }
-        var hash = SHA256()
-        while let piece = try handle.read(upToCount: 4 << 20), !piece.isEmpty { hash.update(data: piece) }
-        return hash.finalize().map { String(format: "%02x", $0) }.joined()
-    }
-
-    private final class ObservationHolder: @unchecked Sendable {
-        var observation: NSKeyValueObservation?
-        var task: URLSessionDownloadTask?
-    }
+    /// The file's SHA-256, lowercase hex.
+    static func checksum(of url: URL) throws -> String { try ModelDownload.checksum(of: url) }
 
     // MARK: Running
 
