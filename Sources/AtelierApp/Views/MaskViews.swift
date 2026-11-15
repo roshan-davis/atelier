@@ -956,7 +956,7 @@ struct MasksPanel: View {
                 SliderRow(label: "Refine Edge", value: value(\.refine), range: 0...100, step: 1, origin: 60,
                           trackHelp: "Moves the edge onto the photo's own edges, such as tree lines and rooftops")
                 SliderRow(label: "Feather", value: value(\.feather), range: 0...100, step: 1, origin: 10)
-                Text("The farthest part of the photo that reaches its top edge, found with the depth model on this Mac.")
+                Text("Found from the photo's depth and the sky's own colors, with the depth model on this Mac.")
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             invertToggle(component)

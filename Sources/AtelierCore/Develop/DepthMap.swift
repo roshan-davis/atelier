@@ -65,6 +65,9 @@ public enum DepthMap {
         public let width: Int
         public let height: Int
         public let values: [Float]
+        /// The photo the model saw, RGBA sRGB, rows from the top, on the same grid (for Select
+        /// Sky's colors); empty when not kept.
+        public var colors: [UInt8] = []
 
         /// The depth at a point (top-left fractions of the photo), 0...1.
         public func value(atX x: Double, y: Double) -> Float {
@@ -83,38 +86,6 @@ public enum DepthMap {
             out.reserveCapacity((x1 - x0 + 1) * (y1 - y0 + 1))
             for row in y0...y1 {
                 for column in x0...x1 { out.append(values[row * width + column]) }
-            }
-            return out
-        }
-
-        /// Select Sky's mask, 0...1, on the same grid: the farthest depths (fading in from 0.9 to
-        /// 0.97 of the photo's range; Depth Anything puts the sky at its farthest) that are
-        /// connected to the top row through far pixels, so a distant wall or the far end of a
-        /// room with no sky above it isn't taken. All zero when no far part touches the top.
-        public var sky: [Float] {
-            let low: Float = 0.9, high: Float = 0.97
-            var reached = [Bool](repeating: false, count: values.count)
-            var stack: [Int] = []
-            for column in 0..<width where values[column] >= low {
-                reached[column] = true
-                stack.append(column)
-            }
-            while let index = stack.popLast() {
-                let row = index / width, column = index % width
-                var neighbors: [Int] = []
-                if row > 0 { neighbors.append(index - width) }
-                if row < height - 1 { neighbors.append(index + width) }
-                if column > 0 { neighbors.append(index - 1) }
-                if column < width - 1 { neighbors.append(index + 1) }
-                for next in neighbors where !reached[next] && values[next] >= low {
-                    reached[next] = true
-                    stack.append(next)
-                }
-            }
-            var out = [Float](repeating: 0, count: values.count)
-            for i in values.indices where reached[i] {
-                let t = min(1, max(0, (values[i] - low) / (high - low)))
-                out[i] = t * t * (3 - 2 * t)
             }
             return out
         }
@@ -252,7 +223,7 @@ public enum DepthMap {
                 throw Failure("unexpected output size \(result.count) bytes")
             }
             failure = nil
-            return Field(width: size.width, height: size.height, values: normalized(raw))
+            return Field(width: size.width, height: size.height, values: normalized(raw), colors: pixels)
         } catch {
             failure = error.localizedDescription
             NSLog("Atelier: Depth Range failed: %@", "\(error)")
