@@ -17,12 +17,12 @@
 
 <div class="chips">
   <a href="#start">Start a mask</a><a href="#panel">The Masks panel</a><a href="#linear">Linear Gradient</a><a href="#radial">Radial Gradient</a>
-  <a href="#brush">Brush</a><a href="#luminance">Luminance Range</a><a href="#subject">Select Subject and Object</a><a href="#people">Select People</a><a href="#combine">Add, Subtract, Intersect</a><a href="#adjust">Mask sliders</a>
+  <a href="#brush">Brush</a><a href="#luminance">Luminance Range</a><a href="#color">Color Range</a><a href="#subject">Select Subject and Object</a><a href="#people">Select People</a><a href="#combine">Add, Subtract, Intersect</a><a href="#adjust">Mask sliders</a>
 </div>
 
 <h2 id="start">Start a mask</h2>
 <ol class="steps">
-  <li>In Develop, click the Masking button (the dashed circle under the histogram) or press <kbd>⇧W</kbd>. Or jump straight to a tool: <kbd>M</kbd> Linear Gradient, <kbd>⇧M</kbd> Radial Gradient, <kbd>K</kbd> Brush.</li>
+  <li>In Develop, click the Masking button (the dashed circle under the histogram) or press <kbd>⇧W</kbd>. Or jump straight to a tool: <kbd>M</kbd> Linear Gradient, <kbd>⇧M</kbd> Radial Gradient, <kbd>K</kbd> Brush, <kbd>⇧J</kbd> Color Range.</li>
   <li>Click <b>Create New Mask</b> and pick a kind, then draw it on the photo.</li>
   <li>Move the mask's sliders (Exposure, Temp, Clarity…). They change only the masked area.</li>
   <li>Press <kbd>Return</kbd> or click <b>Done</b>. Masks keep working after Masking closes; open it again any time to change them.</li>
@@ -57,7 +57,7 @@
 <ol class="legend">
   <li><b>Masks</b>, in the order you made them. Click one to select it; double-click to rename. The eye hides its effect.</li>
   <li>A selected mask lists its <b>parts</b>, each with a badge: <b>+</b> added, <b>−</b> subtracted, <b>∩</b> intersected.</li>
-  <li><b>New Mask</b>, and with a mask selected, <b>Add</b> or <b>Subtract</b> a part: Brush, Linear Gradient, Radial Gradient, Luminance Range, Select Subject, Select Object, Select People.</li>
+  <li><b>New Mask</b>, and with a mask selected, <b>Add</b> or <b>Subtract</b> a part: Brush, Linear Gradient, Radial Gradient, Luminance Range, Color Range, Select Subject, Select Object, Select People.</li>
   <li><b>Show Overlay</b> (<kbd>O</kbd>) tints the selected mask red, so you can see exactly where it lands.</li>
   <li>The selected mask's <a href="#adjust">sliders</a>.</li>
 </ol>
@@ -133,6 +133,38 @@
   <figure><div class="frame compare" data-before="redwoods-flat.jpg" data-after="mask-luminance-after.jpg" data-labels="Before|Highlights −60 in the range"></div></figure>
 </div>
 <div class="tip"><p><span class="label">Most useful combined.</span> Intersect a Linear Gradient with a Luminance Range to darken only the bright sky, not the trees that reach into it.</p></div>
+
+<h2 id="color">Color Range</h2>
+<p>Selects by color: click a color on the photo, and everything of a similar color is selected, wherever it is. Choose <b>Color Range</b> from <b>New Mask</b>, <b>Add</b> or <b>Subtract</b>, or press <kbd>⇧J</kbd>; the pointer becomes an eyedropper.</p>
+<table class="keys">
+  <tr><td>Click the photo</td><td>Pick the color under the pointer.</td></tr>
+  <tr><td>Drag over an area</td><td>Pick the range of colors in the box, such as a whole sky from blue to pale. A wider spread of colors selects a wider range.</td></tr>
+  <tr><td><kbd>⇧</kbd>-click or <kbd>⇧</kbd>-drag</td><td>Add another color, up to five.</td></tr>
+  <tr><td><kbd>⌥</kbd>-click a marker</td><td>Remove that color.</td></tr>
+  <tr><td>Click again (no key held)</td><td>Start over with the new color.</td></tr>
+</table>
+<div class="duo">
+  <figure><div class="pic"><img src="images/mask-color-overlay.jpg" alt=""><span class="tag">Overlay: the greens picked from one click</span></div></figure>
+  <figure><div class="frame compare" data-before="redwoods-flat.jpg" data-after="mask-color-after.jpg" data-labels="Before|Greens brighter and richer"></div></figure>
+</div>
+<figure>
+  <div class="pins pinned">
+  <div class="panel">
+    <div class="pb">
+      <div class="gh">Color Range</div>
+      <div class="row" data-pin="1"><span style="display:inline-block;width:16px;height:16px;border-radius:3px;background:#8fb07a;border:1px solid rgba(255,255,255,.35)"></span><span style="display:inline-block;width:16px;height:16px;border-radius:3px;background:#5f8a4e;border:1px solid rgba(255,255,255,.35)"></span><span style="flex:1"></span><span class="muted">2 of 5</span></div>
+      <div class="sl" data-name="Refine" data-value="50" data-at="0.5" data-def="0.5" data-pin="2"></div>
+      <div class="check"><i></i>Invert</div>
+    </div>
+  </div>
+  </div>
+</figure>
+<ol class="legend">
+  <li>The colors picked, up to five. Each also has a marker on the photo, filled with its color, where you clicked; right-click a swatch to remove it.</li>
+  <li><b>Refine</b>: left keeps only colors very close to the picks, right reaches further to similar colors. Lightness counts half as much as hue and saturation, so the same green in shade is still picked.</li>
+</ol>
+<p>The colors are read from the photo before your tone and color sliders, as Select Subject is, so changing Exposure or Saturation doesn't move the mask. While a Color Range part is selected, a drag on the photo picks colors rather than moving around; hold <kbd>Space</kbd> to move.</p>
+<div class="tip"><p><span class="label">Keep it to one place.</span> Color Range selects that color everywhere. Intersect it with a Brush or a Radial Gradient (right-click the mask › <b>Intersect Mask With</b>) to change only one area's greens.</p></div>
 
 <h2 id="subject">Select Subject and Select Object</h2>
 <p><b>Select Subject</b> finds the main subject (people, animals, things in front) with Apple's Vision, on your Mac. <b>Select Object</b> finds something inside a box you drag, so smaller subjects work too; drag the pin to move the box.</p>

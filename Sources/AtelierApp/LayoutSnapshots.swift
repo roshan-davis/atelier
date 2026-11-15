@@ -594,6 +594,17 @@ enum LayoutSnapshots {
         await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
                       to: folder.appendingPathComponent("develop-masking-zoom-1280x800.png"))
         model.zoom = .fit
+        // A Color Range part with two picks (a click and a dragged box): markers on the photo,
+        // swatches and Refine in the panel.
+        develop.createMask(.color)
+        develop.finishDrawing(.color(.init(samples: [
+            .init(box: .init(x: 0.3, y: 0.3, width: 0, height: 0), lab: SIMD3(0.62, 0.08, 0.06)),
+            .init(box: .init(x: 0.55, y: 0.2, width: 0.12, height: 0.1), lab: SIMD3(0.7, -0.02, -0.08), spread: 0.02),
+        ])))
+        develop.setMaskValue(.saturation, to: 40)
+        try? await Task.sleep(for: .seconds(1))
+        await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
+                      to: folder.appendingPathComponent("develop-masking-color-1280x800.png"))
         // Select Object with a box; the sample photo has no subject, so the panel says so.
         develop.createMask(.object)
         develop.finishDrawing(.subject(.init(box: .init(x: 0.45, y: 0.4, width: 0.3, height: 0.35))))

@@ -404,6 +404,7 @@ extension KeyAction {
         case .clipping: return "exclamationmark.triangle"
         case .masking: return "circle.dashed"
         case .radialGradient: return "circle.circle"
+        case .colorRange: return "eyedropper.halffull"
         case .guidedUpright: return "perspective"
         case .remove: return "bandage"
         case .visualizeSpots: return "circle.dotted"

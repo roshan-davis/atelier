@@ -147,7 +147,7 @@ extension DevelopSettings {
         }
 
         public enum Kind: String, Codable, CaseIterable, Sendable {
-            case brush, linear, radial, luminance, subject, object, people
+            case brush, linear, radial, luminance, color, subject, object, people
 
             public var title: String {
                 switch self {
@@ -155,6 +155,7 @@ extension DevelopSettings {
                 case .linear: return "Linear Gradient"
                 case .radial: return "Radial Gradient"
                 case .luminance: return "Luminance Range"
+                case .color: return "Color Range"
                 case .subject: return "Select Subject"
                 case .object: return "Select Object"
                 case .people: return "Select People"
@@ -167,14 +168,17 @@ extension DevelopSettings {
                 case .linear: return "square.bottomhalf.filled"
                 case .radial: return "circle.dashed.inset.filled"
                 case .luminance: return "sun.max"
+                case .color: return "eyedropper"
                 case .subject: return "person.crop.rectangle"
                 case .object: return "viewfinder"
                 case .people: return "person.2"
                 }
             }
 
-            /// Drawn on the photo; the others are made straight from the menu.
-            public var isDrawn: Bool { self == .brush || self == .linear || self == .radial || self == .object }
+            /// Drawn (or, for Color Range, picked) on the photo; the others are made straight from the menu.
+            public var isDrawn: Bool {
+                self == .brush || self == .linear || self == .radial || self == .object || self == .color
+            }
         }
 
         public enum Shape: Hashable, Sendable {
@@ -182,6 +186,8 @@ extension DevelopSettings {
             case linear(LinearGradient)
             case radial(RadialGradient)
             case luminance(LuminanceRange)
+            /// Color Range (AT-068): the colors picked on the photo.
+            case color(ColorRange)
             /// Select Subject (no box) or Select Object (inside a box), found by Vision.
             case subject(Selection)
             /// Select People: face and body skin of the people Vision finds.
@@ -193,6 +199,7 @@ extension DevelopSettings {
                 case .linear: return .linear
                 case .radial: return .radial
                 case .luminance: return .luminance
+                case .color: return .color
                 case .subject(let selection): return selection.box == nil ? .subject : .object
                 case .people: return .people
                 }
@@ -220,12 +227,13 @@ extension DevelopSettings {
             case .brush(let strokes): return strokes.first?.points.first
             case .subject(let selection):
                 return selection.box.map { MaskPoint(x: $0.x + $0.width / 2, y: $0.y + $0.height / 2) }
+            case .color(let range): return range.samples.first?.center
             case .luminance, .people: return nil
             }
         }
 
         private enum CodingKeys: String, CodingKey {
-            case id, mode, inverted, kind, strokes, linear, radial, luminance, selection, people
+            case id, mode, inverted, kind, strokes, linear, radial, luminance, color, selection, people
         }
 
         public init(from decoder: Decoder) throws {
@@ -238,6 +246,7 @@ extension DevelopSettings {
             case .linear: shape = .linear(try c.decode(LinearGradient.self, forKey: .linear))
             case .radial: shape = .radial(try c.decode(RadialGradient.self, forKey: .radial))
             case .luminance: shape = .luminance(try c.decodeIfPresent(LuminanceRange.self, forKey: .luminance) ?? LuminanceRange())
+            case .color: shape = .color(try c.decodeIfPresent(ColorRange.self, forKey: .color) ?? ColorRange())
             case .subject: shape = .subject(try c.decodeIfPresent(Selection.self, forKey: .selection) ?? Selection(feather: 0))
             case .object: shape = .subject(try c.decode(Selection.self, forKey: .selection))
             case .people: shape = .people(try c.decodeIfPresent(PeopleSelection.self, forKey: .people) ?? PeopleSelection())
@@ -255,6 +264,7 @@ extension DevelopSettings {
             case .linear(let gradient): try c.encode(gradient, forKey: .linear)
             case .radial(let gradient): try c.encode(gradient, forKey: .radial)
             case .luminance(let range): try c.encode(range, forKey: .luminance)
+            case .color(let range): try c.encode(range, forKey: .color)
             case .subject(let selection): try c.encode(selection, forKey: .selection)
             case .people(let selection): try c.encode(selection, forKey: .people)
             }
@@ -393,6 +403,75 @@ extension DevelopSettings {
             let distance = x < lo ? lo - x : x > hi ? x - hi : 0
             let t = max(0, 1 - distance / soft)
             return t * t * (3 - 2 * t)
+        }
+    }
+
+    /// Color Range (AT-068, Lightroom's Color Range mask): the colors picked on the photo, up to
+    /// five, and how far from them the mask reaches (Refine). The mask is found on the corrected
+    /// photo (before tone and color), like Select Subject, so global sliders don't move it.
+    public struct ColorRange: Codable, Hashable, Sendable {
+        /// Lightroom allows five picks per Color Range part.
+        public static let maxSamples = 5
+
+        public var samples: [ColorSample] = []
+        /// 0...100: lower keeps only colors close to the picks, higher reaches further.
+        public var refine = 50.0
+
+        public init(samples: [ColorSample] = [], refine: Double = 50) {
+            self.samples = samples
+            self.refine = refine
+        }
+
+        /// How far (in Oklab) from a pick the mask is still full, and where it has faded out.
+        public func reach(of sample: ColorSample) -> (full: Double, zero: Double) {
+            let amount: Double = min(max(refine, 0), 100) / 100
+            let zero: Double = 0.012 + amount * 0.14 + sample.spread
+            return (zero * 0.45, zero)
+        }
+
+        /// How much of the mask is kept for a color (Oklab L, a, b).
+        public func weight(of lab: SIMD3<Double>) -> Double {
+            var best = 0.0
+            for sample in samples.prefix(Self.maxSamples) {
+                let (full, zero) = reach(of: sample)
+                let distance = ColorSample.distance(lab, sample.lab)
+                let ramp: Double = (zero - distance) / max(zero - full, 1e-6)
+                let t: Double = max(0, min(1, ramp))
+                best = max(best, t * t * (3 - 2 * t))
+            }
+            return best
+        }
+    }
+
+    /// One pick of a Color Range: where it was taken (a box on the upright, uncropped photo; a
+    /// click is a small box) and the color found there, in Oklab.
+    public struct ColorSample: Codable, Hashable, Sendable {
+        public var box: MaskRect
+        public var l: Double
+        public var a: Double
+        public var b: Double
+        /// How much the picked area's colors vary (Oklab distance, RMS); a dragged box over a
+        /// sky gradient widens the range by this much.
+        public var spread: Double
+
+        public init(box: MaskRect, lab: SIMD3<Double>, spread: Double = 0) {
+            self.box = box
+            l = lab.x
+            a = lab.y
+            b = lab.z
+            self.spread = spread
+        }
+
+        public var lab: SIMD3<Double> { SIMD3(l, a, b) }
+        public var center: MaskPoint { MaskPoint(x: box.x + box.width / 2, y: box.y + box.height / 2) }
+
+        /// Color distance for Color Range: hue and saturation count fully, lightness half as much
+        /// (a red in shade is still the red), as Lightroom's picks behave.
+        public static func distance(_ x: SIMD3<Double>, _ y: SIMD3<Double>) -> Double {
+            let d = x - y
+            let chroma: Double = d.y * d.y + d.z * d.z
+            let lightness: Double = 0.25 * d.x * d.x
+            return (chroma + lightness).squareRoot()
         }
     }
 

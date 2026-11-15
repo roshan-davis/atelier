@@ -51,6 +51,11 @@ private struct MaskOverlay: View {
         case radialAxis(original: DevelopSettings.RadialGradient, isX: Bool)
         case radialRotate(original: DevelopSettings.RadialGradient)
         case selectPin(mask: UUID, component: UUID)
+        /// Color Range: a click picks the color under it, a drag the colors in a box. `adding`
+        /// (⇧) keeps the part's other picks.
+        case pickColor(start: CGPoint, adding: Bool)
+        /// Color Range: ⌥-click on a pick takes it out.
+        case removeColor(index: Int)
         case pan(last: CGPoint)
         case none
     }
@@ -175,8 +180,41 @@ private struct MaskOverlay: View {
             context.stroke(outline, with: .color(.black.opacity(0.5)), lineWidth: 3)
             context.stroke(outline, with: .color(.white), style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
             pinShape(in: &context, at: space.viewPoint(pin), filled: true)
+        case .color(let range): drawColorPicks(range, in: &context, space: space)
         case .luminance, .people: break
         }
+    }
+
+    /// Color Range's picks: each one's box (for a drag) and a marker filled with its color.
+    private func drawColorPicks(_ range: DevelopSettings.ColorRange, in context: inout GraphicsContext, space: MaskSpace) {
+        for sample in range.samples {
+            let corners = sample.box.corners.map { space.viewPoint($0) }
+            if let first = corners.first, corners.contains(where: { distance($0, first) > 6 }) {
+                var outline = Path()
+                outline.addLines(corners)
+                outline.closeSubpath()
+                context.stroke(outline, with: .color(.black.opacity(0.5)), lineWidth: 3)
+                context.stroke(outline, with: .color(.white), style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
+            }
+            let center = space.viewPoint(sample.center)
+            let marker = CGRect(x: center.x - 7, y: center.y - 7, width: 14, height: 14)
+            let rgb = sample.displaySRGB
+            context.fill(Path(ellipseIn: marker), with: .color(Color(red: rgb.x, green: rgb.y, blue: rgb.z)))
+            context.stroke(Path(ellipseIn: marker.insetBy(dx: 1, dy: 1)), with: .color(.white), lineWidth: 2)
+            context.stroke(Path(ellipseIn: marker), with: .color(.black.opacity(0.7)), lineWidth: 1)
+        }
+    }
+
+    /// The pick under `point` in the selected Color Range part, for ⌥-click.
+    private func colorPick(at point: CGPoint, space: MaskSpace) -> Int? {
+        guard case .color(let range) = develop.selectedComponent?.shape else { return nil }
+        return range.samples.indices.last { distance(point, space.viewPoint(range.samples[$0].center)) < 9 }
+    }
+
+    /// A Color Range part is selected and no tool is waiting: clicks on the photo pick colors.
+    private var isPickingColor: Bool {
+        guard develop.maskTool == nil, case .color = develop.selectedComponent?.shape else { return false }
+        return true
     }
 
     private func drawDrafts(in context: inout GraphicsContext, space: MaskSpace) {
@@ -284,7 +322,7 @@ private struct MaskOverlay: View {
         case .drawRadial(let center):
             draftRadial = space.radial(center: center, width: abs(drag.location.x - center.x),
                                        height: abs(drag.location.y - center.y), feather: 50)
-        case .drawBox(let start):
+        case .drawBox(let start), .pickColor(let start, _):
             draftBox = (start, clamped(drag.location, to: space.rect))
         case .pan(let last):
             frame.pan?(CGSize(width: drag.location.x - last.x, height: drag.location.y - last.y))
@@ -352,7 +390,7 @@ private struct MaskOverlay: View {
             gradient.angle = gradient.angle.truncatingRemainder(dividingBy: 360)
             replaceSelected(.radial(gradient))
             self.action = .radialRotate(original: gradient)
-        case .selectPin, .none:
+        case .selectPin, .removeColor, .none:
             break
         }
     }
@@ -387,6 +425,14 @@ private struct MaskOverlay: View {
             } else {
                 develop.addStroke(stroke)
             }
+        case .pickColor(let start, let adding):
+            let end = clamped(drag.location, to: space.rect)
+            let box = abs(end.x - start.x) > 4 && abs(end.y - start.y) > 4
+                ? DevelopSettings.MaskRect(space.maskPoint(start), space.maskPoint(end))
+                : DevelopSettings.MaskRect(space.maskPoint(start), space.maskPoint(start))
+            develop.pickColorRange(in: box, adding: adding)
+        case .removeColor(let index) where moved < 3:
+            develop.removeColorSample(index)
         case .selectPin(let mask, let component):
             develop.select(mask: mask, component: component)
         case .movePin(let original, _) where moved < 3:
@@ -400,6 +446,7 @@ private struct MaskOverlay: View {
     private func cursor(for action: DragAction) -> CursorShape {
         switch action {
         case .drawLinear, .drawRadial, .drawBox, .paint: return .crosshair
+        case .pickColor, .removeColor: return .eyedropper
         case .movePin, .linearEnd, .radialAxis, .pan: return .grab
         case .linearLine(_, _, let level): return level ? .rowResize : .columnResize
         case .linearRotate: return .rotate
@@ -421,6 +468,7 @@ private struct MaskOverlay: View {
             case .radial: return .drawRadial(center: point)
             case .object: return .drawBox(start: point)
             case .brush: return painting
+            case .color: return .pickColor(start: point, adding: false)
             case .luminance, .subject, .people: return .none
             }
         }
@@ -444,6 +492,10 @@ private struct MaskOverlay: View {
             case .subject:
                 if let pin = component.pin, distance(point, space.viewPoint(pin)) < 10 {
                     return .movePin(original: component, start: space.maskPoint(point))
+                }
+            case .color:
+                if NSEvent.modifierFlags.contains(.option), let index = colorPick(at: point, space: space) {
+                    return .removeColor(index: index)
                 }
             default:
                 break
@@ -475,6 +527,9 @@ private struct MaskOverlay: View {
             }
         }
         if isPainting, space.rect.contains(point) { return painting }
+        if isPickingColor, space.rect.contains(point), !NSEvent.modifierFlags.contains(.option) {
+            return .pickColor(start: point, adding: NSEvent.modifierFlags.contains(.shift))
+        }
         // Zoomed in, a drag on empty photo moves around it.
         return frame.canPan ? .pan(last: point) : .none
     }
@@ -524,7 +579,7 @@ struct MasksPanel: View {
             maskList
             HStack(spacing: 6) {
                 kindMenu(develop.masks.isEmpty ? "Create New Mask" : "New Mask") { develop.createMask($0) }
-                    .help("Make a new mask: Brush (K), Linear Gradient (M), Radial Gradient (⇧M), Luminance Range or Select Subject")
+                    .help("Make a new mask: Brush (K), Linear Gradient (M), Radial Gradient (⇧M), Luminance Range, Color Range (⇧J) or Select Subject")
                 if develop.selectedMask != nil {
                     kindMenu("Add") { develop.addComponent($0, mode: .add) }
                         .help("Add a part to the selected mask")
@@ -794,7 +849,45 @@ struct MasksPanel: View {
             }
         case .people(let selection):
             peopleSettings(component, selection)
+        case .color(let range):
+            colorRangeSettings(component, range)
         case .brush:
+            invertToggle(component)
+        }
+    }
+
+    /// Color Range: the picked colors, Refine, and how to pick more, like Lightroom's Color Range.
+    private func colorRangeSettings(_ component: DevelopSettings.MaskComponent,
+                                    _ range: DevelopSettings.ColorRange) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            GroupHeading(title: "Color Range")
+            HStack(spacing: 6) {
+                ForEach(Array(range.samples.enumerated()), id: \.offset) { index, sample in
+                    let rgb = sample.displaySRGB
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(Color(red: rgb.x, green: rgb.y, blue: rgb.z))
+                        .overlay(RoundedRectangle(cornerRadius: 3).stroke(Color.primary.opacity(0.35), lineWidth: 1))
+                        .frame(width: 18, height: 18)
+                        .help("Picked color \(index + 1). ⌥-click its marker on the photo, or right-click here, to remove it")
+                        .contextMenu {
+                            Button("Remove Color \(index + 1)") { develop.removeColorSample(index) }
+                        }
+                }
+                if range.samples.isEmpty {
+                    Text("No color picked yet").font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+                Text("\(range.samples.count) of \(DevelopSettings.ColorRange.maxSamples)")
+                    .font(.caption).foregroundStyle(.secondary).monospacedDigit()
+            }
+            SliderRow(label: "Refine", value: Binding(get: { range.refine }, set: { value in
+                var changed = range
+                changed.refine = value
+                update(component, .color(changed))
+            }), range: 0...100, step: 1, origin: 50,
+                      trackHelp: "Left keeps only colors close to the picks, right reaches further")
+            Text("Click on the photo to pick a new color, or drag over an area. ⇧-click adds a color (up to five); ⌥-click a marker removes it.")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             invertToggle(component)
         }
     }

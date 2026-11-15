@@ -621,6 +621,20 @@ public final class DevelopSession: @unchecked Sendable {
     /// The context this session renders with.
     var renderContext: CIContext { renderer.context }
 
+    /// The photo masks are found on: corrected, with every Remove tool spot, upright and
+    /// uncropped (the `source` Select Subject and Color Range see).
+    func maskSourceImage(_ settings: DevelopSettings) -> CIImage? {
+        let settings = settings.applyingPanelSwitches()
+        lock.lock()
+        defer { lock.unlock() }
+        guard var image = corrected(settings) else { return nil }
+        if !settings.spots.isEmpty {
+            image = SpotRenderer.apply(settings.spots, to: image, cache: spotCache, fills: spotFills,
+                                       upstream: upstreamID(for: settings))
+        }
+        return image
+    }
+
     /// The corrected photo with the spots before spot `id` drawn on it, upright and uncropped:
     /// what that spot is filled from (Generative AI sends it to ComfyUI). Nil when `id` isn't one
     /// of the spots.

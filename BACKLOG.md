@@ -1291,7 +1291,16 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 
 ## AT-068 — Masking: Sky, Background, Landscape, Color Range, Depth Range; more mask sliders
 
-**Status:** Proposed / discuss. **Owner:** unassigned. **Dependencies:** AT-042 to AT-044 (selection masks, merged).
+**Status:** Approved in steps (Rosh, Nov 15, 2026: "pick the next item from your found list", then chose **Color Range, then Background**; Sky and Depth Range later). Step 1, Color Range, implemented on `claude/masking-color-range`, **not yet built or tested on a Mac**. **Owner:** Claude (Cl). **Chat:** [Compare Lightroom 2025-26 with Atelier](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKQjWyjEX331a5FG3gyZMjyK). **Branch:** `claude/masking-color-range`. **Baseline:** `a9ba090`. **Dependencies:** AT-042 to AT-044 (selection masks, merged).
+
+**Steps:**
+1. **Color Range** (this branch): click, drag, ⇧ add (up to five), ⌥-click remove, Refine, markers and swatches, ⇧J. See the PRD's Masking section.
+2. **Select Background**: next, own branch.
+3. Sky, Depth Range, Landscape and the extra mask sliders: to agree later.
+
+**Step 1 as built:** `DevelopSettings.ColorRange` / `ColorSample` (Masks.swift) with `weight(of:)`; the `atelierColorRange` Metal kernel and `colorRangeMask` in MaskRenderer.swift, run on the same source image as Select Subject; picking in ColorRangeMask.swift (`DevelopSession.colorSample`, read from `maskSourceImage`); `DevelopController.pickColorRange` / `removeColorSample` (one history step each: "Pick Color", "Add Color", "Remove Color"); `MaskOverlay` `.pickColor` / `.removeColor` actions with the eyedropper cursor; `AtelierAction.colorRange` (⇧J, `KeyAction.colorRange`). Tests: `ColorRangeMaskTests`. Help: masking.html#color, shortcuts.html. Layout snapshot `develop-masking-color-1280x800.png`. Not done: agents' `add_mask` has no color kind; XMP keeps it only inside Atelier's own settings (as other masks).
+
+**Validation:** source only, in the cloud (no Swift toolchain). The mask and pick math was checked with a Python port (the help picture uses the same formula). Needs a Mac build, `swift test --filter ColorRangeMaskTests`, and Rosh's manual check.
 
 **Evidence:** the comparison's gap 3. Atelier has Brush, Linear, Radial, Luminance Range, Select Subject, Select Object and Select People. Missing compared with Lightroom: Select Sky, Select Background (today only by inverting Subject), Select Landscape (with 15.0's snow), Color Range, Depth Range (16.0 estimates depth when the file has none). Mask sliders lack Hue, Moiré, Defringe and Color Grading (16.0). The selection plan's Brush Auto Mask (step 4) and SAM 2.1 clicks for Select Object (step 3) stay planned there.
 

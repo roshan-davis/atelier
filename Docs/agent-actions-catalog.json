@@ -91,6 +91,22 @@
     },
     {
       "exposed": true,
+      "id": "develop.colorRange",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Key ⇧J",
+      "summary": "Starts a Color Range mask: the next click on the photo picks its color.",
+      "tier": "runs",
+      "title": "Masking: Color Range",
+      "version": 1
+    },
+    {
+      "exposed": true,
       "id": "develop.compareMode",
       "kind": "view",
       "parameters": {

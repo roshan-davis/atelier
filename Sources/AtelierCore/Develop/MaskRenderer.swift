@@ -66,6 +66,7 @@ extension DevelopRenderer {
     /// A part drawn straight onto `base`'s frame, or a luminance range taken from it.
     static func componentImage(_ component: DevelopSettings.MaskComponent, base: CIImage) -> CIImage? {
         if case .luminance(let range) = component.shape { return luminanceMask(range, from: base) }
+        if case .color(let range) = component.shape { return colorRangeMask(range, from: base) }
         return sourceMask(component, extent: base.extent, subject: nil, brushCache: nil)
     }
 
@@ -138,6 +139,10 @@ extension DevelopRenderer {
             let outline = people?(whole) ?? mask
             guard let matte = fine?(outline) else { return refined }
             return fineEdged(refined, outline: outline, matte: matte, extent: extent)
+        case .color(let range):
+            // Found on the corrected photo itself, so tone and color sliders don't move it.
+            guard let guide else { return nil }
+            return colorRangeMask(range, from: guide)?.cropped(to: extent)
         case .luminance:
             return nil
         }
@@ -284,6 +289,59 @@ extension DevelopRenderer {
         curves.colorSpace = sRGB
         return curves.outputImage?.cropped(to: base.extent)
     }
+
+    /// White where `image`'s colors (working space) are close to the Color Range's picks
+    /// (`ColorRange.weight`), worked out per pixel in Oklab on the GPU.
+    static func colorRangeMask(_ range: DevelopSettings.ColorRange, from image: CIImage) -> CIImage? {
+        guard !range.samples.isEmpty else { return CIImage(color: .black).cropped(to: image.extent) }
+        guard let kernel = colorRangeKernel else { return nil }
+        let rows = ColorRangeSpace.toLMS
+        var arguments: [Any] = [image]
+        for row in rows { arguments.append(CIVector(x: CGFloat(row.x), y: CGFloat(row.y), z: CGFloat(row.z))) }
+        for i in 0..<DevelopSettings.ColorRange.maxSamples {
+            if i < range.samples.count {
+                let sample = range.samples[i]
+                let zero = range.reach(of: sample).zero
+                arguments.append(CIVector(x: CGFloat(sample.l), y: CGFloat(sample.a), z: CGFloat(sample.b), w: CGFloat(zero)))
+            } else {
+                arguments.append(CIVector(x: 0, y: 0, z: 0, w: -1))
+            }
+        }
+        return kernel.apply(extent: image.extent, roiCallback: { _, rect in rect }, arguments: arguments)?
+            .cropped(to: image.extent)
+    }
+
+    /// Whether the Color Range kernel built, for tests.
+    static var colorRangeKernelAvailable: Bool { colorRangeKernel != nil }
+
+    private static let colorRangeKernel: CIKernel? = RuntimeKernels.build("""
+        #include <CoreImage/CoreImage.h>
+        using namespace metal;
+
+        static float atelierColorRangeWeight(float3 lab, float4 pick) {
+            if (pick.w <= 0.0) { return 0.0; }
+            float3 d = lab - pick.xyz;
+            float distance = sqrt(d.y * d.y + d.z * d.z + 0.25 * d.x * d.x);
+            float full = pick.w * 0.45;
+            float t = clamp((pick.w - distance) / max(pick.w - full, 1e-6), 0.0, 1.0);
+            return t * t * (3.0 - 2.0 * t);
+        }
+
+        // r0...r2: working space (linear Rec. 2020) to Oklab's LMS. p0...p4: picks (L, a, b, reach).
+        [[stitchable]] float4 atelierColorRange(coreimage::sampler image, float3 r0, float3 r1, float3 r2,
+                                                float4 p0, float4 p1, float4 p2, float4 p3, float4 p4,
+                                                coreimage::destination dest) {
+            float3 c = image.sample(image.transform(dest.coord())).rgb;
+            float3 lms = float3(dot(r0, c), dot(r1, c), dot(r2, c));
+            lms = sign(lms) * pow(abs(lms), float3(1.0 / 3.0));
+            float3 lab = float3(0.2104542553 * lms.x + 0.7936177850 * lms.y - 0.0040720468 * lms.z,
+                                1.9779984951 * lms.x - 2.4285922050 * lms.y + 0.4505937099 * lms.z,
+                                0.0259040371 * lms.x + 0.7827717662 * lms.y - 0.8086757660 * lms.z);
+            float w = max(max(max(atelierColorRangeWeight(lab, p0), atelierColorRangeWeight(lab, p1)),
+                              max(atelierColorRangeWeight(lab, p2), atelierColorRangeWeight(lab, p3))), atelierColorRangeWeight(lab, p4));
+            return float4(w, w, w, 1.0);
+        }
+        """)?["atelierColorRange"]
 
     static func srgbEncode(_ x: Double) -> Double {
         x <= 0.0031308 ? 12.92 * x : 1.055 * pow(x, 1 / 2.4) - 0.055

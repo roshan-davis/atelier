@@ -236,6 +236,9 @@ public enum AtelierAction {
     public static let brush = Action<NoParameters>(
         "develop.brush", "Masking: Brush", place: "Key K",
         summary: "Starts a Brush mask.", kind: .view)
+    public static let colorRange = Action<NoParameters>(
+        "develop.colorRange", "Masking: Color Range", place: "Key ⇧J",
+        summary: "Starts a Color Range mask: the next click on the photo picks its color.", kind: .view)
     public static let maskOverlay = Action<NoParameters>(
         "develop.maskOverlay", "Masking: Show Overlay", place: "Key O",
         summary: "Shows or hides the mask overlay.", kind: .view)
@@ -288,7 +291,7 @@ public enum AtelierAction {
         rotateRight.descriptor, showBefore.descriptor, showClipping.descriptor, compareMode.descriptor,
         cycleCompareMode.descriptor, newPreset.descriptor, managePresets.descriptor, applyPreset.descriptor,
         blackAndWhite.descriptor, masking.descriptor, linearGradient.descriptor, radialGradient.descriptor,
-        brush.descriptor, maskOverlay.descriptor, remove.descriptor, visualizeSpots.descriptor,
+        brush.descriptor, colorRange.descriptor, maskOverlay.descriptor, remove.descriptor, visualizeSpots.descriptor,
         clearSpots.descriptor, guidedUpright.descriptor, nextArea.descriptor,
         previousArea.descriptor, keyboardShortcuts.descriptor,
     ]
