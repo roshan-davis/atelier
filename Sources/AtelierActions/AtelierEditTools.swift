@@ -193,7 +193,7 @@ public enum CropRules {
 
 /// The mask kinds an agent can add. Brush stays manual.
 public enum AgentMaskKind: String, AgentEnum {
-    case subject, background, object, people, linear, radial, luminance
+    case subject, background, object, people, linear, radial, luminance, depth
 
     /// The Masks panel's name.
     public var title: String {
@@ -205,6 +205,7 @@ public enum AgentMaskKind: String, AgentEnum {
         case .linear: return "Linear Gradient"
         case .radial: return "Radial Gradient"
         case .luminance: return "Luminance Range"
+        case .depth: return "Depth Range"
         }
     }
 }
@@ -297,7 +298,8 @@ public struct AddMaskParameters: ActionParameters, Hashable, PhotoTargeting {
 
     public static let fieldNotes: [String: FieldNote] = PhotoTargetNotes.notes.merging([
         "kind": FieldNote("subject (Select Subject), background (Select Background: all but the subject), object (Select Object, needs box), people (Select People), "
-                          + "linear (Linear Gradient), radial (Radial Gradient) or luminance (Luminance Range). Brush "
+                          + "linear (Linear Gradient), radial (Radial Gradient), luminance (Luminance Range) or depth (Depth Range: "
+                          + "how far away, needs the depth model from Settings > AI). Brush "
                           + "is drawn by hand."),
         "name": FieldNote("The new mask's name (default \"Mask n\"). Not with to_mask."),
         "to_mask": FieldNote("Add this part to the photo's existing mask of this name (get_develop lists masks) instead "
@@ -313,8 +315,9 @@ public struct AddMaskParameters: ActionParameters, Hashable, PhotoTargeting {
                           + "(default [0.25, 0.25])."),
         "feather": FieldNote("radial: how much of the ellipse fades (default 50). subject, background, object, people: softens the "
                              + "edge (default 20, people 10).", minimum: 0, maximum: 100),
-        "range": FieldNote("luminance: [low, high] brightness kept, 0 to 100 (default [50, 100])."),
-        "smoothness": FieldNote("luminance: how softly the range fades (default 50).", minimum: 0, maximum: 100),
+        "range": FieldNote("luminance: [low, high] brightness kept, 0 to 100 (default [50, 100]). depth: [near, far] "
+                           + "depth kept, 0 the nearest part of the photo to 100 the farthest (default [0, 30])."),
+        "smoothness": FieldNote("luminance, depth: how softly the range fades (default 50).", minimum: 0, maximum: 100),
         "person": FieldNote("people: which person, counted from the left from 0; leave out for everyone."),
         "parts": FieldNote("people: the parts to select (default face_skin and body_skin)."),
         "refine": FieldNote("subject, background, object, people: snaps the edge to the photo's edges (0 is off).",
@@ -371,6 +374,7 @@ public enum MaskRules {
         .linear: ["start", "end"],
         .radial: ["center", "size", "feather"],
         .luminance: ["range", "smoothness"],
+        .depth: ["range", "smoothness"],
     ]
 
     /// `sliders` is each mask slider's name and range.
@@ -435,7 +439,7 @@ public enum MaskRules {
             }
         }
         let feather = number(p.feather, "feather", 0...100)
-        var range = [50.0, 100.0]
+        var range = p.kind == .depth ? [0.0, 30.0] : [50.0, 100.0]
         if let given = p.range {
             if given.count == 2, given.allSatisfy({ $0.isFinite && (0...100).contains($0) }), given[0] < given[1] {
                 range = given

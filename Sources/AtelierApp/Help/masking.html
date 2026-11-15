@@ -17,7 +17,7 @@
 
 <div class="chips">
   <a href="#start">Start a mask</a><a href="#panel">The Masks panel</a><a href="#linear">Linear Gradient</a><a href="#radial">Radial Gradient</a>
-  <a href="#brush">Brush</a><a href="#luminance">Luminance Range</a><a href="#color">Color Range</a><a href="#subject">Select Subject and Object</a><a href="#background">Select Background</a><a href="#people">Select People</a><a href="#combine">Add, Subtract, Intersect</a><a href="#adjust">Mask sliders</a>
+  <a href="#brush">Brush</a><a href="#luminance">Luminance Range</a><a href="#color">Color Range</a><a href="#depth">Depth Range</a><a href="#subject">Select Subject and Object</a><a href="#background">Select Background</a><a href="#people">Select People</a><a href="#combine">Add, Subtract, Intersect</a><a href="#adjust">Mask sliders</a>
 </div>
 
 <h2 id="start">Start a mask</h2>
@@ -57,7 +57,7 @@
 <ol class="legend">
   <li><b>Masks</b>, in the order you made them. Click one to select it; double-click to rename. The eye hides its effect.</li>
   <li>A selected mask lists its <b>parts</b>, each with a badge: <b>+</b> added, <b>−</b> subtracted, <b>∩</b> intersected.</li>
-  <li><b>New Mask</b>, and with a mask selected, <b>Add</b> or <b>Subtract</b> a part: Brush, Linear Gradient, Radial Gradient, Luminance Range, Color Range, Select Subject, Select Background, Select Object, Select People.</li>
+  <li><b>New Mask</b>, and with a mask selected, <b>Add</b> or <b>Subtract</b> a part: Brush, Linear Gradient, Radial Gradient, Luminance Range, Color Range, Depth Range, Select Subject, Select Background, Select Object, Select People.</li>
   <li><b>Show Overlay</b> (<kbd>O</kbd>) tints the selected mask red, so you can see exactly where it lands.</li>
   <li>The selected mask's <a href="#adjust">sliders</a>.</li>
 </ol>
@@ -165,6 +165,36 @@
 </ol>
 <p>The colors are read from the photo before your tone and color sliders, as Select Subject is, so changing Exposure or Saturation doesn't move the mask. While a Color Range part is selected, a drag on the photo picks colors rather than moving around; hold <kbd>Space</kbd> to move.</p>
 <div class="tip"><p><span class="label">Keep it to one place.</span> Color Range selects that color everywhere. Intersect it with a Brush or a Radial Gradient (right-click the mask › <b>Intersect Mask With</b>) to change only one area's greens.</p></div>
+
+<h2 id="depth">Depth Range</h2>
+<p>Selects by distance: the parts of the photo between two depths, from <b>0</b> (the nearest part of the photo) to <b>100</b> (the farthest). Use it to cool a distant background, brighten a near foreground, or add haze only to faraway hills. Choose <b>Depth Range</b> from <b>New Mask</b>, <b>Add</b> or <b>Subtract</b>.</p>
+<p>The depth comes from a depth model, <b>Depth Anything V2 Small</b> (Apache 2.0 license). Download it once (50 MB) from the Depth Range settings or <b>Atelier › Settings › AI › Masking Models</b>; it then runs on your Mac in under a second per photo, and photos are never sent anywhere. Depth is relative: each photo's own nearest and farthest parts are 0 and 100.</p>
+<table class="keys">
+  <tr><td>Click the photo</td><td>Pick the depth under the pointer: the range becomes that depth with a little either side.</td></tr>
+  <tr><td>Drag over an area</td><td>Pick the range of depths in the box, such as a whole hillside.</td></tr>
+  <tr><td><kbd>⇧</kbd>-click or <kbd>⇧</kbd>-drag</td><td>Widen the range to take that depth in too.</td></tr>
+</table>
+<figure>
+  <div class="pins pinned">
+  <div class="panel">
+    <div class="pb">
+      <div class="gh">Depth Range</div>
+      <div class="row" data-pin="1"><span style="flex:1;height:10px;border-radius:2px;background:linear-gradient(90deg,#fff,#000);position:relative"><span style="position:absolute;left:0;width:30%;top:0;bottom:0;border:2px solid var(--app-accent,#4a90e2);box-sizing:border-box"></span></span></div>
+      <div class="sl" data-name="From" data-value="0" data-at="0" data-def="0" data-pin="2"></div>
+      <div class="sl" data-name="To" data-value="30" data-at="0.3" data-def="0.3"></div>
+      <div class="sl" data-name="Smoothness" data-value="50" data-at="0.5" data-def="0.5" data-pin="3"></div>
+      <div class="check"><i></i>Invert</div>
+    </div>
+  </div>
+  </div>
+</figure>
+<ol class="legend">
+  <li>Near on the left, far on the right, with the chosen range outlined.</li>
+  <li><b>From</b> and <b>To</b>: the depths kept, 0 nearest to 100 farthest. A new Depth Range starts at 0 to 30, the nearest part of the photo.</li>
+  <li><b>Smoothness</b> softens the edges of the range, as in Luminance Range.</li>
+</ol>
+<p>The depth is found on the photo before your tone and color sliders, and its edges are snapped to the photo's own edges, so a mask doesn't spill past the outline of a tree or a person. While a Depth Range part is selected, a drag on the photo picks depths rather than moving around; hold <kbd>Space</kbd> to move.</p>
+<div class="tip"><p><span class="label">Combine it.</span> Intersect a Depth Range with a Linear Gradient to change only the far horizon, or Subtract Select Subject so a person in the background keeps their color.</p></div>
 
 <h2 id="subject">Select Subject and Select Object</h2>
 <p><b>Select Subject</b> finds the main subject (people, animals, things in front) with Apple's Vision, on your Mac. <b>Select Object</b> finds something inside a box you drag, so smaller subjects work too; drag the pin to move the box.</p>
