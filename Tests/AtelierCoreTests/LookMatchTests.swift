@@ -251,13 +251,119 @@ final class LookMatchTests: XCTestCase {
         XCTAssertNil(LookSkin(sample: plain, faces: [CGRect(x: 0.05, y: 0.02, width: 0.1, height: 0.1)]))
     }
 
-    /// The skin masks cover the whole face, so the lips never keep a look the skin was spared.
-    func testSkinMasksCoverTheLips() {
-        XCTAssertTrue(LookSkin.matchMaskSelection.parts.contains(.faceSkin))
-        XCTAssertTrue(LookSkin.matchMaskSelection.parts.contains(.lips))
-        for part: DevelopSettings.PeopleSelection.Part in [.faceSkin, .lips, .teeth, .eyebrows, .eyeSclera, .iris] {
-            XCTAssertTrue(LookSkin.protectMaskSelection.parts.contains(part), part.rawValue)
+    /// The skin masks are the Entire Face in one piece, softly edged: one base color with no
+    /// holes, and the neck and hands with it when the parts model gives Body Skin.
+    func testSkinMasksCoverTheEntireFaceAndBody() {
+        XCTAssertEqual(LookSkin.maskSelection(bodySkin: false).parts, [.entireFace])
+        XCTAssertEqual(LookSkin.maskSelection(bodySkin: true).parts, [.bodySkin, .entireFace])
+        XCTAssertGreaterThan(LookSkin.maskSelection(bodySkin: true).feather, 0)
+        XCTAssertEqual(LookSkin.eyesSelection.parts, [.eyeSclera, .iris])
+    }
+
+    /// Skin color is matched relative to brightness: a/b over lightness, per tone.
+    func testSkinColorIsMeasuredRelativeToBrightness() throws {
+        let width = 30, height = 10
+        // Fury Road's drawn skin: shadows, midtones, highlights, side by side.
+        let tones: [(UInt8, UInt8, UInt8)] = [(0x8F, 0x5E, 0x37), (0xCF, 0x99, 0x67), (0xF0, 0xC4, 0x96)]
+        var pixels = [UInt8](repeating: 255, count: width * height * 4)
+        for y in 0..<height {
+            for x in 0..<width {
+                let tone = tones[x / 10], i = (y * width + x) * 4
+                pixels[i] = tone.0
+                pixels[i + 1] = tone.1
+                pixels[i + 2] = tone.2
+            }
         }
+        let sample = LookSample(pixels: pixels, width: width, height: height)
+        let thirds = (0..<3).map { CGRect(x: Double($0) / 3, y: 0, width: 1.0 / 3, height: 1) }
+        let skin = try XCTUnwrap(LookSkin(sample: sample, toneRegions: thirds))
+        let relative = skin.relativeToneColors
+        XCTAssertEqual(relative.count, 3)
+        for k in 0..<3 {
+            XCTAssertEqual(relative[k].x, skin.toneColors[k].x / skin.toneLightness[k], accuracy: 1e-9)
+            XCTAssertEqual(relative[k].y, skin.toneColors[k].y / skin.toneLightness[k], accuracy: 1e-9)
+            let measured = try XCTUnwrap(LookSkin.relativeAB(sample, LookSkin.pixels(in: thirds[k], of: sample)))
+            XCTAssertEqual(measured.x, relative[k].x, accuracy: 1e-6)
+            XCTAssertEqual(measured.y, relative[k].y, accuracy: 1e-6)
+        }
+        // The darker shadow looks more saturated than its absolute chroma says.
+        let shadow = relative[0], mid = relative[1]
+        XCTAssertGreaterThan((shadow * shadow).sum(), (mid * mid).sum())
+    }
+
+    /// The skin tone thirds are cut on the brightness a mask's Luminance Range reads: for a gray
+    /// that is the gray's own encoded value.
+    func testSkinToneCutsUseTheLuminanceRangeBrightness() {
+        let width = 3, height = 1
+        let grays: [UInt8] = [60, 128, 200]
+        var pixels = [UInt8](repeating: 255, count: width * height * 4)
+        for (x, gray) in grays.enumerated() {
+            pixels[x * 4] = gray
+            pixels[x * 4 + 1] = gray
+            pixels[x * 4 + 2] = gray
+        }
+        let sample = LookSample(pixels: pixels, width: width, height: height)
+        for (i, gray) in grays.enumerated() {
+            XCTAssertEqual(LookSkin.rangeLuma(sample, i), Double(gray) / 255, accuracy: 0.003)
+        }
+        let split = LookSkin.toneSplit(sample, [2, 0, 1])
+        XCTAssertEqual(split.groups, [[0], [1], [2]])
+        XCTAssertEqual(split.cuts.0, 128.0 / 255, accuracy: 0.003)
+        XCTAssertEqual(split.cuts.1, 200.0 / 255, accuracy: 0.003)
+    }
+
+    /// The joint skin fit's solver: exact on a well-posed system, and damped least squares shares
+    /// a move between two sliders that do the same thing instead of fighting.
+    func testSkinSolverSolvesTogether() throws {
+        let x = try XCTUnwrap(SkinSolver.solve([[2, 1, 0], [1, 3, 1], [0, 1, 4]], [3, 5, 5]))
+        XCTAssertEqual(x[0], 1, accuracy: 1e-9)
+        XCTAssertEqual(x[1], 1, accuracy: 1e-9)
+        XCTAssertEqual(x[2], 1, accuracy: 1e-9)
+        XCTAssertNil(SkinSolver.solve([[1, 1], [1, 1]], [1, 2]))
+
+        var solver = SkinSolver(masks: ["A"], tones: [SkinSolver.Tone(pixels: [], target: .zero, relative: true)],
+                                limit: 35, settings: .neutral)
+        // Temp and Tint move a and b separately; Saturation moves a like Temp does.
+        solver.jacobian = [[0.001, 0, 0.001], [0, 0.002, 0]]
+        let step = try XCTUnwrap(solver.step([0.01, 0.01]))
+        XCTAssertEqual(step[0], step[2], accuracy: 0.5)
+        XCTAssertGreaterThan(step[0], 3)
+        XCTAssertEqual(step[1], 5, accuracy: 0.5)
+        // Moves are capped per step.
+        let big = try XCTUnwrap(solver.step([1, 1]))
+        XCTAssertTrue(big.allSatisfy { abs($0) <= 30 })
+    }
+
+    /// A built-in study's skin target leans the photo's own skin toward the study: half way in
+    /// hue inside the skin band, a mild saturation scale inside natural limits, a touch of warmth.
+    func testStudySkinTargetLeansThePhotosOwnSkin() {
+        func hue(_ v: SIMD2<Double>) -> Double { atan2(v.y, v.x) * 180 / .pi }
+        func length(_ v: SIMD2<Double>) -> Double { (v * v).sum().squareRoot() }
+        func vector(_ hue: Double, _ length: Double) -> SIMD2<Double> {
+            SIMD2(cos(hue * .pi / 180), sin(hue * .pi / 180)) * length
+        }
+        let photo = vector(56, 0.12)
+        // An olive study (Matrix, hue about 101°) never turns the face green.
+        let olive = LookSkin.studyTarget(study: vector(101, 0.08), photo: photo, tone: 1)
+        XCTAssertEqual(hue(olive), LookSkin.skinHueRange.upperBound, accuracy: 1e-9)
+        // A study hue inside the band: half way, then a little warmer.
+        let orange = LookSkin.studyTarget(study: vector(64, 0.091), photo: photo, tone: 1)
+        XCTAssertEqual(hue(orange), 60 + (52 - 60) * 0.075, accuracy: 1e-9)
+        XCTAssertEqual(length(orange), 0.12 * 1.03, accuracy: 1e-9)
+        // A rich study scales by at most 1.2 and stays below the natural ceiling.
+        let rich = LookSkin.studyTarget(study: vector(60, 0.4), photo: vector(56, 0.15), tone: 1)
+        XCTAssertEqual(length(rich), LookSkin.skinSaturationRange.upperBound, accuracy: 1e-9)
+        let richPale = LookSkin.studyTarget(study: vector(60, 0.4), photo: vector(56, 0.08), tone: 1)
+        XCTAssertEqual(length(richPale), 0.08 * 1.2 * 1.03, accuracy: 1e-9)
+        // A pale study (Thrones) scales by no less than 0.85, and never below the floor.
+        let pale = LookSkin.studyTarget(study: vector(60, 0.03), photo: photo, tone: 1)
+        XCTAssertEqual(length(pale), 0.12 * 0.85 * 1.03, accuracy: 1e-9)
+        let gray = LookSkin.studyTarget(study: vector(60, 0.03), photo: SIMD2(0.001, 0), tone: 1)
+        XCTAssertEqual(length(gray), LookSkin.skinSaturationRange.lowerBound, accuracy: 1e-9)
+        // Against a cool background the skin is a little warmer and richer.
+        let cool = LookSkin.studyTarget(study: vector(64, 0.091), photo: photo, tone: 1, coolBackground: true)
+        XCTAssertLessThan(hue(cool), hue(orange))
+        XCTAssertEqual(length(cool), 0.12 * 1.06, accuracy: 1e-9)
     }
 
     func testProtectSkinTonesKeepsSkinInsideItsLimits() throws {

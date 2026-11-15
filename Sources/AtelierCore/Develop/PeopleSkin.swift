@@ -10,7 +10,7 @@ extension DevelopSettings {
     /// parts, ticked in any combination.
     public struct PeopleSelection: Codable, Hashable, Sendable {
         public enum Part: String, Codable, CaseIterable, Sendable {
-            case faceSkin, bodySkin, eyebrows, eyeSclera, iris, lips, teeth, hair, clothes, entirePerson
+            case faceSkin, bodySkin, eyebrows, eyeSclera, iris, lips, teeth, hair, clothes, entirePerson, entireFace
 
             public var title: String {
                 switch self {
@@ -24,6 +24,7 @@ extension DevelopSettings {
                 case .hair: return "Hair"
                 case .clothes: return "Clothes"
                 case .entirePerson: return "Entire Person"
+                case .entireFace: return "Entire Face"
                 }
             }
 
@@ -40,6 +41,7 @@ extension DevelopSettings {
                 case .hair: return "Hair on the head"
                 case .clothes: return "Clothes, scarves and hats"
                 case .entirePerson: return "The whole person"
+                case .entireFace: return "The whole face in one piece: skin, brows, eyes, lips, teeth and the mouth"
                 }
             }
         }
@@ -428,6 +430,8 @@ public struct PeopleSkin: Sendable {
 
             var faceSkin: [Float], bodySkin: [Float]
             var modelParts: [(DevelopSettings.PeopleSelection.Part, [Float])] = []
+            // What isn't face inside the face's outline (hair, a hat, background), for Entire Face.
+            var notFace: [Float] = matte.map { $0.map { 1 - $0 } } ?? [Float](repeating: 0, count: count)
             let region = personRegion(face: face, matte: matte, width: width, height: height)
             if !region.isEmpty, let classes = segment?(region), classes.count == PeopleParts.Class.allCases.count,
                classes.allSatisfy({ $0.count == count }) {
@@ -445,6 +449,10 @@ public struct PeopleSkin: Sendable {
                 bodySkin = part(.bodySkin)
                 let person = matte ?? (0..<count).map { (1 - classes[PeopleParts.Class.background.rawValue][$0]) * keep[$0] }
                 modelParts = [(.hair, part(.hair)), (.clothes, part(.clothes)), (.entirePerson, person)]
+                notFace = (0..<count).map { i in
+                    max(classes[PeopleParts.Class.hair.rawValue][i], classes[PeopleParts.Class.clothes.rawValue][i],
+                        classes[PeopleParts.Class.background.rawValue][i], 1 - keep[i])
+                }
             } else {
                 (faceSkin, bodySkin) = colorSkin(face: face, faceIndex: faceIndex, faces: ordered, holes: holes,
                                                  matte: matte, seeds: seeds, lab: lab, width: width, height: height)
@@ -461,10 +469,25 @@ public struct PeopleSkin: Sendable {
             }
             // Features are small: a finer edge than skin's.
             let featureRadius = max(1, radius / 2)
-            for (part, map) in featureMaps(face, lab: lab, width: width, height: height) {
+            let featureList = featureMaps(face, lab: lab, width: width, height: height)
+            for (part, map) in featureList {
                 if let patch = patch(map, guide: guide, width: width, height: height, radius: featureRadius) {
                     features[part] = patch
                 }
+            }
+            // Entire Face: everything inside the face's outline that isn't hair, a hat or
+            // background, with every skin and feature part and the whole mouth opening added,
+            // so no part of the face is left out (shaded teeth, a tongue, brow edges Vision
+            // misplaces). Match Look's skin masks use it: one base color over the whole face.
+            var entireFace = raster(scaled(face.outline, by: 1.04), width: width, height: height)
+            for i in 0..<count { entireFace[i] *= 1 - min(1, max(0, notFace[i])) }
+            var inside = featureList.map(\.1) + [faceSkin]
+            if face.innerLips.count >= 3 { inside.append(raster(face.innerLips, width: width, height: height)) }
+            for map in inside {
+                for i in 0..<min(count, map.count) where map[i] > entireFace[i] { entireFace[i] = map[i] }
+            }
+            if let patch = patch(entireFace, guide: guide, width: width, height: height, radius: radius) {
+                features[.entireFace] = patch
             }
             people.append(Person(face: CGRect(x: face.box.minX / CGFloat(width), y: face.box.minY / CGFloat(height),
                                               width: face.box.width / CGFloat(width), height: face.box.height / CGFloat(height)),

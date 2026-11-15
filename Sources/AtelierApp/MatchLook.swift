@@ -485,6 +485,9 @@ final class MatchLookModel: ObservableObject, Identifiable {
         if notices.contains(.noSkinInPhoto) { parts.append("No usable face skin in your photo.") }
         if notices.contains(.noSkinInReference) { parts.append("No usable face skin in the reference.") }
         if notices.contains(.skinMatchLimited) { parts.append("The skin sliders could not bring the face color closer.") }
+        if notices.contains(.skinMatchPartial) {
+            parts.append("The skin sliders reached their limit, so the face color is only part of the way to the reference.")
+        }
         return parts.isEmpty ? nil : parts.joined(separator: " ")
     }
 

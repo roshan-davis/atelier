@@ -1,195 +1,396 @@
 import CoreGraphics
 import Foundation
 
+/// How a skin fit ended, and what it learned (for a check on a real render).
+struct SkinFit {
+    enum Outcome: Sendable, Equatable {
+        /// No step brought the skin closer; the settings are as they were.
+        case unchanged
+        /// The skin came to the reference (or was there already).
+        case matched
+        /// The skin came closer but stopped short, at the sliders' limits.
+        case partial
+    }
+
+    var outcome: Outcome
+    var solver: SkinSolver?
+    /// How far the skin was from its target before the fit.
+    var startError = 0.0
+}
+
+/// The joint skin fit: the skin masks' Temp, Tint and Saturation, solved together so every tone's
+/// color comes to its target. The masks overlap (the base mask covers every tone, and the shadow
+/// and highlight masks fade into the midtones), so fitting them one after another left the
+/// midtones off once the ends were corrected. Each slider's effect on each tone is measured
+/// (cheap on the stand-in), the moves are solved together by damped least squares, and a step is
+/// kept only when it brings the tones closer.
+struct SkinSolver {
+    struct Tone {
+        let pixels: [Int]
+        let target: SIMD2<Double>
+        /// Color relative to lightness (`LookSkin.relativeAB`), or plain mean a/b.
+        let relative: Bool
+    }
+
+    static let parameters: [DevelopSettings.LocalParameter] = [.temperature, .tint, .saturation]
+    /// Close enough, per tone, in Oklab a/b over lightness.
+    static let tolerance = 0.003
+
+    let masks: [String]
+    let tones: [Tone]
+    /// How far each slider may move from where it started.
+    let limit: Double
+    /// The sliders' values before the fit, by mask name.
+    let start: [String: [Double]]
+    /// Rows: each tone's a and b; columns: each mask's Temp, Tint and Saturation.
+    var jacobian: [[Double]] = []
+
+    var unknowns: Int { masks.count * Self.parameters.count }
+
+    init(masks: [String], tones: [Tone], limit: Double, settings: DevelopSettings) {
+        self.masks = masks
+        self.tones = tones
+        self.limit = limit
+        var start: [String: [Double]] = [:]
+        for name in masks {
+            let mask = settings.masks.first { $0.name == name }
+            start[name] = Self.parameters.map { mask?[$0] ?? 0 }
+        }
+        self.start = start
+    }
+
+    /// Each tone's color, a and b in turn.
+    func colors(_ sample: LookSample) -> [Double]? {
+        var out: [Double] = []
+        out.reserveCapacity(tones.count * 2)
+        for tone in tones {
+            let color = tone.relative ? LookSkin.relativeAB(sample, tone.pixels) : LookSkin.meanAB(sample, tone.pixels)
+            guard let color else { return nil }
+            out += [color.x, color.y]
+        }
+        return out
+    }
+
+    /// The targets less the colors.
+    func residual(_ colors: [Double]) -> [Double] {
+        tones.enumerated().flatMap { k, tone in [tone.target.x - colors[2 * k], tone.target.y - colors[2 * k + 1]] }
+    }
+
+    static func norm(_ v: [Double]) -> Double { v.reduce(0) { $0 + $1 * $1 }.squareRoot() }
+
+    /// Close enough for every tone.
+    var closeEnough: Double { Self.tolerance * Double(tones.count).squareRoot() }
+
+    func value(_ settings: DevelopSettings, _ k: Int) -> Double {
+        guard let index = settings.masks.firstIndex(where: { $0.name == masks[k / 3] }) else { return 0 }
+        return settings.masks[index][Self.parameters[k % 3]]
+    }
+
+    /// `settings` with unknown `k` set to `value`, kept inside the limits.
+    func setting(_ settings: DevelopSettings, _ k: Int, to value: Double) -> DevelopSettings {
+        guard let index = settings.masks.firstIndex(where: { $0.name == masks[k / 3] }) else { return settings }
+        let from = start[masks[k / 3]]?[k % 3] ?? 0
+        var out = settings
+        out.masks[index][Self.parameters[k % 3]] = min(min(100, from + limit), max(max(-100, from - limit), value)).rounded()
+        return out
+    }
+
+    /// Measures how every slider moves every tone's color, around `settings` (whose colors are
+    /// `colors`): one nudge per slider.
+    mutating func measureJacobian(at settings: DevelopSettings, colors: [Double],
+                                  measure: (DevelopSettings) -> LookSample?, isCancelled: () -> Bool) {
+        var columns: [[Double]] = []
+        for k in 0..<unknowns {
+            let now = value(settings, k)
+            let step = now > 85 ? -12.0 : 12.0
+            var column = [Double](repeating: 0, count: colors.count)
+            if !isCancelled(), let sample = measure(setting(settings, k, to: now + step)),
+               let moved = self.colors(sample) {
+                let actual = value(setting(settings, k, to: now + step), k) - now
+                if abs(actual) > 0.5 { column = zip(moved, colors).map { ($0 - $1) / actual } }
+            }
+            columns.append(column)
+        }
+        jacobian = (0..<colors.count).map { row in columns.map { $0[row] } }
+    }
+
+    /// The slider moves that best bring `residual` to zero: damped least squares, so sliders
+    /// that do nearly the same thing share the move instead of fighting.
+    func step(_ residual: [Double]) -> [Double]? {
+        let n = unknowns
+        guard jacobian.count == residual.count, n > 0 else { return nil }
+        var a = [[Double]](repeating: [Double](repeating: 0, count: n), count: n)
+        var g = [Double](repeating: 0, count: n)
+        for (row, r) in zip(jacobian, residual) {
+            for i in 0..<n {
+                g[i] += row[i] * r
+                for j in 0..<n { a[i][j] += row[i] * row[j] }
+            }
+        }
+        let largest = (0..<n).map { a[$0][$0] }.max() ?? 0
+        guard largest > 1e-14 else { return nil }
+        for i in 0..<n { a[i][i] += 0.01 * largest }
+        guard let x = Self.solve(a, g) else { return nil }
+        return x.map { min(30, max(-30, $0)) }
+    }
+
+    /// `settings` moved by `delta` × `fraction`.
+    func applying(_ delta: [Double], fraction: Double, to settings: DevelopSettings) -> DevelopSettings {
+        var out = settings
+        for k in 0..<min(unknowns, delta.count) where abs(delta[k] * fraction) >= 0.5 {
+            out = setting(out, k, to: value(out, k) + delta[k] * fraction)
+        }
+        return out
+    }
+
+    /// Gaussian elimination with partial pivoting; nil when singular.
+    static func solve(_ matrix: [[Double]], _ vector: [Double]) -> [Double]? {
+        let n = vector.count
+        var m = matrix, v = vector
+        for column in 0..<n {
+            var pivot = column
+            for row in column..<n where abs(m[row][column]) > abs(m[pivot][column]) { pivot = row }
+            guard abs(m[pivot][column]) > 1e-18 else { return nil }
+            if pivot != column {
+                m.swapAt(pivot, column)
+                v.swapAt(pivot, column)
+            }
+            for row in (column + 1)..<n {
+                let factor = m[row][column] / m[column][column]
+                guard factor != 0 else { continue }
+                for k in column..<n { m[row][k] -= factor * m[column][k] }
+                v[row] -= factor * v[column]
+            }
+        }
+        var x = [Double](repeating: 0, count: n)
+        for row in stride(from: n - 1, through: 0, by: -1) {
+            var sum = v[row]
+            for k in (row + 1)..<n { sum -= m[row][k] * x[k] }
+            x[row] = sum / m[row][row]
+        }
+        return x
+    }
+}
+
 extension LookMatcher {
     /// Match Skin Tone: fit ordinary mask color sliders (Temp, Tint, Saturation) on the rendered
-    /// face pixels, tone by tone. The "Match Look: Skin" mask covers the faces and takes the
-    /// photo's skin midtones to the reference's; "Match Look: Skin Shadows" and "Match Look: Skin
-    /// Highlights" add a Luminance Range to the same faces and take the darkest and brightest
-    /// thirds of the skin to the reference's skin shadows and highlights. Color is scored in the
-    /// Oklab color plane; lightness is left to the ordinary Tone fit, except that Protect Skin
-    /// Tones (`holdsLightness`) also brings each tone's brightness back with the mask's Exposure.
-    /// False when no tone came closer.
+    /// face pixels, tone by tone. The "Match Look: Skin" mask covers the skin and is the base
+    /// color; "Match Look: Skin Shadows" and "Match Look: Skin Highlights" add a soft Luminance
+    /// Range to the same skin. The photo's skin is split into darkest, middle and brightest
+    /// thirds, which go to the reference's skin shadows, midtones and highlights; the three masks
+    /// are solved together (`SkinSolver`). Color is scored in the Oklab color plane relative to
+    /// lightness (`LookSkin.relativeAB`); lightness is left to the ordinary Tone fit, except that
+    /// Protect Skin Tones (`holdsLightness`) also brings each tone's brightness back with the
+    /// mask's Exposure.
     static func fitSkin(_ skin: LookSkin, to reference: LookSkin, in settings: inout DevelopSettings,
                         space: MaskSpace, measure: (DevelopSettings) -> LookSample?,
                         limit: Double = maxSkinShift, holdsLightness: Bool = false,
-                        isCancelled: () -> Bool) -> Bool {
+                        bodySkin: Bool = false, study: Bool = false, isCancelled: () -> Bool) -> SkinFit {
         // Vision's face box is tight: brows to chin, cheek to cheek, no forehead. The ellipse is
         // larger than the box and moved up over the forehead, with a short feather, so the
         // whole face gets the full effect (inside 70% of the radius) and it fades out past the
         // jaw, ears and hairline. A box-sized ellipse with a long feather reached only the
         // middle of each face.
-        // With Select People (Vision face landmarks), the masks use its Face Skin part instead:
-        // editable in Masking, where ticking Body Skin carries the change to neck and hands.
         let radials = skin.faces.map { face -> DevelopSettings.MaskComponent in
             let center = CGPoint(x: face.midX * space.rect.width, y: (face.midY - 0.08 * face.height) * space.rect.height)
             let gradient = space.radial(center: center, width: face.width * space.rect.width * 0.62,
                                         height: face.height * space.rect.height * 0.75, feather: 30)
             return DevelopSettings.MaskComponent(.radial(gradient))
         }
-        // The whole face (lips too), not Face Skin alone, so the lips don't keep a look the skin
-        // around them was spared.
-        let selection = holdsLightness ? LookSkin.protectMaskSelection : LookSkin.matchMaskSelection
-        let faces = skin.usesPeople ? [DevelopSettings.MaskComponent(.people(selection))] : radials
-        guard reference.toneColors.count == 3, let start = measure(settings) else {
-            // Without tones: one mask, the skin's mean color to the reference's.
-            return fitMaskColor(LookMatch.skinMaskName, components: faces,
-                                target: colorVector(hue: reference.hue, chroma: reference.chroma),
-                                in: &settings, measure: measure, limit: limit, lightness: nil,
-                                isCancelled: isCancelled, pixels: skin.pixels) { sample in
-                LookSkin.hueAndChroma(sample, skin.pixels).map { colorVector(hue: $0.hue, chroma: $0.chroma) }
+        // With Select People: the Entire Face in one piece (and the body's skin with it, when the
+        // parts model found it), so the base color has no holes and takes nothing by accident;
+        // the tone masks blend in on top of it. Matching leaves the eyes' whites and irises out.
+        var faces = radials
+        if skin.usesPeople {
+            faces = [DevelopSettings.MaskComponent(.people(LookSkin.maskSelection(bodySkin: bodySkin)))]
+            if !holdsLightness {
+                faces.append(DevelopSettings.MaskComponent(.people(LookSkin.eyesSelection), mode: .subtract))
             }
         }
-        // The photo's skin split into thirds by brightness after the global fit, which is what
-        // the masks' Luminance Range sees.
-        let split = LookSkin.toneSplit(start, skin.pixels)
-        guard split.groups.count == 3 else { return false }
-        let (low, high) = (split.cuts.0 * 100, split.cuts.1 * 100)
-        let soft = 30.0
-        func range(_ low: Double, _ high: Double) -> DevelopSettings.MaskComponent {
-            DevelopSettings.MaskComponent(.luminance(DevelopSettings.LuminanceRange(low: low, high: high, smoothness: soft)),
-                                          mode: .intersect)
-        }
-        // Indexed by tone: shadows, midtones, highlights. Midtones go first: the whole-face mask
-        // moves every tone, and the other two correct the ends.
-        let masks: [(String, [DevelopSettings.MaskComponent])] = [
-            (LookMatch.skinShadowsMaskName, faces + [range(0, low)]),
-            (LookMatch.skinMaskName, faces),
-            (LookMatch.skinHighlightsMaskName, faces + [range(high, 100)])
-        ]
-        var matched = false
-        for tone in [1, 0, 2] where !isCancelled() {
-            let pixels = split.groups[tone]
-            let lightness = holdsLightness && reference.toneLightness.count == 3 ? reference.toneLightness[tone] : nil
-            if fitMaskColor(masks[tone].0, components: masks[tone].1, target: reference.toneColors[tone],
-                            in: &settings, measure: measure, limit: limit, lightness: lightness,
-                            isCancelled: isCancelled, pixels: pixels,
-                            color: { LookSkin.meanAB($0, pixels) }) {
-                matched = true
+        guard let start = measure(settings) else { return SkinFit(outcome: .unchanged) }
+
+        // Color is matched relative to brightness (`LookSkin.relativeAB`): the face keeps its own
+        // brightness, so the reference's absolute a/b would look more or less saturated on it.
+        var masks: [(name: String, components: [DevelopSettings.MaskComponent])] = []
+        var tones: [SkinSolver.Tone] = []
+        var lightnessTargets: [Double?] = []
+        let targets = reference.relativeToneColors
+        if targets.count == 3 {
+            // The photo's skin split into thirds by brightness after the global fit, measured
+            // the way the masks' Luminance Range sees it.
+            let split = LookSkin.toneSplit(start, skin.pixels)
+            guard split.groups.count == 3, split.groups.allSatisfy({ !$0.isEmpty }) else {
+                return SkinFit(outcome: .unchanged)
             }
-        }
-        return matched
-    }
-
-    /// Adds (or reuses) the mask `name` made of `components` and fits its Temp, Tint and
-    /// Saturation so `color` of the render comes to `target`. Temp and Tint are solved together
-    /// because their color directions overlap, then Saturation refines it; each step is kept only
-    /// when it brings the color closer. A mask that moved nothing isn't added. True when the color
-    /// was already close or came closer.
-    private static func fitMaskColor(_ name: String, components: [DevelopSettings.MaskComponent],
-                                     target: SIMD2<Double>, in settings: inout DevelopSettings,
-                                     measure: (DevelopSettings) -> LookSample?, limit: Double,
-                                     lightness lightnessTarget: Double?, isCancelled: () -> Bool,
-                                     pixels: [Int],
-                                     color colorOf: (LookSample) -> SIMD2<Double>?) -> Bool {
-        func color(_ candidate: DevelopSettings) -> SIMD2<Double>? {
-            guard !isCancelled(), let sample = measure(candidate) else { return nil }
-            return colorOf(sample)
-        }
-        guard var measured = color(settings) else { return false }
-        let tolerance = 0.002
-        var error = target - measured
-        let colorClose = (error * error).sum() < tolerance * tolerance
-        var lightnessClose = true
-        if let lightnessTarget, let sample = measure(settings), let now = LookSkin.meanLightness(sample, pixels) {
-            lightnessClose = abs(now - lightnessTarget) < 0.005
-        }
-        if colorClose && lightnessClose { return true }
-
-        let existing = settings.masks.firstIndex { $0.name == name }
-        let index = existing ?? settings.masks.count
-        var best = settings
-        if existing == nil {
-            best.masks.append(.init(name: name, components: components))
+            let (low, high) = (split.cuts.0 * 100, split.cuts.1 * 100)
+            // Measured after the global fit: what the face will sit against.
+            let coolBackground = study && LookSkin.isCool(start, outside: skin.pixels)
+            // Wide, soft ranges, so the shadow and highlight corrections fade into the base
+            // color over the face instead of meeting it at a visible step (Rosh: "gradual and
+            // seamless").
+            let soft = 70.0
+            func range(_ low: Double, _ high: Double) -> DevelopSettings.MaskComponent {
+                DevelopSettings.MaskComponent(.luminance(DevelopSettings.LuminanceRange(low: low, high: high, smoothness: soft)),
+                                              mode: .intersect)
+            }
+            masks = [(LookMatch.skinShadowsMaskName, faces + [range(0, low)]),
+                     (LookMatch.skinMaskName, faces),
+                     (LookMatch.skinHighlightsMaskName, faces + [range(high, 100)])]
+            tones = (0..<3).map { k in
+                var target = targets[k]
+                // The photo's own skin saturation is its skin before the match (`skin` was
+                // measured on the unedited render), not after the global fit: measured after it,
+                // a look that drained the face set a nearly grey target (Rosh, Nov 14, 2026).
+                let own = skin.relativeToneColors
+                if study, own.count == 3 {
+                    target = LookSkin.studyTarget(study: targets[k], photo: own[k], tone: k,
+                                                  coolBackground: coolBackground)
+                }
+                return SkinSolver.Tone(pixels: split.groups[k], target: target, relative: true)
+            }
+            lightnessTargets = (0..<3).map {
+                holdsLightness && reference.toneLightness.count == 3 ? reference.toneLightness[$0] : nil
+            }
         } else {
-            // A repeat match keeps the mask (and its id) but takes the faces as found now.
-            best.masks[index].components = components
+            // Without tones: one mask, the skin's mean color to the reference's.
+            let lightness = reference.toneLightness.isEmpty ? 0
+                : reference.toneLightness.reduce(0, +) / Double(reference.toneLightness.count)
+            let relative = lightness > 0.05
+            let color = colorVector(hue: reference.hue, chroma: reference.chroma)
+            masks = [(LookMatch.skinMaskName, faces)]
+            tones = [SkinSolver.Tone(pixels: skin.pixels, target: relative ? color / lightness : color, relative: relative)]
+            lightnessTargets = [nil]
         }
 
-        // Keep the skin sliders near where they started: a reference whose skin sits under very
-        // different light shouldn't paint the face.
-        let start = DevelopSettings.LocalParameter.allCases.reduce(into: [DevelopSettings.LocalParameter: Double]()) {
-            $0[$1] = best.masks[index][$1]
+        var best = settings
+        var added: [String] = []
+        for mask in masks {
+            if let index = best.masks.firstIndex(where: { $0.name == mask.name }) {
+                // A repeat match keeps the mask (and its id) but takes the skin as found now.
+                best.masks[index].components = mask.components
+            } else {
+                best.masks.append(.init(name: mask.name, components: mask.components))
+                added.append(mask.name)
+            }
         }
-        func limited(_ parameter: DevelopSettings.LocalParameter, _ value: Double) -> Double {
-            let from = start[parameter] ?? 0
-            return min(min(100, from + limit), max(max(-100, from - limit), value))
-        }
-
+        var solver = SkinSolver(masks: masks.map { $0.name }, tones: tones, limit: limit, settings: best)
+        guard let startColors = solver.colors(start) else { return SkinFit(outcome: .unchanged) }
+        let startError = SkinSolver.norm(solver.residual(startColors))
         var improved = false
-        // Protect Skin Tones: first the tone's brightness back with the mask's Exposure. Oklab
+
+        // Protect Skin Tones: first each tone's brightness back with its mask's Exposure. Oklab
         // lightness is about the cube root of luminance, so a ratio r is about 3 log2(r) stops.
-        if let lightnessTarget, !isCancelled() {
+        for (k, target) in lightnessTargets.enumerated() {
+            guard let target, target > 0.02, !isCancelled(),
+                  let index = best.masks.firstIndex(where: { $0.name == masks[k].name }) else { continue }
+            let pixels = tones[k].pixels
             func lightness(_ candidate: DevelopSettings) -> Double? {
                 measure(candidate).flatMap { LookSkin.meanLightness($0, pixels) }
             }
-            if var now = lightness(best), now > 0.02, lightnessTarget > 0.02 {
-                for _ in 0..<2 where abs(now - lightnessTarget) >= 0.005 && !isCancelled() {
-                    var trial = best
-                    let exposure = trial.masks[index][.exposure] + 3 * log2(lightnessTarget / now)
-                    trial.masks[index][.exposure] = (min(1.5, max(-1.5, exposure)) * 100).rounded() / 100
-                    guard trial != best, let next = lightness(trial), abs(next - lightnessTarget) < abs(now - lightnessTarget) else { break }
-                    best = trial
-                    now = next
-                    improved = true
-                }
-            }
-            // Brightness moves chroma a little; the color steps below start from here.
-            if improved, let after = color(best) {
-                measured = after
-                error = target - after
-            }
-        }
-
-        // Each slider's effect on the color is measured once (three renders) and reused for
-        // every step: the response is close to linear over this range, and each render with
-        // masks is the slow part of a match.
-        func slope(_ parameter: DevelopSettings.LocalParameter) -> SIMD2<Double> {
-            var trial = best
-            let value = trial.masks[index][parameter]
-            let step = value > 85 ? -12.0 : 12.0
-            trial.masks[index][parameter] = value + step
-            guard let result = color(trial) else { return .zero }
-            return (result - measured) / step
-        }
-        let temp = slope(.temperature), tint = slope(.tint), saturation = slope(.saturation)
-        let determinant = temp.x * tint.y - tint.x * temp.y
-        let response = (saturation * saturation).sum()
-
-        func tryStep(_ changes: [(DevelopSettings.LocalParameter, Double)]) {
-            for fraction in [1.0, 0.5] {
+            guard var now = lightness(best), now > 0.02 else { continue }
+            for _ in 0..<2 where abs(now - target) >= 0.005 && !isCancelled() {
                 var trial = best
-                for (parameter, delta) in changes {
-                    let value = trial.masks[index][parameter]
-                    trial.masks[index][parameter] = limited(parameter, (value + min(30, max(-30, delta)) * fraction).rounded())
-                }
-                guard trial != best, let result = color(trial) else { continue }
-                let next = target - result
-                guard (next * next).sum() < (error * error).sum() else { continue }
+                let exposure = trial.masks[index][.exposure] + 3 * log2(target / now)
+                trial.masks[index][.exposure] = (min(1.5, max(-1.5, exposure)) * 100).rounded() / 100
+                guard trial != best, let next = lightness(trial), abs(next - target) < abs(now - target) else { break }
                 best = trial
-                measured = result
-                error = next
+                now = next
                 improved = true
+            }
+        }
+
+        guard let afterLightness = measure(best), var colors = solver.colors(afterLightness) else {
+            return SkinFit(outcome: .unchanged)
+        }
+        var error = SkinSolver.norm(solver.residual(colors))
+        if startError < solver.closeEnough && !improved {
+            // Already there: nothing to add.
+            return SkinFit(outcome: .matched)
+        }
+        // The slopes are measured once (one try per slider, nine for three masks) and reused:
+        // the response is close to linear over this range. They are measured again only when a
+        // round finds no step that helps. Measuring them every round doubled the match's time.
+        var fresh = false
+        for _ in 0..<skinRounds where error >= solver.closeEnough && !isCancelled() {
+            if solver.jacobian.isEmpty {
+                solver.measureJacobian(at: best, colors: colors, measure: measure, isCancelled: isCancelled)
+                fresh = true
+            }
+            var stepped = false
+            while !stepped && !isCancelled() {
+                guard let delta = solver.step(solver.residual(colors)) else { break }
+                for fraction in [1.0, 0.5, 0.25] where !isCancelled() {
+                    let trial = solver.applying(delta, fraction: fraction, to: best)
+                    guard trial != best, let sample = measure(trial), let next = solver.colors(sample) else { continue }
+                    let nextError = SkinSolver.norm(solver.residual(next))
+                    guard nextError < error else { continue }
+                    best = trial
+                    colors = next
+                    error = nextError
+                    stepped = true
+                    improved = true
+                    break
+                }
+                if stepped || fresh { break }
+                // Old slopes led nowhere: measure them here and try once more.
+                solver.measureJacobian(at: best, colors: colors, measure: measure, isCancelled: isCancelled)
+                fresh = true
+            }
+            if !stepped { break }
+            fresh = false
+        }
+
+        guard improved, !isCancelled() else { return SkinFit(outcome: .unchanged, solver: solver, startError: startError) }
+        // A mask that moved nothing isn't worth adding.
+        best.masks.removeAll { added.contains($0.name) && !$0.hasAdjustments }
+        settings = best
+        return SkinFit(outcome: outcome(error: error, start: startError, solver: solver), solver: solver,
+                       startError: startError)
+    }
+
+    /// The skin fit runs on the stand-in (`LookEmulator`), which is close but not exact. One real
+    /// render checks the skin; when it is off, one more step from the slopes the fit already
+    /// measured, kept only if the real render comes closer (one or two more renders). Nil when
+    /// there is nothing to check.
+    static func settleSkin(_ settings: inout DevelopSettings, fit: SkinFit,
+                           measure: (DevelopSettings) -> LookSample?) -> SkinFit.Outcome? {
+        guard let solver = fit.solver, !solver.jacobian.isEmpty, let sample = measure(settings),
+              let colors = solver.colors(sample) else { return nil }
+        var error = SkinSolver.norm(solver.residual(colors))
+        if error >= solver.closeEnough, let delta = solver.step(solver.residual(colors)) {
+            // One real render for the step: real renders are the slow part of a match.
+            for fraction in [1.0] {
+                let trial = solver.applying(delta, fraction: fraction, to: settings)
+                guard trial != settings, let next = measure(trial).flatMap(solver.colors) else { continue }
+                let nextError = SkinSolver.norm(solver.residual(next))
+                guard nextError < error else { continue }
+                settings = trial
+                error = nextError
                 break
             }
         }
-        for _ in 0..<2 {
-            if abs(determinant) > 1e-10 {
-                tryStep([(.temperature, (error.x * tint.y - error.y * tint.x) / determinant),
-                         (.tint, (temp.x * error.y - temp.y * error.x) / determinant)])
-            }
-            if response > 1e-10 {
-                tryStep([(.saturation, (error * saturation).sum() / response)])
-            }
-            if (error * error).sum() < tolerance * tolerance || isCancelled() { break }
-        }
-
-        if improved { settings = best }
-        return improved
+        return outcome(error: error, start: fit.startError, solver: solver)
     }
 
-    /// The most Match Skin Tone moves each skin slider (Temp, Tint, Saturation) from where it was.
+    /// Matched when the tones are close or most of the way there; partial when the sliders'
+    /// limits stopped the fit short.
+    static func outcome(error: Double, start: Double, solver: SkinSolver) -> SkinFit.Outcome {
+        error <= 2 * solver.closeEnough || error <= 0.35 * start ? .matched : .partial
+    }
+
+    /// Rounds of the joint skin fit, each with freshly measured slopes.
+    static let skinRounds = 4
+
+    /// The most Match Skin Tone moves each skin slider (Temp, Tint, Saturation) from where it was,
+    /// for a photo reference: a reference whose skin sits under very different light shouldn't
+    /// paint the face.
     static let maxSkinShift = 35.0
+    /// The same for a built-in study, whose skin colors are drawn on purpose: Matrix's olive skin
+    /// is about 55° of hue from an ordinary face and Fury Road's highlights need about 1.7 × the
+    /// chroma, which ±35 couldn't reach (Rosh, Nov 14, 2026).
+    /// Raised to the full range (Nov 14, 2026): the masks also have to undo what the global
+    /// look did to the face, as Protect's do, and at 60 a Matrix match left the face grey.
+    static let studySkinShift = 100.0
     /// Protect Skin Tones' skin masks undo the look on the face, so they may use the sliders'
     /// whole range: at 35 they couldn't undo a strong Temp/Tint, and Protect then pulled the
     /// whole match back.

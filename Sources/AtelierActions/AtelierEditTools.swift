@@ -222,6 +222,7 @@ public enum AgentPeoplePart: String, AgentEnum {
     case eyeSclera = "eye_sclera"
     case iris, lips, teeth, hair, clothes
     case entirePerson = "entire_person"
+    case entireFace = "entire_face"
 }
 
 public struct AddMaskParameters: ActionParameters, Hashable, PhotoTargeting {

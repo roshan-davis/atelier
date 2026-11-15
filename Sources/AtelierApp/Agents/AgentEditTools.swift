@@ -507,6 +507,7 @@ extension AgentPeoplePart {
         case .hair: return .hair
         case .clothes: return .clothes
         case .entirePerson: return .entirePerson
+        case .entireFace: return .entireFace
         }
     }
 }

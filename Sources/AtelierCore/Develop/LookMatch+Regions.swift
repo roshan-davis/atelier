@@ -24,6 +24,8 @@ public enum LookMatchNotice: Sendable, Hashable {
     case noSkinInPhoto
     case noSkinInReference
     case skinMatchLimited
+    /// Match Skin Tone brought the skin closer but its sliders' limits stopped it short.
+    case skinMatchPartial
     /// Subject & Background found no subject in the photo; the whole photo was matched.
     case noSubjectInPhoto
     /// Subject & Background found no subject in the reference; the whole photo was matched.
@@ -133,14 +135,26 @@ public struct LookSkin: Sendable {
         return (y0..<y1).flatMap { y in (x0..<x1).map { y * sample.width + $0 } }
     }
 
-    /// The pixels split into their darkest, middle and brightest thirds by brightness (luma),
-    /// with the two brightness levels between them (0 to 1).
+    /// The pixels split into their darkest, middle and brightest thirds by brightness, with the
+    /// two brightness levels between them (0 to 1). Brightness is measured as a mask's Luminance
+    /// Range reads it (`rangeLuma`), so the skin tone masks' ranges cut where the thirds do.
     static func toneSplit(_ sample: LookSample, _ pixels: [Int]) -> (groups: [[Int]], cuts: (Double, Double)) {
-        let sorted = pixels.filter { $0 < sample.count }.sorted { sample.luma[$0] < sample.luma[$1] }
+        let valid = pixels.filter { $0 < sample.count }
+        let brightness = Dictionary(uniqueKeysWithValues: Set(valid).map { ($0, rangeLuma(sample, $0)) })
+        let sorted = valid.sorted { brightness[$0, default: 0] < brightness[$1, default: 0] }
         guard sorted.count >= 3 else { return ([], (1.0 / 3, 2.0 / 3)) }
         let first = sorted.count / 3, second = sorted.count * 2 / 3
         let groups = [Array(sorted[..<first]), Array(sorted[first..<second]), Array(sorted[second...])]
-        return (groups, (Double(sample.luma[sorted[first]]), Double(sample.luma[sorted[second]])))
+        return (groups, (brightness[sorted[first], default: 0], brightness[sorted[second], default: 0]))
+    }
+
+    /// A pixel's brightness as a mask's Luminance Range reads it: the linear luminance, sRGB
+    /// encoded (`MaskRenderer.luminanceMask`). The sample's own `luma` is luma of the encoded
+    /// values, a few percent off on skin, so the ranges sat off the thirds they were fitted for.
+    static func rangeLuma(_ sample: LookSample, _ i: Int) -> Double {
+        let rgb = Oklab.toLinear(SIMD3(Double(sample.lightness[i]), Double(sample.a[i]), Double(sample.b[i])))
+        let luminance = 0.2126 * rgb.x + 0.7152 * rgb.y + 0.0722 * rgb.z
+        return Oklab.encoded(min(1, max(0, luminance)))
     }
 
     /// Mean Oklab lightness of the pixels.
@@ -151,6 +165,84 @@ public struct LookSkin: Sendable {
             n += 1
         }
         return n > 0 ? sum / n : nil
+    }
+
+    /// The pixels' color relative to their brightness: mean Oklab a/b over mean Oklab lightness.
+    /// How saturated skin looks goes with chroma over lightness, so this is what Match Skin Tone
+    /// matches: the same a/b on a brighter face looks paler, on a darker one deeper. Matching
+    /// the reference's absolute a/b while the face kept its own brightness overshot a dark
+    /// photo's shadows by 44% against Fury Road and left Thrones' pale skin 32% too saturated
+    /// (Rosh, Nov 14, 2026). Nil when the pixels are nearly black.
+    static func relativeAB(_ sample: LookSample, _ pixels: [Int]) -> SIMD2<Double>? {
+        guard let ab = meanAB(sample, pixels), let lightness = meanLightness(sample, pixels), lightness > 0.05 else {
+            return nil
+        }
+        return ab / lightness
+    }
+
+    /// The built-in studies' mean drawn skin saturation (`relativeAB` length) for shadows,
+    /// midtones and highlights, over the four portrait studies. `BuiltInLookReferenceTests`
+    /// checks these against the drawings.
+    static let studySkinBaseline = [0.111, 0.091, 0.068]
+
+    /// A built-in study's skin target for one tone on this photo. Drawn skin is a hint, not a
+    /// color to copy: photographed skin reads close to gray next to a flat drawing, and Rosh's
+    /// tests (Nov 14, 2026) showed copying it turning faces gray (Matrix, Thrones) or mustard
+    /// with clipped blue (Fury Road). So the photo's own skin leads and the study only leans it:
+    /// - Hue: half way from the skin's own hue toward the study's, kept inside the band real skin
+    ///   lives in (`skinHueRange`), so Matrix's olive drawing gives a slightly yellower face,
+    ///   never a green one.
+    /// - Saturation: the skin's own, scaled by the square root of how rich or pale this study's
+    ///   skin is against the studies' average (0.85 to 1.2 ×), then kept between
+    ///   `skinSaturationRange` so a match never drains a face to gray or pushes it past natural.
+    /// - Warmth: skin always gets a touch of warmth, the red of blood under the skin (a few
+    ///   degrees redder, a few percent richer), and a little more when the background is cool
+    ///   (`coolBackground`), where a warm face reads alive against it (Rosh, Nov 14, 2026).
+    static func studyTarget(study: SIMD2<Double>, photo: SIMD2<Double>, tone: Int,
+                            coolBackground: Bool = false) -> SIMD2<Double> {
+        let studyLength = (study * study).sum().squareRoot()
+        let photoLength = (photo * photo).sum().squareRoot()
+        guard studyLength > 1e-6, studySkinBaseline.indices.contains(tone) else { return photo }
+        let studyHue = atan2(study.y, study.x) * 180 / .pi
+        // Nearly gray skin has no hue of its own; it takes the middle of the skin band.
+        let ownHue = photoLength > 0.01 ? atan2(photo.y, photo.x) * 180 / .pi : skinWarmHue
+        var difference = studyHue - ownHue
+        difference -= 360 * (difference / 360).rounded()
+        var hue = ownHue + 0.5 * difference
+        let warmth = coolBackground ? 1.0 : 0.5
+        hue += (skinWarmHue - hue) * 0.15 * warmth
+        hue = min(skinHueRange.upperBound, max(skinHueRange.lowerBound, hue))
+        let scale = min(1.2, max(0.85, (studyLength / studySkinBaseline[tone]).squareRoot()))
+        var length = photoLength * scale * (1 + 0.06 * warmth)
+        length = min(skinSaturationRange.upperBound, max(skinSaturationRange.lowerBound, length))
+        let radians = hue * .pi / 180
+        return SIMD2(cos(radians), sin(radians)) * length
+    }
+
+    /// Oklab hues real skin takes, light to deep: past 70° it reads yellow or olive, below 40°
+    /// pink.
+    static let skinHueRange = 40.0...70.0
+    /// The warm, slightly red skin hue warmth leans toward.
+    static let skinWarmHue = 52.0
+    /// Skin saturation (`relativeAB` length) a study match keeps within: below it faces read gray,
+    /// above it orange or mustard, and the blue channel clips.
+    static let skinSaturationRange = 0.07...0.17
+
+    /// Whether the background (everything but the skin) is cool: its mean color leans blue,
+    /// teal or green. Gray backgrounds are not cool.
+    static func isCool(_ sample: LookSample, outside skin: [Int]) -> Bool {
+        let skinSet = Set(skin)
+        let others = (0..<sample.count).filter { !skinSet.contains($0) }
+        guard let ab = meanAB(sample, others), (ab * ab).sum().squareRoot() > 0.008 else { return false }
+        let hue = atan2(ab.y, ab.x) * 180 / .pi
+        return hue > 120 || hue < -60
+    }
+
+    /// The skin's shadows, midtones and highlights as `relativeAB` measures them; empty unless
+    /// both the colors and the lightness of all three tones are known.
+    var relativeToneColors: [SIMD2<Double>] {
+        guard toneColors.count == 3, toneLightness.count == 3, toneLightness.allSatisfy({ $0 > 0.05 }) else { return [] }
+        return zip(toneColors, toneLightness).map { $0 / $1 }
     }
 
     /// Mean Oklab a/b of the pixels.
@@ -184,13 +276,22 @@ public struct LookSkin: Sendable {
     /// in Masking.
     public static let matchSelection = DevelopSettings.PeopleSelection(parts: [.faceSkin], feather: 0)
 
-    /// What the skin masks cover. Face Skin alone leaves holes at the lips (and eyes, brows and
-    /// teeth), so the look stayed on the lips while the skin around them was held or matched:
-    /// Rosh saw a hard, odd-colored lip area. Match Skin Tone also moves the lips with the skin;
-    /// Protect Skin Tones holds every part of the face.
-    static let matchMaskSelection = DevelopSettings.PeopleSelection(parts: [.faceSkin, .lips], feather: 0)
-    static let protectMaskSelection = DevelopSettings.PeopleSelection(
-        parts: [.faceSkin, .lips, .teeth, .eyebrows, .eyeSclera, .iris], feather: 0)
+    /// What the skin masks cover: the Entire Face in one piece, softly edged. Built from Face
+    /// Skin and the feature parts, the masks took some shaded teeth and brow edges and left
+    /// other pockets out, so the face showed disjointed colors (Rosh, Nov 11, 2026). Now one base
+    /// color covers the whole face and the shadow and highlight masks blend in on top of it.
+    /// With `bodySkin` (the built-in parts model is loaded, so Body Skin is the model's, not a
+    /// color guess that leaks into warm clothes) the neck, arms and hands take the same change:
+    /// a face matched alone left a line at the collar (Rosh, Nov 14, 2026). Skin is still
+    /// measured on Face Skin, so the face decides the change and the neck follows it.
+    public static func maskSelection(bodySkin: Bool) -> DevelopSettings.PeopleSelection {
+        DevelopSettings.PeopleSelection(parts: bodySkin ? [.entireFace, .bodySkin] : [.entireFace], feather: 20)
+    }
+
+    /// Taken back out of Match Skin Tone's masks: the eyes' whites and irises. Entire Face
+    /// includes them so the skin has no holes, but a skin color move would tint the whites.
+    /// Protect Skin Tones keeps them in, since it holds the face as it was.
+    static let eyesSelection = DevelopSettings.PeopleSelection(parts: [.eyeSclera, .iris], feather: 5)
 
     /// Select People's face skin on an image, at `width` × `height`, with the faces it found; nil
     /// when it finds no one.
@@ -328,9 +429,10 @@ public struct LookTarget: Sendable {
         } else {
             skin = LookSkin(sample: plain, faces: features?.faces ?? LookSkin.faces(in: image))
         }
-        // Protect leaves face skin out of the global fit. Match uses the ordinary area fit
-        // first, then corrects faces locally against the reference measurement.
-        let excluded = skinMode == .protect ? skin?.pixels ?? [] : []
+        // Both skin modes leave the skin out of the global fit: the skin has its own masks.
+        // Match used to measure it with everything else, so a study's drawn skin pulled the
+        // whole look (Rosh, Nov 14, 2026).
+        let excluded = skinMode != .off ? skin?.pixels ?? [] : []
         if skinMode == .match, skin == nil { notices.insert(.noSkinInReference) }
         var background: LookSample?, subject: LookSample?
         switch areas {
@@ -345,7 +447,10 @@ public struct LookTarget: Sendable {
                 back.focusWeights(mask.map { 1 - $0 }, share: LookSample.areaShare)
                 front.focusWeights(mask, share: 1)
                 background = back.excluding(excluded)
-                subject = front.excluding(excluded)
+                // The subject's look leaves the skin out with either skin treatment: Match Skin
+                // Tone gives the skin its own masks, so the drawn face shouldn't also set the
+                // subject's color (it drained the face with the study's dark clothes).
+                subject = front.excluding(skin?.pixels ?? [])
             } else {
                 notices.insert(.noSubjectInReference)
             }
@@ -415,7 +520,14 @@ extension LookMatcher {
             skin = skin ?? LookSkin(sample: plain, faces: photoFaces ?? LookSkin.faces(in: baseImage))
             if skin == nil { notices.insert(options.skinMode == .protect ? .noFaces : .noSkinInPhoto) }
         }
-        let skinPixels = options.skinMode == .protect ? skin?.pixels ?? [] : []
+        // The global look is fitted without the skin, and kept from changing it much, for both
+        // skin modes: Protect holds the skin, Match gives it its own masks. When Match let the
+        // global fit act on the face (Fury Road's orange desert raising Orange saturation),
+        // the skin masks could only bring the face's average back: its warmest cheek stayed
+        // over-saturated with blue clipped to 0 while the forehead went pale (Rosh, Nov 14,
+        // 2026). The masks now make a small, even change instead of undoing a large one.
+        let guardsSkin = options.skinMode == .protect || (options.skinMode == .match && target.skin != nil)
+        let skinPixels = guardsSkin ? skin?.pixels ?? [] : []
 
         // Where the photo is measured.
         var reference = target.whole
@@ -506,7 +618,7 @@ extension LookMatcher {
 
         var current = base
         var penalty: ((LookSample) -> Double)?
-        if options.skinMode == .protect, let skin { penalty = { measured in skin.penalty(measured) } }
+        if guardsSkin, let skin { penalty = { measured in skin.penalty(measured) } }
         fitGlobal(&current, asShot: asShot, options: options, reference: reference, measure: sample,
                   penalty: penalty, afterDecode: { settings in
                       guard LookEmulator.supports(settings) else { return false }
@@ -517,18 +629,31 @@ extension LookMatcher {
                   }, isCancelled: isCancelled)
 
         if let subjectFocus, let subjectReference = target.subject, !isCancelled() {
+            // With Match Skin Tone the skin has its own masks: the subject is measured without
+            // it and its mask leaves it out, so the subject's Saturation (fitted to a study's
+            // dark, grey clothes) doesn't drain the face first (Rosh, Nov 14, 2026: Matrix and
+            // Dark Knight left the face nearly grey).
+            let matchesSkin = options.skinMode == .match && target.skin != nil
+            let subjectSkin = matchesSkin ? skin?.pixels ?? [] : skinPixels
             func subjectSample(_ settings: DevelopSettings) -> LookSample? {
                 guard var measured = photo(settings) else { return nil }
                 measured.focusWeights(subjectFocus, share: 1)
-                return measured.excluding(skinPixels)
+                return measured.excluding(subjectSkin)
             }
-            fitSubject(&current, options: options, reference: subjectReference, measure: subjectSample)
+            let leaveOut = matchesSkin && skin?.usesPeople == true
+                ? LookSkin.maskSelection(bodySkin: PeopleParts.isAvailable) : nil
+            fitSubject(&current, options: options, reference: subjectReference, leavingOut: leaveOut,
+                       measure: subjectSample)
         }
 
+        var skinFit: SkinFit?
         if let skin, !isCancelled() {
             let size = CGSize(width: baseImage.width, height: baseImage.height)
             let space = MaskSpace(sourceSize: session.sourceSize, crop: base.crop ?? .init(),
                                   rect: CGRect(origin: .zero, size: size), outputSize: size)
+            // Body Skin only from the built-in parts model: found by color alone it can take a
+            // warm scarf or coat touching the neck.
+            let bodySkin = skin.usesPeople && PeopleParts.isAvailable
             if options.skinMode == .protect {
                 // Hold the skin at its own colors, tone by tone, with the skin masks, so the rest
                 // of the photo keeps the full look. Only if that can't bring it back inside the
@@ -539,16 +664,23 @@ extension LookMatcher {
                     // The masks may move as far as needed: they undo the look on the face,
                     // rather than paint the face like Match Skin Tone does.
                     _ = fitSkin(skin, to: skin, in: &current, space: space, measure: whole,
-                                limit: protectSkinShift, holdsLightness: true, isCancelled: isCancelled)
+                                limit: protectSkinShift, holdsLightness: true, bodySkin: bodySkin,
+                                isCancelled: isCancelled)
                 }
                 if !isCancelled(), let now = whole(current), !skin.isWithin(now) {
                     protect(skin, in: &current, from: base, asShot: asShot, options: options, measure: whole)
                 }
             } else if let referenceSkin = target.skin {
-                if !fitSkin(skin, to: referenceSkin, in: &current, space: space,
-                            measure: whole, isCancelled: isCancelled) {
-                    notices.insert(.skinMatchLimited)
+                let limit = target.whole.isColorStudy ? studySkinShift : maxSkinShift
+                let fit = fitSkin(skin, to: referenceSkin, in: &current, space: space, measure: whole,
+                                  limit: limit, bodySkin: bodySkin, study: target.whole.isColorStudy,
+                                  isCancelled: isCancelled)
+                switch fit.outcome {
+                case .unchanged: notices.insert(.skinMatchLimited)
+                case .partial: notices.insert(.skinMatchPartial)
+                case .matched: break
                 }
+                skinFit = fit
             }
         }
         // The stand-in is close but not exact: check with a real render, and settle Exposure
@@ -559,6 +691,13 @@ extension LookMatcher {
             usesEmulator = false
             if let guess, let real = whole(current) { offBy = guess.distance(to: real) }
             if options.tone { fitExposure(&current, reference: reference, measure: sample) }
+            // The skin was fitted on the stand-in: check it on a real render, and step once more
+            // if it is off.
+            if options.skinMode == .match, let fit = skinFit, fit.outcome != .unchanged, !isCancelled(),
+               let settled = settleSkin(&current, fit: fit, measure: whole) {
+                notices.remove(.skinMatchPartial)
+                if settled == .partial { notices.insert(.skinMatchPartial) }
+            }
             if options.skinMode == .protect, let skin, let now = whole(current), !skin.isWithin(now) {
                 protect(skin, in: &current, from: base, asShot: asShot, options: options, measure: whole)
             }
@@ -586,13 +725,23 @@ extension LookMatcher {
     /// Adds a "Match Look: Subject" mask (Select Subject) and fits its Temp, Tint, Exposure and
     /// Saturation so the photo's subject matches the reference's, once the background matches.
     /// The slopes are measured by rendering a nudge of each slider, as the global fit does.
+    /// `leavingOut`: Select People parts subtracted from the subject (the skin, when Match Skin
+    /// Tone gives it its own masks).
     static func fitSubject(_ settings: inout DevelopSettings, options: LookMatchOptions, reference: LookSample,
+                           leavingOut: DevelopSettings.PeopleSelection? = nil,
                            measure: (DevelopSettings) -> LookSample?) {
         let earlier = settings.masks.firstIndex { $0.name == LookMatch.subjectMaskName }
         let index = earlier ?? settings.masks.count
         if earlier == nil {
             let part = DevelopSettings.MaskComponent(.subject(DevelopSettings.Selection(feather: subjectFeather)))
             settings.masks.append(DevelopSettings.Mask(name: LookMatch.subjectMaskName, components: [part]))
+        }
+        if let leavingOut {
+            let cut = DevelopSettings.MaskComponent(.people(leavingOut), mode: .subtract)
+            // A repeat match keeps the user's parts and adds the cut only once.
+            if !settings.masks[index].components.contains(where: { $0.shape == cut.shape && $0.mode == .subtract }) {
+                settings.masks[index].components.append(cut)
+            }
         }
         for parameter in options.subjectFitParameters { settings.masks[index][parameter] = 0 }
         func with(_ changes: [(DevelopSettings.LocalParameter, Double)]) -> DevelopSettings {
