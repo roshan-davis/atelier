@@ -1031,17 +1031,26 @@ struct MasksPanel: View {
                           gradient: gradient(parameter),
                           format: { value in
                               if parameter == .exposure { return String(format: "%+.2f", value) }
+                              if parameter == .hue { return value == 0 ? "0°" : String(format: "%+.0f°", value) }
                               return value == 0 ? "0" : String(format: parameter.range.lowerBound < 0 ? "%+.0f" : "%.0f", value)
                           })
             }
         }
     }
 
+    /// The mask Hue track, -180 to 180 around red: cyan, blue, magenta, red, yellow, green, cyan.
+    private static let hueTrack: [Color] = {
+        let hues: [Double] = [0.5, 0.667, 0.833, 0, 0.167, 0.333, 0.5]
+        return hues.map { Color(hue: $0, saturation: 0.75, brightness: 0.9) }
+    }()
+
     private func gradient(_ parameter: DevelopSettings.LocalParameter) -> [Color]? {
         switch parameter {
         case .temperature: return [Color(red: 0.3, green: 0.5, blue: 1), Color(red: 1, green: 0.85, blue: 0.3)]
         case .tint: return [Color(red: 0.3, green: 0.8, blue: 0.3), Color(red: 0.85, green: 0.3, blue: 0.85)]
         case .saturation: return [Color.gray, Color(red: 1, green: 0.4, blue: 0.2), Color(red: 0.3, green: 0.6, blue: 1)]
+        // Where red goes: left through magenta and blue, right through yellow and green.
+        case .hue: return Self.hueTrack
         default: return nil
         }
     }

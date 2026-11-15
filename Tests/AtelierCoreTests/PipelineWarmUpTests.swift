@@ -14,6 +14,7 @@ final class PipelineWarmUpTests: XCTestCase {
         XCTAssertTrue(variants.allSatisfy(\.masks.isEmpty), "masks need the photo itself")
         XCTAssertTrue(variants.allSatisfy { $0.clarity == 35 }, "a tool already on keeps its value")
         XCTAssertTrue(variants.contains { $0.highlights != 0 })
+        XCTAssertTrue(variants.contains { !Calibration.isNeutral($0) }, "Calibration's kernel is built before its first drag")
         XCTAssertEqual(Set(variants.map { $0 }).count, variants.count, "no render twice")
     }
 

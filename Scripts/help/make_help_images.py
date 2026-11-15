@@ -384,6 +384,22 @@ def color_range_mask(image, box, refine=50):
     return t * t * (3 - 2 * t)
 
 
+def turn_hue(image, degrees):
+    """The mask Hue slider (MaskSliders.turnHue): Oklab a and b turned by `degrees`."""
+    lab = oklab(image)
+    t = np.radians(degrees)
+    a = lab[..., 1] * np.cos(t) - lab[..., 2] * np.sin(t)
+    b = lab[..., 1] * np.sin(t) + lab[..., 2] * np.cos(t)
+    lms = np.stack([lab[..., 0], a, b], -1) @ np.linalg.inv(OKLAB_M2).T
+    linear = np.clip((lms ** 3) @ np.linalg.inv(OKLAB_M1).T, 0, 1)
+    return np.where(linear <= 0.0031308, linear * 12.92, 1.055 * linear ** (1 / 2.4) - 0.055).astype(np.float32)
+
+
+def make_mask_slider_images(base):
+    greens = color_range_mask(base, (0.1, 0.48, 0.015, 0.02))
+    pair("mask-hue", base, mix(base, turn_hue(base, -50), greens))
+
+
 def red_overlay(image, mask, strength=0.55):
     red = np.array([0.95, 0.12, 0.12], np.float32)
     return mix(image, red, mask * strength)
@@ -735,6 +751,11 @@ def main():
     if "--spots-only" in sys.argv:
         make_spot_images(load("splash-eagle.jpg"))
         return 0
+    if "--mask-sliders-only" in sys.argv:
+        base = flat(load("splash-redwoods.jpg"))
+        SHARED["redwoods-flat.jpg"] = base
+        make_mask_slider_images(base)
+        return 0
     if "--calibration-only" in sys.argv:
         base = flat(load("splash-redwoods.jpg"))
         SHARED["redwoods-flat.jpg"] = base
@@ -863,6 +884,7 @@ def main():
     greens = color_range_mask(base, (0.1, 0.48, 0.015, 0.02))
     save(red_overlay(base, greens), "mask-color-overlay.jpg")
     pair("mask-color", base, mix(base, saturation(exposure(base, 0.25), 0.5), greens))
+    make_mask_slider_images(base)
 
     # Remove tool
     make_spot_images(eagle)

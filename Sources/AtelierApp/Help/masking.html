@@ -48,7 +48,7 @@
       <div class="sl" data-name="Exposure" data-value="−1.00" data-at="0.4" data-def="0.5"></div>
       <div class="sl" data-name="Highlights" data-value="−30" data-at="0.35" data-def="0.5"></div>
       <div class="sl" data-name="Clarity" data-value="+20" data-at="0.6" data-def="0.5"></div>
-      <div class="muted">… Temp, Tint, Contrast, Shadows, Whites, Blacks, Texture, Dehaze, Saturation, Sharpness, Noise</div>
+      <div class="muted">… Temp, Tint, Contrast, Shadows, Whites, Blacks, Texture, Dehaze, Hue, Saturation, Sharpness, Noise, Moiré, Defringe</div>
       <div class="row" style="justify-content:space-between"><span class="btn">Reset Sliders</span><span class="btn on">Done</span></div>
     </div>
   </div>
@@ -234,9 +234,18 @@
 <p>Right-click a <b>mask</b> for Rename, Duplicate, Invert, Intersect Mask With and Delete. Right-click a <b>part</b> for Invert, Switch to Add / Subtract and Delete. <kbd>Delete</kbd> removes the selected part (the whole mask if it was the last part).</p>
 
 <h2 id="adjust">Mask sliders</h2>
-<p>Each mask has its own: <b>Amount</b> (0 to 200%, scales all of the mask's sliders at once), Temp, Tint, Exposure, Contrast, Highlights, Shadows, Whites, Blacks, Texture, Clarity, Dehaze, Saturation, Sharpness and Noise. They work like the <a href="basic.html">Basic</a> sliders. Double-click a name to reset it; <b>Reset Sliders</b> clears them all.</p>
+<p>Each mask has its own: <b>Amount</b> (0 to 200%, scales all of the mask's sliders at once), Temp, Tint, Exposure, Contrast, Highlights, Shadows, Whites, Blacks, Texture, Clarity, Dehaze, Hue, Saturation, Sharpness, Noise, Moiré and Defringe. Most work like their <a href="basic.html">Basic</a> and <a href="detail.html">Detail</a> twins. Double-click a name to reset it; <b>Reset Sliders</b> clears them all.</p>
 <p><b>Invert</b> shows once, for what is selected: with a part selected it sits with that part's settings and inverts just the part; with the mask row selected it sits under Amount and inverts the whole mask.</p>
 <p>Temp and Tint go the Lightroom way: more Temp is warmer (yellow), more Tint adds magenta.</p>
+<dl class="defs">
+  <dt>Hue <span class="range">−180° to +180°</span></dt><dd>Turns every color in the mask around the color wheel, keeping its brightness and strength. Right goes red → yellow → green → blue → magenta, left the other way; ±180° reaches the opposite color. The track shows where red goes. For fine moves, click the value and type it.</dd>
+  <dt>Moiré <span class="range">0 to 100</span></dt><dd>Removes colored bands from fine patterns, such as fabric, screens or feathers, keeping their detail and brightness. Paint it only where the bands are, as in Lightroom.</dd>
+  <dt>Defringe <span class="range">0 to 100</span></dt><dd>Removes purple and green fringes along edges inside the mask, with the same method as <a href="lens-corrections.html#defringe">Lens Corrections › Defringe</a> at its default colors. Use it where the whole-photo Defringe would touch colors you want to keep.</dd>
+</dl>
+<figure>
+  <div class="frame compare" data-before="redwoods-flat.jpg" data-after="mask-hue-after.jpg" data-labels="Before|Color Range on the leaves, Hue −50°"></div>
+  <figcaption>Hue on a Color Range mask of the leaves turns them toward autumn gold without touching the trunks or the light.</figcaption>
+</figure>
 <div class="tip"><p><span class="label">Change your mind later.</span> Masks stay on the same spot of the photo when you crop, straighten or change the Transform. They're saved with the photo, copied by Copy/Paste Settings and virtual copies, and can be included in presets.</p></div>
 
 <div class="see-also">See also: <a href="develop.html#history">History and undo</a> · <a href="presets.html#create">Create a preset</a></div>

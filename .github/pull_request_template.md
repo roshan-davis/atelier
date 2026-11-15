@@ -41,5 +41,6 @@ Then in Xcode: Product > Run (⌘R), and:
 - [ ] PRD (`Requirements/Atelier-PRD.md`) updated
 - [ ] Help page updated and `Scripts/help/build_help_index.py` reports no problems
 - [ ] `PreviewCache.version` bumped (rendering changed)
+- [ ] GPU and live rendering (AGENTS.md): no CPU pixel loops or GPU→CPU round trips in the live render, display path and caches untouched or updated, new kernels in `PipelineWarmUp`, Frame Diagnostics numbers before/after for render-path changes
 - [ ] `LayoutSnapshots.swift` covers new screens, and I looked at the snapshots for the latest commit
 - [ ] `AtelierCoreTests` added or updated

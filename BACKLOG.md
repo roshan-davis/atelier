@@ -1291,12 +1291,13 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 
 ## AT-068 — Masking: Sky, Background, Landscape, Color Range, Depth Range; more mask sliders
 
-**Status:** Approved in steps (Rosh, Nov 15, 2026: "pick the next item from your found list", then chose **Color Range, then Background**; Sky and Depth Range later). Step 1, Color Range: PR #144, merged `a36e38a` (Rosh, Nov 15, 2026: "merge it"), a type-check fix from Rosh's Xcode build included; not yet tested by Rosh. Step 2, Select Background: on `claude/masking-select-background`, **not yet built or tested on a Mac**. **Owner:** Claude (Cl). **Chat:** [Compare Lightroom 2025-26 with Atelier](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKQjWyjEX331a5FG3gyZMjyK). **Branch:** `claude/masking-color-range`. **Baseline:** `a9ba090`. **Dependencies:** AT-042 to AT-044 (selection masks, merged).
+**Status:** Approved in steps (Rosh, Nov 15, 2026: "pick the next item from your found list", then chose **Color Range, then Background**; Sky and Depth Range later). Step 1, Color Range: PR #144, merged `a36e38a` (Rosh, Nov 15, 2026: "merge it"), a type-check fix from Rosh's Xcode build included; not yet tested by Rosh. Step 2, Select Background: PR #146, merged `dc313b1`, **not yet built or tested on a Mac**. Step 3, Hue, Moiré and Defringe mask sliders: `claude/masking-more-sliders`. **Owner:** Claude (Cl). **Chat:** [Compare Lightroom 2025-26 with Atelier](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKQjWyjEX331a5FG3gyZMjyK). **Branch:** `claude/masking-color-range`. **Baseline:** `a9ba090`. **Dependencies:** AT-042 to AT-044 (selection masks, merged).
 
 **Steps:**
 1. **Color Range** (this branch): click, drag, ⇧ add (up to five), ⌥-click remove, Refine, markers and swatches, ⇧J. See the PRD's Masking section.
 2. **Select Background** (`claude/masking-select-background`): its own part in New Mask / Add / Subtract and for agents (`add_mask` kind `background`); `Selection.background` (decodes false), rendered as the Vision subject inverted after the edge controls, Grow negated so it grows the background. Tests: `SelectBackgroundTests`. Help: masking.html#background.
-3. Sky, Depth Range, Landscape and the extra mask sliders: to agree later.
+3. **Hue, Moiré and Defringe mask sliders** (Rosh, Nov 15, 2026: "merge it and pick the next"; branch `claude/masking-more-sliders`): `LocalParameter.hue` (−180…180°, Oklab hue turn, kernel `atelierMaskHue`), `.moire` and `.defringe` (0…100, remove only) in `MaskSliders.swift`, applied in `applyLocal` (Defringe and Moiré first, Hue last). Agents set them through `add_mask` settings (`hue`, `moire`, `defringe`). Tests: `MaskSlidersTests`. Help: masking.html#adjust. **Not yet built or tested on a Mac.** Not done: Lightroom's negative Moiré/Defringe (protect), Use Fine Adjustment for Hue, mask Color Grading (16.0).
+4. Sky, Depth Range, Landscape and mask Color Grading: to agree later (Sky and Depth need a model choice).
 
 **Step 1 as built:** `DevelopSettings.ColorRange` / `ColorSample` (Masks.swift) with `weight(of:)`; the `atelierColorRange` Metal kernel and `colorRangeMask` in MaskRenderer.swift, run on the same source image as Select Subject; picking in ColorRangeMask.swift (`DevelopSession.colorSample`, read from `maskSourceImage`); `DevelopController.pickColorRange` / `removeColorSample` (one history step each: "Pick Color", "Add Color", "Remove Color"); `MaskOverlay` `.pickColor` / `.removeColor` actions with the eyedropper cursor; `AtelierAction.colorRange` (⇧J, `KeyAction.colorRange`). Tests: `ColorRangeMaskTests`. Help: masking.html#color, shortcuts.html. Layout snapshot `develop-masking-color-1280x800.png`. Not done: agents' `add_mask` has no color kind; XMP keeps it only inside Atelier's own settings (as other masks).
 
@@ -1308,7 +1309,7 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 
 ## AT-069 — Develop: Calibration panel
 
-**Status:** Approved (Rosh, Nov 15, 2026: "pick the next", Calibration recommended on the decision card) / implemented, not yet built or accepted. **Owner:** Claude (project thread "Lightroom gaps"). **Branch:** `claude/develop-calibration`. **PR:** opened from this branch. **Dependencies:** camera-matched RAW look (PRD).
+**Status:** Approved (Rosh, Nov 15, 2026: "pick the next", Calibration recommended on the decision card) / PR #147 merged `8198486` (Rosh: "merge it"), not yet built or accepted. **Owner:** Claude (project thread "Lightroom gaps"). **Branch:** `claude/develop-calibration`. **PR:** #147. **Dependencies:** camera-matched RAW look (PRD).
 
 **Evidence:** the comparison's gap 4. The PRD listed Calibration as "Next" with no ID. Lightroom's Calibration has Shadows Tint and Red, Green and Blue Primary Hue and Saturation, and sits last in the panel stack with an on/off switch.
 
