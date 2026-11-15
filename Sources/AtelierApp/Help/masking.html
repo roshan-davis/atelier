@@ -17,7 +17,7 @@
 
 <div class="chips">
   <a href="#start">Start a mask</a><a href="#panel">The Masks panel</a><a href="#linear">Linear Gradient</a><a href="#radial">Radial Gradient</a>
-  <a href="#brush">Brush</a><a href="#luminance">Luminance Range</a><a href="#color">Color Range</a><a href="#depth">Depth Range</a><a href="#subject">Select Subject and Object</a><a href="#background">Select Background</a><a href="#people">Select People</a><a href="#combine">Add, Subtract, Intersect</a><a href="#adjust">Mask sliders</a>
+  <a href="#brush">Brush</a><a href="#luminance">Luminance Range</a><a href="#color">Color Range</a><a href="#depth">Depth Range</a><a href="#subject">Select Subject and Object</a><a href="#sky">Select Sky</a><a href="#background">Select Background</a><a href="#people">Select People</a><a href="#combine">Add, Subtract, Intersect</a><a href="#adjust">Mask sliders</a>
 </div>
 
 <h2 id="start">Start a mask</h2>
@@ -57,7 +57,7 @@
 <ol class="legend">
   <li><b>Masks</b>, in the order you made them. Click one to select it; double-click to rename. The eye hides its effect.</li>
   <li>A selected mask lists its <b>parts</b>, each with a badge: <b>+</b> added, <b>−</b> subtracted, <b>∩</b> intersected.</li>
-  <li><b>New Mask</b>, and with a mask selected, <b>Add</b> or <b>Subtract</b> a part: Brush, Linear Gradient, Radial Gradient, Luminance Range, Color Range, Depth Range, Select Subject, Select Background, Select Object, Select People.</li>
+  <li><b>New Mask</b>, and with a mask selected, <b>Add</b> or <b>Subtract</b> a part: Brush, Linear Gradient, Radial Gradient, Luminance Range, Color Range, Depth Range, Select Subject, Select Sky, Select Background, Select Object, Select People.</li>
   <li><b>Show Overlay</b> (<kbd>O</kbd>) tints the selected mask red, so you can see exactly where it lands.</li>
   <li>The selected mask's <a href="#adjust">sliders</a>.</li>
 </ol>
@@ -203,6 +203,11 @@
   <figure><div class="frame compare" data-before="mask-subject-before.jpg" data-after="mask-subject-after.jpg" data-labels="Before|Background muted"></div></figure>
 </div>
 <p>Both have the <a href="#edges">edge controls</a>: <b>Grow</b>, <b>Refine Edge</b> and <b>Feather</b> (default 20). To change the background instead of the subject, use <a href="#background">Select Background</a>. If Vision finds nothing, the panel says so.</p>
+
+<h2 id="sky">Select Sky</h2>
+<p><b>Select Sky</b> selects the sky in one step, to darken a bright sky, deepen its blue or warm a sunset without touching the land. It uses the same depth model as <a href="#depth">Depth Range</a> (download it once, 50 MB): the sky is the farthest part of the photo that reaches its top edge. A far wall with no sky above it isn't taken, and a photo with no sky selects nothing and the panel says so.</p>
+<p>It has Grow, Refine Edge and Feather like the other <a href="#edges">edge controls</a>. <b>Refine Edge</b> starts at 60, so the edge follows tree lines and rooftops; raise it for fine branches. <b>Invert</b> selects the land instead.</p>
+<div class="tip"><p><span class="label">Fog and haze.</span> Where distant hills fade into a hazy sky, the depth model may see both as equally far and take the hills too. Subtract a Linear Gradient or a Brush from the mask there, or use Color Range on the sky instead.</p></div>
 
 <h2 id="background">Select Background</h2>
 <p><b>Select Background</b> selects everything except the main subject, in one step: the same subject Select Subject finds, turned inside out. Use it to darken, cool or soften what is behind a person or an animal.</p>

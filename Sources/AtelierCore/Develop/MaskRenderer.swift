@@ -76,7 +76,8 @@ extension DevelopRenderer {
     /// People's skin there.
     /// `guide` is the photo on the same frame, which Refine Edge snaps AI selections to; `fine`
     /// gives the Fine Edges model's foreground matte around a selection's outline on that frame
-    /// (covering a square around it; nil when not downloaded). `depth` gives the photo's depth
+    /// (covering a square around it; nil when not downloaded). `sky` gives Select Sky's mask on
+    /// that frame from the depth model (nil like `depth`). `depth` gives the photo's depth
     /// on that frame, 0 nearest to 1 farthest (nil when the depth model isn't downloaded or its
     /// map isn't ready yet).
     static func sourceMask(_ component: DevelopSettings.MaskComponent, extent: CGRect,
@@ -84,6 +85,7 @@ extension DevelopRenderer {
                            people: ((DevelopSettings.PeopleSelection) -> CIImage?)? = nil,
                            fine: ((CIImage) -> CIImage?)? = nil,
                            depth: (() -> CIImage?)? = nil,
+                           sky: (() -> CIImage?)? = nil,
                            guide: CIImage? = nil,
                            brushCache: BrushCache?) -> CIImage? {
         let width = extent.width, height = extent.height
@@ -154,6 +156,10 @@ extension DevelopRenderer {
         case .depth(let range):
             guard let map = depth?() else { return nil }
             return depthRangeMask(range, from: map)?.cropped(to: extent)
+        case .sky(let selection):
+            guard let mask = sky?() else { return nil }
+            return refinedSelection(mask, grow: selection.grow, refine: selection.refine, feather: selection.feather,
+                                    guide: guide, extent: extent)
         case .luminance:
             return nil
         }

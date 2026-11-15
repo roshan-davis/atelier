@@ -185,7 +185,7 @@ extension DevelopSettings {
         }
 
         public enum Kind: String, Codable, CaseIterable, Sendable {
-            case brush, linear, radial, luminance, color, depth, subject, background, object, people
+            case brush, linear, radial, luminance, color, depth, subject, sky, background, object, people
 
             public var title: String {
                 switch self {
@@ -196,6 +196,7 @@ extension DevelopSettings {
                 case .color: return "Color Range"
                 case .depth: return "Depth Range"
                 case .subject: return "Select Subject"
+                case .sky: return "Select Sky"
                 case .background: return "Select Background"
                 case .object: return "Select Object"
                 case .people: return "Select People"
@@ -211,6 +212,7 @@ extension DevelopSettings {
                 case .color: return "eyedropper"
                 case .depth: return "square.3.layers.3d.down.backward"
                 case .subject: return "person.crop.rectangle"
+                case .sky: return "cloud.sun"
                 case .background: return "person.and.background.dotted"
                 case .object: return "viewfinder"
                 case .people: return "person.2"
@@ -232,6 +234,8 @@ extension DevelopSettings {
             case color(ColorRange)
             /// Depth Range (AT-068): how far away, from the depth model.
             case depth(DepthRange)
+            /// Select Sky (AT-068): the farthest part of the photo that reaches its top, from the depth model.
+            case sky(SkySelection)
             /// Select Subject (no box), Select Object (inside a box) or Select Background (the
             /// subject turned inside out), found by Vision.
             case subject(Selection)
@@ -246,6 +250,7 @@ extension DevelopSettings {
                 case .luminance: return .luminance
                 case .color: return .color
                 case .depth: return .depth
+                case .sky: return .sky
                 case .subject(let selection):
                     if selection.background { return .background }
                     return selection.box == nil ? .subject : .object
@@ -276,12 +281,12 @@ extension DevelopSettings {
             case .subject(let selection):
                 return selection.box.map { MaskPoint(x: $0.x + $0.width / 2, y: $0.y + $0.height / 2) }
             case .color(let range): return range.samples.first?.center
-            case .luminance, .people, .depth: return nil
+            case .luminance, .people, .depth, .sky: return nil
             }
         }
 
         private enum CodingKeys: String, CodingKey {
-            case id, mode, inverted, kind, strokes, linear, radial, luminance, color, depth, selection, people
+            case id, mode, inverted, kind, strokes, linear, radial, luminance, color, depth, sky, selection, people
         }
 
         public init(from decoder: Decoder) throws {
@@ -296,6 +301,7 @@ extension DevelopSettings {
             case .luminance: shape = .luminance(try c.decodeIfPresent(LuminanceRange.self, forKey: .luminance) ?? LuminanceRange())
             case .color: shape = .color(try c.decodeIfPresent(ColorRange.self, forKey: .color) ?? ColorRange())
             case .depth: shape = .depth(try c.decodeIfPresent(DepthRange.self, forKey: .depth) ?? DepthRange())
+            case .sky: shape = .sky(try c.decodeIfPresent(SkySelection.self, forKey: .sky) ?? SkySelection())
             case .subject: shape = .subject(try c.decodeIfPresent(Selection.self, forKey: .selection) ?? Selection(feather: 0))
             case .background:
                 var selection = try c.decodeIfPresent(Selection.self, forKey: .selection) ?? Selection()
@@ -319,6 +325,7 @@ extension DevelopSettings {
             case .luminance(let range): try c.encode(range, forKey: .luminance)
             case .color(let range): try c.encode(range, forKey: .color)
             case .depth(let range): try c.encode(range, forKey: .depth)
+            case .sky(let sky): try c.encode(sky, forKey: .sky)
             case .subject(let selection): try c.encode(selection, forKey: .selection)
             case .people(let selection): try c.encode(selection, forKey: .people)
             }
@@ -514,6 +521,30 @@ extension DevelopSettings {
             picked.low = max(0, lo.rounded())
             picked.high = min(100, hi.rounded())
             return picked
+        }
+    }
+
+    /// Select Sky (AT-068): the sky from the depth model (`DepthMap.Field.sky`), with the edge
+    /// controls the other AI selections have. Refine Edge starts at 60 so the edge follows tree
+    /// lines and rooftops.
+    public struct SkySelection: Codable, Hashable, Sendable {
+        public var feather = 10.0
+        public var refine = 60.0
+        public var grow = 0.0
+
+        public init(feather: Double = 10, refine: Double = 60, grow: Double = 0) {
+            self.feather = feather
+            self.refine = refine
+            self.grow = grow
+        }
+
+        private enum CodingKeys: String, CodingKey { case feather, refine, grow }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            feather = try c.decodeIfPresent(Double.self, forKey: .feather) ?? 10
+            refine = try c.decodeIfPresent(Double.self, forKey: .refine) ?? 60
+            grow = try c.decodeIfPresent(Double.self, forKey: .grow) ?? 0
         }
     }
 

@@ -87,8 +87,43 @@ public enum DepthMap {
             return out
         }
 
+        /// Select Sky's mask, 0...1, on the same grid: the farthest depths (fading in from 0.9 to
+        /// 0.97 of the photo's range; Depth Anything puts the sky at its farthest) that are
+        /// connected to the top row through far pixels, so a distant wall or the far end of a
+        /// room with no sky above it isn't taken. All zero when no far part touches the top.
+        public var sky: [Float] {
+            let low: Float = 0.9, high: Float = 0.97
+            var reached = [Bool](repeating: false, count: values.count)
+            var stack: [Int] = []
+            for column in 0..<width where values[column] >= low {
+                reached[column] = true
+                stack.append(column)
+            }
+            while let index = stack.popLast() {
+                let row = index / width, column = index % width
+                var neighbors: [Int] = []
+                if row > 0 { neighbors.append(index - width) }
+                if row < height - 1 { neighbors.append(index + width) }
+                if column > 0 { neighbors.append(index - 1) }
+                if column < width - 1 { neighbors.append(index + 1) }
+                for next in neighbors where !reached[next] && values[next] >= low {
+                    reached[next] = true
+                    stack.append(next)
+                }
+            }
+            var out = [Float](repeating: 0, count: values.count)
+            for i in values.indices where reached[i] {
+                let t = min(1, max(0, (values[i] - low) / (high - low)))
+                out[i] = t * t * (3 - 2 * t)
+            }
+            return out
+        }
+
         /// As a one-channel float image on `extent` (the corrected photo's frame), stretched to it.
-        func image(on extent: CGRect) -> CIImage? {
+        func image(on extent: CGRect) -> CIImage? { Self.image(values, width: width, height: height, on: extent) }
+
+        /// `values` (`width` × `height`, rows from the top) as a one-channel float image on `extent`.
+        static func image(_ values: [Float], width: Int, height: Int, on extent: CGRect) -> CIImage? {
             // A 32-bit float gray CGImage, whose rows run from the top, read as stored values.
             let data = values.withUnsafeBufferPointer { Data(buffer: $0) }
             guard let provider = CGDataProvider(data: data as CFData),

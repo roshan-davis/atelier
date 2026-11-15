@@ -181,7 +181,7 @@ private struct MaskOverlay: View {
             context.stroke(outline, with: .color(.white), style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
             pinShape(in: &context, at: space.viewPoint(pin), filled: true)
         case .color(let range): drawColorPicks(range, in: &context, space: space)
-        case .luminance, .people, .depth: break
+        case .luminance, .people, .depth, .sky: break
         }
     }
 
@@ -478,7 +478,7 @@ private struct MaskOverlay: View {
             case .object: return .drawBox(start: point)
             case .brush: return painting
             case .color: return .pickColor(start: point, adding: false)
-            case .luminance, .depth, .subject, .background, .people: return .none
+            case .luminance, .depth, .subject, .sky, .background, .people: return .none
             }
         }
         if let component = develop.selectedComponent {
@@ -588,7 +588,7 @@ struct MasksPanel: View {
             maskList
             HStack(spacing: 6) {
                 kindMenu(develop.masks.isEmpty ? "Create New Mask" : "New Mask") { develop.createMask($0) }
-                    .help("Make a new mask: Brush (K), Linear Gradient (M), Radial Gradient (⇧M), Luminance Range, Color Range (⇧J), Depth Range, Select Subject or Select Background")
+                    .help("Make a new mask: Brush (K), Linear Gradient (M), Radial Gradient (⇧M), Luminance Range, Color Range (⇧J), Depth Range, Select Subject, Select Sky or Select Background")
                 if develop.selectedMask != nil {
                     kindMenu("Add") { develop.addComponent($0, mode: .add) }
                         .help("Add a part to the selected mask")
@@ -864,6 +864,8 @@ struct MasksPanel: View {
             colorRangeSettings(component, range)
         case .depth(let range):
             depthRangeSettings(component, range)
+        case .sky(let selection):
+            skySettings(component, selection)
         case .brush:
             invertToggle(component)
         }
@@ -934,6 +936,32 @@ struct MasksPanel: View {
             }
             invertToggle(component)
         }
+    }
+
+    /// Select Sky: the edge controls, once the depth model it comes from is downloaded.
+    private func skySettings(_ component: DevelopSettings.MaskComponent,
+                             _ selection: DevelopSettings.SkySelection) -> some View {
+        let value = { (path: WritableKeyPath<DevelopSettings.SkySelection, Double>) in
+            Binding(get: { selection[keyPath: path] }, set: { newValue in
+                var changed = selection
+                changed[keyPath: path] = newValue
+                update(component, .sky(changed))
+            })
+        }
+        return VStack(alignment: .leading, spacing: 6) {
+            GroupHeading(title: "Select Sky")
+            DepthModelGate {
+                SliderRow(label: "Grow", value: value(\.grow), range: -100...100, step: 1, origin: 0,
+                          trackHelp: "Left shrinks the sky, right grows it")
+                SliderRow(label: "Refine Edge", value: value(\.refine), range: 0...100, step: 1, origin: 60,
+                          trackHelp: "Moves the edge onto the photo's own edges, such as tree lines and rooftops")
+                SliderRow(label: "Feather", value: value(\.feather), range: 0...100, step: 1, origin: 10)
+                Text("The farthest part of the photo that reaches its top edge, found with the depth model on this Mac.")
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            invertToggle(component)
+        }
+        .onAppear { develop.checkSky() }
     }
 
     /// Select People: which person and which parts, like Lightroom's People mask.
