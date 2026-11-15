@@ -261,6 +261,7 @@ public final class DevelopRenderer: @unchecked Sendable {
         case .sharpenAmount: image = SliderPreview.grayscale(image)
         case .highlightClipping: image = SliderPreview.clipping(image, highlights: true)
         case .shadowClipping: image = SliderPreview.clipping(image, highlights: false)
+        case .visualizeSpots(let amount): image = SpotRenderer.visualize(image, amount: amount)
         default: break
         }
         return image
@@ -485,6 +486,8 @@ public final class DevelopSession: @unchecked Sendable {
     public let lensCorrectionSupported: Bool
     private let lock = NSLock()
     private let brushCache = BrushCache()
+    /// The Remove tool's spot shapes, drawn once per spot.
+    private let spotCache = SpotShapeCache()
     /// Select Subject's and Select Object's masks on the corrected photo, by box, found once per
     /// lens geometry; a nil mask when Vision found nothing.
     private var subjectMasks: [DevelopSettings.MaskRect?: CIImage?] = [:]
@@ -571,6 +574,9 @@ public final class DevelopSession: @unchecked Sendable {
             return image
         }
         guard var image = corrected(settings) else { return nil }
+        // The Remove tool's spots, before every tone and color step (so a slider never redraws
+        // them) and before the masks, which then see the cleaned photo.
+        image = SpotRenderer.apply(settings.spots, to: image, cache: spotCache)
         let sourceExtent = image.extent
         let source = image
         let crop = settings.crop

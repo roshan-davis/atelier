@@ -1082,6 +1082,7 @@ final class LibraryModel: ObservableObject {
         }
         if mode == .develop, handleTransformKey(event) { return true }
         if mode == .develop, handleMaskingKey(event) { return true }
+        if mode == .develop, handleRemoveKey(event) { return true }
 
         // Delete opens Remove Photo, as in Lightroom; not while cropping or painting an AI mask.
         if event.keyCode == 51 || event.keyCode == 117,
@@ -1157,6 +1158,38 @@ final class LibraryModel: ObservableObject {
             return true
         case 53:  // escape
             develop.isGuiding = false
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Lightroom's Remove tool keys (Q and A are `KeyAction`s): [ and ] size the brush (with ⇧,
+    /// its feather), / gives the selected spot a new source, Delete removes it, Esc deselects
+    /// or closes the tool.
+    private func handleRemoveKey(_ event: NSEvent) -> Bool {
+        guard develop.isRemoving else { return false }
+        let modifiers = event.modifierFlags.intersection([.command, .option, .control])
+        let shift = event.modifierFlags.contains(.shift)
+        switch event.keyCode {
+        case 33, 30:  // [ and ]
+            guard modifiers.isEmpty else { return false }
+            let larger = event.keyCode == 30
+            if shift {
+                develop.setSpotFeather(develop.spotFeather + (larger ? 10 : -10))
+            } else {
+                develop.setSpotSize(develop.spotSize * (larger ? 1.2 : 1 / 1.2))
+            }
+            return true
+        case 44:  // /
+            guard modifiers.isEmpty, !shift else { return false }
+            develop.newSourceForSelectedSpot()
+            return true
+        case 51, 117:  // delete, forward delete
+            develop.deleteSelectedSpot()
+            return true
+        case 53:  // escape
+            if develop.selectedSpotID != nil { develop.selectSpot(nil) } else { develop.isRemoving = false }
             return true
         default:
             return false

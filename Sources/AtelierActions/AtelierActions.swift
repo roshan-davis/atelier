@@ -239,6 +239,16 @@ public enum AtelierAction {
     public static let maskOverlay = Action<NoParameters>(
         "develop.maskOverlay", "Masking: Show Overlay", place: "Key O",
         summary: "Shows or hides the mask overlay.", kind: .view)
+    public static let remove = Action<NoParameters>(
+        "develop.remove", "Remove Tool (Q)", place: "Develop > Remove Tool (Q), key Q",
+        summary: "Opens or closes the Remove tool, which heals or clones spots on the photo.", kind: .view)
+    public static let visualizeSpots = Action<NoParameters>(
+        "develop.visualizeSpots", "Remove: Visualize Spots", place: "Key A",
+        summary: "Shows or hides Visualize Spots, the photo's edges in black on white so dust stands out.",
+        kind: .view)
+    public static let clearSpots = Action<NoParameters>(
+        "develop.clearSpots", "Clear All Spots", place: "Develop > Clear All Spots",
+        summary: "Removes every Heal and Clone spot from the open photo.", kind: .edit)
     public static let guidedUpright = Action<NoParameters>(
         "develop.guidedUpright", "Transform: Guided Upright", place: "Key ⇧T",
         summary: "Opens or closes Guided Upright.", kind: .view)
@@ -278,7 +288,8 @@ public enum AtelierAction {
         rotateRight.descriptor, showBefore.descriptor, showClipping.descriptor, compareMode.descriptor,
         cycleCompareMode.descriptor, newPreset.descriptor, managePresets.descriptor, applyPreset.descriptor,
         blackAndWhite.descriptor, masking.descriptor, linearGradient.descriptor, radialGradient.descriptor,
-        brush.descriptor, maskOverlay.descriptor, guidedUpright.descriptor, nextArea.descriptor,
+        brush.descriptor, maskOverlay.descriptor, remove.descriptor, visualizeSpots.descriptor,
+        clearSpots.descriptor, guidedUpright.descriptor, nextArea.descriptor,
         previousArea.descriptor, keyboardShortcuts.descriptor,
     ]
 

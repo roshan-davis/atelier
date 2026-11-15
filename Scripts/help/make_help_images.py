@@ -628,6 +628,24 @@ def make_skin_look_images(folder):
             save(image, f"match-skin-{kind}.jpg")
 
 
+def make_spot_images(eagle):
+    """Remove tool: sensor dust on the eagle's calm water (before) and the clean photo (after),
+    plus Visualize Spots, which shows the specks as dark rings on white."""
+    view = eagle.copy()
+    H, W = view.shape[:2]
+    dusty = view.copy()
+    y, x = np.mgrid[0:H, 0:W].astype(np.float32)
+    for cx, cy, r, depth in [(0.12, 0.2, 10, 0.32), (0.83, 0.16, 7, 0.38), (0.2, 0.7, 13, 0.26),
+                             (0.86, 0.62, 8, 0.36), (0.6, 0.86, 6, 0.4), (0.92, 0.88, 11, 0.28)]:
+        d = np.sqrt((x - cx * W) ** 2 + (y - cy * H) ** 2)
+        speck = (1 - smoothstep(r * 0.35, r, d)) * depth
+        dusty = dusty * (1 - speck[..., None])
+    pair("spots", dusty, view)
+    L = blur(np.clip(luma(dusty), 0, 1) ** (1 / 2.2), 1.0)
+    edge = np.abs(cv2.Laplacian(L, cv2.CV_32F, ksize=3))
+    save(np.repeat((1 - smoothstep(0.03, 0.07, edge))[..., None], 3, axis=2), "spots-visualize.jpg")
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     if len(sys.argv) == 3 and sys.argv[1] in ("--presets-from", "--check-presets-from"):
@@ -639,6 +657,9 @@ def main():
         return 0
     if len(sys.argv) == 3 and sys.argv[1] == "--skin-look-from":
         make_skin_look_images(sys.argv[2])
+        return 0
+    if "--spots-only" in sys.argv:
+        make_spot_images(load("splash-eagle.jpg"))
         return 0
     if "--hdr-only" in sys.argv:
         make_hdr_images(flat(load("splash-redwoods.jpg")))
@@ -746,6 +767,9 @@ def main():
     bright = smoothstep(0.55, 0.75, luma(base))
     save(red_overlay(base, bright), "mask-luminance-overlay.jpg")
     pair("mask-luminance", base, mix(base, highlights(base, -0.6), bright))
+
+    # Remove tool
+    make_spot_images(eagle)
 
     # Match Look: Reinhard transfer in Lab, as a stand-in for the slider fit
     reference = load("splash-eagle.jpg")

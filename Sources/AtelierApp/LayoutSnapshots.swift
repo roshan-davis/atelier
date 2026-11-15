@@ -93,6 +93,7 @@ enum LayoutSnapshots {
         await snapshotColorTools(model: model, into: folder)
         await snapshotMatchLook(model: model, into: folder)
         await snapshotMasking(model: model, into: folder)
+        await snapshotRemove(model: model, into: folder)
         await snapshotTransform(model: model, into: folder)
         await snapshotPresets(model: model, into: folder)
         // Each theme in Develop at the size in Rosh's screenshot, and the theme picker itself.
@@ -602,6 +603,35 @@ enum LayoutSnapshots {
                       to: folder.appendingPathComponent("develop-masking-object-1280x800.png"))
         develop.deleteAllMasks()
         develop.isMasking = false
+        develop.flushSave()
+    }
+
+    /// The Remove tool (AT-066): a Heal click, a Clone stroke selected with its source, and
+    /// Visualize Spots.
+    private static func snapshotRemove(model: LibraryModel, into folder: URL) async {
+        let develop = model.develop
+        develop.isRemoving = true
+        develop.spotMode = .heal
+        develop.spotSize = 0.04
+        develop.addSpot(points: [.init(x: 0.3, y: 0.35)])
+        develop.spotMode = .clone
+        develop.spotSize = 0.02
+        develop.addSpot(points: [.init(x: 0.55, y: 0.6), .init(x: 0.62, y: 0.62), .init(x: 0.7, y: 0.6)])
+        try? await Task.sleep(for: .seconds(2))
+        print("SNAPSHOT: spots \(develop.spots.map { "\($0.mode.rawValue) points=\($0.points.count) offset=\($0.offset)" })")
+        await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
+                      to: folder.appendingPathComponent("develop-remove-1280x800.png"))
+        await capture(AnyView(DevelopPanel(develop: develop).environmentObject(model)), size: CGSize(width: 320, height: 900),
+                      to: folder.appendingPathComponent("panel-remove-320x900.png"))
+        develop.visualizesSpots = true
+        try? await Task.sleep(for: .seconds(1))
+        await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
+                      to: folder.appendingPathComponent("develop-remove-visualize-1280x800.png"))
+        develop.visualizesSpots = false
+        develop.deleteAllSpots()
+        develop.isRemoving = false
+        develop.spotMode = .heal
+        develop.spotSize = DevelopSettings.Spot.defaultSize
         develop.flushSave()
     }
 

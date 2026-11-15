@@ -26,6 +26,9 @@ struct DevelopImageView: View {
                         MaskEditorView(develop: develop, image: image, display: develop.displayImage ?? image,
                                        pixelSize: pixelSize, zoom: model.zoomState,
                                        onReport: onZoomReport)
+                    } else if develop.isRemoving {
+                        SpotEditorView(develop: develop, image: image, display: develop.displayImage ?? image,
+                                       pixelSize: pixelSize, zoom: model.zoomState, onReport: onZoomReport)
                     } else if develop.isGuiding {
                         GuidedUprightView(develop: develop, image: image)
                     } else if develop.showingBefore || develop.compareMode == .off {
@@ -189,7 +192,7 @@ struct DevelopImageView: View {
     }
 
     private var compareDisabled: Bool {
-        develop.isCropping || develop.isAIOpen || develop.isMasking || develop.isGuiding
+        develop.isCropping || develop.isAIOpen || develop.isMasking || develop.isGuiding || develop.isRemoving
     }
 
     private func bottomBar(showHint: Bool, compactZoom: Bool) -> some View {
@@ -428,6 +431,13 @@ struct DevelopPanel: View {
                                      isModified: develop.settings.crop != nil, reset: { develop.setCrop(Crop()) },
                                      expandAll: expandAll, collapseAll: collapseAll) {
                             CropPanel(develop: develop)
+                        }
+                    }
+                    if develop.isRemoving {
+                        PanelSection(title: "Remove", isExpanded: .constant(true), soloMode: $soloMode,
+                                     isModified: !develop.spots.isEmpty, reset: { develop.deleteAllSpots() },
+                                     expandAll: expandAll, collapseAll: collapseAll) {
+                            RemovePanel(develop: develop)
                         }
                     }
                     if develop.isMasking {
@@ -912,6 +922,10 @@ private struct ToolStrip: View {
             tool("crop", title: "Crop & Straighten (R)", active: develop.isCropping,
                  modified: develop.settings.crop != nil) {
                 develop.isCropping.toggle()
+            }
+            tool("bandage", title: "Remove: Heal and Clone spots (Q)", active: develop.isRemoving,
+                 modified: !develop.spots.isEmpty) {
+                develop.isRemoving.toggle()
             }
             tool("circle.dashed", title: "Masking: Linear Gradient, Radial Gradient, Brush, Luminance Range, Select Subject (⇧W)",
                  active: develop.isMasking, modified: !develop.masks.isEmpty) {

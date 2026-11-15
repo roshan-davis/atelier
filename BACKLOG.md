@@ -174,6 +174,8 @@ Evidence baseline, October 30, 2026:
 
 **Acceptance to agree:** one selected workflow with realistic fixtures, exact query/membership/relink semantics, non-destructive behavior, Help and PRD; defer remaining features explicitly.
 
+**Lightroom gap list (Nov 15, 2026, Rosh: "lets add these in the backlog"):** the Lightroom Classic 16 comparison (`reports/lightroom-classic-16-vs-atelier-2026-11-15.md` in project files, gap 5) puts these under this item: smart collections, exact duplicate detection (Lightroom 15.4) and near-duplicates (PRD), Map view and People view (face recognition), both PRD "Later". Still proposed; pick one with Rosh.
+
 ## AT-014 — UI, gestures and accessibility acceptance
 
 **Status:** Proposed / discuss; acceptance unverified. **Owner/chat/branch/PR:** unassigned. **Dependencies:** agree screens, themes and interaction matrix.
@@ -394,6 +396,14 @@ Evidence baseline, October 30, 2026:
 | HSL Saturation Red, full size (Z6) | 115 → 79 | – |
 
 Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Grading, 40–50% with J on; step-1 sliders unchanged as expected. The histogram and color scope take about 95–150 ms per tick in this Debug build, so moving them off the render queue is most of the win (candidate next fix: count them on the GPU). The run also showed `createCGImage` deferring the render until first draw (full-size Contrast "took" 7 ms), i.e. on the main thread; commit ae8b282 forces `deferred: false`. Timings at ae8b282 are pending: CI for that head failed to get a runner (re-run once), so they need a run on a Mac (`ATELIER_SAMPLE_RAWS=<folder of NEFs> ATELIER_SAMPLE_OUT=<folder> swift test --filter SliderPerformanceTests`).
+
+**Step 2 as built (branch `claude/project-thread-mp3ctg`, PR #139):**
+- Core: `DevelopSettings.Spot` and `SpotSource` (`Develop/Spots.swift`): 16 candidate sources around the spot (8 directions, 2 distances, kept on the photo), ranked by how alike the ring around each is to the ring around the spot, read from a small gray copy of the proxy. `SpotRenderer` (`Develop/SpotRenderer.swift`): Clone and Heal as Core Image Metal kernels over each spot's own area; Heal spreads the photo-minus-source difference from a thin ring outside the spot over the inside with normalized blurs at two sizes (a fast stand-in for a Poisson membrane). Brush shapes are cached per photo (`SpotShapeCache`). Visualize Spots is a `SliderPreview` case (Laplacian edges, black on white).
+- App: tool strip button, Q, Develop > Remove Tool (Q) and Develop > Clear All Spots; `SpotEditorView` overlay (click, stroke, drag source, drag spot, Space-pan, brush circle); Remove panel; keys [ ] ⇧[ ⇧] / A Delete Esc. Agent actions `develop.remove`, `develop.visualizeSpots`, `develop.clearSpots`. Help page `remove.html`. Layout snapshots `develop-remove`, `panel-remove`, `develop-remove-visualize`.
+- No `PreviewCache.version` bump: photos without spots render as before.
+- Left out: XMP writing of spots, the Spot Removal paste checkbox, agent Sync carrying spots, Content-Aware (step 3), Generative AI (step 4). Not measured yet: Heal time on a 45 MP NEF with many dust spots.
+- Tests: `SpotTests` (encoding, defaults, presets, source candidates and ranking, hit-testing, Clone, Heal, Opacity, Visualize). Nothing compiled in the cloud.
+- Fixed during Rosh's test: a spot first turned the photo into the spot's area stretched over the frame (each spot was a small piece composited over the photo). Each spot is now one kernel pass over the whole photo that leaves pixels outside its area unchanged (`c640040`). `swift test` and the layout snapshots were not run separately before the merge.
 
 **Acceptance:** Mac build and tests pass; Develop sliders on every panel update correctly (no stale photo after Exposure, Temp/Tint, Profile, Lens Corrections, Defringe or Transform changes); J overlay marks the same pixels as before and the histogram is unchanged by it; Instruments numbers before/after for an HSL drag, a Contrast drag and a Clarity drag on a Z6 NEF; Atelier.app shows its icon in Finder. **Deferred:** GPU-4 to GPU-13 from the audit.
 
@@ -1199,3 +1209,69 @@ So no tool has a private note per photo, and none leaves a readable, editable re
 **Scope:** with a built-in study, Subject & Background still fits the global sliders background to background but adds no "Match Look: Subject" mask (`LookMatcher.match` skips `fitSubject` when `target.whole.isColorStudy`); PR #137's nudge (`studySubjectLean`, `maxStudySubjectShift`, `fitSubject(own:)`) removed. File and catalog references unchanged. Dialog hint for studies, PRD, Help updated. A subject mask left by an earlier match is kept untouched.
 
 **Acceptance:** Mac build; `LookMatchTests.testStudySubjectTakesTheBackgroundLookWithoutASubjectMask`, `BuiltInLookReferenceTests`, `MatchLookModelTests` pass; Rosh: Z62_9184 (earlier match undone) with each portrait study in Subject & Background, no Subject mask in Masking, hair and jacket keep natural colors under the study's look.
+
+## Lightroom Classic 16 gaps (Nov 15, 2026)
+
+Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 first", after the comparison `reports/lightroom-classic-16-vs-atelier-2026-11-15.md` (project files; Lightroom Classic 16.0 and 15.x against `main` at `e71d7d5`). Six gaps, ranked by the report. Gap 5 (smart collections, duplicates, Map, People) goes under AT-013. AT-066 is approved to start. The rest are proposals to discuss before building.
+
+## AT-066 — Develop: Remove tool (Content-Aware Remove, Heal, Clone)
+
+**Status:** Approved (Rosh, Nov 15, 2026: "start with 1 first", then "OK" to this design and to the engine recommendation: PatchMatch built in, a model later only if it falls short). Step 2 (Clone and Heal) built and run by Rosh on the Mac; Rosh asked to merge PR #139 (Nov 14, 2026, 10:18 PM PT). See "Step 2 as built" below. Step 3 (Content-Aware Remove) is next. **Owner:** Claude (Cl). **Chat:** [Compare Lightroom 2025-26 with Atelier](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKQjWyjEX331a5FG3gyZMjyK). **Branch:** `claude/project-thread-mp3ctg`. **Baseline:** `e71d7d5`. **Dependencies:** none for steps 2–3; step 4 uses the ComfyUI Remove Object recipe (AT-008 Processor contract).
+
+**Evidence:** Atelier has no spot tool. The only way to remove something is the AI tool's Remove Object (ComfyUI, Qwen-Image-Edit-2511, about 91 s at 768 px), which is too slow for dust, blemishes or a stray wire, and it writes a new version instead of a setting. Lightroom's Remove tool (Q) does Content-Aware Remove, Heal and Clone in place, and 15.0–16.0 built Dust Removal, Reflection Removal and AI Blemish removal on top of it.
+
+**Design (Lightroom Classic as the floor; approved Nov 15, 2026):**
+- **Open:** a Remove button (bandage) in the tool strip under the histogram, between Crop and Masking, and Q (a `KeyAction`, customizable in Settings > Keyboard). Opening it closes Crop, Masking and AI, as those close each other. Esc or Q again closes it, Return applies (same as Done).
+- **Panel** under the tool strip: Mode buttons **Content-Aware Remove** (the default once step 3 lands; Heal until then), **Heal** and **Clone**; **Size**, **Feather** (Heal and Clone only) and **Opacity**, all `SliderRow`; **Visualize Spots** (A in Lightroom; here the same key) with its threshold slider, which shows a black-and-white edge view so sensor dust stands out; **Show Overlay** (spot outlines, on by default while the tool is open); Reset and Done.
+- **On the photo** (an overlay on the Develop photo view, like Masking; never a second photo view): click for a round spot, drag to paint a stroke. Heal and Clone pick a source next to the spot automatically and show it as a second outline joined by a line; drag the source outline to move it, or press / for a new automatic source (Lightroom's key). Click a spot to select it; Delete removes it and plays `DeleteFeedback.play(.remove)` (PRD UX principle 12). [ and ] resize, ⇧[ and ⇧] feather, as in Masking. Cursors come from `CursorShape` (a brush circle at the brush size, a move cursor over a source). The photo zooms and pans as everywhere (`ZoomViewport`, Space-drag, pinch, Navigator).
+- **What each mode does:** Clone copies the source with a feathered edge. Heal copies the source's texture and matches the colors and brightness around the spot's edge (a smooth membrane fill of the edge difference, as in Poisson healing). Content-Aware Remove fills the spot from texture found anywhere nearby, not from one source (PatchMatch, Barnes et al. 2009), then blends the edge like Heal.
+- **Stored as settings:** `DevelopSettings.spots`, a list of spots (mode, stroke points and size in the same uncropped source coordinates as masks, feather, opacity, source offset, and the Content-Aware fill's random seed so every render matches). Decoded with `decodeIfPresent` and an empty default, so old catalogs, presets and history load unchanged. Written to XMP with the other settings (AT-004 path). Paste Settings and Sync keep each photo's own spots (Lightroom's default; a **Spot Removal** checkbox to paste them anyway is deferred). Presets never carry spots.
+- **Pipeline:** spots apply to the corrected photo (after RAW decode, lens corrections, Defringe and Transform, before crop and every tone and color step). So they stay put when tone or color changes, and a tone slider drag never refills a spot. Clone and Heal fills are cheap GPU passes. A Content-Aware fill is computed once in the background, per spot, from the pre-tone image, cached by spot and upstream settings, and reused in every frame and export. While one computes, the spot shows the Heal result.
+- **History:** each spot, move, resize, mode change and delete is one step ("Add Spot", "Move Spot Source", "Delete Spot"), and Undo works while the tool is open.
+- **Agent actions** (the registry, regenerated catalog): Show Remove Tool (`view`), Visualize Spots (`view`, toggle), Clear All Spots (`edit`, one Undo). Painting spots stays manual for now (same reason Brush masks are left out for agents in AT-050d); a `remove_spots` tool with round spots at given points could follow for dust.
+- **Preview cache:** adding the `spots` field changes nothing for photos without spots, so no `PreviewCache.version` bump unless the pipeline order changes how existing photos render. Check before merging.
+- **Help:** a new Remove tool page with drawn controls and before/after pictures for each mode (from `make_help_images.py`), listed in `GROUPS`.
+
+**Steps (one PR each):**
+1. This design, PRD section and Help outline (docs only).
+2. Clone and Heal: click and stroke spots, automatic and draggable source, Visualize Spots, history, Copy/Paste checkbox, XMP, actions, Help.
+3. Content-Aware Remove (PatchMatch, background fill with cache). Measure fill time on a 45 MP Nikon NEF for a dust-size spot and a 300 px stroke before deciding on GPU work.
+4. **Generative AI** checkbox under Content-Aware (as in Lightroom): the stroke goes to the existing ComfyUI Remove Object recipe and the result is stored as that spot's fill (a patch file next to the catalog), so large objects use the same tool. The AI tool's Remove Object stays until Rosh decides whether to fold it in.
+
+**Later, separate items once this lands:** Detect Dust (find and fill sensor spots automatically, Lightroom 15.0), Blemishes (spots found on the Face Skin mask from Select People, Lightroom 16.0), Reflection Removal.
+
+**Decided (Rosh, Nov 15, 2026):** the Content-Aware engine is built-in PatchMatch (no model, no download, fine for dust, blemishes and small objects), with a small permissively licensed inpainting model as an optional Settings download later if PatchMatch falls short on larger areas. Generative AI (step 4) covers big removals.
+
+**Acceptance:** Mac build and tests (spot geometry and encoding in `AtelierCoreTests`, Heal edge-match and Content-Aware determinism checks on fixtures); layout snapshot of the tool panel; Rosh on a NEF: remove sensor dust with Visualize Spots, a skin blemish with Heal, a wire with a Clone stroke, then change Exposure and crop. Spots stay put and the fills don't redo themselves during the drag.
+
+## AT-067 — Develop > Detail: AI Denoise
+
+**Status:** Proposed / discuss. **Owner:** unassigned. **Dependencies:** AT-007 model registry and license policy.
+
+**Evidence:** the comparison's gap 2. Atelier has only classic Luminance and Color noise reduction. Lightroom's Denoise runs a model on the demosaiced RAW (Apple Neural Engine on a Mac) and keeps the original.
+
+**Questions to agree:** model and license (Apache 2.0/MIT only, size limits Rosh accepts; candidates still to research), whether it runs built in on Core ML or as a download, whether it works on RAW before the tone steps (Lightroom's way) or on the rendered image, and whether the result is a cached derived file or a new version.
+
+## AT-068 — Masking: Sky, Background, Landscape, Color Range, Depth Range; more mask sliders
+
+**Status:** Proposed / discuss. **Owner:** unassigned. **Dependencies:** AT-042 to AT-044 (selection masks, merged).
+
+**Evidence:** the comparison's gap 3. Atelier has Brush, Linear, Radial, Luminance Range, Select Subject, Select Object and Select People. Missing compared with Lightroom: Select Sky, Select Background (today only by inverting Subject), Select Landscape (with 15.0's snow), Color Range, Depth Range (16.0 estimates depth when the file has none). Mask sliders lack Hue, Moiré, Defringe and Color Grading (16.0). The selection plan's Brush Auto Mask (step 4) and SAM 2.1 clicks for Select Object (step 3) stay planned there.
+
+**Questions to agree:** order (Color Range needs no model; Sky and Background may come from Vision or a small segmentation model; Depth Range needs a depth model with a permissive license), and which mask sliders first.
+
+## AT-069 — Develop: Calibration panel
+
+**Status:** Proposed / discuss. **Owner:** unassigned. **Dependencies:** camera-matched RAW look (PRD).
+
+**Evidence:** the comparison's gap 4. The PRD lists Calibration as "Next" with no ID. Lightroom's Calibration has Shadows Tint and Red, Green and Blue Primary Hue and Saturation, and sits last in the panel stack with an on/off switch.
+
+**Questions to agree:** how the primaries map onto Atelier's camera-match profile and Oklab color steps, and whether existing photos must stay unchanged (neutral defaults: yes).
+
+## AT-070 — Lens Blur, Adaptive presets and Panorama merge
+
+**Status:** Proposed / discuss. **Owner:** unassigned. **Dependencies:** a depth source (AT-068's Depth Range) for Lens Blur; AT-068's Sky and Background masks for Adaptive presets; AT-054 (HDR bracket merge) for shared alignment code with Panorama.
+
+**Evidence:** the comparison's gap 6. Lightroom has Lens Blur (AI depth, bokeh shapes, focus range), Adaptive presets (presets with Sky, Subject, Portrait or Landscape masks that adapt per photo) and Photo Merge > Panorama and HDR Panorama. Atelier presets can carry masks, but there are no adaptive packs. Panorama is PRD "Later".
+
+**Questions to agree:** which first; each gets its own ID when picked.
