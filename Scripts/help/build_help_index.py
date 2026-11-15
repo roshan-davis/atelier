@@ -48,7 +48,7 @@ GROUPS = [
     ]),
     ("Tools", [
         ("crop.html", "Crop & Straighten"),
-        ("remove.html", "Remove: Heal and Clone"),
+        ("remove.html", "Remove: Content-Aware, Heal and Clone"),
         ("masking.html", "Masking"),
         ("presets.html", "Presets"),
         ("preset-lookbook.html", "Built-in preset lookbook"),

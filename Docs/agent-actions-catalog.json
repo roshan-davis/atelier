@@ -84,7 +84,7 @@
         "type": "object"
       },
       "place": "Develop > Clear All Spots",
-      "summary": "Removes every Heal and Clone spot from the open photo.",
+      "summary": "Removes every Remove tool spot (Content-Aware, Heal and Clone) from the open photo.",
       "tier": "undoable",
       "title": "Clear All Spots",
       "version": 1

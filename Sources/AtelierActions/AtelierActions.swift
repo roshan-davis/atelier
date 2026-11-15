@@ -248,7 +248,7 @@ public enum AtelierAction {
         kind: .view)
     public static let clearSpots = Action<NoParameters>(
         "develop.clearSpots", "Clear All Spots", place: "Develop > Clear All Spots",
-        summary: "Removes every Heal and Clone spot from the open photo.", kind: .edit)
+        summary: "Removes every Remove tool spot (Content-Aware, Heal and Clone) from the open photo.", kind: .edit)
     public static let guidedUpright = Action<NoParameters>(
         "develop.guidedUpright", "Transform: Guided Upright", place: "Key ⇧T",
         summary: "Opens or closes Guided Upright.", kind: .view)

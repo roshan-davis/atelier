@@ -630,7 +630,8 @@ def make_skin_look_images(folder):
 
 def make_spot_images(eagle):
     """Remove tool: sensor dust on the eagle's calm water (before) and the clean photo (after),
-    plus Visualize Spots, which shows the specks as dark rings on white."""
+    Visualize Spots, which shows the specks as dark rings on white, and Content-Aware removing
+    the fish."""
     view = eagle.copy()
     H, W = view.shape[:2]
     dusty = view.copy()
@@ -641,6 +642,18 @@ def make_spot_images(eagle):
         speck = (1 - smoothstep(r * 0.35, r, d)) * depth
         dusty = dusty * (1 - speck[..., None])
     pair("spots", dusty, view)
+    # Content-Aware: the fish under the eagle, filled from the water around it.
+    from patchmatch_fill import complete
+    # A brush stroke along the fish, from its tail to below the talons.
+    (ax, ay), (bx, by), radius = (272, 585), (372, 505), 34
+    x0, y0, x1, y1 = 140, 380, min(W, 500), H
+    region = view[y0:y1, x0:x1].astype(np.float64)
+    yy, xx = np.mgrid[y0:y1, x0:x1].astype(np.float64)
+    t = np.clip(((xx - ax) * (bx - ax) + (yy - ay) * (by - ay)) / ((bx - ax) ** 2 + (by - ay) ** 2), 0, 1)
+    hole = np.hypot(xx - (ax + t * (bx - ax)), yy - (ay + t * (by - ay))) <= radius
+    filled = view.copy()
+    filled[y0:y1, x0:x1] = complete(region, hole).astype(np.float32)
+    pair("content-aware", view, filled)
     L = blur(np.clip(luma(dusty), 0, 1) ** (1 / 2.2), 1.0)
     edge = np.abs(cv2.Laplacian(L, cv2.CV_32F, ksize=3))
     save(np.repeat((1 - smoothstep(0.03, 0.07, edge))[..., None], 3, axis=2), "spots-visualize.jpg")

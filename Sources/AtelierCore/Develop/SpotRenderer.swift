@@ -15,17 +15,26 @@ import Foundation
 /// slider never redraws them; the brush shapes are kept in a `SpotShapeCache` per open photo.
 enum SpotRenderer {
     /// `image` with `spots` drawn on it. `image` is the corrected photo, upright and uncropped.
-    static func apply(_ spots: [DevelopSettings.Spot], to image: CIImage, cache: SpotShapeCache? = nil) -> CIImage {
+    /// Content-Aware spots take their fill from `fills` (keyed by `upstream`, which names the
+    /// corrected photo); without one, or while it is being found, they show Heal.
+    static func apply(_ spots: [DevelopSettings.Spot], to image: CIImage, cache: SpotShapeCache? = nil,
+                      fills: SpotFills? = nil, upstream: Int = 0) -> CIImage {
         guard !spots.isEmpty, let kernels, !image.extent.isInfinite, !image.extent.isEmpty else { return image }
         var result = image
+        var prior: [DevelopSettings.Spot] = []
         for spot in spots where !spot.points.isEmpty && spot.opacity > 0 {
-            result = apply(spot, to: result, kernels: kernels, cache: cache)
+            var fill: CIImage?
+            if spot.mode == .contentAware {
+                fill = fills?.fill(for: spot, prior: prior, upstream: upstream, image: result)
+            }
+            result = apply(spot, to: result, fill: fill, kernels: kernels, cache: cache)
+            prior.append(spot)
         }
         return result
     }
 
-    private static func apply(_ spot: DevelopSettings.Spot, to image: CIImage, kernels: [String: CIKernel],
-                              cache: SpotShapeCache?) -> CIImage {
+    private static func apply(_ spot: DevelopSettings.Spot, to image: CIImage, fill: CIImage?,
+                              kernels: [String: CIKernel], cache: SpotShapeCache?) -> CIImage {
         let extent = image.extent
         let photo = extent.size
         let radius = max(1, CGFloat(spot.size) * max(photo.width, photo.height) / 2)
@@ -48,21 +57,31 @@ enum SpotRenderer {
         // `area` as it is, never a small piece cropped and composited over the photo. With the
         // small piece, the photo came out as that piece with its edges stretched over the whole
         // frame (Rosh, Nov 14, 2026).
-        let shift = CIVector(x: CGFloat(spot.offset.x) * photo.width, y: -CGFloat(spot.offset.y) * photo.height)
+        //
+        // A Content-Aware spot without its fill yet shows Heal, from its source or, if it has
+        // none, the nearest place it could take one from.
+        var offset = spot.offset
+        if spot.mode == .contentAware, fill == nil, offset == DevelopSettings.MaskPoint(x: 0, y: 0) {
+            offset = SpotSource.candidates(for: spot, photo: photo).first ?? offset
+        }
+        let shift = CIVector(x: CGFloat(offset.x) * photo.width, y: -CGFloat(offset.y) * photo.height)
         let bounds = CIVector(x: extent.minX + 0.5, y: extent.minY + 0.5, z: extent.maxX - 0.5, w: extent.maxY - 0.5)
         let inside = CIVector(x: region.minX, y: region.minY, z: region.maxX, w: region.maxY)
         let opacity = spot.opacity / 100
         // The photo (input 0) is read at each pixel and `shift` away; the other inputs only at it.
-        let dx = CGFloat(spot.offset.x) * photo.width, dy = -CGFloat(spot.offset.y) * photo.height
+        let dx = shift.x, dy = shift.y
         let roi: CIKernelROICallback = { index, rect in
             index == 0 ? rect.union(rect.offsetBy(dx: dx, dy: dy)).insetBy(dx: -1, dy: -1) : rect
         }
         let filled: CIImage?
-        switch spot.mode {
-        case .clone:
+        switch (spot.mode, fill) {
+        case (.contentAware, let fill?):
+            filled = kernels["atelierSpotFill"]?.apply(extent: extent, roiCallback: { _, rect in rect },
+                                                       arguments: [image, fill, mask, inside, opacity])
+        case (.clone, _):
             filled = kernels["atelierSpotBlend"]?.apply(extent: extent, roiCallback: roi,
                                                         arguments: [image, mask, shift, bounds, inside, opacity])
-        case .heal:
+        case (.heal, _), (.contentAware, _):
             let outer = shapes.outer.transformed(by: place), inner = shapes.inner.transformed(by: place)
             guard let ring = kernels["atelierSpotRing"]?.apply(extent: region, roiCallback: roi,
                                                                arguments: [image, outer, inner, shift, bounds])
@@ -178,6 +197,18 @@ enum SpotRenderer {
                 return float4(d * w, w);
             }
 
+            // Content-Aware: the fill found for the spot (`ContentAwareFill`), through its edge.
+            [[stitchable]] float4 atelierSpotFill(coreimage::sampler image, coreimage::sampler fill,
+                                                  coreimage::sampler mask, float4 inside, float opacity,
+                                                  coreimage::destination dest) {
+                float2 p = dest.coord();
+                float4 a = image.sample(image.transform(p));
+                if (!atelierSpotInside(p, inside)) { return a; }
+                float4 f = fill.sample(fill.transform(p));
+                float m = clamp(mask.sample(mask.transform(p)).r, 0.0, 1.0) * opacity;
+                return float4(mix(a.rgb, f.rgb, m), a.a);
+            }
+
             // Heal: the source plus the ring's difference spread over the inside. The near blur
             // keeps the seam exact; the far one reaches the middle of large spots.
             [[stitchable]] float4 atelierSpotHeal(coreimage::sampler image, coreimage::sampler near,
@@ -211,7 +242,7 @@ enum SpotRenderer {
         return RuntimeKernels.build(source)
     }()
 
-    static var kernelsAvailable: Bool { kernels?.count == 4 }
+    static var kernelsAvailable: Bool { kernels?.count == 5 }
 
     /// Visualize Spots on the finished photo: white with its edges in black. `amount` is the
     /// panel's slider (0...100): higher shows fainter edges, so more specks.

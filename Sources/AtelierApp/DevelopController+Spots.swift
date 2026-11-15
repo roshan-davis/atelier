@@ -2,8 +2,9 @@ import AppKit
 import AtelierCore
 import Foundation
 
-/// The Remove tool's spots (AT-066): adding them with a source picked next to them, moving and
-/// changing them, and deleting them. Each change is one history step.
+/// The Remove tool's spots (AT-066): adding them (Heal and Clone with a source picked next to
+/// them; Content-Aware keeps one too, for Heal while its fill is found and for switching
+/// modes), moving and changing them, and deleting them. Each change is one history step.
 extension DevelopController {
     typealias Spot = DevelopSettings.Spot
 
@@ -14,7 +15,7 @@ extension DevelopController {
     /// The decoded photo's size (upright, uncropped) used for spot geometry.
     private var spotPhotoSize: CGSize { sourceSize ?? CGSize(width: 3, height: 2) }
 
-    /// Adds a Heal or Clone spot along `points` (one point for a click) with the panel's brush,
+    /// Adds a spot along `points` (one point for a click) with the panel's brush,
     /// its source picked where the photo looks most like the spot's surroundings.
     func addSpot(points: [DevelopSettings.MaskPoint]) {
         guard assetID != nil, !points.isEmpty else { return }
@@ -27,9 +28,14 @@ extension DevelopController {
         setSpots(spots, step: "Add \(spot.mode.title) Spot")
     }
 
-    /// Lightroom's / key: the selected spot takes the next best source.
+    /// Lightroom's / key: the selected spot takes the next best source, or for Content-Aware,
+    /// another fill.
     func newSourceForSelectedSpot() {
         guard let spot = selectedSpot else { return }
+        if spot.mode == .contentAware {
+            updateSpot(spot.id, step: "New Fill") { $0.variation += 1 }
+            return
+        }
         let ranked = SpotSource.ranked(for: spot, photo: spotPhotoSize, brightness: spotBrightnessReader())
         guard let offset = SpotSource.next(after: spot.offset, in: ranked, photo: spotPhotoSize) else { return }
         updateSpot(spot.id, step: "New Spot Source") { $0.offset = offset }

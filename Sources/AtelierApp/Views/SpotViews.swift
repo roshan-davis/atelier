@@ -91,6 +91,11 @@ private struct SpotOverlay: View {
             outline(spot.points, size: spot.size, in: &context, space: space, color: .white.opacity(0.55), width: 1)
         }
         guard let spot = develop.selectedSpot else { return }
+        // Content-Aware has no source to show.
+        guard spot.mode != .contentAware else {
+            outline(spot.points, size: spot.size, in: &context, space: space, color: .white, width: 1.5)
+            return
+        }
         let from = space.viewPoint(spot.sourceCenter), to = space.viewPoint(spot.center)
         var link = Path()
         link.move(to: from)
@@ -245,7 +250,7 @@ private struct SpotOverlay: View {
         guard space.rect.contains(point) else { return .none }
         let at = space.maskPoint(point)
         if let spot = develop.selectedSpot {
-            if spot.sourceContains(at, photo: photoSize) { return .moveSource(id: spot.id, original: spot.offset, start: at) }
+            if spot.mode != .contentAware, spot.sourceContains(at, photo: photoSize) { return .moveSource(id: spot.id, original: spot.offset, start: at) }
             if spot.contains(at, photo: photoSize) { return .moveSpot(id: spot.id, original: spot.points, start: at) }
         }
         // The newest spot on top.
@@ -274,7 +279,7 @@ struct RemovePanel: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .help("Heal matches the colors around the spot; Clone copies the source as it is")
+            .help("Content-Aware fills from texture all around the spot; Heal matches a source to the colors around it; Clone copies the source as it is")
             VStack(alignment: .leading, spacing: 6) {
                 GroupHeading(title: "Brush", reset: resetBrush)
                 SliderRow(label: "Size", value: Binding(get: { develop.spotSize * 100 }, set: { develop.setSpotSize($0 / 100) }),
@@ -313,8 +318,14 @@ struct RemovePanel: View {
     }
 
     private var hint: String {
+        if develop.selectedSpot?.mode == .contentAware {
+            return "Press / for another fill, or switch to Heal or Clone to pick a source. Delete removes the spot."
+        }
         if develop.selectedSpot != nil {
             return "Drag the dashed source to take the fill from elsewhere, or press / for another. Delete removes the spot."
+        }
+        if develop.spotMode == .contentAware {
+            return "Click a spot, or drag over a line or wire. Atelier fills it from what's around it."
         }
         return "Click a spot, or drag over a line or wire. Atelier picks a source next to it."
     }
