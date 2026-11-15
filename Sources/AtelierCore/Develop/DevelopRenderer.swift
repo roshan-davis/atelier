@@ -127,6 +127,10 @@ public final class DevelopRenderer: @unchecked Sendable {
         var image = input
         let extent = input.extent
 
+        // Calibration (AT-069) reshapes the profile's primaries, so it comes before every other
+        // color and tone step, as in Lightroom.
+        image = Calibration.apply(image, settings: settings)
+
         // Highlights and Shadows: local, judged by an edge-aware base (see LocalContrast).
         image = LocalContrast.toneRegions(image, highlights: settings.highlights / 100, shadows: settings.shadows / 100,
                                           scale: scale, cacheStage: cacheStages)

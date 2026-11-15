@@ -391,6 +391,34 @@ def red_overlay(image, mask, strength=0.55):
 
 # MARK: Pictures
 
+def calibration(image, red_hue=0, red_sat=0, green_hue=0, green_sat=0, blue_hue=0, blue_sat=0, tint=0):
+    """Calibration (AT-069), the same math as Calibration.swift, in linear Rec. 2020. Sliders -1...1."""
+    to2020 = np.array([[0.6274, 0.3293, 0.0433], [0.0691, 0.9195, 0.0114], [0.0164, 0.0880, 0.8956]], np.float32)
+    linear = np.power(np.clip(image, 0, 1), 2.2) @ to2020.T
+    k = np.ones(3) / np.sqrt(3)
+    gray = np.ones(3) / 3
+    columns = []
+    for i, (hue, sat) in enumerate(((red_hue, red_sat), (green_hue, green_sat), (blue_hue, blue_sat))):
+        p = np.zeros(3)
+        p[i] = 1
+        a = hue * np.pi / 6
+        turned = p * np.cos(a) + np.cross(k, p) * np.sin(a) + k * np.dot(k, p) * (1 - np.cos(a))
+        columns.append(gray + (turned - gray) * (1 + sat * 0.6))
+    m = np.array(columns).T
+    m = m * np.linalg.solve(m, np.ones(3))
+    c = linear @ m.T.astype(np.float32)
+    if tint:
+        weights = np.array([0.2627, 0.6780, 0.0593], np.float32)
+        y = c @ weights
+        t = np.clip(np.cbrt(np.maximum(y, 0)) / 0.68, 0, 1)
+        w = 1 - t * t * (3 - 2 * t)
+        tinted = c * (1 + np.array([0.5, -1, 0.5], np.float32) * (tint * 0.16 * w)[..., None])
+        new_y = tinted @ weights
+        c = np.where((new_y > 1e-6)[..., None], tinted * (y / np.maximum(new_y, 1e-6))[..., None], tinted)
+    out = c @ np.linalg.inv(to2020).T.astype(np.float32)
+    return np.power(np.clip(out, 0, 1), 1 / 2.2)
+
+
 def pair(name, before, after):
     """Writes name-before.jpg and name-after.jpg, except for a shared picture (redwoods.jpg,
     redwoods-flat.jpg), which the page uses directly."""
@@ -688,6 +716,10 @@ def make_spot_images(eagle):
     save(np.repeat((1 - smoothstep(0.03, 0.07, edge))[..., None], 3, axis=2), "spots-visualize.jpg")
 
 
+def make_calibration_images(base):
+    pair("calibration", base, calibration(base, red_hue=0.25, blue_sat=0.6))
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     if len(sys.argv) == 3 and sys.argv[1] in ("--presets-from", "--check-presets-from"):
@@ -702,6 +734,11 @@ def main():
         return 0
     if "--spots-only" in sys.argv:
         make_spot_images(load("splash-eagle.jpg"))
+        return 0
+    if "--calibration-only" in sys.argv:
+        base = flat(load("splash-redwoods.jpg"))
+        SHARED["redwoods-flat.jpg"] = base
+        make_calibration_images(base)
         return 0
     if "--hdr-only" in sys.argv:
         make_hdr_images(flat(load("splash-redwoods.jpg")))
@@ -797,6 +834,8 @@ def main():
 
     # Effects
     pair("post-crop-vignette", base, vignette(base, -0.5))
+    # Calibration
+    make_calibration_images(base)
     grain_view = crop(red_full, 0.42, 0.42, 0.2, 0.15)
     pair("grain", enlarge(grain_view, 2), enlarge(grain(grain_view, 0.45, 1.0), 2))
 

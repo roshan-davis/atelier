@@ -299,7 +299,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
 
     /// The Develop panels, in Lightroom's order.
     public enum Panel: String, CaseIterable, Sendable, Codable {
-        case basic, toneCurve, hsl, colorGrading, detail, lensCorrections, transform, effects
+        case basic, toneCurve, hsl, colorGrading, detail, lensCorrections, transform, effects, calibration
 
         /// Every panel but Basic has an on/off switch in its header, as in Lightroom.
         public var hasSwitch: Bool { self != .basic }
@@ -314,6 +314,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             case .lensCorrections: return "Lens Corrections"
             case .transform: return "Transform"
             case .effects: return "Effects"
+            case .calibration: return "Calibration"
             }
         }
 
@@ -478,6 +479,11 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         case vignette, vignetteMidpoint, grain, grainSize, grainRoughness, grainType
         case vignetteStyle, vignetteRoundness, vignetteFeather, vignetteHighlights
         case glowAmount, glowStyle, glowRange, glowSpread, glowWarmth
+        /// Calibration (AT-069), each -100...100: Shadows Tint, then each primary's Hue and
+        /// Saturation. See `Calibration`.
+        case calibrationShadowsTint
+        case calibrationRedHue, calibrationRedSat, calibrationGreenHue, calibrationGreenSat
+        case calibrationBlueHue, calibrationBlueSat
 
         public static func hsl(_ channel: HSLChannel, _ band: ColorBand) -> Parameter {
             Parameter(rawValue: channel.prefix + band.rawValue)!
@@ -622,6 +628,9 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             case .glowRange: return "Range"
             case .glowSpread: return "Spread"
             case .glowWarmth: return "Warmth"
+            case .calibrationShadowsTint: return "Tint"
+            case .calibrationRedHue, .calibrationGreenHue, .calibrationBlueHue: return "Hue"
+            case .calibrationRedSat, .calibrationGreenSat, .calibrationBlueSat: return "Saturation"
             case .gradeBlending: return "Blending"
             case .gradeBalance: return "Balance"
             default:
@@ -641,6 +650,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             if rawValue.hasPrefix("curve") { return .toneCurve }
             if rawValue.hasPrefix("lens") { return .lensCorrections }
             if rawValue.hasPrefix("transform") { return .transform }
+            if rawValue.hasPrefix("calibration") { return .calibration }
             switch self {
             case .sharpening, .sharpenRadius, .sharpenDetail, .sharpenMasking, .aiDenoise, .luminanceNoise, .colorNoise:
                 return .detail
@@ -676,6 +686,10 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
             case .transformVertical, .transformHorizontal, .transformRotate, .transformAspect, .transformScale,
                  .transformOffsetX, .transformOffsetY: return "Transform"
             case .gradeBlending, .gradeBalance: return "Blend"
+            case .calibrationShadowsTint: return "Shadows"
+            case .calibrationRedHue, .calibrationRedSat: return "Red Primary"
+            case .calibrationGreenHue, .calibrationGreenSat: return "Green Primary"
+            case .calibrationBlueHue, .calibrationBlueSat: return "Blue Primary"
             default:
                 return GradeRegion.allCases.first { rawValue.hasPrefix("grade\($0.rawValue)") }?.rawValue ?? ""
             }

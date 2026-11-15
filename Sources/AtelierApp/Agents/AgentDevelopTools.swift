@@ -221,6 +221,7 @@ extension DevelopPart {
         case .lensCorrections: return .lensCorrections
         case .transform: return .transform
         case .effects: return .effects
+        case .calibration: return .calibration
         case .crop: return .crop
         case .masks: return .masks
         }
