@@ -485,6 +485,7 @@ struct DevelopPanel: View {
                                         GroupHeading(title: group.0) { develop.reset(group: group.0, parameters: group.1) }
                                         ForEach(group.1, id: \.self) { parameter in
                                             ParameterSlider(parameter: parameter, develop: develop)
+                                            if parameter == .aiDenoise { AIDenoiseStatus(develop: develop) }
                                         }
                                     }
                                 }

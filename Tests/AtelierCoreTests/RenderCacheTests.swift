@@ -37,6 +37,7 @@ final class RenderCacheTests: XCTestCase {
             ("distortion", { $0[.lensDistortion] = 20 }),
             ("lens vignetting", { $0[.lensVignette] = 30 }),
             ("transform", { $0[.transformVertical] = 10 }),
+            ("AI Denoise", { $0[.aiDenoise] = 50 }),
         ]
         for parameter in DevelopSettings.Parameter.allCases where parameter.isDefringe {
             changes.append((parameter.rawValue, { $0[parameter] = parameter.defaultValue + 5 }))
@@ -47,6 +48,8 @@ final class RenderCacheTests: XCTestCase {
             XCTAssertNotEqual(DevelopSession.CorrectedKey(settings, view: .photo), key, name)
         }
         XCTAssertNotEqual(DevelopSession.CorrectedKey(base, view: .amount(.purple)), key, "Defringe views")
+        XCTAssertNotEqual(DevelopSession.CorrectedKey(base, view: .photo, denoised: true), key,
+                          "AI Denoise's noise picture coming in")
     }
 
     /// An interactive session renders the same as a fresh one after any sequence of edits, so a

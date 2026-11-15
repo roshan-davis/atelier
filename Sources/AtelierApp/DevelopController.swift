@@ -731,10 +731,36 @@ final class DevelopController: ObservableObject {
                                                                   queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.scheduleRender() }
         }
+        // And AI Denoise's noise picture (until then the photo shows Apple's noise reduction).
+        aiDenoiseObservers = [
+            NotificationCenter.default.addObserver(forName: AIDenoise.ready, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.scheduleRender() }
+            },
+            NotificationCenter.default.addObserver(forName: AIDenoise.statusChanged, object: nil,
+                                                   queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.aiDenoiseStatusChanges += 1 }
+            },
+        ]
     }
 
     private var fineEdgesObserver: NSObjectProtocol?
     private var spotFillObserver: NSObjectProtocol?
+    private var aiDenoiseObservers: [NSObjectProtocol] = []
+    /// Counts AI Denoise's status changes, so the Detail panel shows the new one.
+    @Published private var aiDenoiseStatusChanges = 0
+
+    /// The line under Detail > AI Denoise: working, done or why it didn't run; nil for none.
+    var aiDenoiseStatus: String? {
+        _ = aiDenoiseStatusChanges
+        return AIDenoise.statusText(for: session?.url, isRAW: isRAW, amount: settings[.aiDenoise])
+    }
+
+    /// AI Denoise is finding the open photo's noise.
+    var isAIDenoising: Bool {
+        _ = aiDenoiseStatusChanges
+        guard let url = session?.url, settings[.aiDenoise] > 0 else { return false }
+        return AIDenoise.status(for: url) == .working
+    }
 
     // MARK: Opening
 
