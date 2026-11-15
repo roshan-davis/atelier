@@ -150,9 +150,12 @@ public enum DepthMap {
         guard isInstalled else { throw Failure("the depth model isn't downloaded.") }
         let env = try environment ?? ORTEnv(loggingLevel: .warning)
         environment = env
-        func options(coreML: Bool) throws -> ORTSessionOptions {
+        func options(coreML: Bool, level: ORTGraphOptimizationLevel = .basic) throws -> ORTSessionOptions {
             let options = try ORTSessionOptions()
-            try options.setGraphOptimizationLevel(.all)
+            // Basic at most: the extended fusions (SimplifiedLayerNormFusion) break on this
+            // half-precision export ("Attempting to get index by a name which does not exist:
+            // InsertedPrecisionFreeCast_…", Rosh's Mac, Nov 15, 2026).
+            try options.setGraphOptimizationLevel(level)
             let cache = coreMLCacheURL
             try? FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
             if coreML {
@@ -167,7 +170,12 @@ public enum DepthMap {
             made = try ORTSession(env: env, modelPath: modelURL.path, sessionOptions: options(coreML: true))
         } catch {
             NSLog("Atelier: Depth Range with Core ML failed (%@), using the CPU", "\(error)")
-            made = try ORTSession(env: env, modelPath: modelURL.path, sessionOptions: options(coreML: false))
+            do {
+                made = try ORTSession(env: env, modelPath: modelURL.path, sessionOptions: options(coreML: false))
+            } catch {
+                NSLog("Atelier: Depth Range on the CPU failed (%@), trying without graph optimizations", "\(error)")
+                made = try ORTSession(env: env, modelPath: modelURL.path, sessionOptions: options(coreML: false, level: .none))
+            }
         }
         session = made
         return made
