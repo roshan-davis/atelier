@@ -7,19 +7,33 @@ import SwiftUI
 /// the photo's colors sit and where the other wheels' tints are, the color picker sets a wheel
 /// to cancel a cast, and a graph shows the tonal ranges Blending and Balance shape. The Preset
 /// menu at the top sets every wheel, Blending and Balance (`SectionPresetRow`).
+///
+/// A mask's Color Grading (Lightroom Classic 16) is this same panel with `target` set to the
+/// mask; there the panel's Preset menu, color picker and eye buttons, which act on the whole
+/// photo's grade, are left out.
 struct ColorGradingPanel: View {
     typealias Region = DevelopSettings.GradeRegion
 
     @ObservedObject var develop: DevelopController
-    /// "3-Way" or a region's name.
-    @AppStorage("develop.gradeView") private var view = "3-Way"
+    var target: GradeTarget = .photo
+    /// "3-Way" or a region's name, remembered separately for the panel and for masks.
+    @AppStorage("develop.gradeView") private var panelView = "3-Way"
+    @AppStorage("masking.gradeView") private var maskView = "3-Way"
     @State private var width: CGFloat = 256
+
+    private var isPhoto: Bool { target == .photo }
+    private var view: String {
+        get { isPhoto ? panelView : maskView }
+        nonmutating set { if isPhoto { panelView = newValue } else { maskView = newValue } }
+    }
 
     private var single: Region? { Region(rawValue: view) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionPresetRow(kind: .colorGrading, develop: develop)
+            if isPhoto {
+                SectionPresetRow(kind: .colorGrading, develop: develop)
+            }
             viewPicker
             Group {
                 if let single {
@@ -28,10 +42,11 @@ struct ColorGradingPanel: View {
                     threeWay
                 }
             }
-            GroupHeading(title: "Blend") { develop.reset(group: "Blend", parameters: [.gradeBlending, .gradeBalance]) }
-            ParameterSlider(parameter: .gradeBlending, develop: develop)
-            ParameterSlider(parameter: .gradeBalance, develop: develop)
-            ToneRangeGraph(blending: develop.value(.gradeBlending) / 100, balance: develop.value(.gradeBalance) / 100)
+            GroupHeading(title: "Blend") { develop.resetGrade([.gradeBlending, .gradeBalance], name: "Blend", in: target) }
+            slider(.gradeBlending)
+            slider(.gradeBalance)
+            ToneRangeGraph(blending: develop.gradeValue(.gradeBlending, in: target) / 100,
+                           balance: develop.gradeValue(.gradeBalance, in: target) / 100)
                 .frame(height: 34)
                 .help("Where Shadows (blue), Midtones (gray) and Highlights (yellow) apply, from black to white. "
                       + "Blending widens the overlap; Balance moves the split.")
@@ -46,27 +61,48 @@ struct ColorGradingPanel: View {
             Text("Adjust")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
-                .onDoubleClick { develop.reset(.colorGrading) }
+                .onDoubleClick { develop.resetAllGrade(in: target) }
                 .help("Double-click to reset all Color Grading")
             Spacer(minLength: 4)
             viewButton("3-Way", help: "Shadows, Midtones and Highlights") { ThreeWayGlyph() }
             ForEach(Region.allCases, id: \.self) { region in
                 viewButton(region.rawValue, help: region.rawValue) { RegionGlyph(region: region) }
             }
-            Divider().frame(height: 14).padding(.horizontal, 2)
-            PickerButton(develop: develop, kind: .gradeColor,
-                         help: single.map { "Color picker: click a spot to set the \($0.rawValue) wheel so its color cast turns neutral" }
-                             ?? "Color picker: click a spot to set the Shadows, Midtones or Highlights wheel (by the spot's tone) "
-                             + "so its color cast turns neutral") {
-                develop.gradePickRegion = single
+            if isPhoto {
+                Divider().frame(height: 14).padding(.horizontal, 2)
+                PickerButton(develop: develop, kind: .gradeColor,
+                             help: single.map { "Color picker: click a spot to set the \($0.rawValue) wheel so its color cast turns neutral" }
+                                 ?? "Color picker: click a spot to set the Shadows, Midtones or Highlights wheel (by the spot's tone) "
+                                 + "so its color cast turns neutral") {
+                    develop.gradePickRegion = single
+                }
             }
         }
+    }
+
+    /// The panel's own sliders bind to the photo's settings (`ParameterSlider`); a mask's go
+    /// through the same `SliderRow` with the mask's values.
+    @ViewBuilder
+    private func slider(_ parameter: DevelopSettings.Parameter) -> some View {
+        if isPhoto {
+            ParameterSlider(parameter: parameter, develop: develop)
+        } else {
+            SliderRow(label: parameter.label,
+                      value: Binding(get: { develop.gradeValue(parameter, in: target) },
+                                     set: { develop.setGrade(parameter, to: $0, in: target) }),
+                      range: parameter.range, step: 1, origin: parameter.defaultValue,
+                      reset: { develop.resetGrade([parameter], name: Self.name(parameter), in: target) })
+        }
+    }
+
+    private static func name(_ parameter: DevelopSettings.Parameter) -> String {
+        DevelopController.parameterName(parameter)
     }
 
     private func viewButton<Glyph: View>(_ id: String, help: String, @ViewBuilder glyph: () -> Glyph) -> some View {
         Button {
             view = id
-            if develop.isPickingGradeColor { develop.gradePickRegion = Region(rawValue: id) }
+            if isPhoto, develop.isPickingGradeColor { develop.gradePickRegion = Region(rawValue: id) }
         } label: {
             glyph()
                 .frame(width: 22, height: 20)
@@ -81,11 +117,11 @@ struct ColorGradingPanel: View {
     private var threeWay: some View {
         let side = max(80, min(170, (width - 12) / 2))
         return VStack(spacing: 10) {
-            WheelBlock(region: .midtones, develop: develop, size: side, large: false)
+            WheelBlock(region: .midtones, develop: develop, target: target, size: side, large: false)
                 .frame(maxWidth: .infinity)
             HStack(alignment: .top, spacing: 12) {
-                WheelBlock(region: .shadows, develop: develop, size: side, large: false)
-                WheelBlock(region: .highlights, develop: develop, size: side, large: false)
+                WheelBlock(region: .shadows, develop: develop, target: target, size: side, large: false)
+                WheelBlock(region: .highlights, develop: develop, target: target, size: side, large: false)
             }
             .frame(maxWidth: .infinity)
         }
@@ -94,11 +130,11 @@ struct ColorGradingPanel: View {
     /// One large wheel, with Hue and Saturation sliders that take typed values.
     private func singleView(_ region: Region) -> some View {
         VStack(alignment: .leading, spacing: 7) {
-            WheelBlock(region: region, develop: develop, size: max(120, min(260, width - 8)), large: true)
+            WheelBlock(region: region, develop: develop, target: target, size: max(120, min(260, width - 8)), large: true)
                 .frame(maxWidth: .infinity)
-            ParameterSlider(parameter: region.hue, develop: develop)
-            ParameterSlider(parameter: region.saturation, develop: develop)
-            ParameterSlider(parameter: region.luminance, develop: develop)
+            slider(region.hue)
+            slider(region.saturation)
+            slider(region.luminance)
         }
     }
 }
@@ -109,8 +145,11 @@ private struct WheelBlock: View {
 
     let region: Region
     @ObservedObject var develop: DevelopController
+    let target: GradeTarget
     let size: CGFloat
     let large: Bool
+
+    private func value(_ parameter: DevelopSettings.Parameter) -> Double { develop.gradeValue(parameter, in: target) }
 
     var body: some View {
         VStack(spacing: 6) {
@@ -118,48 +157,53 @@ private struct WheelBlock: View {
                 Text(region.rawValue)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                    .onDoubleClick { develop.resetGrade(region, luminance: true) }
+                    .onDoubleClick { develop.resetGrade(region, luminance: true, in: target) }
                     .help("Double-click to reset the \(region.rawValue) wheel")
-                Image(systemName: "eye")
-                    .font(.caption)
-                    .foregroundStyle(develop.sliderPreview == .gradeSolo(region) ? Color.accentColor : Color.secondary)
-                    .contentShape(Rectangle())
-                    .gesture(DragGesture(minimumDistance: 0)
-                        .onChanged { _ in
-                            if develop.sliderPreview != .gradeSolo(region) { develop.sliderPreview = .gradeSolo(region) }
-                        }
-                        .onEnded { _ in develop.sliderPreview = nil })
-                    .help(SliderPreview.gradeSolo(region).hint)
+                if target == .photo { soloButton }
             }
-            ColorWheel(region: region, develop: develop)
+            ColorWheel(region: region, develop: develop, target: target)
                 .frame(width: size, height: size)
             if !large {
-                DevelopSlider(value: Binding(get: { develop.value(region.luminance) },
-                                             set: { develop.set(region.luminance, to: $0) }),
-                              range: region.luminance.range, step: 1, origin: 0,
+                let luminance = Binding(get: { value(region.luminance) },
+                                        set: { develop.setGrade(region.luminance, to: $0, in: target) })
+                DevelopSlider(value: luminance, range: region.luminance.range, step: 1, origin: 0,
                               gradient: [Color.black, Color.white])
                     .frame(width: size)
-                    .modifier(KeyboardSlider(value: Binding(get: { develop.value(region.luminance) },
-                                                            set: { develop.set(region.luminance, to: $0) }),
-                                             range: region.luminance.range, step: 1))
+                    .modifier(KeyboardSlider(value: luminance, range: region.luminance.range, step: 1))
                     .help("Luminance (double-click the wheel's name to reset the wheel)")
-                Text("H \(Int(develop.value(region.hue))) · S \(Int(develop.value(region.saturation))) · L \(Int(develop.value(region.luminance)))")
+                Text("H \(Int(value(region.hue))) · S \(Int(value(region.saturation))) · L \(Int(value(region.luminance)))")
                     .font(.caption2)
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
             }
         }
         .contextMenu {
-            Button("Reset Hue and Saturation") { develop.resetGrade(region, luminance: false) }
-            Button("Reset Luminance") { develop.reset(region.luminance) }
-            Button("Reset \(region.rawValue)") { develop.resetGrade(region, luminance: true) }
+            Button("Reset Hue and Saturation") { develop.resetGrade(region, luminance: false, in: target) }
+            Button("Reset Luminance") {
+                develop.resetGrade([region.luminance], name: "\(region.rawValue) Luminance", in: target)
+            }
+            Button("Reset \(region.rawValue)") { develop.resetGrade(region, luminance: true, in: target) }
             Divider()
-            Button("Copy \(region.rawValue) Settings") { develop.copyGradeWheel(region) }
-            Button("Paste Settings to \(region.rawValue)") { develop.pasteGradeWheel(onto: region) }
+            Button("Copy \(region.rawValue) Settings") { develop.copyGradeWheel(region, in: target) }
+            Button("Paste Settings to \(region.rawValue)") { develop.pasteGradeWheel(onto: region, in: target) }
                 .disabled(develop.copiedGradeWheel == nil)
             Divider()
-            Button("Reset All Color Grading") { develop.reset(.colorGrading) }
+            Button("Reset All Color Grading") { develop.resetAllGrade(in: target) }
         }
+    }
+
+    /// Press and hold to see the photo graded by this wheel alone (the photo's panel only).
+    private var soloButton: some View {
+        Image(systemName: "eye")
+            .font(.caption)
+            .foregroundStyle(develop.sliderPreview == .gradeSolo(region) ? Color.accentColor : Color.secondary)
+            .contentShape(Rectangle())
+            .gesture(DragGesture(minimumDistance: 0)
+                .onChanged { _ in
+                    if develop.sliderPreview != .gradeSolo(region) { develop.sliderPreview = .gradeSolo(region) }
+                }
+                .onEnded { _ in develop.sliderPreview = nil })
+            .help(SliderPreview.gradeSolo(region).hint)
     }
 }
 
@@ -180,6 +224,7 @@ struct ColorWheel: View {
 
     let region: Region
     @ObservedObject var develop: DevelopController
+    var target: GradeTarget = .photo
 
     private enum Grab {
         /// The dot inside: `point` is where it would be, relative to the center, before clamping.
@@ -199,8 +244,8 @@ struct ColorWheel: View {
 
     private var diagnosticName: String { "Color Grading \(region.rawValue)" }
 
-    private var hue: Double { develop.value(region.hue) }
-    private var saturation: Double { develop.value(region.saturation) }
+    private var hue: Double { develop.gradeValue(region.hue, in: target) }
+    private var saturation: Double { develop.gradeValue(region.saturation, in: target) }
 
     var body: some View {
         GeometryReader { geometry in
@@ -254,12 +299,13 @@ struct ColorWheel: View {
             .onHover { inside in
                 if inside {
                     develop.hoveredGradeRegion = region
-                } else if develop.hoveredGradeRegion == region {
+                    develop.hoveredGradeTarget = target
+                } else if develop.hoveredGradeRegion == region, develop.hoveredGradeTarget == target {
                     develop.hoveredGradeRegion = nil
                 }
             }
             .onDisappear {
-                if develop.hoveredGradeRegion == region { develop.hoveredGradeRegion = nil }
+                if develop.hoveredGradeRegion == region, develop.hoveredGradeTarget == target { develop.hoveredGradeRegion = nil }
                 frameHUD?.end(diagnosticName)
             }
         }
@@ -293,7 +339,8 @@ struct ColorWheel: View {
 
     /// The photo's colors that fall in this wheel's range.
     private func scope(radius: CGFloat, center: CGPoint) -> some View {
-        let blending = develop.value(.gradeBlending) / 100, balance = develop.value(.gradeBalance) / 100
+        let blending: Double = develop.gradeValue(.gradeBlending, in: target) / 100
+        let balance: Double = develop.gradeValue(.gradeBalance, in: target) / 100
         let index = ColorGrade.index(of: region)
         return MeasuresReader(develop.measures) { measures in Canvas { context, _ in
             let samples = measures.colorScope?.samples ?? []
@@ -310,14 +357,16 @@ struct ColorWheel: View {
 
     /// Small rings where the other wheels' tints are.
     private func others(radius: CGFloat, center: CGPoint) -> some View {
-        ForEach(Region.allCases.filter { $0 != region && develop.value($0.saturation) > 0 }, id: \.self) { other in
-            let color = ColorGrade.swatch(hue: develop.value(other.hue), saturation: develop.value(other.saturation))
+        let tinted: [Region] = Region.allCases.filter { $0 != region && develop.gradeValue($0.saturation, in: target) > 0 }
+        return ForEach(tinted, id: \.self) { other in
+            let otherHue: Double = develop.gradeValue(other.hue, in: target)
+            let otherSaturation: Double = develop.gradeValue(other.saturation, in: target)
+            let color = ColorGrade.swatch(hue: otherHue, saturation: otherSaturation)
             Circle()
                 .fill(Color(.sRGB, red: color.red, green: color.green, blue: color.blue))
                 .overlay(Circle().stroke(Color.white.opacity(0.8), lineWidth: 1))
                 .frame(width: 7, height: 7)
-                .position(point(hue: develop.value(other.hue), saturation: develop.value(other.saturation),
-                                radius: radius, center: center))
+                .position(point(hue: otherHue, saturation: otherSaturation, radius: radius, center: center))
                 .allowsHitTesting(false)
         }
     }
@@ -404,7 +453,7 @@ struct ColorWheel: View {
         if h >= 360 { h -= 360 }
         let s = min(100, max(0, saturation.rounded()))
         guard h != self.hue || s != self.saturation else { return }
-        develop.setGradeColor(region, hue: h, saturation: s)
+        develop.setGradeColor(region, hue: h, saturation: s, in: target)
     }
 
     private func endDrag(_ value: DragGesture.Value) {
@@ -416,7 +465,7 @@ struct ColorWheel: View {
         // Double-click resets hue and saturation, as in Lightroom.
         if let lastTap, Date().timeIntervalSince(lastTap.time) < 0.4, distance(lastTap.location, value.location) < 6 {
             self.lastTap = nil
-            develop.resetGrade(region, luminance: false)
+            develop.resetGrade(region, luminance: false, in: target)
         } else {
             lastTap = (Date(), value.location)
         }

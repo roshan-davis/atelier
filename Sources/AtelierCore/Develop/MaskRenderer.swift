@@ -389,6 +389,12 @@ extension DevelopRenderer {
         local.dehaze = mask.effective(.dehaze)
         local.saturation = mask.effective(.saturation)
         local.luminanceNoise = mask.effective(.noise)
+        // The mask's own Color Grading goes through the same color cube as the panel's.
+        if mask.hasGrade {
+            for parameter in DevelopSettings.Panel.colorGrading.parameters {
+                local[parameter] = mask.effective(grade: parameter)
+            }
+        }
         let sharpness = mask.effective(.sharpness)
         if sharpness > 0 {
             local.sharpening = sharpness * 1.2

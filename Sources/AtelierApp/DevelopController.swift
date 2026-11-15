@@ -1231,6 +1231,10 @@ final class DevelopController: ObservableObject {
                                             luminance: settings[region.luminance])
     }
 
+    func copyGradeWheel(_ values: GradeWheelValues) {
+        copiedGradeWheel = values
+    }
+
     func pasteGradeWheel(onto region: DevelopSettings.GradeRegion) {
         guard assetID != nil, let copied = copiedGradeWheel else { return }
         settings[region.hue] = copied.hue
@@ -1241,6 +1245,8 @@ final class DevelopController: ObservableObject {
 
     /// The wheel under the pointer, which the arrow keys nudge.
     var hoveredGradeRegion: DevelopSettings.GradeRegion?
+    /// Whose wheel it is: the photo's Color Grading panel or a mask's.
+    var hoveredGradeTarget: GradeTarget = .photo
 
     /// Arrow keys over a wheel: Left and Right turn the hue, Up and Down change saturation.
     func nudgeGrade(_ region: DevelopSettings.GradeRegion, hue: Double, saturation: Double) {
@@ -2060,7 +2066,7 @@ final class DevelopController: ObservableObject {
         dirty = true
     }
 
-    private static func parameterName(_ parameter: DevelopSettings.Parameter) -> String {
+    static func parameterName(_ parameter: DevelopSettings.Parameter) -> String {
         if let pair = parameter.hslBand { return "\(pair.0.rawValue) \(pair.1.rawValue)" }
         if let point = parameter.pointColor { return "Point Color \(point.swatch + 1) \(point.setting.label)" }
         if let band = parameter.grayBand { return "B&W \(band.rawValue)" }
@@ -3046,6 +3052,15 @@ extension DevelopController {
         let formatted = parameter == .exposure ? String(format: "%+.2f", mask[parameter])
             : String(format: "%+.0f", mask[parameter])
         changed(step: "\(mask.name) \(parameter.label == "Temp" ? "Temperature" : parameter.label) \(formatted)")
+    }
+
+    /// Changes one mask as one history step named `step` (with the mask's name in front).
+    func updateMask(_ id: UUID, step: String, _ change: (inout Mask) -> Void) {
+        guard let index = maskIndex(id) else { return }
+        let before = settings.masks[index]
+        change(&settings.masks[index])
+        guard settings.masks[index] != before else { return }
+        changed(step: "\(settings.masks[index].name) \(step)")
     }
 
     func setMaskAmount(_ amount: Double) {

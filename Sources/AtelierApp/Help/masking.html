@@ -234,7 +234,7 @@
 <p>Right-click a <b>mask</b> for Rename, Duplicate, Invert, Intersect Mask With and Delete. Right-click a <b>part</b> for Invert, Switch to Add / Subtract and Delete. <kbd>Delete</kbd> removes the selected part (the whole mask if it was the last part).</p>
 
 <h2 id="adjust">Mask sliders</h2>
-<p>Each mask has its own: <b>Amount</b> (0 to 200%, scales all of the mask's sliders at once), Temp, Tint, Exposure, Contrast, Highlights, Shadows, Whites, Blacks, Texture, Clarity, Dehaze, Hue, Saturation, Sharpness, Noise, Moiré and Defringe. Most work like their <a href="basic.html">Basic</a> and <a href="detail.html">Detail</a> twins. Double-click a name to reset it; <b>Reset Sliders</b> clears them all.</p>
+<p>Each mask has its own: <b>Amount</b> (0 to 200%, scales all of the mask's sliders at once), Temp, Tint, Exposure, Contrast, Highlights, Shadows, Whites, Blacks, Texture, Clarity, Dehaze, Hue, Saturation, Sharpness, Noise, Moiré and Defringe, then the mask's own <a href="#mask-grade">Color Grading</a>. Most work like their <a href="basic.html">Basic</a> and <a href="detail.html">Detail</a> twins. Double-click a name to reset it; <b>Reset Sliders</b> clears them all.</p>
 <p><b>Invert</b> shows once, for what is selected: with a part selected it sits with that part's settings and inverts just the part; with the mask row selected it sits under Amount and inverts the whole mask.</p>
 <p>Temp and Tint go the Lightroom way: more Temp is warmer (yellow), more Tint adds magenta.</p>
 <dl class="defs">
@@ -245,6 +245,13 @@
 <figure>
   <div class="frame compare" data-before="redwoods-flat.jpg" data-after="mask-hue-after.jpg" data-labels="Before|Color Range on the leaves, Hue −50°"></div>
   <figcaption>Hue on a Color Range mask of the leaves turns them toward autumn gold without touching the trunks or the light.</figcaption>
+</figure>
+<h3 id="mask-grade">Color Grading in a mask</h3>
+<p>Under the sliders, each mask has its own <b>Color Grading</b>, as in Lightroom Classic 16: the same wheels as the <a href="color-grading.html">Color Grading panel</a>, with the 3-Way view or one wheel at a time, Luminance, Blending and Balance. They work exactly like the panel's (drag the dot, Shift, Command and Option, double-click to reset, arrow keys over a wheel, right-click to copy a wheel and paste it, also between the panel and a mask), but only inside the mask, on top of the photo's own grade. The mask's <b>Amount</b> scales how strong the tints and Luminance are; the hues, Blending and Balance stay. Double-click the <b>Color Grading</b> heading to reset just the mask's grade; <b>Reset Sliders</b> clears it with the rest.</p>
+<p>The panel's Preset menu, color picker and eye buttons work on the whole photo, so they aren't in a mask.</p>
+<figure>
+  <div class="frame compare" data-before="redwoods-flat.jpg" data-after="mask-grade-after.jpg" data-labels="Before|Color Range on the leaves, graded teal and gold"></div>
+  <figcaption>Only the leaves are graded: teal shadows and midtones, golden highlights. The trunks, logs and light keep the photo's own colors.</figcaption>
 </figure>
 <div class="tip"><p><span class="label">Change your mind later.</span> Masks stay on the same spot of the photo when you crop, straighten or change the Transform. They're saved with the photo, copied by Copy/Paste Settings and virtual copies, and can be included in presets.</p></div>
 

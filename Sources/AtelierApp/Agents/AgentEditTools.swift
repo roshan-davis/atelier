@@ -128,9 +128,20 @@ extension AgentServer {
     static let maskSliders: [String: DevelopSettings.LocalParameter] = Dictionary(
         uniqueKeysWithValues: DevelopSettings.LocalParameter.allCases.map { (AdjustRules.snakeName($0.rawValue), $0) })
 
+    /// The mask's own Color Grading by agent name ("grade_shadows_hue", "grade_blending").
+    static let maskGrades: [String: DevelopSettings.Parameter] = Dictionary(
+        uniqueKeysWithValues: DevelopSettings.Panel.colorGrading.parameters.map { (AdjustRules.snakeName($0.rawValue), $0) })
+
+    /// Every name `add_mask` settings take, with its range.
+    static var maskSettingRanges: [String: ClosedRange<Double>] {
+        var ranges = maskSliders.mapValues(\.range)
+        for (name, parameter) in maskGrades { ranges[name] = parameter.range }
+        return ranges
+    }
+
     func addMask(_ parameters: AddMaskParameters, _ client: AgentClient, _ model: LibraryModel) throws -> MCPToolResult {
         let plan: MaskRules.Plan
-        switch MaskRules.plan(parameters, sliders: Self.maskSliders.mapValues(\.range)) {
+        switch MaskRules.plan(parameters, sliders: Self.maskSettingRanges) {
         case .failure(let problems): throw ArgumentProblem(problems.text)
         case .success(let value): plan = value
         }
@@ -160,7 +171,11 @@ extension AgentServer {
                     mask.inverted = plan.invert
                     if let amount = plan.amount { mask.amount = amount }
                     for setting in plan.settings {
-                        if let parameter = Self.maskSliders[setting.name] { mask[parameter] = setting.value }
+                        if let parameter = Self.maskSliders[setting.name] {
+                            mask[parameter] = setting.value
+                        } else if let parameter = Self.maskGrades[setting.name] {
+                            mask[grade: parameter] = setting.value
+                        }
                     }
                     settings.masks.append(mask)
                     names[id] = mask.name
