@@ -533,6 +533,31 @@ final class LookMatchTests: XCTestCase {
         XCTAssertEqual(match.applied(to: .neutral, strength: 1).masks.first?[.exposure], 0)
     }
 
+    func testStudySubjectIsANudgeNotACopy() throws {
+        // A built-in study's person is drawn: its color leans the photo's subject a third of the
+        // way, with Temp, Tint and Saturation kept within ±20 (Rosh, Nov 14, 2026: a denim
+        // jacket copied to Fury Road's brown one pinned Temp at +60 and turned the hair maroon).
+        let session = try XCTUnwrap(DevelopRenderer.shared.session(for: fixture("product"), maxPixelSize: LookSample.size))
+        var look = DevelopSettings.neutral
+        var subject = DevelopSettings.Mask(name: "Look", components: [.init(.subject(.init(feather: LookMatcher.subjectFeather)))])
+        subject[.temperature] = -90
+        subject[.saturation] = 80
+        look.masks = [subject]
+        let image = try XCTUnwrap(session.renderSRGB(look))
+        let photo = try XCTUnwrap(LookTarget(image: image, areas: .subject, skinMode: .off))
+        let study = try XCTUnwrap(LookTarget(image: image, areas: .subject, skinMode: .off, colorStudy: true))
+        let options = LookMatchOptions(tone: false)
+        let copied = try XCTUnwrap(LookMatcher.match(session: session, settings: .neutral, target: photo, options: options))
+        let nudged = try XCTUnwrap(LookMatcher.match(session: session, settings: .neutral, target: study, options: options))
+        let full = try XCTUnwrap(copied.subjectMask)
+        let gentle = try XCTUnwrap(nudged.subjectMask)
+        for parameter in [DevelopSettings.LocalParameter.temperature, .tint, .saturation] {
+            XCTAssertLessThanOrEqual(abs(gentle[parameter]), LookMatcher.maxStudySubjectShift, "\(parameter)")
+        }
+        XCTAssertLessThan(gentle[.temperature], 0)
+        XCTAssertLessThan(abs(gentle[.temperature]), abs(full[.temperature]))
+    }
+
     func testSubjectAreasFallBackWhenTheReferenceHasNoSubject() throws {
         // A plain gradient: Vision finds no subject, so the whole reference is matched.
         let width = 300, height = 200
