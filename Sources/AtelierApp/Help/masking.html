@@ -17,7 +17,7 @@
 
 <div class="chips">
   <a href="#start">Start a mask</a><a href="#panel">The Masks panel</a><a href="#linear">Linear Gradient</a><a href="#radial">Radial Gradient</a>
-  <a href="#brush">Brush</a><a href="#luminance">Luminance Range</a><a href="#color">Color Range</a><a href="#subject">Select Subject and Object</a><a href="#people">Select People</a><a href="#combine">Add, Subtract, Intersect</a><a href="#adjust">Mask sliders</a>
+  <a href="#brush">Brush</a><a href="#luminance">Luminance Range</a><a href="#color">Color Range</a><a href="#subject">Select Subject and Object</a><a href="#background">Select Background</a><a href="#people">Select People</a><a href="#combine">Add, Subtract, Intersect</a><a href="#adjust">Mask sliders</a>
 </div>
 
 <h2 id="start">Start a mask</h2>
@@ -57,7 +57,7 @@
 <ol class="legend">
   <li><b>Masks</b>, in the order you made them. Click one to select it; double-click to rename. The eye hides its effect.</li>
   <li>A selected mask lists its <b>parts</b>, each with a badge: <b>+</b> added, <b>−</b> subtracted, <b>∩</b> intersected.</li>
-  <li><b>New Mask</b>, and with a mask selected, <b>Add</b> or <b>Subtract</b> a part: Brush, Linear Gradient, Radial Gradient, Luminance Range, Color Range, Select Subject, Select Object, Select People.</li>
+  <li><b>New Mask</b>, and with a mask selected, <b>Add</b> or <b>Subtract</b> a part: Brush, Linear Gradient, Radial Gradient, Luminance Range, Color Range, Select Subject, Select Background, Select Object, Select People.</li>
   <li><b>Show Overlay</b> (<kbd>O</kbd>) tints the selected mask red, so you can see exactly where it lands.</li>
   <li>The selected mask's <a href="#adjust">sliders</a>.</li>
 </ol>
@@ -172,7 +172,15 @@
   <figure><div class="pic"><img src="images/mask-subject-overlay.jpg" alt=""><span class="tag">Select Subject</span></div></figure>
   <figure><div class="frame compare" data-before="mask-subject-before.jpg" data-after="mask-subject-after.jpg" data-labels="Before|Background muted"></div></figure>
 </div>
-<p>Both have the <a href="#edges">edge controls</a>: <b>Grow</b>, <b>Refine Edge</b> and <b>Feather</b> (default 20). To change the background instead of the subject, tick <b>Invert</b>. If Vision finds nothing, the panel says so.</p>
+<p>Both have the <a href="#edges">edge controls</a>: <b>Grow</b>, <b>Refine Edge</b> and <b>Feather</b> (default 20). To change the background instead of the subject, use <a href="#background">Select Background</a>. If Vision finds nothing, the panel says so.</p>
+
+<h2 id="background">Select Background</h2>
+<p><b>Select Background</b> selects everything except the main subject, in one step: the same subject Select Subject finds, turned inside out. Use it to darken, cool or soften what is behind a person or an animal.</p>
+<div class="duo">
+  <figure><div class="pic"><img src="images/mask-background-overlay.jpg" alt=""><span class="tag">Select Background</span></div></figure>
+  <figure><div class="frame compare" data-before="mask-subject-before.jpg" data-after="mask-background-after.jpg" data-labels="Before|Background darker and cooler"></div></figure>
+</div>
+<p>It has the same <a href="#edges">edge controls</a>. <b>Grow</b> grows the background, so moving it right takes the background a little further onto the subject's edge, and left keeps it further away. <b>Invert</b> turns it back into the subject. If no subject stands out, there is no background to tell apart and the panel says so; try Color Range or a gradient instead.</p>
 
 <h2 id="people">Select People</h2>
 <p><b>Select People</b> selects parts of people, like Lightroom's People masks. Apple's Vision finds each person, even one whose face is hidden by sunglasses or turned away, traces the face (jaw line, eyes, pupils, brows and lips) and outlines the person. A small model built into Atelier (Google's MediaPipe, about 8 MB) then tells each person's face skin, body skin, hair and clothes apart, so a beige sweater or a skin-colored scarf is clothes, not skin. Eyes, brows, lips and teeth come from the face's outline. Everything runs on your Mac; nothing is downloaded or sent anywhere. The line under the checkboxes says whether the built-in model ran; if it shows an orange warning, Hair, Clothes and Entire Person can't select anything and skin is guessed from color.</p>
@@ -207,7 +215,7 @@
 <p>Press <kbd>O</kbd> to see the selection in red. If Vision finds no face, the panel says so; try Select Subject or a Brush instead. Match Look's <a href="match-look.html#skin">Skin Tones</a> use the same selection.</p>
 
 <h3 id="edges">Edge controls</h3>
-<p>Select Subject, Select Object and Select People share <b>Fine Edges</b> and three sliders for the selection's edge, applied in this order:</p>
+<p>Select Subject, Select Background, Select Object and Select People share <b>Fine Edges</b> and three sliders for the selection's edge, applied in this order:</p>
 <dl class="defs">
   <dt id="fine-edges">Fine Edges</dt><dd>Redraws the edge with BiRefNet (MIT license), which works out how much of each pixel is the subject. There are two models; download either or both: <b>Fast</b> (about 115 MB) takes a few seconds and gives a clean outline but misses loose strands, <b>Hair Detail</b> (about 470 MB) takes about half a minute and brings single strands through partly see-through. The first time, click <b>Get</b> and choose one; it turns on when the download is done. Get the other in <span class="path">Atelier › Settings… › AI › Masking Models</span> (where <b>Remove</b> deletes a model again). With both downloaded, the menu beside the checkbox (or <b>Fine Edges uses</b> in Settings) picks which one runs, for every selection. It runs on your Mac, on a square around the selection. Only the edge moves, within a band of where the selection was: strands outside it are added, background between strands inside it is taken out. With Select People only edges onto the background change, so Face Skin doesn't creep into Hair. Grow, Refine Edge and Feather shape the rest of the edge; they don't blur the strands Fine Edges finds. The line under the checkbox names the model and how long it took. The first Fast run after its download takes longest while your Mac prepares it; Hair Detail takes about half a minute every time.</dd>
   <dt>Grow</dt><dd>Left shrinks the selection, right grows it, by up to 1% of the photo's long edge. Shrink to pull a halo off the background; grow to take in a missed rim.</dd>

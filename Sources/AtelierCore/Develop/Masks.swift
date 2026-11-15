@@ -147,7 +147,7 @@ extension DevelopSettings {
         }
 
         public enum Kind: String, Codable, CaseIterable, Sendable {
-            case brush, linear, radial, luminance, color, subject, object, people
+            case brush, linear, radial, luminance, color, subject, background, object, people
 
             public var title: String {
                 switch self {
@@ -157,6 +157,7 @@ extension DevelopSettings {
                 case .luminance: return "Luminance Range"
                 case .color: return "Color Range"
                 case .subject: return "Select Subject"
+                case .background: return "Select Background"
                 case .object: return "Select Object"
                 case .people: return "Select People"
                 }
@@ -170,6 +171,7 @@ extension DevelopSettings {
                 case .luminance: return "sun.max"
                 case .color: return "eyedropper"
                 case .subject: return "person.crop.rectangle"
+                case .background: return "person.and.background.dotted"
                 case .object: return "viewfinder"
                 case .people: return "person.2"
                 }
@@ -188,7 +190,8 @@ extension DevelopSettings {
             case luminance(LuminanceRange)
             /// Color Range (AT-068): the colors picked on the photo.
             case color(ColorRange)
-            /// Select Subject (no box) or Select Object (inside a box), found by Vision.
+            /// Select Subject (no box), Select Object (inside a box) or Select Background (the
+            /// subject turned inside out), found by Vision.
             case subject(Selection)
             /// Select People: face and body skin of the people Vision finds.
             case people(PeopleSelection)
@@ -200,7 +203,9 @@ extension DevelopSettings {
                 case .radial: return .radial
                 case .luminance: return .luminance
                 case .color: return .color
-                case .subject(let selection): return selection.box == nil ? .subject : .object
+                case .subject(let selection):
+                    if selection.background { return .background }
+                    return selection.box == nil ? .subject : .object
                 case .people: return .people
                 }
             }
@@ -248,6 +253,10 @@ extension DevelopSettings {
             case .luminance: shape = .luminance(try c.decodeIfPresent(LuminanceRange.self, forKey: .luminance) ?? LuminanceRange())
             case .color: shape = .color(try c.decodeIfPresent(ColorRange.self, forKey: .color) ?? ColorRange())
             case .subject: shape = .subject(try c.decodeIfPresent(Selection.self, forKey: .selection) ?? Selection(feather: 0))
+            case .background:
+                var selection = try c.decodeIfPresent(Selection.self, forKey: .selection) ?? Selection()
+                selection.background = true
+                shape = .subject(selection)
             case .object: shape = .subject(try c.decode(Selection.self, forKey: .selection))
             case .people: shape = .people(try c.decodeIfPresent(PeopleSelection.self, forKey: .people) ?? PeopleSelection())
             }
@@ -309,17 +318,21 @@ extension DevelopSettings {
         public var grow = 0.0
         /// Redraws the edge with the Fine Edges model (BiRefNet) when it is downloaded.
         public var fineEdges = false
+        /// Select Background (AT-068): everything except the subject Vision finds. Grow grows the
+        /// background (shrinks the subject).
+        public var background = false
 
         public init(box: MaskRect? = nil, feather: Double = 20, refine: Double = 0, grow: Double = 0,
-                    fineEdges: Bool = false) {
+                    fineEdges: Bool = false, background: Bool = false) {
             self.box = box
             self.feather = feather
             self.refine = refine
             self.grow = grow
             self.fineEdges = fineEdges
+            self.background = background
         }
 
-        private enum CodingKeys: String, CodingKey { case box, feather, refine, grow, fineEdges }
+        private enum CodingKeys: String, CodingKey { case box, feather, refine, grow, fineEdges, background }
 
         public init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -329,6 +342,7 @@ extension DevelopSettings {
             refine = try c.decodeIfPresent(Double.self, forKey: .refine) ?? 0
             grow = try c.decodeIfPresent(Double.self, forKey: .grow) ?? 0
             fineEdges = try c.decodeIfPresent(Bool.self, forKey: .fineEdges) ?? false
+            background = try c.decodeIfPresent(Bool.self, forKey: .background) ?? false
         }
     }
 

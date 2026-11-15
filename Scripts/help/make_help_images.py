@@ -814,6 +814,10 @@ def main():
     subject = eagle_mask(eagle)
     pair("mask-subject", eagle_base, mix(saturation(exposure(eagle_base, -0.3), -0.35), exposure(eagle_base, 0.2), subject))
     save(red_overlay(eagle_base, subject), "mask-subject-overlay.jpg")
+    background = 1 - subject
+    save(red_overlay(eagle_base, background), "mask-background-overlay.jpg")
+    # The page reuses mask-subject-before.jpg as the before picture.
+    save(mix(eagle_base, temperature(exposure(eagle_base, -0.45), -0.35), background), "mask-background-after.jpg")
     bright = smoothstep(0.55, 0.75, luma(base))
     save(red_overlay(base, bright), "mask-luminance-overlay.jpg")
     pair("mask-luminance", base, mix(base, highlights(base, -0.6), bright))

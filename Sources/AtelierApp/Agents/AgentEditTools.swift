@@ -172,7 +172,7 @@ extension AgentServer {
         var members: [String: JSONValue] = [:]
         let distinct = Set(names.values)
         if distinct.count == 1, let name = distinct.first { members["mask"] = .string(name) }
-        if [AgentMaskKind.subject, .object, .people].contains(plan.kind) {
+        if [AgentMaskKind.subject, .background, .object, .people].contains(plan.kind) {
             members["note"] = .string("Atelier finds the \(plan.kind == .people ? "people" : "subject") when the photo "
                                       + "renders. Check with get_preview; the person can refine it in Masking.")
         }
@@ -193,6 +193,9 @@ extension AgentServer {
         switch plan.kind {
         case .subject:
             return .subject(DevelopSettings.Selection(feather: plan.feather ?? 20, refine: plan.refine, grow: plan.grow))
+        case .background:
+            return .subject(DevelopSettings.Selection(feather: plan.feather ?? 20, refine: plan.refine, grow: plan.grow,
+                                                      background: true))
         case .object:
             let box = plan.box ?? [0.3, 0.3, 0.4, 0.4]
             let rect = DevelopSettings.MaskRect(space.maskPoint(view([box[0], box[1]])),
