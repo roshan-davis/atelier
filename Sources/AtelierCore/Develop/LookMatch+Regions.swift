@@ -409,7 +409,10 @@ public struct LookTarget: Sendable {
                 back.focusWeights(mask.map { 1 - $0 }, share: LookSample.areaShare)
                 front.focusWeights(mask, share: 1)
                 background = back.excluding(excluded)
-                subject = front.excluding(excluded)
+                // The subject's look leaves the skin out with either skin treatment: Match Skin
+                // Tone gives the skin its own masks, so the drawn face shouldn't also set the
+                // subject's color (it drained the face with the study's dark clothes).
+                subject = front.excluding(skin?.pixels ?? [])
             } else {
                 notices.insert(.noSubjectInReference)
             }
@@ -581,12 +584,21 @@ extension LookMatcher {
                   }, isCancelled: isCancelled)
 
         if let subjectFocus, let subjectReference = target.subject, !isCancelled() {
+            // With Match Skin Tone the skin has its own masks: the subject is measured without
+            // it and its mask leaves it out, so the subject's Saturation (fitted to a study's
+            // dark, grey clothes) doesn't drain the face first (Rosh, Nov 14, 2026: Matrix and
+            // Dark Knight left the face nearly grey).
+            let matchesSkin = options.skinMode == .match && target.skin != nil
+            let subjectSkin = matchesSkin ? skin?.pixels ?? [] : skinPixels
             func subjectSample(_ settings: DevelopSettings) -> LookSample? {
                 guard var measured = photo(settings) else { return nil }
                 measured.focusWeights(subjectFocus, share: 1)
-                return measured.excluding(skinPixels)
+                return measured.excluding(subjectSkin)
             }
-            fitSubject(&current, options: options, reference: subjectReference, measure: subjectSample)
+            let leaveOut = matchesSkin && skin?.usesPeople == true
+                ? LookSkin.maskSelection(bodySkin: PeopleParts.isAvailable) : nil
+            fitSubject(&current, options: options, reference: subjectReference, leavingOut: leaveOut,
+                       measure: subjectSample)
         }
 
         var skinFit: SkinFit?
@@ -668,13 +680,23 @@ extension LookMatcher {
     /// Adds a "Match Look: Subject" mask (Select Subject) and fits its Temp, Tint, Exposure and
     /// Saturation so the photo's subject matches the reference's, once the background matches.
     /// The slopes are measured by rendering a nudge of each slider, as the global fit does.
+    /// `leavingOut`: Select People parts subtracted from the subject (the skin, when Match Skin
+    /// Tone gives it its own masks).
     static func fitSubject(_ settings: inout DevelopSettings, options: LookMatchOptions, reference: LookSample,
+                           leavingOut: DevelopSettings.PeopleSelection? = nil,
                            measure: (DevelopSettings) -> LookSample?) {
         let earlier = settings.masks.firstIndex { $0.name == LookMatch.subjectMaskName }
         let index = earlier ?? settings.masks.count
         if earlier == nil {
             let part = DevelopSettings.MaskComponent(.subject(DevelopSettings.Selection(feather: subjectFeather)))
             settings.masks.append(DevelopSettings.Mask(name: LookMatch.subjectMaskName, components: [part]))
+        }
+        if let leavingOut {
+            let cut = DevelopSettings.MaskComponent(.people(leavingOut), mode: .subtract)
+            // A repeat match keeps the user's parts and adds the cut only once.
+            if !settings.masks[index].components.contains(where: { $0.shape == cut.shape && $0.mode == .subtract }) {
+                settings.masks[index].components.append(cut)
+            }
         }
         for parameter in options.subjectFitParameters { settings.masks[index][parameter] = 0 }
         func with(_ changes: [(DevelopSettings.LocalParameter, Double)]) -> DevelopSettings {

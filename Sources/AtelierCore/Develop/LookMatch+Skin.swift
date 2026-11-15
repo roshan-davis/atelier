@@ -236,8 +236,12 @@ extension LookMatcher {
                      (LookMatch.skinHighlightsMaskName, faces + [range(high, 100)])]
             tones = (0..<3).map { k in
                 var target = targets[k]
-                if study, let photo = LookSkin.relativeAB(start, split.groups[k]) {
-                    target = LookSkin.studyTarget(study: targets[k], photo: photo, tone: k)
+                // The photo's own skin saturation is its skin before the match (`skin` was
+                // measured on the unedited render), not after the global fit: measured after it,
+                // a look that drained the face set a nearly grey target (Rosh, Nov 14, 2026).
+                let own = skin.relativeToneColors
+                if study, own.count == 3 {
+                    target = LookSkin.studyTarget(study: targets[k], photo: own[k], tone: k)
                 }
                 return SkinSolver.Tone(pixels: split.groups[k], target: target, relative: true)
             }
@@ -381,7 +385,9 @@ extension LookMatcher {
     /// The same for a built-in study, whose skin colors are drawn on purpose: Matrix's olive skin
     /// is about 55° of hue from an ordinary face and Fury Road's highlights need about 1.7 × the
     /// chroma, which ±35 couldn't reach (Rosh, Nov 14, 2026).
-    static let studySkinShift = 60.0
+    /// Raised to the full range (Nov 14, 2026): the masks also have to undo what the global
+    /// look did to the face, as Protect's do, and at 60 a Matrix match left the face grey.
+    static let studySkinShift = 100.0
     /// Protect Skin Tones' skin masks undo the look on the face, so they may use the sliders'
     /// whole range: at 35 they couldn't undo a strong Temp/Tint, and Protect then pulled the
     /// whole match back.
