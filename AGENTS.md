@@ -88,6 +88,18 @@ Rosh's most common complaint is the same bug showing up tool by tool. Before you
 - Measure before optimizing: time it (Instruments, `os_signpost`, or a timed test) and put the numbers in the PR. Don't add caches, threads or lower-quality paths on a guess.
 - Keep the main thread free: rendering, analysis, file and network work run in the background with progress and Cancel (PRD UX principle 4). Slider and handle drags must stay smooth: renders are coalesced (one in flight plus one follow-up, see `DevelopController`), so never queue a render per event.
 
+### GPU and live rendering
+
+Develop is GPU-first, and live drags are fast because of work done in AT-025, AT-036 and AT-039 (#79, #93, #96, #97, #98). A new feature must not quietly undo any of it. Treat these as rules, not suggestions:
+
+- **Pixels stay on the GPU.** Per-pixel work is Core Image filters or Metal kernels (`RuntimeKernels.build`), never a Swift loop over the photo. No GPU → CPU → GPU round trip (`createCGImage`, reading pixels back) in the live render; a one-off analysis (a pick, a fill, a measurement) may read a small or downscaled image, off the main thread. A small table built on the CPU (a curve LUT, `ColorLUT`'s cube) is fine.
+- **Keep the display path.** Live frames go from the render queue straight into IOSurfaces (`DisplaySurfaces`, `LiveFrameSink`, `PhotoFeed`); they don't pass through SwiftUI or the main thread. Don't add a second photo view or route frames through `@Published` state; draw tools as overlays (see [Solve a pattern once, centrally](#solve-a-pattern-once-centrally)).
+- **Respect the caches.** Step 1 (decode, white balance, exposure, camera match, lens, Defringe) is cached by `CorrectedKey`; a new setting that changes step 1 must be part of that key, and anything that can run in step 2 (`applyAdjustments`) should, so its drags don't re-decode the RAW. Stage caches (`insertingIntermediate`) are keyed by the image graph; don't make a stage's graph depend on something that changes every tick unless it must.
+- **Zero costs nothing.** A tool at its neutral value is left out of the render (return the input image unchanged), so photos that don't use it pay nothing.
+- **Warm up new kernels.** Because idle tools are left out, the first drag of a new tool compiles its program on the photo. Every new global Develop tool or kernel gets a variant in `PipelineWarmUp.warmUpVariants` (and `PipelineWarmUpTests` checks it), as Calibration's does.
+- **Keep the main thread and SwiftUI out of the drag.** Slider values flow through `DevelopMeasures` and equatable rows; don't add `@Published` state that changes every tick or a view that re-reads the whole controller. Saves and stored previews (`PreviewRevision`) stay off the live render queue, and histogram drawing stays off the main thread.
+- **Check it.** For a change to the render path, a new kernel or a new live control, run Develop > Frame Diagnostics (or `swift test --filter SliderPerformanceTests` with sample RAWs) before and after on a Mac, and put the numbers in the PR. A cloud agent that can't run it says so and asks for a Mac check. A frame-rate or first-drag regression is a bug, even when the feature works.
+
 ## Action list and ways of working
 
 - [BACKLOG.md](BACKLOG.md) is the canonical action/status list in Git. The PRD remains the product specification; the backlog does not replace it or approve a product change.
