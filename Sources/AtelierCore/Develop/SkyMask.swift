@@ -1,41 +1,53 @@
 import Foundation
 
-/// Select Sky (AT-068) from the depth model's field and the photo's colors on the same grid.
+/// Select Sky (AT-068) from the depth model's output and the photo's colors on the same grid.
 ///
-/// Depth alone can't tell a distant skyline from the sky (both read as "farthest"), nor find sky
-/// seen through gaps in a nearer object (a tower's lattice), so the mask follows what the sky is
-/// rather than tuned cut-offs (Rosh's Eiffel Tower photo, Nov 15, 2026). No rule depends on the
-/// sky's own color or brightness, so a blue noon, a sunset gradient and a night sky are found the
-/// same way:
-/// 1. **Open sky.** The sky is far and has no edges: grow from the top row through pixels that are
-///    far (`farGate.high`) and whose color steps from their neighbor by less than `edgeStep`, a
-///    barely visible Oklab difference. A gradient (sunset pink into blue) is many small steps and
-///    is followed; a skyline, a tree or a building against the sky is one big step and stops it,
-///    however far the depth model thinks it is.
+/// The rules follow what the sky is rather than cut-offs tuned to one sky, so a blue noon, a
+/// sunset and a night sky are found the same way (Rosh, Nov 15, 2026: "a logical fix, not a
+/// bandaid that would break another sky"). Checked with the real model on Rosh's Eiffel Tower
+/// NEF, two harbor panoramas, a castle with clouds and birds, a hotel with sky behind a tree, a
+/// viaduct, and photos without sky (a stadium, a cathedral, a photographed map).
+/// 0. **At infinity.** Depth Anything puts the sky at zero disparity (it is trained that way), so
+///    "far" is measured against the photo's nearest things (`nearness`, 0 at infinity), not as the
+///    farthest part of this photo: a stadium crowd or a wall is never at infinity, however far it
+///    is the farthest thing shown. Fully at infinity up to `infinity.full`, fading out by
+///    `infinity.none`; water reflecting the sky is near, so it never counts.
+/// 1. **Open sky.** The sky has no edges: grow from the top row through pixels at infinity whose
+///    color steps from their neighbor by less than `step` (a barely visible Oklab difference
+///    beyond the photo's own noise). A gradient (sunset pink into blue) is many small steps and is
+///    followed; a skyline or a tree line is one big step and stops it.
 /// 2. **Islands.** A far region the open sky surrounds on every side (a crisp cloud, the sun, the
 ///    moon) is sky too. One that touches something near or the bottom of the photo isn't.
-/// 3. **Seen through.** Any other far pixel above the horizon (the open sky's lowest row) is sky
-///    when its color is the open sky's color right around it, within `edgeStep` plus how much that
-///    sky varies there: sky behind a lattice comes in, a far white building doesn't. Below the
-///    horizon nothing is added, so water reflecting the sky isn't taken.
-/// Every pixel is weighted by how far it is (`farGate`), so near things never count.
-///
-/// Noise: a dusk or night photo's sensor noise can make neighbors differ by more than `edgeStep`
-/// even in a smooth sky. So the colors are cleaned with a 3 × 3 median before edges are judged (it removes
-/// noise but keeps edges; the later steps use the photo's own colors), and the step allowed is
-/// `edgeStep` plus twice the photo's typical neighbor-to-neighbor difference among far pixels:
-/// an edge is a visible difference beyond the photo's noise.
+/// 3. **Seen through.** Any other far pixel is sky when its color is the open sky's color around
+///    it (`LocalColor`), within `step` plus how much that sky varies there: sky behind a lattice
+///    or between branches comes in, a far white building doesn't.
+/// 4. **Grown on.** The sky continues from every sky pixel found in step 3 (whose neighborhood is
+///    sky colored too), through pixels at infinity with no edge, so a patch of sky reached in
+///    step 3 brings in the rest of its patch (sky behind a tree's branches).
+/// Noise: edges are judged on colors cleaned with a 3 × 3 median (it removes noise but keeps
+/// edges; the other steps use the photo's own colors), and `step` is `edgeStep` plus twice the
+/// photo's median difference between neighbors at infinity.
 extension DepthMap.Field {
-    static let farGate: (low: Float, high: Float) = (0.72, 0.88)
+    static let infinity: (full: Float, none: Float) = (0.01, 0.06)
     static let edgeStep: Float = 0.03
 
-    /// Select Sky's mask, 0...1, on the field's grid; all zero when no far area touches the top.
+    /// Each pixel's disparity as a share of the photo's nearest (99th percentile): 0 at infinity,
+    /// 1 as near as the nearest things. Without the model's output, from `values` (1 farthest).
+    func nearness() -> [Float] {
+        guard disparity.count == values.count else { return values.map { 1 - $0 } }
+        let finite = disparity.filter(\.isFinite).sorted()
+        guard !finite.isEmpty else { return values.map { 1 - $0 } }
+        let nearest = max(finite[finite.count - 1 - finite.count / 100], 1e-6)
+        return disparity.map { value -> Float in value.isFinite ? max(0, value) / nearest : 1 }
+    }
+
+    /// Select Sky's mask, 0...1, on the field's grid; all zero when no sky reaches the top.
     public var sky: [Float] {
         let count = width * height
         guard values.count == count else { return [] }
-        let gate = Self.farGate
-        let far: [Float] = values.map { value -> Float in Self.smooth((value - gate.low) / (gate.high - gate.low)) }
-        // Without the photo's colors, the far area open to the top is all there is.
+        let gate = Self.infinity
+        let far: [Float] = nearness().map { r -> Float in Self.smooth((gate.none - r) / (gate.none - gate.full)) }
+        let atInfinity: [Bool] = far.map { $0 >= 1 }
         let labs: [SIMD3<Float>]?
         if colors.count == count * 4 {
             labs = (0..<count).map { i -> SIMD3<Float> in
@@ -46,27 +58,36 @@ extension DepthMap.Field {
         }
         // Edges are judged on noise-cleaned colors; the rest compares the photo's own colors.
         let cleaned = labs.map { Self.median3($0, width: width, height: height) }
-        let step = cleaned.map { stepLimit(labs: $0) } ?? Self.edgeStep
-        var open = openSky(labs: cleaned, step: step)
-        guard let horizon = open.lastIndex(of: true).map({ $0 / width }) else {
-            return [Float](repeating: 0, count: count)
-        }
-        guard let labs else { return (0..<count).map { i -> Float in open[i] ? far[i] : 0 } }
+        let step = cleaned.map { stepLimit(labs: $0, atInfinity: atInfinity) } ?? Self.edgeStep
+        let topRow = (0..<width).filter { atInfinity[$0] }
+        var open = grow(from: topRow, through: atInfinity, labs: cleaned, step: step,
+                        reached: [Bool](repeating: false, count: count))
+        guard open.contains(true) else { return [Float](repeating: 0, count: count) }
+        // Without the photo's colors, what is at infinity and open to the top is all there is.
+        guard let labs, let cleaned else { return (0..<count).map { i -> Float in open[i] ? far[i] : 0 } }
         markIslands(&open, far: far)
         let local = LocalColor(width: width, height: height, labs: labs, mask: open)
         var out = [Float](repeating: 0, count: count)
+        var seeds: [Int] = []
         for i in 0..<count {
             if open[i] {
                 out[i] = far[i]
                 continue
             }
-            let row = i / width
-            guard far[i] > 0, row <= horizon, let around = local.at(row: row, column: i % width) else { continue }
+            guard far[i] > 0, let around = local.at(row: i / width, column: i % width) else { continue }
             let reach = step + around.spread
             let d: SIMD3<Float> = labs[i] - around.mean
             let distance: Float = (d * d).sum().squareRoot()
             out[i] = far[i] * Self.smooth((reach - distance) / (0.5 * reach))
+            // A seed must be sky by its neighborhood's (cleaned) color too: at an edge the cleaned
+            // color mixes both sides and would carry the sky across it.
+            let dc: SIMD3<Float> = cleaned[i] - around.mean
+            if out[i] > 0.5, (dc * dc).sum().squareRoot() < reach { seeds.append(i) }
         }
+        var found = open
+        for i in 0..<count where out[i] > 0.5 { found[i] = true }
+        let grown = grow(from: seeds, through: atInfinity, labs: cleaned, step: step, reached: found)
+        for i in 0..<count where grown[i] && !found[i] { out[i] = far[i] }
         return out
     }
 
@@ -81,17 +102,17 @@ extension DepthMap.Field {
     }
 
     /// The largest color step between neighbors that isn't an edge: `edgeStep` plus twice the
-    /// median step between far neighbors (the photo's noise; edges are too few to move a median).
-    func stepLimit(labs: [SIMD3<Float>]) -> Float {
+    /// median step between neighbors at infinity (the photo's noise; edges are too few to move a
+    /// median).
+    func stepLimit(labs: [SIMD3<Float>], atInfinity: [Bool]) -> Float {
         var steps: [Float] = []
         steps.reserveCapacity(values.count * 2)
-        for index in values.indices where values[index] >= Self.farGate.high {
-            let column = index % width
-            if column < width - 1, values[index + 1] >= Self.farGate.high {
+        for index in values.indices where atInfinity[index] {
+            if index % width < width - 1, atInfinity[index + 1] {
                 let d: SIMD3<Float> = labs[index + 1] - labs[index]
                 steps.append((d * d).sum().squareRoot())
             }
-            if index + width < values.count, values[index + width] >= Self.farGate.high {
+            if index + width < values.count, atInfinity[index + width] {
                 let d: SIMD3<Float> = labs[index + width] - labs[index]
                 steps.append((d * d).sum().squareRoot())
             }
@@ -101,46 +122,15 @@ extension DepthMap.Field {
         return Self.edgeStep + 2 * steps[steps.count / 2]
     }
 
-    /// Each channel's median over the 3 × 3 pixels around each pixel (fewer at the photo's edges).
-    static func median3(_ labs: [SIMD3<Float>], width: Int, height: Int) -> [SIMD3<Float>] {
-        var out = labs
-        var xs: [Float] = [], ys: [Float] = [], zs: [Float] = []
-        xs.reserveCapacity(9)
-        ys.reserveCapacity(9)
-        zs.reserveCapacity(9)
-        for row in 0..<height {
-            for column in 0..<width {
-                xs.removeAll(keepingCapacity: true)
-                ys.removeAll(keepingCapacity: true)
-                zs.removeAll(keepingCapacity: true)
-                for r in max(0, row - 1)...min(height - 1, row + 1) {
-                    for c in max(0, column - 1)...min(width - 1, column + 1) {
-                        let lab = labs[r * width + c]
-                        xs.append(lab.x)
-                        ys.append(lab.y)
-                        zs.append(lab.z)
-                    }
-                }
-                xs.sort()
-                ys.sort()
-                zs.sort()
-                out[row * width + column] = SIMD3<Float>(xs[xs.count / 2], ys[ys.count / 2], zs[zs.count / 2])
-            }
-        }
-        return out
-    }
-
-    /// Step 1: far pixels reached from the top row with no color edge (a step of `step` or more)
-    /// on the way (`labs` nil: by depth alone).
-    func openSky(labs: [SIMD3<Float>]?, step: Float) -> [Bool] {
-        var reached = [Bool](repeating: false, count: values.count)
-        var stack: [Int] = []
-        for column in 0..<width where values[column] >= Self.farGate.high {
-            reached[column] = true
-            stack.append(column)
-        }
+    /// `reached` plus every pixel in `allowed` reached from `starts` with no color step of
+    /// `step` or more on the way (`labs` nil: by `allowed` alone). `starts` count as reached.
+    func grow(from starts: [Int], through allowed: [Bool], labs: [SIMD3<Float>]?, step: Float,
+              reached: [Bool]) -> [Bool] {
+        var reached = reached
+        var stack = starts
+        for index in starts { reached[index] = true }
         while let index = stack.popLast() {
-            for next in neighbors(of: index) where !reached[next] && values[next] >= Self.farGate.high {
+            for next in neighbors(of: index) where !reached[next] && allowed[next] {
                 if let labs {
                     let d: SIMD3<Float> = labs[next] - labs[index]
                     guard (d * d).sum().squareRoot() < step else { continue }
@@ -176,6 +166,35 @@ extension DepthMap.Field {
             }
             if island { for index in region { open[index] = true } }
         }
+    }
+
+    /// Each channel's median over the 3 × 3 pixels around each pixel (fewer at the photo's edges).
+    static func median3(_ labs: [SIMD3<Float>], width: Int, height: Int) -> [SIMD3<Float>] {
+        var out = labs
+        var xs: [Float] = [], ys: [Float] = [], zs: [Float] = []
+        xs.reserveCapacity(9)
+        ys.reserveCapacity(9)
+        zs.reserveCapacity(9)
+        for row in 0..<height {
+            for column in 0..<width {
+                xs.removeAll(keepingCapacity: true)
+                ys.removeAll(keepingCapacity: true)
+                zs.removeAll(keepingCapacity: true)
+                for r in max(0, row - 1)...min(height - 1, row + 1) {
+                    for c in max(0, column - 1)...min(width - 1, column + 1) {
+                        let lab = labs[r * width + c]
+                        xs.append(lab.x)
+                        ys.append(lab.y)
+                        zs.append(lab.z)
+                    }
+                }
+                xs.sort()
+                ys.sort()
+                zs.sort()
+                out[row * width + column] = SIMD3<Float>(xs[xs.count / 2], ys[ys.count / 2], zs[zs.count / 2])
+            }
+        }
+        return out
     }
 
     /// The mean color of the masked pixels around a point, and how much they vary, from summed-area

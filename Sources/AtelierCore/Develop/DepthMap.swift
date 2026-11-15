@@ -68,6 +68,9 @@ public enum DepthMap {
         /// The photo the model saw, RGBA sRGB, rows from the top, on the same grid (for Select
         /// Sky's colors); empty when not kept.
         public var colors: [UInt8] = []
+        /// The model's own output on the same grid (relative inverse depth: 0 at infinity, larger
+        /// is nearer), for Select Sky; empty when not kept.
+        public var disparity: [Float] = []
 
         /// The depth at a point (top-left fractions of the photo), 0...1.
         public func value(atX x: Double, y: Double) -> Float {
@@ -223,7 +226,8 @@ public enum DepthMap {
                 throw Failure("unexpected output size \(result.count) bytes")
             }
             failure = nil
-            return Field(width: size.width, height: size.height, values: normalized(raw), colors: pixels)
+            return Field(width: size.width, height: size.height, values: normalized(raw), colors: pixels,
+                         disparity: raw)
         } catch {
             failure = error.localizedDescription
             NSLog("Atelier: Depth Range failed: %@", "\(error)")

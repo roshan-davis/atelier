@@ -2,12 +2,13 @@ import Foundation
 import XCTest
 @testable import AtelierCore
 
-/// Select Sky (AT-068): the far part of the photo open to its top with no edges, plus clouds it
-/// surrounds and sky seen through gaps, from the depth model and the photo's colors.
+/// Select Sky (AT-068): the part of the photo at infinity open to its top with no edges, plus
+/// clouds it surrounds and sky seen through gaps, from the depth model and the photo's colors.
+/// Without `disparity`, these fields give depth as `values` (1 at infinity).
 final class SelectSkyTests: XCTestCase {
     /// 8 × 12, rows from the top: a pink sunset sky (depth 1), a near dark tower in columns 3
-    /// and 4 with one sky-colored gap at row 3 (depth 0.85, the tower's own depth as the model
-    /// gives it), a dark skyline in rows 6 and 7 almost as far as the sky (0.95), near ground.
+    /// and 4 with one sky-colored gap at row 3 (0.99, the model blurs it a little toward the
+    /// tower), a dark skyline in rows 6 and 7 almost at infinity (0.95), near ground.
     /// Rosh's Eiffel Tower photo had both problems: the skyline was taken, the gaps weren't.
     private func towerScene() -> DepthMap.Field {
         var values: [Float] = [], colors: [UInt8] = []
@@ -17,7 +18,7 @@ final class SelectSkyTests: XCTestCase {
                 if row <= 5 {
                     if column == 3 || column == 4 {
                         if row == 3 {
-                            values.append(0.85)
+                            values.append(0.99)
                             colors += pink
                         } else {
                             values.append(0.6)
@@ -56,9 +57,24 @@ final class SelectSkyTests: XCTestCase {
         XCTAssertTrue(indoors.sky.allSatisfy { $0 == 0 })
     }
 
-    func testWithoutColorsTheFarAreaOpenToTheTopIsKept() {
+    func testWithoutColorsWhatIsAtInfinityAndOpenToTheTopIsKept() {
         let field = DepthMap.Field(width: 2, height: 2, values: [1, 0.95, 1, 0.2])
-        XCTAssertEqual(field.sky, [1, 1, 1, 0])
+        XCTAssertEqual(field.sky, [1, 0, 1, 0])
+    }
+
+    /// The model's own output decides what is at infinity: the sky is 0 there. A photo whose
+    /// farthest part is a stadium crowd (disparity well above 0) has no sky, however smooth.
+    func testOnlyZeroDisparityIsSky() {
+        let gray: [UInt8] = [120, 110, 115, 255]
+        let colors = Array([[UInt8]](repeating: gray, count: 8).joined())
+        let stadium = DepthMap.Field(width: 2, height: 4, values: [Float](repeating: 0.5, count: 8), colors: colors,
+                                     disparity: [1, 1, 1, 1, 6, 6, 10, 10])
+        XCTAssertTrue(stadium.sky.allSatisfy { $0 == 0 }, "the crowd is the farthest thing but not at infinity")
+        let outdoors = DepthMap.Field(width: 2, height: 4, values: [Float](repeating: 0.5, count: 8), colors: colors,
+                                      disparity: [0, 0, 0, 0, 6, 6, 10, 10])
+        XCTAssertEqual(Array(outdoors.sky[0..<4]), [1, 1, 1, 1])
+        XCTAssertEqual(outdoors.nearness()[0], 0)
+        XCTAssertEqual(outdoors.nearness()[7], 1, accuracy: 0.001)
     }
 
     /// A scene from rows of (depth, RGB) cells.
@@ -86,7 +102,7 @@ final class SelectSkyTests: XCTestCase {
                 let sky: [UInt8] = (0..<3).map { UInt8((pink[$0] * (1 - t) + blue[$0] * t).rounded()) }
                 if row <= 11 {
                     if column == 6 || column == 7 {
-                        return row == 5 || row == 8 ? (0.9, sky) : (0.6, [40, 35, 30])
+                        return row == 5 || row == 8 ? (0.99, sky) : (0.6, [40, 35, 30])
                     }
                     if (3...4).contains(row), (2...4).contains(column) { return (1, [235, 225, 230]) }
                     return (1, sky)
@@ -142,11 +158,12 @@ final class SelectSkyTests: XCTestCase {
         XCTAssertTrue(sky[(8 * 16)...].allSatisfy { $0 == 0 }, "neither the dark buildings nor the lights")
     }
 
-    /// A blue day sky and a far white building rising into it: bright, far, but not the sky's color.
+    /// A blue day sky and a white building rising into it, which the model puts at infinity too
+    /// (the worst case): bright, but not the sky's color.
     func testDaySkyLeavesAFarWhiteBuilding() {
         let rows: [[(Float, [UInt8])]] = (0..<14).map { row in
             (0..<16).map { column -> (Float, [UInt8]) in
-                if row <= 8, (3...8).contains(row), (5...9).contains(column) { return (0.95, [240, 240, 235]) }
+                if row <= 8, (3...8).contains(row), (5...9).contains(column) { return (1, [240, 240, 235]) }
                 if row <= 8 { return (1, [UInt8(90 + row * 8), UInt8(140 + row * 6), 220]) }
                 if row == 9 { return (0.97, [60, 90, 50]) }
                 return (0.4, [150, 140, 120])
