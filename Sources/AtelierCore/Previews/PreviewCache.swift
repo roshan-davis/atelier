@@ -32,7 +32,9 @@ public final class PreviewCache: Sendable {
     ///    the lips instead of 35%), so photos with a Select People mask render slightly differently.
     /// 10: Select People's Face Skin and Body Skin come from the built-in MediaPipe parts model
     ///    (`PeopleParts`) instead of skin color, so photos with a Select People mask look different.
-    public static let version = 10
+    /// 11: the depth model sees the photo shrunk with Lanczos and in whole pixels (it was
+    ///    point-sampled, with a dark half-covered top row), so Depth Range masks differ slightly.
+    public static let version = 11
 
     /// Clears previews written by an older version. The old folder is moved aside at once and
     /// deleted in the background, so a large cache doesn't hold up launch.

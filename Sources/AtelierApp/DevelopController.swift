@@ -2827,7 +2827,7 @@ struct MaskTool: Equatable {
         case .brush: return "Paint on the photo. Hold ⌥ to erase; [ and ] change the size."
         case .object: return "Drag a box around the object to select it."
         case .color: return "Click a color on the photo, or drag over an area to pick its range of colors."
-        case .luminance, .depth, .subject, .background, .people: return ""
+        case .luminance, .depth, .subject, .sky, .background, .people: return ""
         }
     }
 }
@@ -2890,6 +2890,7 @@ extension DevelopController {
         case .luminance: return .luminance(DevelopSettings.LuminanceRange(low: 50, high: 100))
         case .color: return .color(DevelopSettings.ColorRange())
         case .depth: return .depth(DevelopSettings.DepthRange())
+        case .sky: return .sky(DevelopSettings.SkySelection())
         case .subject: return .subject(DevelopSettings.Selection())
         case .background: return .subject(DevelopSettings.Selection(background: true))
         case .object: return .subject(DevelopSettings.Selection(box: .init(x: 0.3, y: 0.3, width: 0.4, height: 0.4)))
@@ -2912,6 +2913,7 @@ extension DevelopController {
         maskMessage = nil
         if case .subject(let selection) = component.shape { checkSubject(selection) }
         if case .people = component.shape { findPeople(reportNone: true) }
+        if case .sky = component.shape { checkSky() }
         if tool.newMask || selectedMask == nil {
             component.mode = .add
             let mask = Mask(name: settings.nextMaskName(), components: [component])
@@ -3005,6 +3007,24 @@ extension DevelopController {
                     self.maskMessage = nil
                     component.shape = .depth(picked)
                     self.updateComponent(component, step: "\(adding ? "Add Depth" : "Pick Depth"): \(mask.name)")
+                }
+            }
+        }
+    }
+
+    /// Select Sky: finds the depth in the background and says so in the panel when there is no
+    /// sky (no far part of the photo reaches its top edge).
+    func checkSky() {
+        guard let session, DepthMap.isInstalled else { return }
+        let settings = self.settings
+        let assetID = self.assetID
+        queue.async {
+            let found = session.findsSky(settings: settings)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard self.assetID == assetID, found == false else { return }
+                    self.maskMessage = "No sky found: no far part of this photo reaches its top edge. "
+                        + "Try Color Range or a Linear Gradient."
                 }
             }
         }

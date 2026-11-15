@@ -65,6 +65,12 @@ public enum DepthMap {
         public let width: Int
         public let height: Int
         public let values: [Float]
+        /// The photo the model saw, RGBA sRGB, rows from the top, on the same grid (for Select
+        /// Sky's colors); empty when not kept.
+        public var colors: [UInt8] = []
+        /// The model's own output on the same grid (relative inverse depth: 0 at infinity, larger
+        /// is nearer), for Select Sky; empty when not kept.
+        public var disparity: [Float] = []
 
         /// The depth at a point (top-left fractions of the photo), 0...1.
         public func value(atX x: Double, y: Double) -> Float {
@@ -88,7 +94,10 @@ public enum DepthMap {
         }
 
         /// As a one-channel float image on `extent` (the corrected photo's frame), stretched to it.
-        func image(on extent: CGRect) -> CIImage? {
+        func image(on extent: CGRect) -> CIImage? { Self.image(values, width: width, height: height, on: extent) }
+
+        /// `values` (`width` × `height`, rows from the top) as a one-channel float image on `extent`.
+        static func image(_ values: [Float], width: Int, height: Int, on extent: CGRect) -> CIImage? {
             // A 32-bit float gray CGImage, whose rows run from the top, read as stored values.
             let data = values.withUnsafeBufferPointer { Data(buffer: $0) }
             guard let provider = CGDataProvider(data: data as CFData),
@@ -217,7 +226,8 @@ public enum DepthMap {
                 throw Failure("unexpected output size \(result.count) bytes")
             }
             failure = nil
-            return Field(width: size.width, height: size.height, values: normalized(raw))
+            return Field(width: size.width, height: size.height, values: normalized(raw), colors: pixels,
+                         disparity: raw)
         } catch {
             failure = error.localizedDescription
             NSLog("Atelier: Depth Range failed: %@", "\(error)")

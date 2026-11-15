@@ -191,9 +191,9 @@ extension AgentServer {
             members["note"] = .string("Atelier finds the \(plan.kind == .people ? "people" : "subject") when the photo "
                                       + "renders. Check with get_preview; the person can refine it in Masking.")
         }
-        if plan.kind == .depth {
+        if plan.kind == .depth || plan.kind == .sky {
             members["note"] = .string(DepthMap.isInstalled
-                ? "Atelier finds the photo's depth when it renders. Check with get_preview."
+                ? "Atelier finds the photo's depth (and the sky from it) when it renders. Check with get_preview."
                 : "The depth model isn't downloaded, so this mask selects nothing until the person downloads it in "
                     + "Settings > AI > Masking Models.")
         }
@@ -236,6 +236,8 @@ extension AgentServer {
         case .luminance:
             return .luminance(DevelopSettings.LuminanceRange(low: plan.range[0], high: plan.range[1],
                                                              smoothness: plan.smoothness))
+        case .sky:
+            return .sky(DevelopSettings.SkySelection(feather: plan.feather ?? 10, refine: plan.refine, grow: plan.grow))
         case .depth:
             return .depth(DevelopSettings.DepthRange(low: plan.range[0], high: plan.range[1], smoothness: plan.smoothness))
         }

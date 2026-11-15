@@ -99,6 +99,17 @@ final class AtelierEditToolsTests: XCTestCase {
         guard case .failure = wrong else { return XCTFail("box isn't a depth field") }
     }
 
+    func testSkyMaskTakesTheEdgeControls() throws {
+        let plan = try MaskRules.plan(AddMaskParameters(current: true, kind: .sky), sliders: maskSliders).get()
+        XCTAssertEqual(plan.title, "New Mask: Select Sky")
+        XCTAssertEqual(plan.refine, 60, "snaps to tree lines by default")
+        let soft = try MaskRules.plan(AddMaskParameters(current: true, kind: .sky, feather: 40, refine: 0), sliders: maskSliders).get()
+        XCTAssertEqual(soft.refine, 0)
+        XCTAssertEqual(soft.feather, 40)
+        let wrong = MaskRules.plan(AddMaskParameters(current: true, kind: .sky, range: [0, 30]), sliders: maskSliders)
+        guard case .failure = wrong else { return XCTFail("range isn't a sky field") }
+    }
+
     func testMaskSettingsAreChecked() throws {
         let plan = try MaskRules.plan(AddMaskParameters(current: true, kind: .subject,
                                                         settings: ["exposure=+0.5", "Clarity = -20"]),
