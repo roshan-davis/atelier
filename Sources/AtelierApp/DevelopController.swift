@@ -2815,7 +2815,7 @@ struct MaskTool: Equatable {
         case .brush: return "Paint on the photo. Hold ⌥ to erase; [ and ] change the size."
         case .object: return "Drag a box around the object to select it."
         case .color: return "Click a color on the photo, or drag over an area to pick its range of colors."
-        case .luminance, .subject, .people: return ""
+        case .luminance, .subject, .background, .people: return ""
         }
     }
 }
@@ -2878,6 +2878,7 @@ extension DevelopController {
         case .luminance: return .luminance(DevelopSettings.LuminanceRange(low: 50, high: 100))
         case .color: return .color(DevelopSettings.ColorRange())
         case .subject: return .subject(DevelopSettings.Selection())
+        case .background: return .subject(DevelopSettings.Selection(background: true))
         case .object: return .subject(DevelopSettings.Selection(box: .init(x: 0.3, y: 0.3, width: 0.4, height: 0.4)))
         case .people: return .people(DevelopSettings.PeopleSelection())
         case .brush: return .brush([])
@@ -2986,9 +2987,14 @@ extension DevelopController {
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     guard self.assetID == assetID, !found else { return }
-                    self.maskMessage = selection.box == nil
-                        ? "No subject stands out in this photo. Try Select Object and drag a box around what you want."
-                        : "Nothing found in that box. Try a box that fits closer around the object."
+                    if selection.background {
+                        self.maskMessage = "No subject stands out in this photo, so there is no background to tell apart. "
+                            + "Try Color Range, a Linear Gradient or a Brush."
+                    } else {
+                        self.maskMessage = selection.box == nil
+                            ? "No subject stands out in this photo. Try Select Object and drag a box around what you want."
+                            : "Nothing found in that box. Try a box that fits closer around the object."
+                    }
                 }
             }
         }

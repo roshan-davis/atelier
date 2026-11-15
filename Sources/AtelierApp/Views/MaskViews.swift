@@ -469,7 +469,7 @@ private struct MaskOverlay: View {
             case .object: return .drawBox(start: point)
             case .brush: return painting
             case .color: return .pickColor(start: point, adding: false)
-            case .luminance, .subject, .people: return .none
+            case .luminance, .subject, .background, .people: return .none
             }
         }
         if let component = develop.selectedComponent {
@@ -579,7 +579,7 @@ struct MasksPanel: View {
             maskList
             HStack(spacing: 6) {
                 kindMenu(develop.masks.isEmpty ? "Create New Mask" : "New Mask") { develop.createMask($0) }
-                    .help("Make a new mask: Brush (K), Linear Gradient (M), Radial Gradient (⇧M), Luminance Range, Color Range (⇧J) or Select Subject")
+                    .help("Make a new mask: Brush (K), Linear Gradient (M), Radial Gradient (⇧M), Luminance Range, Color Range (⇧J), Select Subject or Select Background")
                 if develop.selectedMask != nil {
                     kindMenu("Add") { develop.addComponent($0, mode: .add) }
                         .help("Add a part to the selected mask")
@@ -827,7 +827,7 @@ struct MasksPanel: View {
             }
         case .subject(let selection):
             VStack(alignment: .leading, spacing: 6) {
-                GroupHeading(title: selection.box == nil ? "Select Subject" : "Select Object")
+                GroupHeading(title: component.kind.title)
                 let value = { (path: WritableKeyPath<DevelopSettings.Selection, Double>) in
                     Binding(get: { selection[keyPath: path] }, set: { newValue in
                         var changed = selection
@@ -841,8 +841,10 @@ struct MasksPanel: View {
                                  changed.fineEdges = on
                                  update(component, .subject(changed))
                              }))
-                Text(selection.box == nil
-                     ? "Found on this Mac with Apple's Vision. Invert it to adjust the background."
+                Text(selection.background
+                     ? "Everything except the subject Apple's Vision finds, on this Mac. Grow reaches further onto the subject."
+                     : selection.box == nil
+                     ? "Found on this Mac with Apple's Vision. Or choose Select Background to adjust everything else."
                      : "Found by Vision inside the box. Drag the pin to move the box, or draw a new one.")
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 invertToggle(component)

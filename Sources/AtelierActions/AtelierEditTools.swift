@@ -193,12 +193,13 @@ public enum CropRules {
 
 /// The mask kinds an agent can add. Brush stays manual.
 public enum AgentMaskKind: String, AgentEnum {
-    case subject, object, people, linear, radial, luminance
+    case subject, background, object, people, linear, radial, luminance
 
     /// The Masks panel's name.
     public var title: String {
         switch self {
         case .subject: return "Select Subject"
+        case .background: return "Select Background"
         case .object: return "Select Object"
         case .people: return "Select People"
         case .linear: return "Linear Gradient"
@@ -295,7 +296,7 @@ public struct AddMaskParameters: ActionParameters, Hashable, PhotoTargeting {
         parts: [.faceSkin], refine: 0, grow: 0, invert: false, amount: 100, settings: ["exposure=-0.5"])
 
     public static let fieldNotes: [String: FieldNote] = PhotoTargetNotes.notes.merging([
-        "kind": FieldNote("subject (Select Subject), object (Select Object, needs box), people (Select People), "
+        "kind": FieldNote("subject (Select Subject), background (Select Background: all but the subject), object (Select Object, needs box), people (Select People), "
                           + "linear (Linear Gradient), radial (Radial Gradient) or luminance (Luminance Range). Brush "
                           + "is drawn by hand."),
         "name": FieldNote("The new mask's name (default \"Mask n\"). Not with to_mask."),
@@ -310,15 +311,15 @@ public struct AddMaskParameters: ActionParameters, Hashable, PhotoTargeting {
         "center": FieldNote("radial: the ellipse's center [x, y] (default [0.5, 0.5])."),
         "size": FieldNote("radial: half-width and half-height [w, h], fractions of the shown photo's width and height "
                           + "(default [0.25, 0.25])."),
-        "feather": FieldNote("radial: how much of the ellipse fades (default 50). subject, object, people: softens the "
+        "feather": FieldNote("radial: how much of the ellipse fades (default 50). subject, background, object, people: softens the "
                              + "edge (default 20, people 10).", minimum: 0, maximum: 100),
         "range": FieldNote("luminance: [low, high] brightness kept, 0 to 100 (default [50, 100])."),
         "smoothness": FieldNote("luminance: how softly the range fades (default 50).", minimum: 0, maximum: 100),
         "person": FieldNote("people: which person, counted from the left from 0; leave out for everyone."),
         "parts": FieldNote("people: the parts to select (default face_skin and body_skin)."),
-        "refine": FieldNote("subject, object, people: snaps the edge to the photo's edges (0 is off).",
+        "refine": FieldNote("subject, background, object, people: snaps the edge to the photo's edges (0 is off).",
                             minimum: 0, maximum: 100),
-        "grow": FieldNote("subject, object, people: shrinks (below 0) or grows the selection.", minimum: -100, maximum: 100),
+        "grow": FieldNote("subject, background, object, people: shrinks (below 0) or grows the selection.", minimum: -100, maximum: 100),
         "invert": FieldNote("true: invert the new part (with to_mask) or the new mask."),
         "amount": FieldNote("New mask only: scales all of its sliders, percent (default 100).", minimum: 0, maximum: 200),
         "settings": FieldNote("New mask only: its sliders as \"name=value\": temperature, tint, exposure, contrast, "
@@ -362,6 +363,7 @@ public enum MaskRules {
     /// The fields each kind takes; any other kind-specific field refuses the call.
     static let fields: [AgentMaskKind: Set<String>] = [
         .subject: ["feather", "refine", "grow"],
+        .background: ["feather", "refine", "grow"],
         .object: ["box", "feather", "refine", "grow"],
         .people: ["person", "parts", "feather", "refine", "grow"],
         .linear: ["start", "end"],
@@ -682,7 +684,7 @@ public extension AtelierAgentTools {
 
     static let addMask = MCPTool(
         name: "add_mask", title: "Add a mask",
-        description: "Adds a mask to photos, or a part to an existing mask: Select Subject, Select Object (a box), Select "
+        description: "Adds a mask to photos, or a part to an existing mask: Select Subject, Select Background, Select Object (a box), Select "
             + "People (parts, one person or everyone), Linear Gradient, Radial Gradient or Luminance Range, with the new "
             + "mask's sliders. Positions are fractions of the photo as get_preview shows it. Subject, object and people "
             + "are found by Atelier when the photo renders; check the result with get_preview. One change; "

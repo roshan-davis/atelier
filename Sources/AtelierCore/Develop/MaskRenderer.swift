@@ -122,11 +122,16 @@ extension DevelopRenderer {
             return image.transformed(by: CGAffineTransform(translationX: extent.minX, y: extent.minY))
         case .subject(let selection):
             guard let mask = subject?(selection.box) else { return nil }
-            let refined = refinedSelection(mask, grow: selection.grow, refine: selection.refine, feather: selection.feather,
+            // Select Background is the subject turned inside out: its edge is the same edge, so
+            // Grow (which grows the background) shrinks the subject before it is inverted.
+            let grow = selection.background ? -selection.grow : selection.grow
+            var refined = refinedSelection(mask, grow: grow, refine: selection.refine, feather: selection.feather,
                                            guide: guide, extent: extent)
             // Fine Edges last, so Feather and Refine Edge don't blur away the strands it finds.
-            guard selection.fineEdges, let matte = fine?(mask) else { return refined }
-            return fineEdged(refined, outline: mask, matte: matte, extent: extent)
+            if selection.fineEdges, let matte = fine?(mask) {
+                refined = fineEdged(refined, outline: mask, matte: matte, extent: extent)
+            }
+            return selection.background ? invert(refined).cropped(to: extent) : refined
         case .people(let selection):
             guard let mask = people?(selection) else { return nil }
             let refined = refinedSelection(mask, grow: selection.grow, refine: selection.refine, feather: selection.feather,

@@ -142,7 +142,7 @@ For Gemma or Qwen, start with Organize or Edit.
 | | `auto` | Auto Tone or Auto White Balance | Undoable |
 | | `apply_preset`, `sync`, `reset` | Apply a preset, copy settings from one photo to others (chosen groups), reset all or a group | Undoable |
 | | `crop` | Aspect ratio, straighten angle, rotate | Undoable |
-| Masks | `add_mask` | Select Subject, Sky, People (with parts), Linear or Radial, plus its adjustments. Brush stays manual. | Undoable |
+| Masks | `add_mask` | Select Subject, Background, Object, People (with parts), Linear, Radial or Luminance Range, plus its adjustments. Brush stays manual. | Undoable |
 | Match Look | `match_look` | Match to a catalog photo or built-in study, with Protect Skin Tones | Undoable |
 | AI | `run_recipe` | Upscale or Replace Background as a background job with progress. Remove Object needs painting, so it opens the tool instead. | Asks first |
 | Export | `export` | Export with a preset to a folder; license gate applies | Asks first |
