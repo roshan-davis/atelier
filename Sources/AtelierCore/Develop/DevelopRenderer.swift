@@ -1015,16 +1015,20 @@ public final class DevelopSession: @unchecked Sendable {
     }
 
     /// The photo the depth model sees: the corrected photo at about 1036 pixels on its long edge
-    /// (the model shrinks it to its own size), as sRGB. Shrunk with Lanczos, which averages the
-    /// pixels it drops: a plain scale transform samples them, so a high-ISO photo's noise reached
-    /// the model and Select Sky's colors at full strength (Rosh's Eiffel Tower photo, Nov 15, 2026).
+    /// (the model shrinks it to its own size), as sRGB, in whole pixels. Shrunk with Lanczos,
+    /// which averages the pixels it drops (a plain scale transform samples them, so noise reached
+    /// the model at full strength), and cropped to whole pixels: the scaled size is fractional
+    /// (6064 × 4040 → 1036 × 690.2), and the old half-covered top row came out dark, which stopped
+    /// Select Sky at its first row (Rosh's Eiffel Tower photo, Nov 15, 2026).
     private func depthInput(of source: CIImage) -> CGImage? {
         let extent = source.extent
         let factor = min(1, 1036 / max(extent.width, extent.height))
         var small = source.transformed(by: CGAffineTransform(translationX: -extent.minX, y: -extent.minY))
         if factor < 1 {
-            // Clamped first, so the filter doesn't darken the border with the empty space outside.
-            let frame = CGRect(x: 0, y: 0, width: (extent.width * factor).rounded(.down), height: (extent.height * factor).rounded(.down))
+            // Clamped first, so the filter doesn't darken the border with the empty space outside;
+            // cropped to whole pixels, so no row or column is part empty.
+            let frame = CGRect(x: 0, y: 0, width: (extent.width * factor).rounded(.down),
+                               height: (extent.height * factor).rounded(.down))
             small = small.clampedToExtent()
                 .applyingFilter("CILanczosScaleTransform", parameters: [kCIInputScaleKey: factor, kCIInputAspectRatioKey: 1])
                 .cropped(to: frame)

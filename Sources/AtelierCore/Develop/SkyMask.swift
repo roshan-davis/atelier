@@ -20,9 +20,8 @@ import Foundation
 ///    horizon nothing is added, so water reflecting the sky isn't taken.
 /// Every pixel is weighted by how far it is (`farGate`), so near things never count.
 ///
-/// Noise: a dusk or night photo's sensor noise makes neighbors differ by more than `edgeStep`
-/// even in a smooth sky (Rosh's Eiffel Tower photo, Nov 15, 2026: the open sky stopped after the
-/// first row). So the colors are cleaned with a 3 × 3 median before edges are judged (it removes
+/// Noise: a dusk or night photo's sensor noise can make neighbors differ by more than `edgeStep`
+/// even in a smooth sky. So the colors are cleaned with a 3 × 3 median before edges are judged (it removes
 /// noise but keeps edges; the later steps use the photo's own colors), and the step allowed is
 /// `edgeStep` plus twice the photo's typical neighbor-to-neighbor difference among far pixels:
 /// an edge is a visible difference beyond the photo's noise.
