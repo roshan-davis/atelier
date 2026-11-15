@@ -65,9 +65,9 @@ struct CullSubjectOverlay: View {
     private func faceMark(_ face: CullPreviewFace, number: Int, photo: CGRect) -> some View {
         let box = Self.place(face.box, in: photo)
         let color = Self.color(face.eyes)
-        let dash: [CGFloat] = face.byMediaPipe ? [3, 2] : []
+        let dash: [CGFloat] = Self.dash(face)
         Rectangle()
-            .stroke(color, style: StrokeStyle(lineWidth: 1.5, dash: dash))
+            .stroke(color, style: StrokeStyle(lineWidth: face.eyes == .background ? 1 : 1.5, dash: dash))
             .frame(width: box.width, height: box.height)
             .offset(x: box.minX, y: box.minY)
         // The face's number on its top left corner; what it means is in the bar below.
@@ -83,6 +83,7 @@ struct CullSubjectOverlay: View {
         case .halfClosed: text = "Half closed"
         case .closed: text = "Eyes closed"
         case .unknown: text = "Not checked"
+        case .background: return "Background, out of focus: left out"
         }
         if let smile = face.smile { text += smile >= CullEyes.smiling ? ", smiling" : ", not smiling" }
         if face.byMediaPipe { text += ", found by MediaPipe" }
@@ -110,7 +111,7 @@ struct CullSubjectOverlay: View {
     }
 
     /// The line under the photo: what the subject is, and how to read the boxes.
-    static func describe(subject: CullSubject, sharedRegion: Bool, faceCount: Int) -> String {
+    static func describe(subject: CullSubject, sharedRegion: Bool, faceCount: Int, background: Int = 0) -> String {
         var what: String
         switch subject.kind {
         case .faces: what = faceCount == 1 ? "the face" : "\(faceCount) faces"
@@ -119,12 +120,16 @@ struct CullSubjectOverlay: View {
         case .wholeFrame: what = "the whole frame (nothing stood out)"
         }
         if sharedRegion && subject.kind != .wholeFrame { what += ", same area in every shot" }
+        if background > 0 {
+            what += background == 1 ? " · 1 blurred background face left out" : " · \(background) blurred background faces left out"
+        }
         return "Subject (orange): \(what)"
     }
 
     /// How the face boxes are colored, for the bar's tooltip.
     static let colorKey = "Face boxes: green eyes open, yellow half closed, red closed, gray not checked; "
-        + "dashed when MediaPipe found the face. Each face's number is explained in the line below."
+        + "dashed when MediaPipe found the face. Faint dotted boxes are out-of-focus faces in the background, "
+        + "left out of the subject, the eye checks and the reasons. Each face's number is explained in the line below."
 
     static func color(_ eyes: CullEyes) -> Color {
         switch eyes {
@@ -132,7 +137,17 @@ struct CullSubjectOverlay: View {
         case .halfClosed: return .yellow
         case .closed: return .red
         case .unknown: return .gray
+        case .background: return backgroundColor
         }
+    }
+
+    /// Out-of-focus background faces: faint, so the eye colors stand out.
+    static let backgroundColor = Color(white: 0.85).opacity(0.55)
+
+    /// Background faces dotted, MediaPipe's dashed, Apple Vision's solid.
+    static func dash(_ face: CullPreviewFace) -> [CGFloat] {
+        if face.eyes == .background { return [1.5, 3] }
+        return face.byMediaPipe ? [3, 2] : []
     }
 
     /// A Vision rectangle in the view's top-left points, given where the photo is.

@@ -1145,6 +1145,20 @@ So no tool has a private note per photo, and none leaves a readable, editable re
 
 **Acceptance:** Show Subject draws the dashed subject box and face boxes in the right places at Fit and zoomed, never past the photo, labels say what the subject is and the sharpness, and it never shows outside the Cull preview.
 
+## AT-062 — Cull: blurred background faces aren't the subject
+
+**Status:** Built, not compiled in the cloud (no macOS); needs a Mac build and Rosh's acceptance. Approved by Rosh in words (Nov 14, 2026, below). **Owner:** Claude, chat [Drop blurred background faces from Cull subject](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKLs4UjcQgNuZSvu1stFiC5d), branch `claude/cull-background-faces`. **Depends on:** AT-059, AT-061.
+
+**Evidence:** Rosh (Nov 14, 2026, screenshot of Z62_9227 in a 12-shot group, Find Faces Both, Advanced on): "subject is just me but it is picking up the blurred background person too. if the blur difference is more for one of the detection. can it drop that from the subject selection? otherwise it picks up eveyone in the background - see a threshold value if it below from that it is not meant to be focused anyway - photographer knows what he/she is taking". The shot was dropped for "Eyes half closed: 1 of 2 people", the second person being a blurred passer-by MediaPipe took for a face; the subject box spanned both.
+
+**Cause (main at `9dbe5dd`):** every face found counted equally: the subject box was the union of all faces, its sharpness their size-weighted mean, and every face's eyes were judged.
+
+**Built:** `AtelierCore/Cull/CullBackground.swift`: per photo, a face under 20% of the sharpest face's sharpness (or under 35% and at most half its width) is background; per group, a person is background when that holds in more than half their shots. `Culling.assess` drops them before measuring (subject, sharpness, eyes, smiles, face quality); `Culling.eyes` returns `.background` for them, so reasons, note pins and Show Subject follow. Show Subject draws them faint and dotted; the subject line counts them. Measured thresholds (cloud, OpenCV boxes, same Laplacian as `GrayPlane`): in focus 0.41 to 1 of the sharpest (group-5-outdoor, kids-group, crowd, profile couple); background 0.002 (Z62_9227, from the Cull preview in the screenshot), 0.065 to 0.24 (profile.jpg café). Tests: `CullPickTests` (screenshot case, thresholds, missed-focus shot), `CullFixtureTests` (no background face among the in-focus test photos).
+
+**Acceptance:** Mac build and tests; Z62_9225 to Z62_9227 group: the passer-by is faint and dotted, the subject box is around Rosh only, no "Eyes half closed: 1 of 2 people"; group-5, kids and crowd test photos show no background faces.
+
+**Deferred:** a setting for the threshold (fixed for now); whole people (body boxes) aren't filtered by focus (clothing texture misleads); the motion-blur check (`coherence`) is still read on the subject box from analysis, which can include the background face's area.
+
 ## AT-063 — Match Look: skin covers the neck, has no holes, and reaches the study's color
 
 **Status:** In review; never compiled (cloud, no macOS toolchain; CI billing-blocked). Needs a Mac build, tests and Rosh's test. **Owner:** Claude. **Chat:** [Analyze Match Look skin matching gaps](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKNa3pxZsTY6t8uNKnYc1sgY). **Branch:** `claude/match-look-skin-gaps`. **PR:** [#136](https://github.com/roshan-davis/atelier/pull/136). **Baseline:** `9dbe5dd`. **Dependencies:** AT-047 (merged), AT-048 (carried in this PR).
