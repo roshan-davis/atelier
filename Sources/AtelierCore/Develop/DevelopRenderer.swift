@@ -513,11 +513,17 @@ public final class DevelopSession: @unchecked Sendable {
     private var correctedCache: [(key: CorrectedKey, image: CIImage)] = []
     /// Whether `correctedCache` is used; see `DevelopRenderer.session(for:maxPixelSize:interactive:)`.
     private let interactive: Bool
+    /// Apple's own noise reduction for this RAW file (its defaults), turned off while AI Denoise
+    /// replaces it.
+    private let nativeNoiseReduction: (luminance: Float, color: Float)
+    /// The file as AI Denoise keys its noise pictures (`AIDenoise.Store.fileKey`).
+    private let denoiseFile: String
 
     init?(url: URL, maxPixelSize: Int?, renderer: DevelopRenderer, interactive: Bool = false) {
         self.url = url
         self.renderer = renderer
         self.interactive = interactive
+        denoiseFile = AIDenoise.Store.fileKey(url)
         var lensName: String?
         var focal = 0.0
         if let source = CGImageSourceCreateWithURL(url as CFURL, nil),
@@ -538,6 +544,7 @@ public final class DevelopSession: @unchecked Sendable {
                 if longEdge > 0 { raw.scaleFactor = Float(min(1, Double(maxPixelSize) / Double(longEdge))) }
             }
             renderScale = Double(raw.scaleFactor)
+            nativeNoiseReduction = (raw.luminanceNoiseReductionAmount, raw.colorNoiseReductionAmount)
             sourceSize = raw.outputImage?.extent.size ?? raw.nativeSize
             asShotTemperature = Double(raw.neutralTemperature)
             asShotTint = Double(raw.neutralTint)
@@ -554,6 +561,7 @@ public final class DevelopSession: @unchecked Sendable {
                 }
             }
             renderScale = scale
+            nativeNoiseReduction = (0, 0)
             sourceSize = image.extent.size
             isRAW = false
             rawFilter = nil
@@ -633,7 +641,8 @@ public final class DevelopSession: @unchecked Sendable {
     /// The number for the corrected photo `settings` make (see `upstreamIDs`). Call with the
     /// lock held.
     private func upstreamID(for settings: DevelopSettings) -> Int {
-        let key = CorrectedKey(settings.applyingPanelSwitches(), view: .photo)
+        let switched = settings.applyingPanelSwitches()
+        let key = CorrectedKey(switched, view: .photo, denoised: isDenoised(switched))
         if let index = upstreamIDs.firstIndex(where: { $0.key == key }) {
             let found = upstreamIDs.remove(at: index)
             upstreamIDs.append(found)
@@ -652,7 +661,7 @@ public final class DevelopSession: @unchecked Sendable {
     private func corrected(_ settings: DevelopSettings, defringeView: Defringe.View = .photo) -> CIImage? {
         let settings = settings.applyingPanelSwitches()
         guard interactive else { return decodeAndCorrect(settings, defringeView: defringeView) }
-        let key = CorrectedKey(settings, view: defringeView)
+        let key = CorrectedKey(settings, view: defringeView, denoised: isDenoised(settings))
         if let index = correctedCache.firstIndex(where: { $0.key == key }) {
             let cached = correctedCache.remove(at: index)
             correctedCache.append(cached)
@@ -679,8 +688,12 @@ public final class DevelopSession: @unchecked Sendable {
         let removeChromaticAberration: Bool
         let defringe: [Double]
         let view: Defringe.View
+        /// AI Denoise's Amount, and whether its noise picture was ready (it is found in the
+        /// background, and the photo renders again once it is in).
+        let aiDenoise: Double
+        let denoised: Bool
 
-        init(_ settings: DevelopSettings, view: Defringe.View) {
+        init(_ settings: DevelopSettings, view: Defringe.View, denoised: Bool = false) {
             // Lens profile corrections, lens vignetting and distortion, Upright and Transform.
             geometry = settings.lensGeometryKey
             temperature = settings.temperature
@@ -690,7 +703,15 @@ public final class DevelopSession: @unchecked Sendable {
             removeChromaticAberration = settings.removeChromaticAberration
             defringe = DevelopSettings.Parameter.allCases.filter(\.isDefringe).map { settings[$0] }
             self.view = view
+            aiDenoise = settings[.aiDenoise]
+            self.denoised = denoised
         }
+    }
+
+    /// Whether AI Denoise's noise picture for `settings` is ready (for `CorrectedKey`).
+    private func isDenoised(_ settings: DevelopSettings) -> Bool {
+        isRAW && settings[.aiDenoise] > 0
+            && AIDenoise.store.cached(file: denoiseFile, profileCorrections: settings.lensProfileCorrections) != nil
     }
 
     private func decodeAndCorrect(_ settings: DevelopSettings, defringeView: Defringe.View) -> CIImage? {
@@ -702,7 +723,23 @@ public final class DevelopSession: @unchecked Sendable {
             if lensCorrectionSupported, raw.isLensCorrectionEnabled != settings.lensProfileCorrections {
                 raw.isLensCorrectionEnabled = settings.lensProfileCorrections
             }
-            guard let output = raw.outputImage else { return nil }
+            // AI Denoise (AT-067) replaces Apple's noise reduction once the photo's noise is found:
+            // in the background while editing, before rendering in exports and previews.
+            let amount = settings[.aiDenoise] / 100
+            let residual = amount > 0
+                ? AIDenoise.store.residual(for: url, file: denoiseFile, profileCorrections: settings.lensProfileCorrections,
+                                           waits: !interactive, context: renderer.context)
+                : nil
+            let luminanceNR = residual == nil ? nativeNoiseReduction.luminance : 0
+            let colorNR = residual == nil ? nativeNoiseReduction.color : 0
+            if raw.isLuminanceNoiseReductionSupported, raw.luminanceNoiseReductionAmount != luminanceNR {
+                raw.luminanceNoiseReductionAmount = luminanceNR
+            }
+            if raw.isColorNoiseReductionSupported, raw.colorNoiseReductionAmount != colorNR {
+                raw.colorNoiseReductionAmount = colorNR
+            }
+            guard var output = raw.outputImage else { return nil }
+            if let residual { output = residual.apply(to: output, amount: amount) }
             image = settings.profile == .appleNeutral ? output : cameraMatch.apply(to: output)
         } else {
             guard let base = baseImage else { return nil }

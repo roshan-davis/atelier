@@ -56,17 +56,21 @@ public final class BundledModel: @unchecked Sendable {
 
     /// The model package in AtelierCore's resource bundle: beside the app's executable or in its
     /// Resources folder (packaged app), or SwiftPM's own bundle (tests, Xcode runs).
-    public func packageURL() -> URL? {
+    public func packageURL() -> URL? { Self.resourceURL(name: name, extension: "mlpackage") }
+
+    /// A file in AtelierCore's `Models` resources (an `.mlpackage`, or AI Denoise's `.onnx`),
+    /// wherever the resource bundle is.
+    public static func resourceURL(name: String, extension ext: String) -> URL? {
         let bundleName = "Atelier_AtelierCore.bundle"
         let folders = [Bundle.main.resourceURL, Bundle.main.bundleURL,
                        Bundle.main.executableURL?.deletingLastPathComponent()].compactMap { $0 }
         for folder in folders {
             if let bundle = Bundle(url: folder.appendingPathComponent(bundleName)),
-               let url = bundle.url(forResource: name, withExtension: "mlpackage", subdirectory: "Models") {
+               let url = bundle.url(forResource: name, withExtension: ext, subdirectory: "Models") {
                 return url
             }
         }
-        return Bundle.module.url(forResource: name, withExtension: "mlpackage", subdirectory: "Models")
+        return Bundle.module.url(forResource: name, withExtension: ext, subdirectory: "Models")
     }
 
     struct LoadError: Error, CustomStringConvertible {

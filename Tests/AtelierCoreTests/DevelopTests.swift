@@ -116,7 +116,8 @@ final class DevelopTests: XCTestCase {
         XCTAssertEqual(old.grainSize, 25)
         XCTAssertEqual(old.clarity, 0)
         XCTAssertEqual(DevelopSettings.Panel.detail.parameters, [.sharpening, .sharpenRadius, .sharpenDetail, .sharpenMasking,
-                                                                .luminanceNoise, .colorNoise])
+                                                                .aiDenoise, .luminanceNoise, .colorNoise])
+        XCTAssertEqual(old[.aiDenoise], 0, "AI Denoise is off on photos edited before it")
         XCTAssertEqual(Set(DevelopSettings.Parameter.allCases.map(\.panel)).count, DevelopSettings.Panel.allCases.count)
     }
 

@@ -1,0 +1,13 @@
+PMRID.onnx
+
+Contains the pretrained weights of PMRID ("Practical Deep Raw Image Denoising on
+Mobile Devices", Yuzhi Wang, Haibin Huang, Qin Xu, Jiaming Liu, Yiqun Liu and Jue
+Wang, ECCV 2020), from https://github.com/megvii-research/PMRID
+(models/torch_pretrained.ckp, SHA-256
+9361614f3514d27351d81909f2215c0fdc38619c0288d936b7266485ac106c14).
+Copyright Megvii Inc. Licensed under the Apache License, Version 2.0 (see
+PMRID-LICENSE.txt).
+
+Changes made for Atelier: the network (models/net_torch.py) was rebuilt as an
+ONNX graph with a fixed 1 x 4 x 512 x 512 input, holding the checkpoint's weights
+unchanged. Made by Scripts/models/convert_pmrid_onnx.py in the Atelier repository.

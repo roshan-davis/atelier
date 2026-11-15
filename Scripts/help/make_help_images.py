@@ -740,6 +740,14 @@ def main():
     noisy = luminance_noise(head, 0.05)
     pair("noise", noisy, blur(head, 0.6))
     pair("color-noise", color_noise(head, 0.07), head)
+    # AI Denoise: a high-ISO look (noise that grows with brightness, plus colored blotches), and
+    # the clean head it aims for. Its own generator, so the pictures before it don't change.
+    shot = np.random.default_rng(67)
+    speckle = blur(shot.standard_normal(head.shape[:2]).astype(np.float32), 0.5)
+    blotches = blur(shot.standard_normal(head.shape).astype(np.float32), 1.8)
+    blotches -= blotches.mean(axis=2, keepdims=True)
+    high_iso = np.clip(head + (speckle * np.sqrt(0.002 + 0.006 * head.mean(axis=2)))[..., None] + blotches * 0.05, 0, 1)
+    pair("ai-denoise", high_iso, head)
 
     # Lens Corrections
     pair("distortion", barrel(red, 0.32), red)

@@ -15,7 +15,7 @@
 <h1>Detail</h1>
 <p class="lede">Sharpen fine detail and clean up noise. Judge both at 100%: double-click the photo or press <kbd>Z</kbd> first.</p>
 
-<div class="chips"><a href="#sharpening">Sharpening</a><a href="#sharpen-option">See what you're sharpening</a><a href="#noise">Noise Reduction</a></div>
+<div class="chips"><a href="#sharpening">Sharpening</a><a href="#sharpen-option">See what you're sharpening</a><a href="#noise">Noise Reduction</a><a href="#ai-denoise">AI Denoise</a></div>
 
 <figure>
   <div class="pins pinned">
@@ -28,6 +28,7 @@
       <div class="sl" data-name="Detail" data-value="25" data-at="0.25" data-def="0.25"></div>
       <div class="sl" data-name="Masking" data-value="40" data-at="0.4" data-def="0"></div>
       <div class="gh" data-pin="2">Noise Reduction</div>
+      <div class="sl" data-name="AI Denoise" data-value="50" data-at="0.5" data-def="0"></div>
       <div class="sl" data-name="Luminance" data-value="20" data-at="0.2" data-def="0"></div>
       <div class="sl" data-name="Color" data-value="25" data-at="0.25" data-def="0"></div>
     </div>
@@ -57,6 +58,7 @@
 
 <h2 id="noise">Noise Reduction</h2>
 <dl class="defs">
+  <dt>AI Denoise <span class="range">0–100</span></dt><dd>Takes the noise out of a RAW photo with a neural network built into Atelier, keeping fine detail far better than Luminance. See <a href="#ai-denoise">AI Denoise</a> below.</dd>
   <dt>Luminance</dt><dd>Smooths grainy speckle in brightness (high ISO). Too much looks plasticky; stop when the grain is calm.</dd>
   <dt>Color</dt><dd>Removes colored blotches in shadows and flat areas. A little goes a long way.</dd>
 </dl>
@@ -70,6 +72,20 @@
     <figcaption><b>Color</b> noise reduction.</figcaption>
   </figure>
 </div>
+<h3 id="ai-denoise">AI Denoise</h3>
+<p>For high-ISO and underexposed RAW photos. Drag <b>AI Denoise</b> up from 0; 50 to 70 suits most photos, 100 takes out all the noise it finds. Its spread is measured on each photo, so it adjusts itself to the camera and ISO.</p>
+<ul>
+  <li>The first time on a photo, the line under the slider says <b>Finding the noise…</b> for a few seconds while the photo is worked on at full size. The photo shows Atelier's usual noise reduction until it's done; after that every Amount is instant.</li>
+  <li>While AI Denoise is above 0, the RAW engine's own noise reduction is off, so the slider starts from the photo's real noise. Use <b>Luminance</b> and <b>Color</b> on top if you want it smoother still.</li>
+  <li>It works on RAW files only. On JPEG, TIFF and HEIC photos the slider does nothing and the line under it says so.</li>
+  <li>Everything runs on your Mac (Core ML where it can), nothing is downloaded or sent anywhere, and the original stays untouched. Exports and previews wait for it.</li>
+</ul>
+<figure>
+  <div class="frame compare" data-before="ai-denoise-before.jpg" data-after="ai-denoise-after.jpg" data-labels="High ISO|AI Denoise"></div>
+  <figcaption><b>AI Denoise</b> takes out speckle and color blotches while the feathers stay sharp.</figcaption>
+</figure>
+<div class="note"><p><span class="label">The model.</span> PMRID (Wang et al., ECCV 2020, Apache License 2.0), about 4 MB, built into the app. Its results are fine for your website or shop.</p></div>
+
 <div class="tip"><p><span class="label">Order.</span> Noise reduction runs before sharpening, so reduce noise first, then sharpen with some Masking so the noise isn't sharpened back.</p></div>
 
 <div class="see-also">See also: <a href="basic.html#texture-clarity">Texture and Clarity</a> · <a href="effects.html#grain">Grain</a></div>
