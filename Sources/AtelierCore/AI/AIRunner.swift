@@ -144,27 +144,10 @@ public final class AIRunner: Sendable {
             if let model = settings.upscaleModel { values["Atelier Upscale Model"] = ["model_name": model] }
         }
         let workflow = try WorkflowBinder.bind(graph, values: values, required: required)
-        let monitor = await client.monitor()
-        defer { monitor.close() }
-        let promptID = try await client.queue(workflow)
         // Node times differ by recipe and by how much is generated.
         let timingsKey = mask != nil ? "\(recipe.rawValue)-\(settings.generationSize)" : recipe.rawValue
-        monitor.track(promptID, workflow: workflow, known: ComfyTimings.load(timingsKey))
-
-        let client = self.client
-        let outputs = try await withTaskCancellationHandler {
-            try await client.outputs(of: promptID) { elapsed in
-                report(AIProgress("Generating… \(Int(elapsed)) s", fraction: monitor.fraction()))
-            }
-        } onCancel: {
-            Task { await client.interrupt() }
-        }
-        ComfyTimings.save(monitor.measured, key: timingsKey)
-        guard let first = outputs.last else { throw AIError("ComfyUI returned no image.") }
+        let generated = try await generate(workflow, timingsKey: timingsKey, report: report)
         progress("Blending the result")
-        guard let generated = AIImaging.image(from: try await client.download(first)) else {
-            throw AIError("ComfyUI's result could not be read.")
-        }
 
         let final: CGImage
         if let mask {
@@ -205,9 +188,33 @@ public final class AIRunner: Sendable {
         return AIResult(assetID: id, url: target)
     }
 
+    /// Queues `workflow` in ComfyUI, reports how far it has got, and returns the last image it
+    /// made. Cancelling the task stops ComfyUI too.
+    func generate(_ workflow: [String: Any], timingsKey: String,
+                  report: @escaping @Sendable (AIProgress) -> Void) async throws -> CGImage {
+        let monitor = await client.monitor()
+        defer { monitor.close() }
+        let promptID = try await client.queue(workflow)
+        monitor.track(promptID, workflow: workflow, known: ComfyTimings.load(timingsKey))
+        let client = self.client
+        let outputs = try await withTaskCancellationHandler {
+            try await client.outputs(of: promptID) { elapsed in
+                report(AIProgress("Generating… \(Int(elapsed)) s", fraction: monitor.fraction()))
+            }
+        } onCancel: {
+            Task { await client.interrupt() }
+        }
+        ComfyTimings.save(monitor.measured, key: timingsKey)
+        guard let first = outputs.last else { throw AIError("ComfyUI returned no image.") }
+        guard let generated = AIImaging.image(from: try await client.download(first)) else {
+            throw AIError("ComfyUI's result could not be read.")
+        }
+        return generated
+    }
+
     /// Which models made the result, with their licenses, for the license gate. Models Atelier
     /// can't vouch for (a custom workflow, a different edit model) are recorded as unknown.
-    private func models(for recipe: AIRecipe, isCustom: Bool, settings: AISettings) -> [[String: String]] {
+    func models(for recipe: AIRecipe, isCustom: Bool, settings: AISettings) -> [[String: String]] {
         if isCustom { return [["name": recipe.workflowURL.lastPathComponent, "license": "unknown", "allowedUse": "unknown"]] }
         var models = recipe.builtInModels
         if let editModel = settings.editModel, let i = models.indices.first, models[i].file != editModel {

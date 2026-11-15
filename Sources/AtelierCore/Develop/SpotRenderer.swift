@@ -16,16 +16,23 @@ import Foundation
 enum SpotRenderer {
     /// `image` with `spots` drawn on it. `image` is the corrected photo, upright and uncropped.
     /// Content-Aware spots take their fill from `fills` (keyed by `upstream`, which names the
-    /// corrected photo); without one, or while it is being found, they show Heal.
+    /// corrected photo); without one, or while it is being found, they show Heal. Generative AI
+    /// spots take theirs from `patches`.
     static func apply(_ spots: [DevelopSettings.Spot], to image: CIImage, cache: SpotShapeCache? = nil,
-                      fills: SpotFills? = nil, upstream: Int = 0) -> CIImage {
+                      fills: SpotFills? = nil, upstream: Int = 0, patches: SpotPatches = .shared) -> CIImage {
         guard !spots.isEmpty, let kernels, !image.extent.isInfinite, !image.extent.isEmpty else { return image }
         var result = image
         var prior: [DevelopSettings.Spot] = []
         for spot in spots where !spot.points.isEmpty && spot.opacity > 0 {
             var fill: CIImage?
             if spot.mode == .contentAware {
-                fill = fills?.fill(for: spot, prior: prior, upstream: upstream, image: result)
+                // A Generative AI spot's own fill once ComfyUI has made it; until then (or if
+                // its file is gone) the Content-Aware one.
+                if spot.generative, let patch = spot.patch, let placed = patches.placed(patch, on: result) {
+                    fill = placed
+                } else {
+                    fill = fills?.fill(for: spot, prior: prior, upstream: upstream, image: result)
+                }
             }
             result = apply(spot, to: result, fill: fill, kernels: kernels, cache: cache)
             prior.append(spot)

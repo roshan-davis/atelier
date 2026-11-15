@@ -280,6 +280,11 @@ struct RemovePanel: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             .help("Content-Aware fills from texture all around the spot; Heal matches a source to the colors around it; Clone copies the source as it is")
+            if develop.spotMode == .contentAware {
+                Toggle("Generative AI", isOn: Binding(get: { develop.spotGenerative }, set: { develop.setSpotGenerative($0) }))
+                    .help("Fill with your ComfyUI Remove Object recipe (Settings > AI) instead of from the photo: for people and large objects. Each fill takes ComfyUI a minute or more; the spot shows Content-Aware until it is in")
+                generationStatus
+            }
             VStack(alignment: .leading, spacing: 6) {
                 GroupHeading(title: "Brush", reset: resetBrush)
                 SliderRow(label: "Size", value: Binding(get: { develop.spotSize * 100 }, set: { develop.setSpotSize($0 / 100) }),
@@ -317,12 +322,49 @@ struct RemovePanel: View {
         }
     }
 
+    /// The selected spot's fill being made, or why the last one failed.
+    @ViewBuilder private var generationStatus: some View {
+        if let id = develop.selectedSpotID, let progress = develop.spotGenerations[id] {
+            HStack(spacing: 6) {
+                if let fraction = progress.fraction {
+                    ProgressView(value: fraction).controlSize(.small).frame(width: 60)
+                } else {
+                    ProgressView().controlSize(.small)
+                }
+                Text(progress.phase)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                Button("Cancel") { develop.cancelSelectedFill() }
+                    .controlSize(.small)
+                    .help("Stop ComfyUI; the spot keeps the fill it has")
+            }
+        } else if !develop.spotGenerations.isEmpty {
+            Text(develop.spotGenerations.count == 1 ? "Generating 1 fill…" : "Generating \(develop.spotGenerations.count) fills…")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        if let error = develop.spotGenerationError {
+            Text(error)
+                .font(.caption)
+                .foregroundStyle(.red)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     private var hint: String {
+        if let spot = develop.selectedSpot, spot.mode == .contentAware, spot.generative {
+            return "Press / for ComfyUI to make another fill. Delete removes the spot."
+        }
         if develop.selectedSpot?.mode == .contentAware {
             return "Press / for another fill, or switch to Heal or Clone to pick a source. Delete removes the spot."
         }
         if develop.selectedSpot != nil {
             return "Drag the dashed source to take the fill from elsewhere, or press / for another. Delete removes the spot."
+        }
+        if develop.spotMode == .contentAware, develop.spotGenerative {
+            return "Paint over a person or object. ComfyUI fills it; until then Atelier shows a fill from what's around it."
         }
         if develop.spotMode == .contentAware {
             return "Click a spot, or drag over a line or wire. Atelier fills it from what's around it."

@@ -19,19 +19,25 @@ extension DevelopController {
     /// its source picked where the photo looks most like the spot's surroundings.
     func addSpot(points: [DevelopSettings.MaskPoint]) {
         guard assetID != nil, !points.isEmpty else { return }
-        var spot = Spot(mode: spotMode, points: points, size: spotSize, feather: spotFeather, opacity: spotOpacity)
+        var spot = Spot(mode: spotMode, points: points, size: spotSize, feather: spotFeather, opacity: spotOpacity,
+                        generative: spotMode == .contentAware && spotGenerative)
         let ranked = SpotSource.ranked(for: spot, photo: spotPhotoSize, brightness: spotBrightnessReader())
         spot.offset = ranked.first ?? fallbackOffset(for: spot)
         var spots = settings.spots
         spots.append(spot)
         selectedSpotID = spot.id
         setSpots(spots, step: "Add \(spot.mode.title) Spot")
+        if spot.generative { generateFill(for: spot.id) }
     }
 
     /// Lightroom's / key: the selected spot takes the next best source, or for Content-Aware,
-    /// another fill.
+    /// another fill (with Generative AI, ComfyUI makes another).
     func newSourceForSelectedSpot() {
         guard let spot = selectedSpot else { return }
+        if spot.mode == .contentAware, spot.generative {
+            generateFill(for: spot.id)
+            return
+        }
         if spot.mode == .contentAware {
             updateSpot(spot.id, step: "New Fill") { $0.variation += 1 }
             return
@@ -48,7 +54,12 @@ extension DevelopController {
 
     /// Moves a spot (and its source with it) to `points` (dragging the spot outline).
     func moveSpot(_ id: UUID, to points: [DevelopSettings.MaskPoint]) {
-        updateSpot(id, step: "Move Spot") { $0.points = points }
+        updateSpot(id, step: "Move Spot") {
+            $0.points = points
+            // A generated fill was made for where the spot was.
+            $0.patch = nil
+        }
+        spotGeometryChanged(id)
     }
 
     /// The panel's Heal/Clone switch and sliders change the selected spot, as in Lightroom, and
@@ -60,7 +71,13 @@ extension DevelopController {
 
     func setSpotSize(_ size: Double) {
         spotSize = min(max(size, Spot.sizeRange.lowerBound), Spot.sizeRange.upperBound)
-        if let id = selectedSpotID { updateSpot(id, step: "Spot Size") { $0.size = self.spotSize } }
+        if let id = selectedSpotID {
+            updateSpot(id, step: "Spot Size") {
+                $0.size = self.spotSize
+                $0.patch = nil
+            }
+            spotGeometryChanged(id)
+        }
     }
 
     func setSpotFeather(_ feather: Double) {
@@ -81,11 +98,13 @@ extension DevelopController {
         spotSize = spot.size
         spotFeather = spot.feather
         spotOpacity = spot.opacity
+        if spot.mode == .contentAware { spotGenerative = spot.generative }
     }
 
     func deleteSelectedSpot() {
         guard let id = selectedSpotID, settings.spots.contains(where: { $0.id == id }) else { return }
         selectedSpotID = nil
+        cancelFill(for: id)
         setSpots(settings.spots.filter { $0.id != id }, step: "Delete Spot")
         DeleteFeedback.play(.remove)
     }
@@ -94,11 +113,12 @@ extension DevelopController {
     func deleteAllSpots() {
         guard !settings.spots.isEmpty else { return }
         selectedSpotID = nil
+        for spot in settings.spots { cancelFill(for: spot.id) }
         setSpots([], step: "Clear All Spots")
         DeleteFeedback.play(.remove)
     }
 
-    private func updateSpot(_ id: UUID, step: String, _ change: (inout Spot) -> Void) {
+    func updateSpot(_ id: UUID, step: String, _ change: (inout Spot) -> Void) {
         guard let index = settings.spots.firstIndex(where: { $0.id == id }) else { return }
         var spots = settings.spots
         change(&spots[index])
