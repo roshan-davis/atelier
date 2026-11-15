@@ -390,6 +390,16 @@ final class DevelopController: ObservableObject {
     }
     /// The spot selected on the photo (its outlines drawn solid; Delete removes it).
     @Published var selectedSpotID: UUID?
+    /// Generative AI (AT-066 step 4): new Content-Aware spots are filled by the Remove Object
+    /// recipe in ComfyUI. See DevelopController+SpotGeneration.
+    @Published var spotGenerative = UserDefaults.standard.bool(forKey: "spots.generative") {
+        didSet { UserDefaults.standard.set(spotGenerative, forKey: "spots.generative") }
+    }
+    /// Spots whose fill ComfyUI is making, with what it is doing.
+    @Published var spotGenerations: [UUID: AIProgress] = [:]
+    /// Why the last generated fill failed, for the Remove panel.
+    @Published var spotGenerationError: String?
+    var spotGenerationTasks: [UUID: Task<Void, Never>] = [:]
     /// What the next click or stroke makes, remembered like Lightroom's.
     @Published var spotMode = DevelopSettings.Spot.Mode(
         rawValue: UserDefaults.standard.string(forKey: "spots.mode") ?? "") ?? .contentAware {
@@ -607,7 +617,7 @@ final class DevelopController: ObservableObject {
     /// Copy/paste settings clipboard, shared across photos.
     @Published private(set) var clipboard: DevelopSettings?
 
-    private let catalog: Catalog
+    let catalog: Catalog
     private let previews: PreviewCache
     private var session: DevelopSession?
     private var rendering = false
@@ -797,6 +807,7 @@ final class DevelopController: ObservableObject {
         maskMessage = nil
         selectedSpotID = nil
         spotBrightness = nil
+        spotGenerationError = nil
         peopleFaces = nil
         presetAmount = nil
         previewingPreset = nil

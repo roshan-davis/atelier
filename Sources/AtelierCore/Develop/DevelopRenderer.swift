@@ -610,6 +610,26 @@ public final class DevelopSession: @unchecked Sendable {
         return DevelopRenderer.straightenedOutline(crop, size: crop.orientedSize(sourceExtent.size), of: adjusted)
     }
 
+    /// The context this session renders with.
+    var renderContext: CIContext { renderer.context }
+
+    /// The corrected photo with the spots before spot `id` drawn on it, upright and uncropped:
+    /// what that spot is filled from (Generative AI sends it to ComfyUI). Nil when `id` isn't one
+    /// of the spots.
+    func imageUnderSpot(_ id: UUID, settings: DevelopSettings) -> CIImage? {
+        let settings = settings.applyingPanelSwitches()
+        guard let index = settings.spots.firstIndex(where: { $0.id == id }) else { return nil }
+        lock.lock()
+        defer { lock.unlock() }
+        guard var image = corrected(settings) else { return nil }
+        let prior = Array(settings.spots[..<index])
+        if !prior.isEmpty {
+            image = SpotRenderer.apply(prior, to: image, cache: spotCache, fills: spotFills,
+                                       upstream: upstreamID(for: settings))
+        }
+        return image
+    }
+
     /// The number for the corrected photo `settings` make (see `upstreamIDs`). Call with the
     /// lock held.
     private func upstreamID(for settings: DevelopSettings) -> Int {

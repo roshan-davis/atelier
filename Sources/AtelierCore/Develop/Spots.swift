@@ -38,6 +38,32 @@ extension DevelopSettings {
         public var offset: MaskPoint
         /// Content-Aware's variation: / tries another fill (another random start for the search).
         public var variation: Int
+        /// Content-Aware with Generative AI on (AT-066 step 4): the fill is made by the AI
+        /// recipe Remove Object in ComfyUI. Until it is in, or when ComfyUI can't be reached,
+        /// the spot shows the Content-Aware fill.
+        public var generative: Bool
+        /// The generated fill, once ComfyUI has made it.
+        public var patch: Patch?
+
+        /// A generated fill: an image Atelier keeps in `SpotPatches`, and where it sits.
+        public struct Patch: Codable, Hashable, Sendable {
+            public var id: UUID
+            /// The area the image covers, in fractions of the upright, uncropped photo (top-left
+            /// origin), as the spot's points.
+            public var region: MaskRect
+            /// The average color of that area of the photo it was made from (red, green, blue in
+            /// the working space), so a later White Balance or Exposure change moves the fill
+            /// with the photo around it.
+            public var mean: [Double]
+            public var seed: UInt32
+
+            public init(id: UUID = UUID(), region: MaskRect, mean: [Double], seed: UInt32) {
+                self.id = id
+                self.region = region
+                self.mean = mean
+                self.seed = seed
+            }
+        }
 
         public static let defaultSize = 0.03
         public static let defaultFeather = 30.0
@@ -45,7 +71,8 @@ extension DevelopSettings {
 
         public init(mode: Mode, points: [MaskPoint], size: Double = Spot.defaultSize,
                     feather: Double = Spot.defaultFeather, opacity: Double = 100,
-                    offset: MaskPoint = MaskPoint(x: 0, y: 0), variation: Int = 0) {
+                    offset: MaskPoint = MaskPoint(x: 0, y: 0), variation: Int = 0, generative: Bool = false,
+                    patch: Patch? = nil) {
             self.mode = mode
             self.points = points
             self.size = min(max(size, Self.sizeRange.lowerBound), Self.sizeRange.upperBound)
@@ -53,6 +80,8 @@ extension DevelopSettings {
             self.opacity = min(max(opacity, 0), 100)
             self.offset = offset
             self.variation = variation
+            self.generative = generative
+            self.patch = patch
         }
 
         /// The source's path: the spot's moved by `offset`.
@@ -114,7 +143,7 @@ extension DevelopSettings {
         }
 
         private enum CodingKeys: String, CodingKey {
-            case id, mode, points, size, feather, opacity, offset, variation
+            case id, mode, points, size, feather, opacity, offset, variation, generative, patch
         }
 
         /// Missing keys take their defaults, so spots keep loading as fields are added.
@@ -128,6 +157,8 @@ extension DevelopSettings {
             opacity = try c.decodeIfPresent(Double.self, forKey: .opacity) ?? 100
             offset = try c.decodeIfPresent(MaskPoint.self, forKey: .offset) ?? MaskPoint(x: 0, y: 0)
             variation = try c.decodeIfPresent(Int.self, forKey: .variation) ?? 0
+            generative = try c.decodeIfPresent(Bool.self, forKey: .generative) ?? false
+            patch = try? c.decodeIfPresent(Patch.self, forKey: .patch)
         }
 
         public func encode(to encoder: Encoder) throws {
@@ -140,6 +171,8 @@ extension DevelopSettings {
             if opacity != 100 { try c.encode(opacity, forKey: .opacity) }
             try c.encode(offset, forKey: .offset)
             if variation != 0 { try c.encode(variation, forKey: .variation) }
+            if generative { try c.encode(generative, forKey: .generative) }
+            try c.encodeIfPresent(patch, forKey: .patch)
         }
     }
 }
