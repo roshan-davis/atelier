@@ -1312,3 +1312,13 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 **Evidence:** the comparison's gap 6. Lightroom has Lens Blur (AI depth, bokeh shapes, focus range), Adaptive presets (presets with Sky, Subject, Portrait or Landscape masks that adapt per photo) and Photo Merge > Panorama and HDR Panorama. Atelier presets can carry masks, but there are no adaptive packs. Panorama is PRD "Later".
 
 **Questions to agree:** which first; each gets its own ID when picked.
+
+## AT-071 — Cull: compare the suggested keeper and runner-up with linked zoom
+
+**Status:** Proposed / discuss. **Owner:** unassigned. **Dependencies:** AT-059 (Pick By ranking), AT-060 (shared Cull zoom and pan).
+
+**Why:** In a portrait burst or group shot, the choice often comes down to one blink, a small expression change, or slightly sharper eyes. Cull shows one large preview at a time, so checking the same detail means switching frames and comparing from memory. Seeing the two finalists together at the same magnification lets the photographer verify the suggestion and decide which frame to keep.
+
+**Scope:** In the existing Cull view, compare the suggested keeper and the next-ranked frame from the same group under the active Pick By setting. Enable Compare for groups with at least two frames. Reuse the shared photo viewport so zooming or panning either preview updates both.
+
+**Acceptance:** In both pre-import Cull and Show Cull Group, open Compare on a group with at least two frames. Zoom to 100% on a face and pan in either pane. Both panes follow at the same magnification and relative image position. Return to the single-photo view and verify that reviewing the pair preserved the current keep/drop choices. On a single-frame group, Compare is unavailable.
