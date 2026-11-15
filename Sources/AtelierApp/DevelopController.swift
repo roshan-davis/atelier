@@ -155,6 +155,7 @@ final class DevelopController: ObservableObject {
             isAIOpen = false
             isMasking = false
             isGuiding = false
+            isRemoving = false
             showingBefore = false
             compareMode = .off
         }
@@ -284,6 +285,7 @@ final class DevelopController: ObservableObject {
                 isAIOpen = false
                 isMasking = false
                 isGuiding = false
+                isRemoving = false
                 picker = nil
             } else {
                 showCropOfWholeImage()
@@ -322,6 +324,7 @@ final class DevelopController: ObservableObject {
             isCropping = false
             isMasking = false
             isGuiding = false
+            isRemoving = false
             picker = nil
             showingBefore = false
             compareMode = .off
@@ -336,6 +339,7 @@ final class DevelopController: ObservableObject {
                 isCropping = false
                 isAIOpen = false
                 isGuiding = false
+                isRemoving = false
                 picker = nil
                 showingBefore = false
                 compareMode = .off
@@ -355,12 +359,80 @@ final class DevelopController: ObservableObject {
                 isCropping = false
                 isAIOpen = false
                 isMasking = false
+                isRemoving = false
                 showingBefore = false
                 compareMode = .off
             }
             selectedGuide = nil
             scheduleRender()
         }
+    }
+
+    /// The Remove tool is open (Q, AT-066): Heal and Clone spots are drawn and edited on the
+    /// photo, and the Remove panel shows under the tool strip. See DevelopController+Spots.
+    @Published var isRemoving = false {
+        didSet {
+            guard isRemoving != oldValue else { return }
+            if isRemoving {
+                isCropping = false
+                isAIOpen = false
+                isMasking = false
+                isGuiding = false
+                picker = nil
+                showingBefore = false
+                compareMode = .off
+            } else {
+                selectedSpotID = nil
+                visualizesSpots = false
+            }
+        }
+    }
+    /// The spot selected on the photo (its outlines drawn solid; Delete removes it).
+    @Published var selectedSpotID: UUID?
+    /// What the next click or stroke makes, remembered like Lightroom's.
+    @Published var spotMode = DevelopSettings.Spot.Mode(
+        rawValue: UserDefaults.standard.string(forKey: "spots.mode") ?? "") ?? .heal {
+        didSet { UserDefaults.standard.set(spotMode.rawValue, forKey: "spots.mode") }
+    }
+    /// The brush for new spots: Size is a fraction of the photo's long edge.
+    @Published var spotSize = UserDefaults.standard.object(forKey: "spots.size") as? Double
+        ?? DevelopSettings.Spot.defaultSize {
+        didSet { UserDefaults.standard.set(spotSize, forKey: "spots.size") }
+    }
+    @Published var spotFeather = UserDefaults.standard.object(forKey: "spots.feather") as? Double
+        ?? DevelopSettings.Spot.defaultFeather {
+        didSet { UserDefaults.standard.set(spotFeather, forKey: "spots.feather") }
+    }
+    @Published var spotOpacity = UserDefaults.standard.object(forKey: "spots.opacity") as? Double ?? 100 {
+        didSet { UserDefaults.standard.set(spotOpacity, forKey: "spots.opacity") }
+    }
+    /// The spots' outlines on the photo while the tool is open (Lightroom's Tool Overlay).
+    @Published var showsSpotOverlay = UserDefaults.standard.object(forKey: "spots.showOverlay") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(showsSpotOverlay, forKey: "spots.showOverlay") }
+    }
+    /// Visualize Spots (A): white with the photo's edges in black, so dust stands out.
+    @Published var visualizesSpots = false {
+        didSet {
+            guard visualizesSpots != oldValue else { return }
+            sliderPreview = visualizesSpots ? .visualizeSpots(spotVisualizeAmount) : nil
+        }
+    }
+    /// Visualize Spots' slider (0...100): higher shows fainter edges.
+    @Published var spotVisualizeAmount = UserDefaults.standard.object(forKey: "spots.visualize") as? Double ?? 50 {
+        didSet {
+            UserDefaults.standard.set(spotVisualizeAmount, forKey: "spots.visualize")
+            if visualizesSpots { sliderPreview = .visualizeSpots(spotVisualizeAmount) }
+        }
+    }
+    /// The photo's brightness for picking spot sources, from the proxy it was read from.
+    var spotBrightness: (image: ObjectIdentifier, map: BrightnessMap)?
+
+    /// Replaces the open photo's spots as one history step named `step` (a drag that keeps
+    /// the same name stays one step).
+    func setSpots(_ spots: [DevelopSettings.Spot], step: String) {
+        guard assetID != nil, spots != settings.spots else { return }
+        settings.spots = spots
+        changed(step: step)
     }
     /// Guided tool > Show Whole Photo: the view zooms out, uncropped, so every guide shows,
     /// whatever the correction pushed out of the frame. View only; remembered.
@@ -716,6 +788,8 @@ final class DevelopController: ObservableObject {
         selectedComponentID = nil
         maskTool = nil
         maskMessage = nil
+        selectedSpotID = nil
+        spotBrightness = nil
         peopleFaces = nil
         presetAmount = nil
         previewingPreset = nil
@@ -1557,9 +1631,22 @@ final class DevelopController: ObservableObject {
     }
 
     /// Pastes onto the open photo, or onto every photo in `assetIDs` when given.
+    /// As in Lightroom, Spot Removal isn't pasted: each photo keeps its own Heal and Clone spots.
     func pasteSettings(onto assetIDs: [Int64]? = nil) {
         guard let clipboard else { return }
-        apply(clipboard, onto: assetIDs, step: "Paste Settings")
+        let targets = assetIDs ?? assetID.map { [$0] } ?? []
+        do {
+            let current = try currentSettings(for: targets)
+            var each: [Int64: DevelopSettings] = [:]
+            for id in targets {
+                var pasted = clipboard
+                pasted.spots = current[id]?.spots ?? []
+                each[id] = pasted
+            }
+            try apply(each: each, step: "Paste Settings")
+        } catch {
+            errorMessage = "Could not save: \(error.localizedDescription)"
+        }
     }
 
     /// Clears all edits on the photos (Lightroom's Reset).

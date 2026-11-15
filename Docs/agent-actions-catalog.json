@@ -75,6 +75,22 @@
     },
     {
       "exposed": true,
+      "id": "develop.clearSpots",
+      "kind": "edit",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Develop > Clear All Spots",
+      "summary": "Removes every Heal and Clone spot from the open photo.",
+      "tier": "undoable",
+      "title": "Clear All Spots",
+      "version": 1
+    },
+    {
+      "exposed": true,
       "id": "develop.compareMode",
       "kind": "view",
       "parameters": {
@@ -299,6 +315,22 @@
     },
     {
       "exposed": true,
+      "id": "develop.remove",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Develop > Remove Tool (Q), key Q",
+      "summary": "Opens or closes the Remove tool, which heals or clones spots on the photo.",
+      "tier": "runs",
+      "title": "Remove Tool (Q)",
+      "version": 1
+    },
+    {
+      "exposed": true,
       "id": "develop.resetAll",
       "kind": "edit",
       "parameters": {
@@ -378,6 +410,22 @@
       "summary": "Shows or hides clipped highlights and shadows on the photo.",
       "tier": "runs",
       "title": "Show Clipping (J)",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "develop.visualizeSpots",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Key A",
+      "summary": "Shows or hides Visualize Spots, the photo's edges in black on white so dust stands out.",
+      "tier": "runs",
+      "title": "Remove: Visualize Spots",
       "version": 1
     },
     {

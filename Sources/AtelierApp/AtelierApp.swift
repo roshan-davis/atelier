@@ -174,6 +174,8 @@ private struct ReadyLibraryCommands: Commands {
                 actions.button(AtelierAction.autoWhiteBalance)
                 actions.button(AtelierAction.whiteBalanceSelector)
                 actions.button(AtelierAction.crop)
+                actions.button(AtelierAction.remove)
+                actions.button(AtelierAction.clearSpots)
                 actions.button(AtelierAction.rotateLeft)
                 actions.button(AtelierAction.rotateRight)
                 Divider()

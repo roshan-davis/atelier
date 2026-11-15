@@ -33,6 +33,9 @@ public enum SliderPreview: Hashable, Sendable {
     case defringeAmount(DevelopSettings.FringeColor)
     /// Defringe Hue: black outside the Hue range, so it shows which colors can be affected.
     case defringeHue(DevelopSettings.FringeColor)
+    /// The Remove tool's Visualize Spots: white with the photo's edges in black, so sensor dust
+    /// and specks stand out. The amount (0...100) is the panel's slider; higher shows more.
+    case visualizeSpots(Double)
 
     /// The view Option shows while dragging `parameter`, if it has one.
     public init?(parameter: DevelopSettings.Parameter) {
@@ -69,6 +72,7 @@ public enum SliderPreview: Hashable, Sendable {
         case .pointColorRange: return "Shows the colors this swatch changes; the rest turns gray"
         case .defringeAmount: return "Hold Option while dragging to see the fringes being removed (in color, on white)"
         case .defringeHue: return "Hold Option while dragging to see which colors the range covers (the rest turns black)"
+        case .visualizeSpots: return "Shows the photo's edges in black on white, so dust and specks stand out"
         }
     }
 

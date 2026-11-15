@@ -31,6 +31,10 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
     /// Local adjustments, applied in order after the global ones (see Masks.swift).
     public var masks: [Mask] = []
 
+    /// The Remove tool's Heal and Clone spots, applied in order to the corrected photo before
+    /// every tone and color step (see Spots.swift and `SpotRenderer`).
+    public var spots: [Spot] = []
+
     /// Basic > Profile: the base look under every slider (RAW files).
     public var profile = Profile.cameraMatching
     /// Lens Corrections > Enable Profile Corrections: the RAW engine's corrections for the lens.
@@ -220,6 +224,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         crop = try c.decodeIfPresent(Crop.self, forKey: Key("crop"))
         // A mask this version can't read never costs the photo its other settings.
         masks = (try? c.decodeIfPresent([Mask].self, forKey: Key("masks"))) ?? []
+        spots = (try? c.decodeIfPresent([Spot].self, forKey: Key("spots"))) ?? []
         profile = (try? c.decodeIfPresent(Profile.self, forKey: Key("profile"))) ?? .cameraMatching
         lensProfileCorrections = try c.decodeIfPresent(Bool.self, forKey: Key("lensProfileCorrections")) ?? true
         removeChromaticAberration = try c.decodeIfPresent(Bool.self, forKey: Key("removeChromaticAberration")) ?? false
@@ -244,6 +249,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         if !pointCurves.isEmpty { try c.encode(pointCurves, forKey: Key("pointCurves")) }
         try c.encodeIfPresent(storedCrop, forKey: Key("crop"))
         if !masks.isEmpty { try c.encode(masks, forKey: Key("masks")) }
+        if !spots.isEmpty { try c.encode(spots, forKey: Key("spots")) }
         if profile != .cameraMatching { try c.encode(profile, forKey: Key("profile")) }
         if !lensProfileCorrections { try c.encode(false, forKey: Key("lensProfileCorrections")) }
         if removeChromaticAberration { try c.encode(true, forKey: Key("removeChromaticAberration")) }
@@ -256,7 +262,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
     public static let neutral = DevelopSettings()
 
     public var isNeutral: Bool {
-        temperature == nil && values.isEmpty && pointCurves.isEmpty && storedCrop == nil && masks.isEmpty
+        temperature == nil && values.isEmpty && pointCurves.isEmpty && storedCrop == nil && masks.isEmpty && spots.isEmpty
             && profile == .cameraMatching && lensProfileCorrections && !removeChromaticAberration && upright == nil
             && !constrainCrop && !monochrome && disabledPanels.isEmpty
     }

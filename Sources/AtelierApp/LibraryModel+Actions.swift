@@ -227,6 +227,20 @@ extension LibraryModel {
             model.develop.showMaskOverlay.toggle()
             return true
         }
+        r.bindChecked(AtelierAction.remove, enabled: { $0.focusedID != nil }) { model, _, _ in
+            if model.mode != .develop { model.openDevelop() }
+            guard model.mode == .develop else { return false }
+            model.develop.isRemoving.toggle()
+            return true
+        }
+        r.bindChecked(AtelierAction.visualizeSpots) { model, _, _ in
+            guard model.mode == .develop, model.develop.isRemoving else { return false }
+            model.develop.visualizesSpots.toggle()
+            return true
+        }
+        r.bind(AtelierAction.clearSpots, enabled: { $0.mode == .develop && !$0.develop.spots.isEmpty }) { model, _, _ in
+            model.develop.deleteAllSpots()
+        }
         r.bindChecked(AtelierAction.guidedUpright) { model, _, _ in
             guard model.mode == .develop else { return false }
             if model.develop.isGuiding { model.develop.isGuiding = false } else { model.develop.setUpright(.guided) }
@@ -344,6 +358,8 @@ extension KeyAction {
         case .masking: return registry.run(AtelierAction.masking)
         case .radialGradient: return registry.run(AtelierAction.radialGradient)
         case .guidedUpright: return registry.run(AtelierAction.guidedUpright)
+        case .remove: return registry.run(AtelierAction.remove)
+        case .visualizeSpots: return registry.run(AtelierAction.visualizeSpots)
         case .nextArea: return registry.run(AtelierAction.nextArea)
         case .previousArea: return registry.run(AtelierAction.previousArea)
         }

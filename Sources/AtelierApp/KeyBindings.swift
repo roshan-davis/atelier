@@ -13,6 +13,7 @@ enum KeyAction: String, CaseIterable, Identifiable {
     case beforeAfter, compareMode, zoom, crop, treatment, whiteBalance
     case linearGradient, brush, maskOverlay, clipping
     case masking, radialGradient, guidedUpright
+    case remove, visualizeSpots
     case nextArea, previousArea
 
     var id: String { rawValue }
@@ -46,6 +47,8 @@ enum KeyAction: String, CaseIterable, Identifiable {
         case .masking: return "Masking: open or close"
         case .radialGradient: return "Masking: Radial Gradient"
         case .guidedUpright: return "Transform: Guided Upright"
+        case .remove: return "Remove tool: open or close"
+        case .visualizeSpots: return "Remove: Visualize Spots (toggle)"
         case .nextArea: return "Focus: next area (Presets, right panel, Filmstrip)"
         case .previousArea: return "Focus: previous area"
         }
@@ -58,7 +61,7 @@ enum KeyAction: String, CaseIterable, Identifiable {
         case .pick, .reject, .unflag: return "Flags"
         case .grid, .loupe, .develop, .zoom: return "Views"
         case .beforeAfter, .compareMode, .crop, .treatment, .whiteBalance, .linearGradient, .brush, .maskOverlay, .clipping,
-             .masking, .radialGradient, .guidedUpright: return "Develop"
+             .masking, .radialGradient, .guidedUpright, .remove, .visualizeSpots: return "Develop"
         case .nextArea, .previousArea: return "Keyboard focus"
         }
     }
@@ -98,6 +101,8 @@ enum KeyAction: String, CaseIterable, Identifiable {
         case .masking: return "⇧w"
         case .radialGradient: return "⇧m"
         case .guidedUpright: return "⇧t"
+        case .remove: return "q"
+        case .visualizeSpots: return "a"
         case .nextArea: return "⌃" + KeyCombo.tab
         case .previousArea: return "⌃⇧" + KeyCombo.tab
         }

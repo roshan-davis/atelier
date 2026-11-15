@@ -405,6 +405,8 @@ extension KeyAction {
         case .masking: return "circle.dashed"
         case .radialGradient: return "circle.circle"
         case .guidedUpright: return "perspective"
+        case .remove: return "bandage"
+        case .visualizeSpots: return "circle.dotted"
         case .nextArea: return "arrow.right.to.line"
         case .previousArea: return "arrow.left.to.line"
         }
