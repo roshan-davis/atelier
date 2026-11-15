@@ -3,18 +3,21 @@ import Foundation
 
 extension DevelopSettings {
     /// One spot of the Remove tool (AT-066), like Lightroom's: a click or a brush stroke whose
-    /// area is filled from a source next to it. Heal matches the colors around the spot's edge;
-    /// Clone copies the source as it is.
+    /// area is filled. Content-Aware fills it from texture found all around it
+    /// (`ContentAwareFill`); Heal and Clone from a source next to it, Heal matching the colors
+    /// around the spot's edge, Clone copying the source as it is.
     ///
     /// Positions are fractions of the upright, uncropped photo (0...1, top-left origin) and the
     /// size is a fraction of its long edge, as for masks, so a spot stays put when the crop,
     /// straighten, turns or flips change, and looks the same at any render size.
     public struct Spot: Codable, Hashable, Sendable, Identifiable {
         public enum Mode: String, Codable, CaseIterable, Sendable {
-            case heal, clone
+            // Lightroom's order.
+            case contentAware, heal, clone
 
             public var title: String {
                 switch self {
+                case .contentAware: return "Content-Aware"
                 case .heal: return "Heal"
                 case .clone: return "Clone"
                 }
@@ -33,6 +36,8 @@ extension DevelopSettings {
         public var opacity: Double
         /// Where the source sits, relative to the spot, in fractions of the photo's width and height.
         public var offset: MaskPoint
+        /// Content-Aware's variation: / tries another fill (another random start for the search).
+        public var variation: Int
 
         public static let defaultSize = 0.03
         public static let defaultFeather = 30.0
@@ -40,13 +45,14 @@ extension DevelopSettings {
 
         public init(mode: Mode, points: [MaskPoint], size: Double = Spot.defaultSize,
                     feather: Double = Spot.defaultFeather, opacity: Double = 100,
-                    offset: MaskPoint = MaskPoint(x: 0, y: 0)) {
+                    offset: MaskPoint = MaskPoint(x: 0, y: 0), variation: Int = 0) {
             self.mode = mode
             self.points = points
             self.size = min(max(size, Self.sizeRange.lowerBound), Self.sizeRange.upperBound)
             self.feather = min(max(feather, 0), 100)
             self.opacity = min(max(opacity, 0), 100)
             self.offset = offset
+            self.variation = variation
         }
 
         /// The source's path: the spot's moved by `offset`.
@@ -108,7 +114,7 @@ extension DevelopSettings {
         }
 
         private enum CodingKeys: String, CodingKey {
-            case id, mode, points, size, feather, opacity, offset
+            case id, mode, points, size, feather, opacity, offset, variation
         }
 
         /// Missing keys take their defaults, so spots keep loading as fields are added.
@@ -121,6 +127,7 @@ extension DevelopSettings {
             feather = try c.decodeIfPresent(Double.self, forKey: .feather) ?? Self.defaultFeather
             opacity = try c.decodeIfPresent(Double.self, forKey: .opacity) ?? 100
             offset = try c.decodeIfPresent(MaskPoint.self, forKey: .offset) ?? MaskPoint(x: 0, y: 0)
+            variation = try c.decodeIfPresent(Int.self, forKey: .variation) ?? 0
         }
 
         public func encode(to encoder: Encoder) throws {
@@ -132,6 +139,7 @@ extension DevelopSettings {
             try c.encode(feather, forKey: .feather)
             if opacity != 100 { try c.encode(opacity, forKey: .opacity) }
             try c.encode(offset, forKey: .offset)
+            if variation != 0 { try c.encode(variation, forKey: .variation) }
         }
     }
 }

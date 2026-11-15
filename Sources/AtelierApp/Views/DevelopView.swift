@@ -923,7 +923,7 @@ private struct ToolStrip: View {
                  modified: develop.settings.crop != nil) {
                 develop.isCropping.toggle()
             }
-            tool("bandage", title: "Remove: Heal and Clone spots (Q)", active: develop.isRemoving,
+            tool("bandage", title: "Remove: Content-Aware, Heal and Clone spots (Q)", active: develop.isRemoving,
                  modified: !develop.spots.isEmpty) {
                 develop.isRemoving.toggle()
             }

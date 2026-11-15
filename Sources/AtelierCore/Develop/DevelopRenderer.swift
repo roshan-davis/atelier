@@ -488,6 +488,12 @@ public final class DevelopSession: @unchecked Sendable {
     private let brushCache = BrushCache()
     /// The Remove tool's spot shapes, drawn once per spot.
     private let spotCache = SpotShapeCache()
+    /// Content-Aware Remove's fills, found once per spot and corrected photo.
+    private lazy var spotFills = SpotFills(context: renderer.context, waits: !interactive)
+    /// A number for each corrected photo's settings (`CorrectedKey`) that the spots were drawn
+    /// on, so a fill is found again only when the photo under it changes. Most recent last.
+    private var upstreamIDs: [(key: CorrectedKey, id: Int)] = []
+    private var nextUpstreamID = 1
     /// Select Subject's and Select Object's masks on the corrected photo, by box, found once per
     /// lens geometry; a nil mask when Vision found nothing.
     private var subjectMasks: [DevelopSettings.MaskRect?: CIImage?] = [:]
@@ -576,7 +582,10 @@ public final class DevelopSession: @unchecked Sendable {
         guard var image = corrected(settings) else { return nil }
         // The Remove tool's spots, before every tone and color step (so a slider never redraws
         // them) and before the masks, which then see the cleaned photo.
-        image = SpotRenderer.apply(settings.spots, to: image, cache: spotCache)
+        if !settings.spots.isEmpty {
+            image = SpotRenderer.apply(settings.spots, to: image, cache: spotCache, fills: spotFills,
+                                       upstream: upstreamID(for: settings))
+        }
         let sourceExtent = image.extent
         let source = image
         let crop = settings.crop
@@ -599,6 +608,22 @@ public final class DevelopSession: @unchecked Sendable {
         guard !cropping, let crop else { return adjusted }
         // Vignetting and grain would paint the crop tool's empty corners; cut them again.
         return DevelopRenderer.straightenedOutline(crop, size: crop.orientedSize(sourceExtent.size), of: adjusted)
+    }
+
+    /// The number for the corrected photo `settings` make (see `upstreamIDs`). Call with the
+    /// lock held.
+    private func upstreamID(for settings: DevelopSettings) -> Int {
+        let key = CorrectedKey(settings.applyingPanelSwitches(), view: .photo)
+        if let index = upstreamIDs.firstIndex(where: { $0.key == key }) {
+            let found = upstreamIDs.remove(at: index)
+            upstreamIDs.append(found)
+            return found.id
+        }
+        let id = nextUpstreamID
+        nextUpstreamID += 1
+        upstreamIDs.append((key, id))
+        if upstreamIDs.count > 16 { upstreamIDs.removeFirst() }
+        return id
     }
 
     /// Pipeline step 1: decode with white balance and exposure, the profile, then the lens

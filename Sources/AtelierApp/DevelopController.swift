@@ -368,8 +368,9 @@ final class DevelopController: ObservableObject {
         }
     }
 
-    /// The Remove tool is open (Q, AT-066): Heal and Clone spots are drawn and edited on the
-    /// photo, and the Remove panel shows under the tool strip. See DevelopController+Spots.
+    /// The Remove tool is open (Q, AT-066): Content-Aware, Heal and Clone spots are drawn and
+    /// edited on the photo, and the Remove panel shows under the tool strip. See
+    /// DevelopController+Spots.
     @Published var isRemoving = false {
         didSet {
             guard isRemoving != oldValue else { return }
@@ -391,7 +392,7 @@ final class DevelopController: ObservableObject {
     @Published var selectedSpotID: UUID?
     /// What the next click or stroke makes, remembered like Lightroom's.
     @Published var spotMode = DevelopSettings.Spot.Mode(
-        rawValue: UserDefaults.standard.string(forKey: "spots.mode") ?? "") ?? .heal {
+        rawValue: UserDefaults.standard.string(forKey: "spots.mode") ?? "") ?? .contentAware {
         didSet { UserDefaults.standard.set(spotMode.rawValue, forKey: "spots.mode") }
     }
     /// The brush for new spots: Size is a fraction of the photo's long edge.
@@ -715,9 +716,15 @@ final class DevelopController: ObservableObject {
                                                                    queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.scheduleRender() }
         }
+        // So does Content-Aware Remove's fill (until then the spot shows Heal).
+        spotFillObserver = NotificationCenter.default.addObserver(forName: ContentAwareFill.fillReady, object: nil,
+                                                                  queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.scheduleRender() }
+        }
     }
 
     private var fineEdgesObserver: NSObjectProtocol?
+    private var spotFillObserver: NSObjectProtocol?
 
     // MARK: Opening
 
@@ -1631,7 +1638,7 @@ final class DevelopController: ObservableObject {
     }
 
     /// Pastes onto the open photo, or onto every photo in `assetIDs` when given.
-    /// As in Lightroom, Spot Removal isn't pasted: each photo keeps its own Heal and Clone spots.
+    /// As in Lightroom, Spot Removal isn't pasted: each photo keeps its own Remove tool spots.
     func pasteSettings(onto assetIDs: [Int64]? = nil) {
         guard let clipboard else { return }
         let targets = assetIDs ?? assetID.map { [$0] } ?? []

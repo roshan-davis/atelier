@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Remove: Heal and Clone · Atelier Help</title>
+<title>Remove: Content-Aware, Heal and Clone · Atelier Help</title>
 <link rel="stylesheet" href="assets/help.css">
 <script src="assets/toc.js" defer></script>
 <script src="assets/help.js" defer></script>
@@ -12,8 +12,8 @@
 <main class="page">
 
 <div class="eyebrow">Tool</div>
-<h1>Remove: Heal and Clone</h1>
-<p class="lede">Take out sensor dust, specks, blemishes, wires and small distractions. Each spot is a setting, not a change to the pixels: move it, resize it, pick another source or delete it any time.</p>
+<h1>Remove: Content-Aware, Heal and Clone</h1>
+<p class="lede">Take out sensor dust, specks, blemishes, wires and small distractions, filled from what's around them or from a source you choose. Each spot is a setting, not a change to the pixels: move it, resize it, pick another source or delete it any time.</p>
 
 <div class="chips"><a href="#open">Open the tool</a><a href="#spots">Make a spot</a><a href="#source">Change the source</a><a href="#panel">The Remove panel</a><a href="#visualize">Visualize Spots</a><a href="#keys">Keys</a></div>
 
@@ -21,20 +21,25 @@
 <p>In Develop, press <kbd>Q</kbd>, click the bandage button in the tool strip under the histogram (between Crop and Masking), or choose <span class="path">Develop › Remove Tool (Q)</span>. Press <kbd>Q</kbd>, <kbd>Return</kbd> or click <b>Done</b> to close it. Spots keep working after you close the tool; they're part of the photo's edit, in previews, exports and Edit In.</p>
 
 <h2 id="spots">Make a spot</h2>
-<p><b>Click</b> on a speck to make a round spot the size of the brush. <b>Drag</b> along a wire, a hair or a scratch to make a spot that follows the stroke. Atelier picks a <b>source</b> next to the spot, the place where the photo around it looks most like the area around the spot, and fills the spot from there.</p>
+<p><b>Click</b> on a speck to make a round spot the size of the brush. <b>Drag</b> along a wire, a hair or a scratch to make a spot that follows the stroke. How the spot is filled depends on the mode at the top of the panel.</p>
 <figure>
   <div class="frame compare" data-before="spots-before.jpg" data-after="spots-after.jpg" data-labels="Sensor dust|Six Heal spots"></div>
 </figure>
 <dl class="defs">
-  <dt id="heal">Heal</dt><dd>Copies the source's texture and blends it into the colors and brightness around the spot, so the fill meets the photo with no visible edge. Best for dust, skin and anything on a smooth or even area.</dd>
+  <dt id="content-aware">Content-Aware</dt><dd>The default. Fills the spot from texture found all around it, piece by piece, so water, sky, grass or skin carry on through it, even where no one place nearby would do. The fill appears after a moment (the spot shows Heal until then) and is kept, so later edits don't redo it. Press <kbd>/</kbd> for another fill if the first one repeats something.</dd>
+  <dt id="heal">Heal</dt><dd>Atelier picks a <b>source</b> next to the spot, the place where the photo around it looks most like the area around the spot. Heal copies the source's texture and blends it into the colors and brightness around the spot, so the fill meets the photo with no visible edge. Best for dust, skin and anything on a smooth or even area.</dd>
   <dt id="clone">Clone</dt><dd>Copies the source exactly as it is. Use it where Heal would smear a pattern or an edge, for example along a line or next to a sharp border.</dd>
 </dl>
 
+<figure>
+  <div class="frame compare" data-before="content-aware-before.jpg" data-after="content-aware-after.jpg" data-labels="Before|One Content-Aware stroke"></div>
+</figure>
+
 <h2 id="source">Change the source</h2>
-<p>The selected spot shows a solid outline, its source a dashed outline, with an arrow from the source to the spot.</p>
+<p>A selected Heal or Clone spot shows a solid outline, its source a dashed outline, with an arrow from the source to the spot. A Content-Aware spot has no source; switch it to Heal or Clone to choose one.</p>
 <ul>
   <li>Drag the <b>dashed outline</b> to take the fill from somewhere else.</li>
-  <li>Press <kbd>/</kbd> for the next best source Atelier found.</li>
+  <li>Press <kbd>/</kbd> for the next best source Atelier found (on a Content-Aware spot, another fill).</li>
   <li>Drag the <b>solid outline</b> to move the spot; its source moves with it.</li>
   <li>Click another spot to select it. Its settings show on the panel's sliders; changing them changes that spot.</li>
   <li>Press <kbd>Delete</kbd> to delete the selected spot, or <kbd>Esc</kbd> to deselect it.</li>
@@ -47,21 +52,21 @@
   <div class="panel">
     <div class="ph"><span class="chev">›</span>Remove<span class="grow"></span><span class="reset">↺</span></div>
     <div class="pb">
-      <div class="row" data-pin="1"><span class="seg"><span class="sel">Heal</span><span>Clone</span></span></div>
+      <div class="row" data-pin="1"><span class="seg"><span class="sel">Content-Aware</span><span>Heal</span><span>Clone</span></span></div>
       <div class="row"><span class="name"><b>Brush</b></span></div>
       <div class="sl" data-pin="2" data-name="Size" data-value="3.0" data-at="0.068" data-def="0"></div>
       <div class="sl" data-name="Feather" data-value="30" data-at="0.3" data-def="0.3"></div>
       <div class="sl" data-name="Opacity" data-value="100" data-at="1" data-def="1"></div>
       <div class="check" data-pin="3"><i class="on"></i>Show Overlay</div>
       <div class="check" data-pin="4"><i></i>Visualize Spots</div>
-      <div class="muted">Click a spot, or drag over a line or wire. Atelier picks a source next to it.</div>
+      <div class="muted">Click a spot, or drag over a line or wire. Atelier fills it from what's around it.</div>
       <div class="row" data-pin="5"><span class="muted">2 spots</span><span class="grow" style="flex:1"></span><span class="btn on">Done</span></div>
     </div>
   </div>
   </div>
 </figure>
 <ol class="legend">
-  <li><b>Heal / Clone</b>: the mode for the next spot, and for the selected spot.</li>
+  <li><b>Content-Aware / Heal / Clone</b>: the mode for the next spot, and for the selected spot.</li>
   <li><b>Size</b>, <b>Feather</b> and <b>Opacity</b> set the brush and change the selected spot. Size is a share of the photo's long edge (<kbd>[</kbd> <kbd>]</kbd>); Feather is how softly the fill fades into the photo (<kbd>⇧[</kbd> <kbd>⇧]</kbd>). Double-click a name to reset it, or hold <kbd>⌥</kbd> and click <b>Reset Brush</b> to reset all three.</li>
   <li><b>Show Overlay</b> shows every spot's outline. The selected spot always shows.</li>
   <li><b>Visualize Spots</b> shows the photo in black and white to find dust (below).</li>
@@ -81,7 +86,7 @@
 <table class="keys">
   <tr><td><kbd>Q</kbd></td><td>Open or close the Remove tool</td></tr>
   <tr><td><kbd>[</kbd> <kbd>]</kbd> · <kbd>⇧[</kbd> <kbd>⇧]</kbd></td><td>Brush size · feather</td></tr>
-  <tr><td><kbd>/</kbd></td><td>Next source for the selected spot</td></tr>
+  <tr><td><kbd>/</kbd></td><td>Next source for the selected spot (Content-Aware: another fill)</td></tr>
   <tr><td><kbd>A</kbd></td><td>Visualize Spots</td></tr>
   <tr><td><kbd>Space</kbd>-drag</td><td>Move around the zoomed photo</td></tr>
   <tr><td><kbd>Delete</kbd></td><td>Delete the selected spot</td></tr>
@@ -89,7 +94,7 @@
 </table>
 
 <div class="tip"><p><span class="label">Copy and paste</span> Paste Settings and Sync leave each photo's own spots alone, as Lightroom does by default: dust sits in a different place on every photo. Presets never carry spots.</p></div>
-<div class="note"><p><span class="label">Coming next</span> A Content-Aware mode that fills larger areas by itself, and a generative Remove through <a href="ai.html">AI tools</a>.</p></div>
+<div class="note"><p><span class="label">Large objects</span> Content-Aware is made for dust, specks, blemishes, wires and small things on a plain or even background. A person or a large object in a busy scene can come out smudged; for those, use Remove Object in <a href="ai.html">AI tools</a>. A Generative option in this tool comes later.</p></div>
 
 <div class="see-also">See also: <a href="masking.html">Masking</a> · <a href="ai.html">AI tools</a> · <a href="develop.html">Develop basics</a></div>
 
