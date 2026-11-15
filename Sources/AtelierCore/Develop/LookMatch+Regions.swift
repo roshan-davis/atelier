@@ -429,9 +429,10 @@ public struct LookTarget: Sendable {
         } else {
             skin = LookSkin(sample: plain, faces: features?.faces ?? LookSkin.faces(in: image))
         }
-        // Protect leaves face skin out of the global fit. Match uses the ordinary area fit
-        // first, then corrects faces locally against the reference measurement.
-        let excluded = skinMode == .protect ? skin?.pixels ?? [] : []
+        // Both skin modes leave the skin out of the global fit: the skin has its own masks.
+        // Match used to measure it with everything else, so a study's drawn skin pulled the
+        // whole look (Rosh, Nov 14, 2026).
+        let excluded = skinMode != .off ? skin?.pixels ?? [] : []
         if skinMode == .match, skin == nil { notices.insert(.noSkinInReference) }
         var background: LookSample?, subject: LookSample?
         switch areas {
@@ -519,7 +520,14 @@ extension LookMatcher {
             skin = skin ?? LookSkin(sample: plain, faces: photoFaces ?? LookSkin.faces(in: baseImage))
             if skin == nil { notices.insert(options.skinMode == .protect ? .noFaces : .noSkinInPhoto) }
         }
-        let skinPixels = options.skinMode == .protect ? skin?.pixels ?? [] : []
+        // The global look is fitted without the skin, and kept from changing it much, for both
+        // skin modes: Protect holds the skin, Match gives it its own masks. When Match let the
+        // global fit act on the face (Fury Road's orange desert raising Orange saturation),
+        // the skin masks could only bring the face's average back: its warmest cheek stayed
+        // over-saturated with blue clipped to 0 while the forehead went pale (Rosh, Nov 14,
+        // 2026). The masks now make a small, even change instead of undoing a large one.
+        let guardsSkin = options.skinMode == .protect || (options.skinMode == .match && target.skin != nil)
+        let skinPixels = guardsSkin ? skin?.pixels ?? [] : []
 
         // Where the photo is measured.
         var reference = target.whole
@@ -610,7 +618,7 @@ extension LookMatcher {
 
         var current = base
         var penalty: ((LookSample) -> Double)?
-        if options.skinMode == .protect, let skin { penalty = { measured in skin.penalty(measured) } }
+        if guardsSkin, let skin { penalty = { measured in skin.penalty(measured) } }
         fitGlobal(&current, asShot: asShot, options: options, reference: reference, measure: sample,
                   penalty: penalty, afterDecode: { settings in
                       guard LookEmulator.supports(settings) else { return false }
