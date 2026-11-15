@@ -72,6 +72,9 @@ extension DevelopRenderer {
         on(.glowAmount, 20)
         on(.vignette, -20)
         on(.grain, 20)
+        // Calibration: one kernel for the primaries and Shadows Tint (their values are its
+        // arguments), so one variant builds it.
+        on(.calibrationBlueSat, 20)
         return variants
     }
 
