@@ -323,8 +323,8 @@ public struct AddMaskParameters: ActionParameters, Hashable, PhotoTargeting {
         "invert": FieldNote("true: invert the new part (with to_mask) or the new mask."),
         "amount": FieldNote("New mask only: scales all of its sliders, percent (default 100).", minimum: 0, maximum: 200),
         "settings": FieldNote("New mask only: its sliders as \"name=value\": temperature, tint, exposure, contrast, "
-                              + "highlights, shadows, whites, blacks, texture, clarity, dehaze, saturation, sharpness, "
-                              + "noise. Example [\"exposure=-0.5\", \"clarity=20\"]."),
+                              + "highlights, shadows, whites, blacks, texture, clarity, dehaze, hue (degrees, -180 to 180), "
+                              + "saturation, sharpness, noise, moire, defringe. Example [\"exposure=-0.5\", \"clarity=20\"]."),
     ]) { $1 }
 }
 

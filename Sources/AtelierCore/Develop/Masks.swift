@@ -81,12 +81,13 @@ extension DevelopSettings {
         case temperature, tint
         case exposure, contrast, highlights, shadows, whites, blacks
         case texture, clarity, dehaze
-        case saturation
-        case sharpness, noise
+        case hue, saturation
+        case sharpness, noise, moire, defringe
 
         public var label: String {
             switch self {
             case .temperature: return "Temp"
+            case .moire: return "Moiré"
             default: return rawValue.prefix(1).uppercased() + rawValue.dropFirst()
             }
         }
@@ -94,7 +95,10 @@ extension DevelopSettings {
         public var range: ClosedRange<Double> {
             switch self {
             case .exposure: return -4...4
-            case .noise: return 0...100
+            // Hue turns colors by degrees (AT-068), as far as Lightroom's (a full turn across the track).
+            case .hue: return -180...180
+            // Remove only, like Noise: there is nothing to add.
+            case .noise, .moire, .defringe: return 0...100
             default: return -100...100
             }
         }
@@ -105,8 +109,8 @@ extension DevelopSettings {
             case .temperature, .tint: return 0
             case .exposure, .contrast, .highlights, .shadows, .whites, .blacks: return 1
             case .texture, .clarity, .dehaze: return 2
-            case .saturation: return 3
-            case .sharpness, .noise: return 4
+            case .hue, .saturation: return 3
+            case .sharpness, .noise, .moire, .defringe: return 4
             }
         }
     }

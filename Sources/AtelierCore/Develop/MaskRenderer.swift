@@ -356,6 +356,10 @@ extension DevelopRenderer {
     static func applyLocal(_ mask: DevelopSettings.Mask, to input: CIImage, scale: Double) -> CIImage {
         var image = input
         let extent = input.extent
+        // Detail clean-up first, on the colors as they came in, as the global Defringe and
+        // color noise reduction come before tone and color.
+        image = MaskSliders.defringe(image, amount: mask.effective(.defringe), scale: scale)
+        image = MaskSliders.moire(image, amount: mask.effective(.moire), scale: scale)
         let temperature = mask.effective(.temperature), tint = mask.effective(.tint)
         if temperature != 0 || tint != 0 {
             // Core Image turns `neutral` into `targetNeutral`'s white, so treating a hotter (or
@@ -391,6 +395,7 @@ extension DevelopRenderer {
             local.sharpenRadius = 1
         }
         image = applyAdjustments(local, to: image, scale: scale)
+        image = MaskSliders.hue(image, degrees: mask.effective(.hue))
         if sharpness < 0 {
             // Negative sharpness softens, as in Lightroom.
             let blurred = image.clampedToExtent().applyingGaussianBlur(sigma: max(0.5, 3 * scale)).cropped(to: extent)
