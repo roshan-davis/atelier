@@ -533,10 +533,10 @@ final class LookMatchTests: XCTestCase {
         XCTAssertEqual(match.applied(to: .neutral, strength: 1).masks.first?[.exposure], 0)
     }
 
-    func testStudySubjectIsANudgeNotACopy() throws {
-        // A built-in study's person is drawn: its color leans the photo's subject a third of the
-        // way, with Temp, Tint and Saturation kept within ±20 (Rosh, Nov 14, 2026: a denim
-        // jacket copied to Fury Road's brown one pinned Temp at +60 and turned the hair maroon).
+    func testStudySubjectTakesTheBackgroundLookWithoutASubjectMask() throws {
+        // A built-in study's drawn person sets no color of its own: Subject & Background fits the
+        // look on the background and adds no "Match Look: Subject" mask, so hair and clothes take
+        // the background's look (Rosh, Nov 14, 2026). A photo reference still gets the mask.
         let session = try XCTUnwrap(DevelopRenderer.shared.session(for: fixture("product"), maxPixelSize: LookSample.size))
         var look = DevelopSettings.neutral
         var subject = DevelopSettings.Mask(name: "Look", components: [.init(.subject(.init(feather: LookMatcher.subjectFeather)))])
@@ -547,15 +547,11 @@ final class LookMatchTests: XCTestCase {
         let photo = try XCTUnwrap(LookTarget(image: image, areas: .subject, skinMode: .off))
         let study = try XCTUnwrap(LookTarget(image: image, areas: .subject, skinMode: .off, colorStudy: true))
         let options = LookMatchOptions(tone: false)
-        let copied = try XCTUnwrap(LookMatcher.match(session: session, settings: .neutral, target: photo, options: options))
-        let nudged = try XCTUnwrap(LookMatcher.match(session: session, settings: .neutral, target: study, options: options))
-        let full = try XCTUnwrap(copied.subjectMask)
-        let gentle = try XCTUnwrap(nudged.subjectMask)
-        for parameter in [DevelopSettings.LocalParameter.temperature, .tint, .saturation] {
-            XCTAssertLessThanOrEqual(abs(gentle[parameter]), LookMatcher.maxStudySubjectShift, "\(parameter)")
-        }
-        XCTAssertLessThan(gentle[.temperature], 0)
-        XCTAssertLessThan(abs(gentle[.temperature]), abs(full[.temperature]))
+        let matched = try XCTUnwrap(LookMatcher.match(session: session, settings: .neutral, target: photo, options: options))
+        let fromStudy = try XCTUnwrap(LookMatcher.match(session: session, settings: .neutral, target: study, options: options))
+        XCTAssertNotNil(matched.subjectMask)
+        XCTAssertNil(fromStudy.subjectMask)
+        XCTAssertTrue(fromStudy.matched.masks.isEmpty)
     }
 
     func testSubjectAreasFallBackWhenTheReferenceHasNoSubject() throws {

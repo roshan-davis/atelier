@@ -1171,7 +1171,7 @@ So no tool has a private note per photo, and none leaves a readable, editable re
 
 ## AT-064 — Match Look: hair (and later clothes) matched part by part
 
-**Status:** Proposed / deferred. Rosh (Nov 14, 2026), after reading the analysis below: what Match Look does today is "good for now instead of additional hair matching"; keep this in the backlog, not working on it now. No PR. **Owner:** none (Claude drafted the plan). **Chat:** [Match hair and clothes in Match Look](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKSTwLJe5ECeSvSnytwc1uGi). **Baseline:** `850a588`. **Dependencies:** AT-063 (merged), AT-043 (parts model, merged).
+**Status:** Dropped for built-in studies (Nov 14, 2026, Rosh: "anything other than skin can go along with the tone of the background … why need to do overly complicated thing?"): with a study, hair and clothes take the background's look and no Subject mask is added (AT-065). Still possible for photo references only if Rosh asks; not planned. **Owner:** none (Claude drafted the plan). **Chat:** [Match hair and clothes in Match Look](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKSTwLJe5ECeSvSnytwc1uGi). **Baseline:** `850a588`. **Dependencies:** AT-063 (merged), AT-043 (parts model, merged).
 
 **How hair and clothes are matched today (at `850a588`):** nothing aims at them. Whole Photo: the global sliders are fitted on every pixel of both images except the skin (left out with either skin option), so drawn hair and clothes count like any other area and the global look lands on the photo's hair and clothes. Subject & Background: the global sliders are fitted background to background; then one "Match Look: Subject" mask (the person minus the skin) gets one Temp/Tint/Exposure/Saturation correction toward the study's drawn person (hair, clothes and features averaged together), so hair and clothes share one correction.
 
@@ -1190,3 +1190,12 @@ So no tool has a private note per photo, and none leaves a readable, editable re
 
 **Acceptance (when picked up):** Mac build and tests; Rosh: a portrait with visible hair matched to each portrait study in Whole Photo and Subject & Background; hair takes a slight lean toward the study, never an unnatural color; skin results unchanged.
 
+## AT-065 — Match Look: a built-in study's hair and clothes take the background's look (no Subject mask)
+
+**Status:** In review; never compiled (cloud, no macOS toolchain; CI billing-blocked). Needs a Mac build, tests and Rosh's test. **Owner:** Claude. **Chat:** [Match hair and clothes in Match Look](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKSTwLJe5ECeSvSnytwc1uGi). **Branch:** `claude/project-thread-so20kh`. **PR:** see the branch's open PR. **Baseline:** `eaf0b05`. **Dependencies:** AT-063 (merged).
+
+**Evidence:** Rosh's Z62_9184 with Fury Road, Subject & Background: Match Look: Subject at Temp +60 (its limit), Tint +30; denim jacket still blue, hair maroon. PR #137 (merged `eaf0b05`) made the study's subject mask a nudge (a third of the way, ±20); Rosh found it good, then asked why hair and clothes don't simply take the background's tone.
+
+**Scope:** with a built-in study, Subject & Background still fits the global sliders background to background but adds no "Match Look: Subject" mask (`LookMatcher.match` skips `fitSubject` when `target.whole.isColorStudy`); PR #137's nudge (`studySubjectLean`, `maxStudySubjectShift`, `fitSubject(own:)`) removed. File and catalog references unchanged. Dialog hint for studies, PRD, Help updated. A subject mask left by an earlier match is kept untouched.
+
+**Acceptance:** Mac build; `LookMatchTests.testStudySubjectTakesTheBackgroundLookWithoutASubjectMask`, `BuiltInLookReferenceTests`, `MatchLookModelTests` pass; Rosh: Z62_9184 (earlier match undone) with each portrait study in Subject & Background, no Subject mask in Masking, hair and jacket keep natural colors under the study's look.
