@@ -18,6 +18,9 @@ extension DevelopSettings {
         /// Scales every slider of the mask, 0...200 percent.
         public var amount = 100.0
         private var values: [String: Double] = [:]
+        /// The mask's own Color Grading (Lightroom Classic 16): the Color Grading panel's
+        /// parameters, kept only where they differ from the default.
+        private var grade: [String: Double] = [:]
 
         public init(name: String, components: [MaskComponent] = []) {
             self.name = name
@@ -32,11 +35,37 @@ extension DevelopSettings {
             }
         }
 
-        public var hasAdjustments: Bool { !values.isEmpty }
+        public var hasAdjustments: Bool { !values.isEmpty || !grade.isEmpty }
 
         public mutating func resetAdjustments() {
             values = [:]
+            grade = [:]
             amount = 100
+        }
+
+        /// The mask's Color Grading: a Color Grading panel parameter (`.gradeShadowsHue`,
+        /// `.gradeBlending`, ...). Other parameters read their default and can't be set.
+        public subscript(grade parameter: Parameter) -> Double {
+            get { grade[parameter.rawValue] ?? parameter.defaultValue }
+            set {
+                guard parameter.panel == .colorGrading else { return }
+                let value = min(max(newValue, parameter.range.lowerBound), parameter.range.upperBound)
+                grade[parameter.rawValue] = value == parameter.defaultValue ? nil : value
+            }
+        }
+
+        public var hasGrade: Bool { !grade.isEmpty }
+
+        public mutating func resetGrade() { grade = [:] }
+
+        /// A Color Grading value with Amount applied, as the renderer uses it: Amount scales each
+        /// wheel's saturation and luminance (how much it does); hues, Blending and Balance (where
+        /// and which way) stay.
+        public func effective(grade parameter: Parameter) -> Double {
+            let value = self[grade: parameter]
+            let scaled = parameter.rawValue.hasSuffix("Sat") || parameter.rawValue.hasSuffix("Lum")
+            guard scaled else { return value }
+            return min(max(value * amount / 100, parameter.range.lowerBound), parameter.range.upperBound)
         }
 
         /// A slider's value with Amount applied, as the renderer uses it.
@@ -46,7 +75,7 @@ extension DevelopSettings {
         }
 
         private enum CodingKeys: String, CodingKey {
-            case id, name, components, isHidden, inverted, amount, values
+            case id, name, components, isHidden, inverted, amount, values, grade
         }
 
         /// Missing keys take their defaults, so masks keep loading as fields are added.
@@ -62,6 +91,10 @@ extension DevelopSettings {
             for (key, value) in stored {
                 if let parameter = LocalParameter(rawValue: key) { self[parameter] = value }
             }
+            let graded = try c.decodeIfPresent([String: Double].self, forKey: .grade) ?? [:]
+            for (key, value) in graded {
+                if let parameter = Parameter(rawValue: key) { self[grade: parameter] = value }
+            }
         }
 
         public func encode(to encoder: Encoder) throws {
@@ -73,6 +106,7 @@ extension DevelopSettings {
             if inverted { try c.encode(inverted, forKey: .inverted) }
             if amount != 100 { try c.encode(amount, forKey: .amount) }
             if !values.isEmpty { try c.encode(values, forKey: .values) }
+            if !grade.isEmpty { try c.encode(grade, forKey: .grade) }
         }
     }
 

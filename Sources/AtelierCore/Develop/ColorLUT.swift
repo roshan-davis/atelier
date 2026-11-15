@@ -15,8 +15,10 @@ enum ColorLUT {
     private static let lock = NSLock()
     /// Off only for the before/after benchmark (`SliderPerformanceTests`).
     nonisolated(unsafe) static var buildsInParallel = true
-    nonisolated(unsafe) private static var cachedKey: [Double]?
-    nonisolated(unsafe) private static var cachedCube: Data?
+    /// The last few cubes, newest last. More than one: a render with a graded mask needs the
+    /// panel's cube and the mask's, and a single entry would rebuild both on every frame.
+    nonisolated(unsafe) private static var cached: [(key: [Double], cube: Data)] = []
+    static let cacheSize = 4
 
     /// The parameters the cube depends on, in a fixed order.
     private static let parameters: [DevelopSettings.Parameter] = DevelopSettings.Parameter.allCases
@@ -29,7 +31,11 @@ enum ColorLUT {
         guard key != neutral else { return nil }
         lock.lock()
         defer { lock.unlock() }
-        if key == cachedKey, let cachedCube { return cachedCube }
+        if let index = cached.firstIndex(where: { $0.key == key }) {
+            let hit = cached.remove(at: index)
+            cached.append(hit)
+            return hit.cube
+        }
         let color = ColorMix(settings), grade = ColorGrade(settings)
         // In Black & White, the B&W Mix replaces HSL and Point Color; color grading then tones the grays.
         let cube = RenderSignposts.measure("Color cube") {
@@ -38,8 +44,8 @@ enum ColorLUT {
                 return grade.isActive ? grade.apply(mixed) : mixed
             }
         }
-        cachedKey = key
-        cachedCube = cube
+        cached.append((key, cube))
+        if cached.count > cacheSize { cached.removeFirst(cached.count - cacheSize) }
         return cube
     }
 

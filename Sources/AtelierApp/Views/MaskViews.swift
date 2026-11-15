@@ -1035,6 +1035,11 @@ struct MasksPanel: View {
                               return value == 0 ? "0" : String(format: parameter.range.lowerBound < 0 ? "%+.0f" : "%.0f", value)
                           })
             }
+            // The mask's own Color Grading (Lightroom Classic 16): the Color Grading panel's
+            // wheels, Blending and Balance, working on this mask.
+            Spacer().frame(height: 4)
+            GroupHeading(title: "Color Grading") { develop.resetAllGrade(in: .mask(mask.id)) }
+            ColorGradingPanel(develop: develop, target: .mask(mask.id))
         }
     }
 

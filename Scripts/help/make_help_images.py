@@ -398,6 +398,8 @@ def turn_hue(image, degrees):
 def make_mask_slider_images(base):
     greens = color_range_mask(base, (0.1, 0.48, 0.015, 0.02))
     pair("mask-hue", base, mix(base, turn_hue(base, -50), greens))
+    # A mask's own Color Grading: the leaves only, teal shadows and golden highlights.
+    pair("mask-grade", base, mix(base, color_grade(base, shadows=(185, 1.0), midtones=(170, 0.6), highlights=(45, 1.0)), greens))
 
 
 def red_overlay(image, mask, strength=0.55):

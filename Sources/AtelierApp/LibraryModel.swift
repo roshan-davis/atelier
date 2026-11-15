@@ -1062,10 +1062,10 @@ final class LibraryModel: ObservableObject {
         if mode == .develop, let region = develop.hoveredGradeRegion, (123...126).contains(event.keyCode) {
             let step = event.modifierFlags.contains(.shift) ? 10.0 : 1.0
             switch event.keyCode {
-            case 123: develop.nudgeGrade(region, hue: -step, saturation: 0)   // left
-            case 124: develop.nudgeGrade(region, hue: step, saturation: 0)    // right
-            case 125: develop.nudgeGrade(region, hue: 0, saturation: -step)   // down
-            default: develop.nudgeGrade(region, hue: 0, saturation: step)     // up
+            case 123: develop.nudgeGrade(region, hue: -step, saturation: 0, in: develop.hoveredGradeTarget)   // left
+            case 124: develop.nudgeGrade(region, hue: step, saturation: 0, in: develop.hoveredGradeTarget)    // right
+            case 125: develop.nudgeGrade(region, hue: 0, saturation: -step, in: develop.hoveredGradeTarget)   // down
+            default: develop.nudgeGrade(region, hue: 0, saturation: step, in: develop.hoveredGradeTarget)     // up
             }
             return true
         }
