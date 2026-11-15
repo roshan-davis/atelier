@@ -334,20 +334,36 @@ final class LookMatchTests: XCTestCase {
         XCTAssertTrue(big.allSatisfy { abs($0) <= 30 })
     }
 
-    /// A built-in study's skin target keeps the study's hue but scales the photo's own skin
-    /// saturation, so drawn skin doesn't oversaturate a photo's near-gray skin.
-    func testStudySkinTargetScalesThePhotosSaturation() {
-        let photo = SIMD2<Double>(0.05, 0.05)              // hue 45°, length about 0.071
-        let rich = SIMD2<Double>(0.0, 0.18)                // hue 90°, twice the midtone baseline
-        let target = LookSkin.studyTarget(study: rich, photo: photo, tone: 1)
-        XCTAssertEqual(atan2(target.y, target.x) * 180 / .pi, 90, accuracy: 1e-9)
-        let photoLength = (photo * photo).sum().squareRoot()
-        XCTAssertEqual((target * target).sum().squareRoot(), photoLength * 1.6, accuracy: 1e-9)  // capped
-        let pale = LookSkin.studyTarget(study: SIMD2(0.0455, 0), photo: photo, tone: 1)
-        XCTAssertEqual((pale * pale).sum().squareRoot(), photoLength * 0.5, accuracy: 1e-9)
-        // Nearly gray skin still takes some of the study's color.
-        let gray = LookSkin.studyTarget(study: SIMD2(0.0, 0.091), photo: SIMD2(0.001, 0), tone: 1)
-        XCTAssertEqual((gray * gray).sum().squareRoot(), 0.03, accuracy: 1e-9)
+    /// A built-in study's skin target leans the photo's own skin toward the study: half way in
+    /// hue inside the skin band, a mild saturation scale inside natural limits, a touch of warmth.
+    func testStudySkinTargetLeansThePhotosOwnSkin() {
+        func hue(_ v: SIMD2<Double>) -> Double { atan2(v.y, v.x) * 180 / .pi }
+        func length(_ v: SIMD2<Double>) -> Double { (v * v).sum().squareRoot() }
+        func vector(_ hue: Double, _ length: Double) -> SIMD2<Double> {
+            SIMD2(cos(hue * .pi / 180), sin(hue * .pi / 180)) * length
+        }
+        let photo = vector(56, 0.12)
+        // An olive study (Matrix, hue about 101°) never turns the face green.
+        let olive = LookSkin.studyTarget(study: vector(101, 0.08), photo: photo, tone: 1)
+        XCTAssertEqual(hue(olive), LookSkin.skinHueRange.upperBound, accuracy: 1e-9)
+        // A study hue inside the band: half way, then a little warmer.
+        let orange = LookSkin.studyTarget(study: vector(64, 0.091), photo: photo, tone: 1)
+        XCTAssertEqual(hue(orange), 60 + (52 - 60) * 0.075, accuracy: 1e-9)
+        XCTAssertEqual(length(orange), 0.12 * 1.03, accuracy: 1e-9)
+        // A rich study scales by at most 1.2 and stays below the natural ceiling.
+        let rich = LookSkin.studyTarget(study: vector(60, 0.4), photo: vector(56, 0.15), tone: 1)
+        XCTAssertEqual(length(rich), LookSkin.skinSaturationRange.upperBound, accuracy: 1e-9)
+        let richPale = LookSkin.studyTarget(study: vector(60, 0.4), photo: vector(56, 0.08), tone: 1)
+        XCTAssertEqual(length(richPale), 0.08 * 1.2 * 1.03, accuracy: 1e-9)
+        // A pale study (Thrones) scales by no less than 0.85, and never below the floor.
+        let pale = LookSkin.studyTarget(study: vector(60, 0.03), photo: photo, tone: 1)
+        XCTAssertEqual(length(pale), 0.12 * 0.85 * 1.03, accuracy: 1e-9)
+        let gray = LookSkin.studyTarget(study: vector(60, 0.03), photo: SIMD2(0.001, 0), tone: 1)
+        XCTAssertEqual(length(gray), LookSkin.skinSaturationRange.lowerBound, accuracy: 1e-9)
+        // Against a cool background the skin is a little warmer and richer.
+        let cool = LookSkin.studyTarget(study: vector(64, 0.091), photo: photo, tone: 1, coolBackground: true)
+        XCTAssertLessThan(hue(cool), hue(orange))
+        XCTAssertEqual(length(cool), 0.12 * 1.06, accuracy: 1e-9)
     }
 
     func testProtectSkinTonesKeepsSkinInsideItsLimits() throws {

@@ -125,13 +125,14 @@ final class BuiltInLookReferenceTests: XCTestCase {
             // Skin is compared tone by tone: the photo's darkest, middle and brightest thirds of
             // skin against the study's drawn skin shadows, midtones and highlights, as color
             // relative to brightness (what Match Skin Tone matches).
-            // A study's target is its hue with the photo's own skin saturation scaled
-            // (`LookSkin.studyTarget`).
+            // A study's target leans the photo's own skin toward the study (`LookSkin.studyTarget`).
             XCTAssertEqual(reference.relativeToneColors.count, 3, study.name)
             let groups = LookSkin.toneSplit(source, skin.pixels).groups
+            let cool = LookSkin.isCool(source, outside: skin.pixels)
             let targets = try (0..<3).map { k in
                 LookSkin.studyTarget(study: reference.relativeToneColors[k],
-                                     photo: try XCTUnwrap(LookSkin.relativeAB(source, groups[k])), tone: k)
+                                     photo: try XCTUnwrap(LookSkin.relativeAB(source, groups[k])), tone: k,
+                                     coolBackground: cool)
             }
             func error(_ settings: DevelopSettings) throws -> Double {
                 let sample = try XCTUnwrap(fit.renderSRGB(settings).flatMap { LookSample(image: $0) })

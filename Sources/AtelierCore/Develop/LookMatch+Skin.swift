@@ -223,6 +223,8 @@ extension LookMatcher {
                 return SkinFit(outcome: .unchanged)
             }
             let (low, high) = (split.cuts.0 * 100, split.cuts.1 * 100)
+            // Measured after the global fit: what the face will sit against.
+            let coolBackground = study && LookSkin.isCool(start, outside: skin.pixels)
             // Wide, soft ranges, so the shadow and highlight corrections fade into the base
             // color over the face instead of meeting it at a visible step (Rosh: "gradual and
             // seamless").
@@ -241,7 +243,8 @@ extension LookMatcher {
                 // a look that drained the face set a nearly grey target (Rosh, Nov 14, 2026).
                 let own = skin.relativeToneColors
                 if study, own.count == 3 {
-                    target = LookSkin.studyTarget(study: targets[k], photo: own[k], tone: k)
+                    target = LookSkin.studyTarget(study: targets[k], photo: own[k], tone: k,
+                                                  coolBackground: coolBackground)
                 }
                 return SkinSolver.Tone(pixels: split.groups[k], target: target, relative: true)
             }

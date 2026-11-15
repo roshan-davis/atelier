@@ -185,20 +185,57 @@ public struct LookSkin: Sendable {
     /// checks these against the drawings.
     static let studySkinBaseline = [0.111, 0.091, 0.068]
 
-    /// A built-in study's skin target for one tone on this photo: the study's hue, and the
-    /// photo's own skin saturation scaled by how much more or less saturated this study's skin is
-    /// than the studies' average. Flat drawn skin is more colorful than skin in a photo, which
-    /// reads close to gray (Rosh, Nov 14, 2026), so the drawn saturation itself pushed photos too
-    /// far; what a study says is its hue and whether its skin is paler or richer than usual
-    /// (Thrones about half, Fury Road about 1.4 ×). The scale stays within 0.5 to 1.6.
-    static func studyTarget(study: SIMD2<Double>, photo: SIMD2<Double>, tone: Int) -> SIMD2<Double> {
+    /// A built-in study's skin target for one tone on this photo. Drawn skin is a hint, not a
+    /// color to copy: photographed skin reads close to gray next to a flat drawing, and Rosh's
+    /// tests (Nov 14, 2026) showed copying it turning faces gray (Matrix, Thrones) or mustard
+    /// with clipped blue (Fury Road). So the photo's own skin leads and the study only leans it:
+    /// - Hue: half way from the skin's own hue toward the study's, kept inside the band real skin
+    ///   lives in (`skinHueRange`), so Matrix's olive drawing gives a slightly yellower face,
+    ///   never a green one.
+    /// - Saturation: the skin's own, scaled by the square root of how rich or pale this study's
+    ///   skin is against the studies' average (0.85 to 1.2 ×), then kept between
+    ///   `skinSaturationRange` so a match never drains a face to gray or pushes it past natural.
+    /// - Warmth: skin always gets a touch of warmth, the red of blood under the skin (a few
+    ///   degrees redder, a few percent richer), and a little more when the background is cool
+    ///   (`coolBackground`), where a warm face reads alive against it (Rosh, Nov 14, 2026).
+    static func studyTarget(study: SIMD2<Double>, photo: SIMD2<Double>, tone: Int,
+                            coolBackground: Bool = false) -> SIMD2<Double> {
         let studyLength = (study * study).sum().squareRoot()
         let photoLength = (photo * photo).sum().squareRoot()
-        guard studyLength > 1e-6, studySkinBaseline.indices.contains(tone) else { return study }
-        let scale = min(1.6, max(0.5, studyLength / studySkinBaseline[tone]))
-        // Skin with almost no color still takes some of the study's, or a look couldn't show.
-        let length = max(photoLength, 0.03) * scale
-        return study / studyLength * length
+        guard studyLength > 1e-6, studySkinBaseline.indices.contains(tone) else { return photo }
+        let studyHue = atan2(study.y, study.x) * 180 / .pi
+        // Nearly gray skin has no hue of its own; it takes the middle of the skin band.
+        let ownHue = photoLength > 0.01 ? atan2(photo.y, photo.x) * 180 / .pi : skinWarmHue
+        var difference = studyHue - ownHue
+        difference -= 360 * (difference / 360).rounded()
+        var hue = ownHue + 0.5 * difference
+        let warmth = coolBackground ? 1.0 : 0.5
+        hue += (skinWarmHue - hue) * 0.15 * warmth
+        hue = min(skinHueRange.upperBound, max(skinHueRange.lowerBound, hue))
+        let scale = min(1.2, max(0.85, (studyLength / studySkinBaseline[tone]).squareRoot()))
+        var length = photoLength * scale * (1 + 0.06 * warmth)
+        length = min(skinSaturationRange.upperBound, max(skinSaturationRange.lowerBound, length))
+        let radians = hue * .pi / 180
+        return SIMD2(cos(radians), sin(radians)) * length
+    }
+
+    /// Oklab hues real skin takes, light to deep: past 70° it reads yellow or olive, below 40°
+    /// pink.
+    static let skinHueRange = 40.0...70.0
+    /// The warm, slightly red skin hue warmth leans toward.
+    static let skinWarmHue = 52.0
+    /// Skin saturation (`relativeAB` length) a study match keeps within: below it faces read gray,
+    /// above it orange or mustard, and the blue channel clips.
+    static let skinSaturationRange = 0.07...0.17
+
+    /// Whether the background (everything but the skin) is cool: its mean color leans blue,
+    /// teal or green. Gray backgrounds are not cool.
+    static func isCool(_ sample: LookSample, outside skin: [Int]) -> Bool {
+        let skinSet = Set(skin)
+        let others = (0..<sample.count).filter { !skinSet.contains($0) }
+        guard let ab = meanAB(sample, others), (ab * ab).sum().squareRoot() > 0.008 else { return false }
+        let hue = atan2(ab.y, ab.x) * 180 / .pi
+        return hue > 120 || hue < -60
     }
 
     /// The skin's shadows, midtones and highlights as `relativeAB` measures them; empty unless
