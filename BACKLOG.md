@@ -403,6 +403,7 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 - No `PreviewCache.version` bump: photos without spots render as before.
 - Left out: XMP writing of spots, the Spot Removal paste checkbox, agent Sync carrying spots, Content-Aware (step 3), Generative AI (step 4). Not measured yet: Heal time on a 45 MP NEF with many dust spots.
 - Tests: `SpotTests` (encoding, defaults, presets, source candidates and ranking, hit-testing, Clone, Heal, Opacity, Visualize). Nothing compiled in the cloud.
+- Fixed during Rosh's test: a spot first turned the photo into the spot's area stretched over the frame (each spot was a small piece composited over the photo). Each spot is now one kernel pass over the whole photo that leaves pixels outside its area unchanged (`c640040`). `swift test` and the layout snapshots were not run separately before the merge.
 
 **Acceptance:** Mac build and tests pass; Develop sliders on every panel update correctly (no stale photo after Exposure, Temp/Tint, Profile, Lens Corrections, Defringe or Transform changes); J overlay marks the same pixels as before and the histogram is unchanged by it; Instruments numbers before/after for an HSL drag, a Contrast drag and a Clarity drag on a Z6 NEF; Atelier.app shows its icon in Finder. **Deferred:** GPU-4 to GPU-13 from the audit.
 
@@ -1215,7 +1216,7 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 
 ## AT-066 — Develop: Remove tool (Content-Aware Remove, Heal, Clone)
 
-**Status:** Approved (Rosh, Nov 15, 2026: "start with 1 first", then "OK" to this design and to the engine recommendation: PatchMatch built in, a model later only if it falls short). Step 2 (Clone and Heal) is implemented on the branch, **not yet built or tested on a Mac**; see "Step 2 as built" below. **Owner:** Claude (Cl). **Chat:** [Compare Lightroom 2025-26 with Atelier](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKQjWyjEX331a5FG3gyZMjyK). **Branch:** `claude/project-thread-mp3ctg`. **Baseline:** `e71d7d5`. **Dependencies:** none for steps 2–3; step 4 uses the ComfyUI Remove Object recipe (AT-008 Processor contract).
+**Status:** Approved (Rosh, Nov 15, 2026: "start with 1 first", then "OK" to this design and to the engine recommendation: PatchMatch built in, a model later only if it falls short). Step 2 (Clone and Heal) built and run by Rosh on the Mac; Rosh asked to merge PR #139 (Nov 14, 2026, 10:18 PM PT). See "Step 2 as built" below. Step 3 (Content-Aware Remove) is next. **Owner:** Claude (Cl). **Chat:** [Compare Lightroom 2025-26 with Atelier](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKQjWyjEX331a5FG3gyZMjyK). **Branch:** `claude/project-thread-mp3ctg`. **Baseline:** `e71d7d5`. **Dependencies:** none for steps 2–3; step 4 uses the ComfyUI Remove Object recipe (AT-008 Processor contract).
 
 **Evidence:** Atelier has no spot tool. The only way to remove something is the AI tool's Remove Object (ComfyUI, Qwen-Image-Edit-2511, about 91 s at 768 px), which is too slow for dust, blemishes or a stray wire, and it writes a new version instead of a setting. Lightroom's Remove tool (Q) does Content-Aware Remove, Heal and Clone in place, and 15.0–16.0 built Dust Removal, Reflection Removal and AI Blemish removal on top of it.
 
