@@ -110,6 +110,24 @@ final class SelectSkyTests: XCTestCase {
         }
     }
 
+    /// A dusk sky with sensor noise of ±12 levels in every channel over a dark skyline as far as
+    /// the sky. Rosh's Eiffel Tower photo, Nov 15, 2026: noise made neighbors differ by more than a
+    /// visible step, so the open sky stopped after its first row.
+    func testNoisySkyIsStillFollowed() {
+        let rows: [[(Float, [UInt8])]] = (0..<20).map { row in
+            (0..<24).map { column -> (Float, [UInt8]) in
+                let i = row * 24 + column
+                func noise(_ k: Int) -> Int { (((i * 7 + k * 13) * 2_654_435_761) >> 9) % 25 - 12 }
+                if row <= 11 { return (1, [UInt8(60 + noise(0)), UInt8(70 + noise(1)), UInt8(110 + noise(2))]) }
+                if row <= 13 { return (0.99, [20, 18, 22]) }
+                return (0.3, [50, 50, 55])
+            }
+        }
+        let sky = scene(rows).sky
+        XCTAssertTrue(sky[0..<(12 * 24)].allSatisfy { $0 > 0.99 }, "the whole noisy sky")
+        XCTAssertTrue(sky[(12 * 24)...].allSatisfy { $0 == 0 }, "not the skyline or the ground")
+    }
+
     /// A dark blue night sky over a city with lit windows: no rule depends on the sky being bright.
     func testNightSkyStopsAtTheDarkCity() {
         let rows: [[(Float, [UInt8])]] = (0..<14).map { row in

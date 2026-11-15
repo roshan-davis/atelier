@@ -18,9 +18,14 @@ import Foundation
 ///    when its color is the open sky's color right around it, within `edgeStep` plus how much that
 ///    sky varies there: sky behind a lattice comes in, a far white building doesn't. Below the
 ///    horizon nothing is added, so water reflecting the sky isn't taken.
-/// Every pixel is weighted by how far it is (`farGate`), so near things never count. The colors
-/// are the photo scaled down to the depth model's grid (518 pixels on the short edge), which
-/// averages away sensor noise, so a high-ISO night sky still steps smoothly.
+/// Every pixel is weighted by how far it is (`farGate`), so near things never count.
+///
+/// Noise: a dusk or night photo's sensor noise makes neighbors differ by more than `edgeStep`
+/// even in a smooth sky (Rosh's Eiffel Tower photo, Nov 15, 2026: the open sky stopped after the
+/// first row). So the colors are cleaned with a 3 × 3 median before edges are judged (it removes
+/// noise but keeps edges; the later steps use the photo's own colors), and the step allowed is
+/// `edgeStep` plus twice the photo's typical neighbor-to-neighbor difference among far pixels:
+/// an edge is a visible difference beyond the photo's noise.
 extension DepthMap.Field {
     static let farGate: (low: Float, high: Float) = (0.72, 0.88)
     static let edgeStep: Float = 0.03
@@ -32,13 +37,18 @@ extension DepthMap.Field {
         let gate = Self.farGate
         let far: [Float] = values.map { value -> Float in Self.smooth((value - gate.low) / (gate.high - gate.low)) }
         // Without the photo's colors, the far area open to the top is all there is.
-        var labs: [SIMD3<Float>]?
+        let labs: [SIMD3<Float>]?
         if colors.count == count * 4 {
             labs = (0..<count).map { i -> SIMD3<Float> in
                 Self.oklab(red: colors[i * 4], green: colors[i * 4 + 1], blue: colors[i * 4 + 2])
             }
+        } else {
+            labs = nil
         }
-        var open = openSky(labs: labs)
+        // Edges are judged on noise-cleaned colors; the rest compares the photo's own colors.
+        let cleaned = labs.map { Self.median3($0, width: width, height: height) }
+        let step = cleaned.map { stepLimit(labs: $0) } ?? Self.edgeStep
+        var open = openSky(labs: cleaned, step: step)
         guard let horizon = open.lastIndex(of: true).map({ $0 / width }) else {
             return [Float](repeating: 0, count: count)
         }
@@ -53,7 +63,7 @@ extension DepthMap.Field {
             }
             let row = i / width
             guard far[i] > 0, row <= horizon, let around = local.at(row: row, column: i % width) else { continue }
-            let reach = Self.edgeStep + around.spread
+            let reach = step + around.spread
             let d: SIMD3<Float> = labs[i] - around.mean
             let distance: Float = (d * d).sum().squareRoot()
             out[i] = far[i] * Self.smooth((reach - distance) / (0.5 * reach))
@@ -71,9 +81,59 @@ extension DepthMap.Field {
         return result
     }
 
-    /// Step 1: far pixels reached from the top row with no color edge on the way (`labs` nil:
-    /// by depth alone).
-    func openSky(labs: [SIMD3<Float>]?) -> [Bool] {
+    /// The largest color step between neighbors that isn't an edge: `edgeStep` plus twice the
+    /// median step between far neighbors (the photo's noise; edges are too few to move a median).
+    func stepLimit(labs: [SIMD3<Float>]) -> Float {
+        var steps: [Float] = []
+        steps.reserveCapacity(values.count * 2)
+        for index in values.indices where values[index] >= Self.farGate.high {
+            let column = index % width
+            if column < width - 1, values[index + 1] >= Self.farGate.high {
+                let d: SIMD3<Float> = labs[index + 1] - labs[index]
+                steps.append((d * d).sum().squareRoot())
+            }
+            if index + width < values.count, values[index + width] >= Self.farGate.high {
+                let d: SIMD3<Float> = labs[index + width] - labs[index]
+                steps.append((d * d).sum().squareRoot())
+            }
+        }
+        guard !steps.isEmpty else { return Self.edgeStep }
+        steps.sort()
+        return Self.edgeStep + 2 * steps[steps.count / 2]
+    }
+
+    /// Each channel's median over the 3 × 3 pixels around each pixel (fewer at the photo's edges).
+    static func median3(_ labs: [SIMD3<Float>], width: Int, height: Int) -> [SIMD3<Float>] {
+        var out = labs
+        var xs: [Float] = [], ys: [Float] = [], zs: [Float] = []
+        xs.reserveCapacity(9)
+        ys.reserveCapacity(9)
+        zs.reserveCapacity(9)
+        for row in 0..<height {
+            for column in 0..<width {
+                xs.removeAll(keepingCapacity: true)
+                ys.removeAll(keepingCapacity: true)
+                zs.removeAll(keepingCapacity: true)
+                for r in max(0, row - 1)...min(height - 1, row + 1) {
+                    for c in max(0, column - 1)...min(width - 1, column + 1) {
+                        let lab = labs[r * width + c]
+                        xs.append(lab.x)
+                        ys.append(lab.y)
+                        zs.append(lab.z)
+                    }
+                }
+                xs.sort()
+                ys.sort()
+                zs.sort()
+                out[row * width + column] = SIMD3<Float>(xs[xs.count / 2], ys[ys.count / 2], zs[zs.count / 2])
+            }
+        }
+        return out
+    }
+
+    /// Step 1: far pixels reached from the top row with no color edge (a step of `step` or more)
+    /// on the way (`labs` nil: by depth alone).
+    func openSky(labs: [SIMD3<Float>]?, step: Float) -> [Bool] {
         var reached = [Bool](repeating: false, count: values.count)
         var stack: [Int] = []
         for column in 0..<width where values[column] >= Self.farGate.high {
@@ -84,7 +144,7 @@ extension DepthMap.Field {
             for next in neighbors(of: index) where !reached[next] && values[next] >= Self.farGate.high {
                 if let labs {
                     let d: SIMD3<Float> = labs[next] - labs[index]
-                    guard (d * d).sum().squareRoot() < Self.edgeStep else { continue }
+                    guard (d * d).sum().squareRoot() < step else { continue }
                 }
                 reached[next] = true
                 stack.append(next)

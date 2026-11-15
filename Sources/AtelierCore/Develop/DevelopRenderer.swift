@@ -1015,12 +1015,20 @@ public final class DevelopSession: @unchecked Sendable {
     }
 
     /// The photo the depth model sees: the corrected photo at about 1036 pixels on its long edge
-    /// (the model shrinks it to its own size), as sRGB.
+    /// (the model shrinks it to its own size), as sRGB. Shrunk with Lanczos, which averages the
+    /// pixels it drops: a plain scale transform samples them, so a high-ISO photo's noise reached
+    /// the model and Select Sky's colors at full strength (Rosh's Eiffel Tower photo, Nov 15, 2026).
     private func depthInput(of source: CIImage) -> CGImage? {
         let extent = source.extent
         let factor = min(1, 1036 / max(extent.width, extent.height))
-        let small = source.transformed(by: CGAffineTransform(translationX: -extent.minX, y: -extent.minY))
-            .transformed(by: CGAffineTransform(scaleX: factor, y: factor))
+        var small = source.transformed(by: CGAffineTransform(translationX: -extent.minX, y: -extent.minY))
+        if factor < 1 {
+            // Clamped first, so the filter doesn't darken the border with the empty space outside.
+            let frame = CGRect(x: 0, y: 0, width: (extent.width * factor).rounded(.down), height: (extent.height * factor).rounded(.down))
+            small = small.clampedToExtent()
+                .applyingFilter("CILanczosScaleTransform", parameters: [kCIInputScaleKey: factor, kCIInputAspectRatioKey: 1])
+                .cropped(to: frame)
+        }
         return renderer.context.createCGImage(small, from: small.extent.integral, format: .RGBA8,
                                               colorSpace: DevelopRenderer.sRGB)
     }
