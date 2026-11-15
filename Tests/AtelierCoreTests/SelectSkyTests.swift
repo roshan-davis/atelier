@@ -2,7 +2,8 @@ import Foundation
 import XCTest
 @testable import AtelierCore
 
-/// Select Sky (AT-068): the farthest part of the photo that reaches its top, from the depth model.
+/// Select Sky (AT-068): the far part of the photo open to its top with no edges, plus clouds it
+/// surrounds and sky seen through gaps, from the depth model and the photo's colors.
 final class SelectSkyTests: XCTestCase {
     /// 8 × 12, rows from the top: a pink sunset sky (depth 1), a near dark tower in columns 3
     /// and 4 with one sky-colored gap at row 3 (depth 0.85, the tower's own depth as the model
@@ -55,9 +56,90 @@ final class SelectSkyTests: XCTestCase {
         XCTAssertTrue(indoors.sky.allSatisfy { $0 == 0 })
     }
 
-    func testWithoutColorsTheCertainSkyIsKept() {
+    func testWithoutColorsTheFarAreaOpenToTheTopIsKept() {
         let field = DepthMap.Field(width: 2, height: 2, values: [1, 0.95, 1, 0.2])
-        XCTAssertEqual(field.sky, [1, 0, 1, 0])
+        XCTAssertEqual(field.sky, [1, 1, 1, 0])
+    }
+
+    /// A scene from rows of (depth, RGB) cells.
+    private func scene(_ rows: [[(Float, [UInt8])]]) -> DepthMap.Field {
+        var values: [Float] = [], colors: [UInt8] = []
+        for row in rows {
+            for (depth, rgb) in row {
+                values.append(depth)
+                colors += rgb + [255]
+            }
+        }
+        return DepthMap.Field(width: rows[0].count, height: rows.count, values: values, colors: colors)
+    }
+
+    /// 32 × 20: a sunset that turns from pink to blue across its right half, a crisp white cloud, a near
+    /// tower with sky gaps, then a dark skyline as far as the sky itself, far trees, near ground.
+    /// Rosh's second Eiffel Tower test missed the blue edge and took a band of the far city.
+    func testSunsetFollowsTheGradientAndStopsAtTheSkyline() {
+        var rows: [[(Float, [UInt8])]] = []
+        for row in 0..<20 {
+            rows.append((0..<32).map { column -> (Float, [UInt8]) in
+                let t = Double(max(0, column - 16)) / 15
+                let pink: [Double] = [230 - row * 3, 150 + row * 5, 170 + row * 2].map { Double($0) }
+                let blue: [Double] = [110, 150, 205]
+                let sky: [UInt8] = (0..<3).map { UInt8((pink[$0] * (1 - t) + blue[$0] * t).rounded()) }
+                if row <= 11 {
+                    if column == 6 || column == 7 {
+                        return row == 5 || row == 8 ? (0.9, sky) : (0.6, [40, 35, 30])
+                    }
+                    if (3...4).contains(row), (2...4).contains(column) { return (1, [235, 225, 230]) }
+                    return (1, sky)
+                }
+                if row <= 13 { return (column % 5 == 0 ? 1 : 0.995, [70, 60, 65]) }
+                if row == 14 { return (0.95, [60, 70, 50]) }
+                return (0.3, [120, 115, 110])
+            })
+        }
+        let sky = scene(rows).sky
+        func at(_ row: Int, _ column: Int) -> Float { sky[row * 32 + column] }
+        XCTAssertEqual(at(8, 31), 1, accuracy: 0.01, "the blue at the right edge is sky")
+        XCTAssertEqual(at(11, 0), 1, accuracy: 0.01, "so is the low sunset sky")
+        XCTAssertEqual(at(3, 3), 1, accuracy: 0.01, "and a cloud the sky surrounds")
+        XCTAssertGreaterThan(at(5, 6), 0.8, "sky through the tower")
+        XCTAssertEqual(at(2, 6), 0, "not the tower")
+        for column in 0..<32 {
+            XCTAssertEqual(at(12, column), 0, "the skyline, though it's as far as the sky")
+            XCTAssertEqual(at(14, column), 0, "the far trees")
+            XCTAssertEqual(at(17, column), 0, "the ground")
+        }
+    }
+
+    /// A dark blue night sky over a city with lit windows: no rule depends on the sky being bright.
+    func testNightSkyStopsAtTheDarkCity() {
+        let rows: [[(Float, [UInt8])]] = (0..<14).map { row in
+            (0..<16).map { column -> (Float, [UInt8]) in
+                if row <= 7 { return (1, [15, 18, 40]) }
+                if row <= 9 { return (0.99, column % 3 == 0 ? [230, 190, 90] : [25, 20, 25]) }
+                return (0.3, [40, 40, 45])
+            }
+        }
+        let sky = scene(rows).sky
+        XCTAssertTrue(sky[0..<(8 * 16)].allSatisfy { $0 > 0.99 })
+        XCTAssertTrue(sky[(8 * 16)...].allSatisfy { $0 == 0 }, "neither the dark buildings nor the lights")
+    }
+
+    /// A blue day sky and a far white building rising into it: bright, far, but not the sky's color.
+    func testDaySkyLeavesAFarWhiteBuilding() {
+        let rows: [[(Float, [UInt8])]] = (0..<14).map { row in
+            (0..<16).map { column -> (Float, [UInt8]) in
+                if row <= 8, (3...8).contains(row), (5...9).contains(column) { return (0.95, [240, 240, 235]) }
+                if row <= 8 { return (1, [UInt8(90 + row * 8), UInt8(140 + row * 6), 220]) }
+                if row == 9 { return (0.97, [60, 90, 50]) }
+                return (0.4, [150, 140, 120])
+            }
+        }
+        let sky = scene(rows).sky
+        func at(_ row: Int, _ column: Int) -> Float { sky[row * 16 + column] }
+        XCTAssertEqual(at(5, 2), 1, accuracy: 0.01)
+        XCTAssertEqual(at(3, 7), 0, "the building's top")
+        XCTAssertEqual(at(8, 5), 0)
+        XCTAssertEqual(at(9, 0), 0, "the far trees")
     }
 
     func testSkyPartSavesWithDefaultsAndDecodesBare() throws {

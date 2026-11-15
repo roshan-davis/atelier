@@ -3,68 +3,89 @@ import Foundation
 /// Select Sky (AT-068) from the depth model's field and the photo's colors on the same grid.
 ///
 /// Depth alone can't tell a distant skyline from the sky (both read as "farthest"), nor find sky
-/// seen through gaps in a nearer object (a tower's lattice). So depth only finds the sky that is
-/// certain, and the sky's own colors decide the rest (Rosh's Eiffel Tower photo, Nov 15, 2026):
-/// 1. Certain sky: the very farthest depths (at least `seedDepth`) connected to the top row.
-/// 2. The sky's colors, in Oklab, band by band from top to bottom, so a sunset gradient counts:
-///    each band's mean and spread from the certain sky in it (bands below the lowest certain sky
-///    use the lowest band with some).
-/// 3. Every pixel that is far enough (`farGate`) and close to its band's sky color is sky, so a
-///    dark skyline drops out and sky behind the tower comes in. Nothing below the lowest certain
-///    sky (plus a little) is taken, so water reflecting the sky isn't.
+/// seen through gaps in a nearer object (a tower's lattice), so the mask follows what the sky is
+/// rather than tuned cut-offs (Rosh's Eiffel Tower photo, Nov 15, 2026). No rule depends on the
+/// sky's own color or brightness, so a blue noon, a sunset gradient and a night sky are found the
+/// same way:
+/// 1. **Open sky.** The sky is far and has no edges: grow from the top row through pixels that are
+///    far (`farGate.high`) and whose color steps from their neighbor by less than `edgeStep`, a
+///    barely visible Oklab difference. A gradient (sunset pink into blue) is many small steps and
+///    is followed; a skyline, a tree or a building against the sky is one big step and stops it,
+///    however far the depth model thinks it is.
+/// 2. **Islands.** A far region the open sky surrounds on every side (a crisp cloud, the sun, the
+///    moon) is sky too. One that touches something near or the bottom of the photo isn't.
+/// 3. **Seen through.** Any other far pixel above the horizon (the open sky's lowest row) is sky
+///    when its color is the open sky's color right around it, within `edgeStep` plus how much that
+///    sky varies there: sky behind a lattice comes in, a far white building doesn't. Below the
+///    horizon nothing is added, so water reflecting the sky isn't taken.
+/// Every pixel is weighted by how far it is (`farGate`), so near things never count. The colors
+/// are the photo scaled down to the depth model's grid (518 pixels on the short edge), which
+/// averages away sensor noise, so a high-ISO night sky still steps smoothly.
 extension DepthMap.Field {
-    static let seedDepth: Float = 0.985
     static let farGate: (low: Float, high: Float) = (0.72, 0.88)
-    static let bands = 12
+    static let edgeStep: Float = 0.03
 
-    /// Select Sky's mask, 0...1, on the field's grid; all zero when no certain sky touches the top.
+    /// Select Sky's mask, 0...1, on the field's grid; all zero when no far area touches the top.
     public var sky: [Float] {
         let count = width * height
         guard values.count == count else { return [] }
-        let seeds = skySeeds()
-        guard seeds.contains(true) else { return [Float](repeating: 0, count: count) }
-        // Without the photo's colors, the certain sky is all there is.
-        guard colors.count == count * 4 else { return seeds.map { $0 ? 1 : 0 } }
-        var labs = [SIMD3<Float>](repeating: .zero, count: count)
-        for i in 0..<count {
-            labs[i] = Self.oklab(red: colors[i * 4], green: colors[i * 4 + 1], blue: colors[i * 4 + 2])
-        }
-        let stats = bandStats(labs: labs, seeds: seeds)
-        var lowestSeedRow = 0
-        for i in 0..<count where seeds[i] { lowestSeedRow = max(lowestSeedRow, i / width) }
-        let lastRow = min(height - 1, lowestSeedRow + max(1, height / 50))
-        var out = [Float](repeating: 0, count: count)
-        for row in 0...lastRow {
-            let (mean, reach) = stats(row)
-            for column in 0..<width {
-                let i = row * width + column
-                let far = Self.smooth((values[i] - Self.farGate.low) / (Self.farGate.high - Self.farGate.low))
-                guard far > 0 else { continue }
-                let d = labs[i] - mean
-                let distance = (d.x * d.x + d.y * d.y + d.z * d.z).squareRoot()
-                let color = Self.smooth((reach - distance) / (reach * 0.5))
-                out[i] = far * color
+        let gate = Self.farGate
+        let far: [Float] = values.map { value -> Float in Self.smooth((value - gate.low) / (gate.high - gate.low)) }
+        // Without the photo's colors, the far area open to the top is all there is.
+        var labs: [SIMD3<Float>]?
+        if colors.count == count * 4 {
+            labs = (0..<count).map { i -> SIMD3<Float> in
+                Self.oklab(red: colors[i * 4], green: colors[i * 4 + 1], blue: colors[i * 4 + 2])
             }
+        }
+        var open = openSky(labs: labs)
+        guard let horizon = open.lastIndex(of: true).map({ $0 / width }) else {
+            return [Float](repeating: 0, count: count)
+        }
+        guard let labs else { return (0..<count).map { i -> Float in open[i] ? far[i] : 0 } }
+        markIslands(&open, far: far)
+        let local = LocalColor(width: width, height: height, labs: labs, mask: open)
+        var out = [Float](repeating: 0, count: count)
+        for i in 0..<count {
+            if open[i] {
+                out[i] = far[i]
+                continue
+            }
+            let row = i / width
+            guard far[i] > 0, row <= horizon, let around = local.at(row: row, column: i % width) else { continue }
+            let reach = Self.edgeStep + around.spread
+            let d: SIMD3<Float> = labs[i] - around.mean
+            let distance: Float = (d * d).sum().squareRoot()
+            out[i] = far[i] * Self.smooth((reach - distance) / (0.5 * reach))
         }
         return out
     }
 
-    /// The certain sky: depths of at least `seedDepth` connected to the top row through such depths.
-    func skySeeds() -> [Bool] {
+    private func neighbors(of index: Int) -> [Int] {
+        let row = index / width, column = index % width
+        var result: [Int] = []
+        if row > 0 { result.append(index - width) }
+        if row < height - 1 { result.append(index + width) }
+        if column > 0 { result.append(index - 1) }
+        if column < width - 1 { result.append(index + 1) }
+        return result
+    }
+
+    /// Step 1: far pixels reached from the top row with no color edge on the way (`labs` nil:
+    /// by depth alone).
+    func openSky(labs: [SIMD3<Float>]?) -> [Bool] {
         var reached = [Bool](repeating: false, count: values.count)
         var stack: [Int] = []
-        for column in 0..<width where values[column] >= Self.seedDepth {
+        for column in 0..<width where values[column] >= Self.farGate.high {
             reached[column] = true
             stack.append(column)
         }
         while let index = stack.popLast() {
-            let row = index / width, column = index % width
-            var neighbors: [Int] = []
-            if row > 0 { neighbors.append(index - width) }
-            if row < height - 1 { neighbors.append(index + width) }
-            if column > 0 { neighbors.append(index - 1) }
-            if column < width - 1 { neighbors.append(index + 1) }
-            for next in neighbors where !reached[next] && values[next] >= Self.seedDepth {
+            for next in neighbors(of: index) where !reached[next] && values[next] >= Self.farGate.high {
+                if let labs {
+                    let d: SIMD3<Float> = labs[next] - labs[index]
+                    guard (d * d).sum().squareRoot() < Self.edgeStep else { continue }
+                }
                 reached[next] = true
                 stack.append(next)
             }
@@ -72,56 +93,97 @@ extension DepthMap.Field {
         return reached
     }
 
-    /// For each row, the sky's color there (interpolated between band centers) and how far from
-    /// it a color still counts (fully within half of that).
-    func bandStats(labs: [SIMD3<Float>], seeds: [Bool]) -> (Int) -> (SIMD3<Float>, Float) {
-        let bandCount = max(1, min(Self.bands, height))
-        var sums = [SIMD3<Float>](repeating: .zero, count: bandCount)
-        var counts = [Int](repeating: 0, count: bandCount)
-        func band(_ row: Int) -> Int { min(bandCount - 1, row * bandCount / height) }
-        for i in seeds.indices where seeds[i] {
-            let b = band(i / width)
-            sums[b] += labs[i]
-            counts[b] += 1
-        }
-        var means = [SIMD3<Float>?](repeating: nil, count: bandCount)
-        for b in 0..<bandCount where counts[b] > 0 { means[b] = sums[b] / Float(counts[b]) }
-        var squares = [Float](repeating: 0, count: bandCount)
-        for i in seeds.indices where seeds[i] {
-            let b = band(i / width)
-            guard let mean = means[b] else { continue }
-            let d = labs[i] - mean
-            squares[b] += d.x * d.x + d.y * d.y + d.z * d.z
-        }
-        var reaches = [Float](repeating: 0, count: bandCount)
-        for b in 0..<bandCount where counts[b] > 0 {
-            let spread = (squares[b] / Float(counts[b])).squareRoot()
-            reaches[b] = 0.045 + 2.5 * min(spread, 0.06)
-        }
-        // Bands without certain sky take the nearest band that has some (above first).
-        var filledMeans = [SIMD3<Float>](repeating: .zero, count: bandCount)
-        var filledReaches = [Float](repeating: 0.045, count: bandCount)
-        for b in 0..<bandCount {
-            var source: Int?
-            for distance in 0..<bandCount {
-                if b - distance >= 0, means[b - distance] != nil { source = b - distance; break }
-                if b + distance < bandCount, means[b + distance] != nil { source = b + distance; break }
+    /// Step 2: adds each far region that the open sky surrounds on every side (the top and the
+    /// sides of the photo count as sky; the bottom doesn't).
+    func markIslands(_ open: inout [Bool], far: [Float]) {
+        var seen = [Bool](repeating: false, count: values.count)
+        for start in values.indices where !seen[start] && !open[start] && far[start] > 0 {
+            var region = [start]
+            seen[start] = true
+            var island = true
+            var next = 0
+            while next < region.count {
+                let index = region[next]
+                next += 1
+                if index / width == height - 1 { island = false }
+                for neighbor in neighbors(of: index) where !open[neighbor] {
+                    if far[neighbor] <= 0 {
+                        island = false
+                    } else if !seen[neighbor] {
+                        seen[neighbor] = true
+                        region.append(neighbor)
+                    }
+                }
             }
-            if let source, let mean = means[source] {
-                filledMeans[b] = mean
-                filledReaches[b] = reaches[source]
+            if island { for index in region { open[index] = true } }
+        }
+    }
+
+    /// The mean color of the masked pixels around a point, and how much they vary, from summed-area
+    /// tables: a window a tenth of the height across, doubled until it holds a few masked pixels.
+    struct LocalColor {
+        let width: Int, height: Int
+        private var counts: [Double], sums: [SIMD3<Double>], squares: [Double]
+
+        init(width: Int, height: Int, labs: [SIMD3<Float>], mask: [Bool]) {
+            self.width = width
+            self.height = height
+            let size = (width + 1) * (height + 1)
+            counts = [Double](repeating: 0, count: size)
+            sums = [SIMD3<Double>](repeating: .zero, count: size)
+            squares = [Double](repeating: 0, count: size)
+            for row in 0..<height {
+                var count = 0.0, sum = SIMD3<Double>.zero, square = 0.0
+                for column in 0..<width {
+                    let i = row * width + column
+                    if mask[i] {
+                        let lab = SIMD3<Double>(Double(labs[i].x), Double(labs[i].y), Double(labs[i].z))
+                        let labSquare: Double = (lab * lab).sum()
+                        count += 1
+                        sum += lab
+                        square += labSquare
+                    }
+                    let here = (row + 1) * (width + 1) + column + 1, above = row * (width + 1) + column + 1
+                    counts[here] = counts[above] + count
+                    sums[here] = sums[above] + sum
+                    squares[here] = squares[above] + square
+                }
             }
         }
-        let rowsPerBand = Float(height) / Float(bandCount)
-        return { row in
-            // Between the centers of the two nearest bands.
-            let position = (Float(row) + 0.5) / rowsPerBand - 0.5
-            let lower = min(bandCount - 1, max(0, Int(position.rounded(.down))))
-            let upper = min(bandCount - 1, lower + 1)
-            let t = min(1, max(0, position - Float(lower)))
-            let mean = filledMeans[lower] * (1 - t) + filledMeans[upper] * t
-            let reach = filledReaches[lower] * (1 - t) + filledReaches[upper] * t
-            return (mean, reach)
+
+        private func corners(_ top: Int, _ left: Int, _ bottom: Int, _ right: Int) -> (Int, Int, Int, Int) {
+            let stride = width + 1
+            return (bottom * stride + right, top * stride + right, bottom * stride + left, top * stride + left)
+        }
+
+        private func box(_ table: [Double], _ c: (Int, Int, Int, Int)) -> Double {
+            let positive = table[c.0] + table[c.3]
+            let negative = table[c.1] + table[c.2]
+            return positive - negative
+        }
+
+        private func box(_ table: [SIMD3<Double>], _ c: (Int, Int, Int, Int)) -> SIMD3<Double> {
+            let positive: SIMD3<Double> = table[c.0] + table[c.3]
+            let negative: SIMD3<Double> = table[c.1] + table[c.2]
+            return positive - negative
+        }
+
+        func at(row: Int, column: Int) -> (mean: SIMD3<Float>, spread: Float)? {
+            var radius = max(2, height / 10)
+            while true {
+                let top = max(0, row - radius), bottom = min(height, row + radius + 1)
+                let left = max(0, column - radius), right = min(width, column + radius + 1)
+                let window = corners(top, left, bottom, right)
+                let count = box(counts, window)
+                if count >= 4 || radius >= max(width, height) {
+                    guard count > 0 else { return nil }
+                    let mean: SIMD3<Double> = box(sums, window) / count
+                    let meanSquare: Double = (mean * mean).sum()
+                    let variance = max(0, box(squares, window) / count - meanSquare)
+                    return (SIMD3<Float>(Float(mean.x), Float(mean.y), Float(mean.z)), Float(variance.squareRoot()))
+                }
+                radius *= 2
+            }
         }
     }
 
