@@ -107,8 +107,11 @@ final class SpotTests: XCTestCase {
         return speck.composited(over: right.composited(over: left))
     }
 
-    private func value(_ image: CIImage, x: Int, yFromTop: Int) -> Float {
-        let context = CIContext(options: [.workingColorSpace: NSNull(), .outputColorSpace: NSNull()])
+    private static let sharedContext = CIContext(options: [.workingColorSpace: NSNull(), .outputColorSpace: NSNull()])
+
+    private func value(_ image: CIImage, x: Int, yFromTop: Int, shared: Bool = false) -> Float {
+        let context = shared ? Self.sharedContext
+            : CIContext(options: [.workingColorSpace: NSNull(), .outputColorSpace: NSNull()])
         var pixel = [Float](repeating: 0, count: 4)
         let y = Int(image.extent.height) - 1 - yFromTop
         pixel.withUnsafeMutableBytes { buffer in
@@ -141,6 +144,21 @@ final class SpotTests: XCTestCase {
         clone.mode = .clone
         XCTAssertEqual(value(SpotRenderer.apply([clone], to: image), x: 40, yFromTop: 50), 0.6, accuracy: 0.02,
                        "Clone copies the source as it is")
+    }
+
+    /// The pipeline hands spots its cached corrected photo. Rendering near the spot first and
+    /// then far from it, in one context, must not smear the spot's area over the rest
+    /// (Rosh, Nov 14, 2026: the whole photo turned into stretched blocks).
+    func testACachedPhotoStaysWholeAroundTheSpot() {
+        let cached = speckled().insertingIntermediate(cache: true)
+        for mode in [Spot.Mode.heal, .clone] {
+            let spot = Spot(mode: mode, points: [Point(x: 40.0 / 200, y: 0.5)], size: 12.0 / 200, feather: 0,
+                            offset: Point(x: 0, y: -0.2))
+            let out = SpotRenderer.apply([spot], to: cached)
+            XCTAssertEqual(value(out, x: 40, yFromTop: 50, shared: true), 0.2, accuracy: 0.03)
+            XCTAssertEqual(value(out, x: 180, yFromTop: 10, shared: true), 0.6, accuracy: 0.001, "\(mode)")
+            XCTAssertEqual(value(out, x: 5, yFromTop: 95, shared: true), 0.2, accuracy: 0.001, "\(mode)")
+        }
     }
 
     func testOpacityAndOrder() {

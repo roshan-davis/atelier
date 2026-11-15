@@ -41,25 +41,30 @@ enum SpotRenderer {
                             width: area.width, height: area.height)
         let place = CGAffineTransform(translationX: region.minX, y: region.minY)
         let mask = shapes.fill.transformed(by: place)
-        let source = image.clampedToExtent().transformed(by: CGAffineTransform(
-            translationX: -CGFloat(spot.offset.x) * photo.width, y: CGFloat(spot.offset.y) * photo.height))
+        // The source is read from the photo itself, `shift` away (Core Image's y points up) and
+        // kept inside `bounds`, in the kernels. The photo is always asked for whole: it is the
+        // cached corrected image (`insertingIntermediate(cache: true)`), and Core Image reused
+        // a copy cached for just the spot's area as the whole photo, smearing its edges over
+        // everything (Rosh, Nov 14, 2026).
+        let shift = CIVector(x: CGFloat(spot.offset.x) * photo.width, y: -CGFloat(spot.offset.y) * photo.height)
+        let bounds = CIVector(x: extent.minX + 0.5, y: extent.minY + 0.5, z: extent.maxX - 0.5, w: extent.maxY - 0.5)
         let opacity = spot.opacity / 100
-        let roi: CIKernelROICallback = { _, rect in rect }
+        let roi: CIKernelROICallback = { index, rect in index == 0 ? extent : rect }
         let filled: CIImage?
         switch spot.mode {
         case .clone:
             filled = kernels["atelierSpotBlend"]?.apply(extent: region, roiCallback: roi,
-                                                        arguments: [image, source, mask, opacity])
+                                                        arguments: [image, mask, shift, bounds, opacity])
         case .heal:
             let outer = shapes.outer.transformed(by: place), inner = shapes.inner.transformed(by: place)
             guard let ring = kernels["atelierSpotRing"]?.apply(extent: region, roiCallback: roi,
-                                                               arguments: [image, source, outer, inner])
+                                                               arguments: [image, outer, inner, shift, bounds])
             else { return image }
             // Zero outside the area, so the blurs only spread what the ring measured.
             let near = ring.applyingGaussianBlur(sigma: Double(max(1, radius * 0.35))).cropped(to: region)
             let far = ring.applyingGaussianBlur(sigma: Double(max(2, radius))).cropped(to: region)
             filled = kernels["atelierSpotHeal"]?.apply(extent: region, roiCallback: roi,
-                                                       arguments: [image, source, near, far, mask, opacity])
+                                                       arguments: [image, near, far, mask, shift, bounds, opacity])
         }
         guard let filled else { return image }
         return filled.cropped(to: region).composited(over: image).cropped(to: extent)
@@ -134,32 +139,38 @@ enum SpotRenderer {
                 return pow(dot(c, float3(0.2627, 0.6780, 0.0593)), 1.0 / 2.2);
             }
 
+            // The source for `p`: the photo `shift` away, held inside the photo's `bounds`.
+            static float4 atelierSpotSource(coreimage::sampler image, float2 p, float2 shift, float4 bounds) {
+                float2 q = clamp(p + shift, bounds.xy, bounds.zw);
+                return image.sample(image.transform(q));
+            }
+
             // Clone: the source over the photo, through the spot's soft edge.
-            [[stitchable]] float4 atelierSpotBlend(coreimage::sampler image, coreimage::sampler source,
-                                                   coreimage::sampler mask, float opacity,
+            [[stitchable]] float4 atelierSpotBlend(coreimage::sampler image, coreimage::sampler mask,
+                                                   float2 shift, float4 bounds, float opacity,
                                                    coreimage::destination dest) {
                 float2 p = dest.coord();
                 float4 a = image.sample(image.transform(p));
-                float4 s = source.sample(source.transform(p));
+                float4 s = atelierSpotSource(image, p, shift, bounds);
                 float m = clamp(mask.sample(mask.transform(p)).r, 0.0, 1.0) * opacity;
                 return float4(mix(a.rgb, s.rgb, m), a.a);
             }
 
             // Heal's ring: the photo minus the source, weighted by the ring (in alpha).
-            [[stitchable]] float4 atelierSpotRing(coreimage::sampler image, coreimage::sampler source,
-                                                  coreimage::sampler outer, coreimage::sampler inner,
+            [[stitchable]] float4 atelierSpotRing(coreimage::sampler image, coreimage::sampler outer,
+                                                  coreimage::sampler inner, float2 shift, float4 bounds,
                                                   coreimage::destination dest) {
                 float2 p = dest.coord();
                 float w = clamp(outer.sample(outer.transform(p)).r - inner.sample(inner.transform(p)).r, 0.0, 1.0);
-                float3 d = image.sample(image.transform(p)).rgb - source.sample(source.transform(p)).rgb;
+                float3 d = image.sample(image.transform(p)).rgb - atelierSpotSource(image, p, shift, bounds).rgb;
                 return float4(d * w, w);
             }
 
             // Heal: the source plus the ring's difference spread over the inside. The near blur
             // keeps the seam exact; the far one reaches the middle of large spots.
-            [[stitchable]] float4 atelierSpotHeal(coreimage::sampler image, coreimage::sampler source,
-                                                  coreimage::sampler near, coreimage::sampler far,
-                                                  coreimage::sampler mask, float opacity,
+            [[stitchable]] float4 atelierSpotHeal(coreimage::sampler image, coreimage::sampler near,
+                                                  coreimage::sampler far, coreimage::sampler mask,
+                                                  float2 shift, float4 bounds, float opacity,
                                                   coreimage::destination dest) {
                 float2 p = dest.coord();
                 float4 n = near.sample(near.transform(p));
@@ -167,7 +178,7 @@ enum SpotRenderer {
                 float weight = n.a + 0.15 * f.a;
                 float3 membrane = weight > 0.00001 ? (n.rgb + 0.15 * f.rgb) / weight : float3(0.0);
                 float4 a = image.sample(image.transform(p));
-                float3 s = source.sample(source.transform(p)).rgb + membrane;
+                float3 s = atelierSpotSource(image, p, shift, bounds).rgb + membrane;
                 float m = clamp(mask.sample(mask.transform(p)).r, 0.0, 1.0) * opacity;
                 return float4(mix(a.rgb, s, m), a.a);
             }
