@@ -52,6 +52,8 @@ public enum CullEyes: Sendable, Equatable {
     case closed
     /// Not judged (too small, turned away).
     case unknown
+    /// An out-of-focus face in the background (`CullBackground`): not the subject, not counted.
+    case background
 
     // Provisional thresholds, from typical eye aspect ratios (open about 0.25 to 0.35, closed
     // under 0.15). Tune them on Rosh's test photos (TestPhotos/Cull, `CullFixtureTests`).
@@ -175,12 +177,15 @@ extension Culling {
     /// squinting smiles aren't read as closed), and with a fixed floor.
     /// With Advanced checks, MediaPipe's blink scores decide where they were read, compared the
     /// same way with the person's lowest blink in the group.
-    public static func eyes(in faces: [[CullFace]]) -> [[CullEyes]] {
+    /// Background faces (`background(in:)`, worked out here unless given) are `.background`.
+    public static func eyes(in faces: [[CullFace]], background: [[Bool]]? = nil) -> [[CullEyes]] {
         let people = Self.people(in: faces)
+        let isBackground = background ?? Self.background(in: faces)
         var widest: [Int: Double] = [:]
         var lowestBlink: [Int: Double] = [:]
         for (photo, photoFaces) in faces.enumerated() {
             for (index, face) in photoFaces.enumerated() {
+                if isBackground[photo][index] { continue }
                 let person = people[photo][index]
                 if let blink = face.expression?.blink { lowestBlink[person] = min(lowestBlink[person] ?? 1, blink) }
                 guard let openness = face.openness else { continue }
@@ -189,6 +194,7 @@ extension Culling {
         }
         return faces.enumerated().map { photo, photoFaces in
             photoFaces.enumerated().map { index, face in
+                if isBackground[photo][index] { return .background }
                 if let blink = face.expression?.blink {
                     let rise = blink - (lowestBlink[people[photo][index]] ?? blink)
                     if blink >= CullEyes.blinkAlone || (blink >= CullEyes.blinkClosed && rise >= CullEyes.blinkRise) {

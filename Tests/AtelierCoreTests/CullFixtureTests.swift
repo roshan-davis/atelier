@@ -32,6 +32,7 @@ final class CullFixtureTests: XCTestCase {
             signal.faces.sort { $0.box.minX < $1.box.minX }
             let openness = signal.faces.map { (face: CullFace) -> String in
                 (face.openness.map { String(format: "%.3f", $0) } ?? (face.skip?.rawValue ?? "-"))
+                    + (face.sharpness.map { String(format: " sharp %.0f", $0) } ?? "")
                     + (face.expression.map { String(format: " (blink %.2f smile %.2f)", $0.blink, $0.smile) } ?? "")
             }
             print(String(format: "cull fixture %@/%@: standard %.0f ms, advanced %.0f ms, aesthetics %@, eyes %@",
@@ -48,6 +49,7 @@ final class CullFixtureTests: XCTestCase {
         let eyes = try await self.eyes("group-5-outdoor", ["base.jpg", "one-blink.jpg", "two-blink.jpg", "half-closed.jpg"])
         XCTAssertEqual(eyes["base.jpg"]?.count, 5)
         XCTAssertFalse(eyes["base.jpg"]?.contains(.closed) ?? true)
+        XCTAssertFalse(eyes.values.contains { $0.contains(.background) }, "everyone here is in focus")
         XCTAssertEqual(eyes["one-blink.jpg"]?[1], .closed)
         XCTAssertEqual(eyes["two-blink.jpg"]?[2], .closed)
         XCTAssertEqual(eyes["two-blink.jpg"]?[4], .closed)
@@ -87,9 +89,11 @@ final class CullFixtureTests: XCTestCase {
         }
     }
 
-    /// Profiles and the crowd only print, for tuning: nothing here is certain enough to assert.
+    /// Profiles and the crowd mostly print, for tuning. Everyone in the crowd is in focus, so
+    /// no face there is background (`CullBackground`).
     func testProfilesAndCrowdPrint() async throws {
         _ = try await self.eyes("profile-and-small-faces", ["profile.jpg"])
-        _ = try await self.eyes("profile-and-small-faces", ["crowd.jpg"])
+        let crowd = try await self.eyes("profile-and-small-faces", ["crowd.jpg"])
+        XCTAssertFalse(crowd["crowd.jpg"]?.contains(.background) ?? true, "the crowd is in focus")
     }
 }

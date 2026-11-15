@@ -49,8 +49,10 @@ public enum CullPick: String, CaseIterable, Identifiable, Sendable {
 
 /// One photo of a group measured against the rest of its group.
 public struct CullAssessment: Sendable, Equatable {
-    /// Faces found, and how many of them had their eyes judged.
+    /// Faces found (background faces left out), and how many of them had their eyes judged.
     public var faces = 0
+    /// Out-of-focus background faces left out of everything here (`CullBackground`).
+    public var background = 0
     public var judged = 0
     public var closed = 0
     public var halfClosed = 0
@@ -93,9 +95,15 @@ public struct CullAssessment: Sendable, Equatable {
 extension Culling {
     /// Measures each photo of a group against the group: eyes per person, sharpness against the
     /// sharpest, exposure against the middle photo.
-    public static func assess(_ group: [CullSignals]) -> [CullAssessment] {
-        guard !group.isEmpty else { return [] }
-        let eyes = Self.eyes(in: group.map(\.faces))
+    /// Out-of-focus background faces are left out first (`CullBackground`): they aren't the
+    /// subject, and their eyes and smiles don't count.
+    public static func assess(_ all: [CullSignals]) -> [CullAssessment] {
+        guard !all.isEmpty else { return [] }
+        let allFaces: [[CullFace]] = all.map(\.faces)
+        let background = Self.background(in: allFaces)
+        let eyes = Self.eyes(in: allFaces, background: background)
+        var group: [CullSignals] = []
+        for index in all.indices { group.append(withoutBackground(all[index], background[index])) }
         // The eyes from the Advanced checks only when every photo has them: sizes differ.
         let eyeValues = group.map(\.eyeSharpness)
         let onEyes = eyeValues.allSatisfy { $0 != nil }
@@ -115,7 +123,8 @@ extension Culling {
             let signal = group[index]
             var assessment = CullAssessment()
             assessment.faces = signal.faces.count
-            assessment.judged = eyes[index].filter { $0 != .unknown }.count
+            assessment.background = background[index].filter { $0 }.count
+            assessment.judged = eyes[index].filter { $0 != .unknown && $0 != .background }.count
             assessment.closed = eyes[index].filter { $0 == .closed }.count
             assessment.halfClosed = eyes[index].filter { $0 == .halfClosed }.count
             assessment.sharpness = values[index] / best
@@ -286,12 +295,26 @@ extension Culling {
     /// the first face not smiling. Approximate, for the Cull preview's markers.
     public static func reasonSpots(_ group: [CullSignals], keeper: Int) -> [CGPoint?] {
         let eyes = Self.eyes(in: group.map(\.faces))
-        let smiles = group.map { $0.faces.filter { ($0.expression?.smile ?? 0) >= CullEyes.smiling }.count }
+        // Background faces' smiles don't count (`CullBackground`).
+        var smiles: [Int] = []
+        for index in group.indices {
+            var count = 0
+            for (face, read) in zip(group[index].faces, eyes[index]) where read != .background {
+                if (face.expression?.smile ?? 0) >= CullEyes.smiling { count += 1 }
+            }
+            smiles.append(count)
+        }
         return group.indices.map { index in
             let faces = group[index].faces
+            var notSmiling: Int? = nil
+            for (position, face) in faces.enumerated() where eyes[index][position] != .background {
+                if (face.expression?.smile ?? 1) < CullEyes.smiling {
+                    notSmiling = position
+                    break
+                }
+            }
             let pick = eyes[index].firstIndex(of: .closed) ?? eyes[index].firstIndex(of: .halfClosed)
-                ?? (keeper < smiles.count && smiles[index] < smiles[keeper]
-                    ? faces.firstIndex { ($0.expression?.smile ?? 1) < CullEyes.smiling } : nil)
+                ?? (keeper < smiles.count && smiles[index] < smiles[keeper] ? notSmiling : nil)
             guard index != keeper, let pick, pick < faces.count else { return nil }
             let box = faces[pick].box
             return CGPoint(x: box.midX, y: 1 - box.midY)

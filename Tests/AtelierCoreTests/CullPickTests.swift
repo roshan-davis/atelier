@@ -212,6 +212,69 @@ final class CullPickTests: XCTestCase {
         XCTAssertEqual(signals.using(.both).faces.count, 1, "a finder that wasn't read changes nothing")
     }
 
+    // MARK: Background faces
+
+    /// A face `width` wide at `x` whose sharpness (variance of the Laplacian) is `sharpness`.
+    private func face(_ x: Double, width: Double, sharpness: Double, openness: Double = 0.3) -> CullFace {
+        CullFace(box: CGRect(x: x, y: 0.5, width: width, height: width * 1.2), quality: 0.6, openness: openness,
+                 sharpness: sharpness)
+    }
+
+    /// Rosh's Z62_9227 (Nov 14, 2026): him in focus, and a blurred passer-by behind him that
+    /// MediaPipe took for a face, read as "Eyes half closed: 1 of 2 people". Sharpness as
+    /// measured on the Cull preview (1338 and 2).
+    func testBlurredBackgroundFaceIsLeftOut() {
+        let rosh = face(0.24, width: 0.13, sharpness: 1338)
+        var passerBy = face(0.7, width: 0.17, sharpness: 2, openness: 0.12)
+        passerBy.expression = FaceExpression(blinkLeft: 0.75, blinkRight: 0.75, smileLeft: 0, smileRight: 0)
+        let shot = photo(faces: [rosh, passerBy])
+        XCTAssertEqual(CullBackground.inFrame(shot.faces), [false, true])
+        XCTAssertEqual(Culling.eyes(in: [shot.faces]), [[.open, .background]])
+        let assessed = Culling.assess([shot])[0]
+        XCTAssertEqual(assessed.faces, 1)
+        XCTAssertEqual(assessed.background, 1)
+        XCTAssertEqual(assessed.judged, 1)
+        XCTAssertEqual(assessed.closed + assessed.halfClosed, 0, "the passer-by's eyes don't count")
+        XCTAssertEqual(assessed.subject.kind, .faces)
+        XCTAssertEqual(assessed.subject.box.minX, 0.24, accuracy: 1e-9)
+        XCTAssertEqual(assessed.subject.box.maxX, 0.37, accuracy: 1e-9, "the subject is Rosh's face only")
+        XCTAssertNil(Culling.reasonSpots([photo(faces: [rosh]), shot], keeper: 0)[1], "no note on the passer-by")
+    }
+
+    /// The thresholds against the faces measured on the test photos: faces in focus read 0.41
+    /// to 1 of the sharpest; background faces 0.002 to 0.24 (the 0.24 one is small).
+    func testBackgroundThresholds() {
+        // group-5-outdoor: smooth skin in focus reads 0.41 of a bearded face.
+        XCTAssertEqual(CullBackground.inFrame([face(0.1, width: 0.105, sharpness: 100), face(0.3, width: 0.107, sharpness: 41),
+                                               face(0.5, width: 0.126, sharpness: 63)]), [false, false, false])
+        // profile.jpg: the café behind the couple, 0.065 to 0.24 and about a third their width.
+        XCTAssertEqual(CullBackground.inFrame([face(0.2, width: 0.107, sharpness: 548), face(0.6, width: 0.103, sharpness: 376),
+                                               face(0.45, width: 0.034, sharpness: 42), face(0.52, width: 0.029, sharpness: 132)]),
+                       [false, false, true, true])
+        // Just as soft but as big as the sharp face: kept (the small-face rule needs half the width).
+        XCTAssertEqual(CullBackground.inFrame([face(0.2, width: 0.1, sharpness: 100), face(0.6, width: 0.09, sharpness: 30)]),
+                       [false, false])
+        // Without sharpness (no copy to measure on) nothing is background.
+        XCTAssertEqual(CullBackground.inFrame([CullFace(box: CGRect(x: 0.1, y: 0.5, width: 0.1, height: 0.1)),
+                                               CullFace(box: CGRect(x: 0.5, y: 0.5, width: 0.1, height: 0.1))]), [false, false])
+    }
+
+    /// Focus slipping to the person behind in one shot doesn't swap who the subject is: that
+    /// shot is the soft one.
+    func testMissedFocusShotKeepsItsSubject() {
+        let sharp = photo(faces: [face(0.24, width: 0.13, sharpness: 1300), face(0.7, width: 0.12, sharpness: 20)])
+        let sharp2 = photo(faces: [face(0.25, width: 0.13, sharpness: 1250), face(0.71, width: 0.12, sharpness: 25)])
+        let missed = photo(faces: [face(0.24, width: 0.13, sharpness: 90), face(0.7, width: 0.12, sharpness: 900)])
+        let background = Culling.background(in: [sharp.faces, sharp2.faces, missed.faces])
+        XCTAssertEqual(background, [[false, true], [false, true], [false, true]])
+        let assessed = Culling.assess([sharp, sharp2, missed])
+        XCTAssertEqual(assessed[2].sharpness, 90.0 / 1300, accuracy: 1e-6, "measured on Rosh, now soft")
+        XCTAssertEqual(Culling.keeper([sharp, sharp2, missed], by: .sharpestSubject), 0)
+        XCTAssertNotEqual(Culling.keeper([sharp, sharp2, missed], by: .balanced), 2)
+        // Two shots, one each way: nothing to go by, so neither face is left out.
+        XCTAssertEqual(Culling.background(in: [sharp.faces, missed.faces]), [[false, false], [false, false]])
+    }
+
     func testFacesMatchPeopleWhoMoveALittle() {
         let faces: [[CullFace]] = [[face(0.2, 0.3), face(0.6, 0.3)], [face(0.62, 0.3), face(0.23, 0.3)], [face(0.9, 0.3)]]
         XCTAssertEqual(Culling.people(in: faces), [[0, 1], [1, 0], [2]])
