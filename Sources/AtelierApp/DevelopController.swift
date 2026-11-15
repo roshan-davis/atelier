@@ -2814,6 +2814,7 @@ struct MaskTool: Equatable {
         case .radial: return "Drag on the photo from the center outward to draw the ellipse."
         case .brush: return "Paint on the photo. Hold ⌥ to erase; [ and ] change the size."
         case .object: return "Drag a box around the object to select it."
+        case .color: return "Click a color on the photo, or drag over an area to pick its range of colors."
         case .luminance, .subject, .people: return ""
         }
     }
@@ -2875,6 +2876,7 @@ extension DevelopController {
     private static func defaultShape(_ kind: MaskComponent.Kind) -> MaskComponent.Shape {
         switch kind {
         case .luminance: return .luminance(DevelopSettings.LuminanceRange(low: 50, high: 100))
+        case .color: return .color(DevelopSettings.ColorRange())
         case .subject: return .subject(DevelopSettings.Selection())
         case .object: return .subject(DevelopSettings.Selection(box: .init(x: 0.3, y: 0.3, width: 0.4, height: 0.4)))
         case .people: return .people(DevelopSettings.PeopleSelection())
@@ -2912,12 +2914,66 @@ extension DevelopController {
     }
 
     /// Changes a part of the selected mask, while dragging its handles or from the panel.
-    func updateComponent(_ component: MaskComponent) {
+    /// `step` names the history step (default "Edit Mask n").
+    func updateComponent(_ component: MaskComponent, step: String? = nil) {
         guard let index = maskIndex(selectedMaskID),
               let part = settings.masks[index].components.firstIndex(where: { $0.id == component.id }),
               settings.masks[index].components[part] != component else { return }
         settings.masks[index].components[part] = component
-        changed(step: "Edit \(settings.masks[index].name)")
+        changed(step: step ?? "Edit \(settings.masks[index].name)")
+    }
+
+    /// Color Range: picks the color in `box` (top-left fractions of the upright, uncropped
+    /// photo; a click is an empty box at the point). With the Color Range tool ready it makes the
+    /// part; with a Color Range part selected it replaces its colors, or adds one when `adding`
+    /// (⇧-click), as in Lightroom. The color is read in the background, from the photo the mask
+    /// is found on.
+    func pickColorRange(in box: DevelopSettings.MaskRect, adding: Bool) {
+        let sharp = wantsFullResolution ? fullSession : nil
+        guard let session = sharp ?? self.session, let assetID else { return }
+        let target = maskTool == nil ? selectedComponentID : nil
+        if target != nil, adding, case .color(let range) = selectedComponent?.shape,
+           range.samples.count >= DevelopSettings.ColorRange.maxSamples {
+            maskMessage = "A Color Range holds up to five colors. ⌥-click one on the photo to remove it first."
+            return
+        }
+        let pickQueue = sharp != nil ? fullQueue : queue
+        let settings = self.settings
+        pickQueue.async {
+            let sample = session.colorSample(in: box, settings: settings)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard self.assetID == assetID, let sample else { return }
+                    if target == nil, self.maskTool?.kind == .color {
+                        self.finishDrawing(.color(DevelopSettings.ColorRange(samples: [sample])))
+                        return
+                    }
+                    guard let target, var component = self.selectedComponent, component.id == target,
+                          case .color(var range) = component.shape,
+                          let mask = self.selectedMask else { return }
+                    self.maskMessage = nil
+                    if adding {
+                        guard range.samples.count < DevelopSettings.ColorRange.maxSamples else { return }
+                        range.samples.append(sample)
+                    } else {
+                        range.samples = [sample]
+                    }
+                    component.shape = .color(range)
+                    self.updateComponent(component, step: "\(adding ? "Add Color" : "Pick Color"): \(mask.name)")
+                }
+            }
+        }
+    }
+
+    /// Color Range: takes pick `index` out of the selected part (⌥-click on the photo, or the
+    /// swatch's menu in the panel).
+    func removeColorSample(_ index: Int) {
+        guard var component = selectedComponent, case .color(var range) = component.shape,
+              range.samples.indices.contains(index), let mask = selectedMask else { return }
+        range.samples.remove(at: index)
+        component.shape = .color(range)
+        maskMessage = nil
+        updateComponent(component, step: "Remove Color: \(mask.name)")
     }
 
     /// Runs Vision in the background and says so in the panel when it finds nothing.

@@ -12,7 +12,7 @@ enum KeyAction: String, CaseIterable, Identifiable {
     case grid, loupe, develop
     case beforeAfter, compareMode, zoom, crop, treatment, whiteBalance
     case linearGradient, brush, maskOverlay, clipping
-    case masking, radialGradient, guidedUpright
+    case masking, radialGradient, colorRange, guidedUpright
     case remove, visualizeSpots
     case nextArea, previousArea
 
@@ -46,6 +46,7 @@ enum KeyAction: String, CaseIterable, Identifiable {
         case .clipping: return "Show clipping on the photo (toggle)"
         case .masking: return "Masking: open or close"
         case .radialGradient: return "Masking: Radial Gradient"
+        case .colorRange: return "Masking: Color Range"
         case .guidedUpright: return "Transform: Guided Upright"
         case .remove: return "Remove tool: open or close"
         case .visualizeSpots: return "Remove: Visualize Spots (toggle)"
@@ -61,7 +62,7 @@ enum KeyAction: String, CaseIterable, Identifiable {
         case .pick, .reject, .unflag: return "Flags"
         case .grid, .loupe, .develop, .zoom: return "Views"
         case .beforeAfter, .compareMode, .crop, .treatment, .whiteBalance, .linearGradient, .brush, .maskOverlay, .clipping,
-             .masking, .radialGradient, .guidedUpright, .remove, .visualizeSpots: return "Develop"
+             .masking, .radialGradient, .colorRange, .guidedUpright, .remove, .visualizeSpots: return "Develop"
         case .nextArea, .previousArea: return "Keyboard focus"
         }
     }
@@ -100,6 +101,7 @@ enum KeyAction: String, CaseIterable, Identifiable {
         case .clipping: return "j"
         case .masking: return "⇧w"
         case .radialGradient: return "⇧m"
+        case .colorRange: return "⇧j"
         case .guidedUpright: return "⇧t"
         case .remove: return "q"
         case .visualizeSpots: return "a"

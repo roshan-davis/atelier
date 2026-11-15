@@ -355,6 +355,35 @@ def rotate(image, degrees, fill=True):
                           borderValue=(0.62, 0.62, 0.62))
 
 
+# Oklab, as Color Range masks see color (sRGB primaries; the app reads the same space from
+# its linear Rec. 2020 working space).
+OKLAB_M1 = np.array([[0.4122214708, 0.5363325363, 0.0514459929], [0.2119034982, 0.6806995451, 0.1073969566],
+                     [0.0883024619, 0.2817188376, 0.6299787005]], np.float32)
+OKLAB_M2 = np.array([[0.2104542553, 0.7936177850, -0.0040720468], [1.9779984951, -2.4285922050, 0.4505937099],
+                     [0.0259040371, 0.7827717662, -0.8086757660]], np.float32)
+
+
+def oklab(image):
+    linear = np.where(image <= 0.04045, image / 12.92, ((image + 0.055) / 1.055) ** 2.4)
+    return np.cbrt(linear @ OKLAB_M1.T) @ OKLAB_M2.T
+
+
+def color_range_mask(image, box, refine=50):
+    """Color Range as the app works it out (ColorRange.weight): the mean color in `box` (x, y,
+    w, h fractions) and its spread, then a smooth falloff in Oklab with lightness counting half."""
+    lab = oklab(image)
+    area = crop(lab, *box).reshape(-1, 3)
+    pick = area.mean(0)
+    d = area - pick
+    spread = min(float(np.sqrt(np.mean(d[:, 1] ** 2 + d[:, 2] ** 2 + 0.25 * d[:, 0] ** 2))), 0.15)
+    zero = 0.012 + refine / 100 * 0.14 + spread
+    full = zero * 0.45
+    d = lab - pick
+    distance = np.sqrt(d[..., 1] ** 2 + d[..., 2] ** 2 + 0.25 * d[..., 0] ** 2)
+    t = np.clip((zero - distance) / (zero - full), 0, 1)
+    return t * t * (3 - 2 * t)
+
+
 def red_overlay(image, mask, strength=0.55):
     red = np.array([0.95, 0.12, 0.12], np.float32)
     return mix(image, red, mask * strength)
@@ -788,6 +817,9 @@ def main():
     bright = smoothstep(0.55, 0.75, luma(base))
     save(red_overlay(base, bright), "mask-luminance-overlay.jpg")
     pair("mask-luminance", base, mix(base, highlights(base, -0.6), bright))
+    greens = color_range_mask(base, (0.1, 0.48, 0.015, 0.02))
+    save(red_overlay(base, greens), "mask-color-overlay.jpg")
+    pair("mask-color", base, mix(base, saturation(exposure(base, 0.25), 0.5), greens))
 
     # Remove tool
     make_spot_images(eagle)

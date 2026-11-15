@@ -222,6 +222,7 @@ extension LibraryModel {
         r.bindChecked(AtelierAction.linearGradient) { model, _, _ in model.startMaskTool(.linear) }
         r.bindChecked(AtelierAction.radialGradient) { model, _, _ in model.startMaskTool(.radial) }
         r.bindChecked(AtelierAction.brush) { model, _, _ in model.startMaskTool(.brush) }
+        r.bindChecked(AtelierAction.colorRange) { model, _, _ in model.startMaskTool(.color) }
         r.bindChecked(AtelierAction.maskOverlay) { model, _, _ in
             guard model.mode == .develop, model.develop.isMasking else { return false }
             model.develop.showMaskOverlay.toggle()
@@ -357,6 +358,7 @@ extension KeyAction {
         case .clipping: return registry.run(AtelierAction.showClipping)
         case .masking: return registry.run(AtelierAction.masking)
         case .radialGradient: return registry.run(AtelierAction.radialGradient)
+        case .colorRange: return registry.run(AtelierAction.colorRange)
         case .guidedUpright: return registry.run(AtelierAction.guidedUpright)
         case .remove: return registry.run(AtelierAction.remove)
         case .visualizeSpots: return registry.run(AtelierAction.visualizeSpots)
