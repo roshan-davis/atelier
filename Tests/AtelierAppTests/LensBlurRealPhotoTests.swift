@@ -128,6 +128,94 @@ final class LensBlurRealPhotoTests: XCTestCase {
         return failed
     }
 
+    // MARK: Show Overlay zoomed in
+
+    /// Zoomed in (the view asks for the full-size render), with a Select Subject Focus area (Fine
+    /// Edges on, as Refine starts it), as Rosh works: Show Overlay on, Refine Edge set to 0, 50
+    /// and 100 (`ATELIER_LENS_BLUR_REFINE=0,50,100` picks others) while the red shows, then Show
+    /// Overlay off, timed until the new full-size blurred frame is shown (Rosh, Nov 16, 2026:
+    /// minutes after Refine Edge was raised).
+    func testZoomedOverlayToggleWithRefineEdge() async throws {
+        let refines = (ProcessInfo.processInfo.environment["ATELIER_LENS_BLUR_REFINE"] ?? "0,50,100")
+            .split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+        controller.wantsFullResolution = true
+        controller.isLensBlurring = true
+        try await fullFrame("zoomed, enter the mode", timeout: 120)
+        controller.startLensBlurRefine()
+        var previous = controller.fullImage
+        controller.addLensBlurPart(.subject, to: .focus, mode: .add)
+        try await idle()
+        try await fullFrame("zoomed, Select Subject area (Fine Edges \(FineEdges.isInstalled ? "on" : "not downloaded"))",
+                            timeout: 300, after: previous)
+        try await idle()
+        var slowest = 0
+        for refine in refines {
+            try await settle()
+            controller.selectedMaskID = nil
+            controller.showMaskOverlay = true
+            _ = try? await frame("overlay on", after: nil, timeout: 300, quiet: true) { self.redFraction($0) > 0.01 }
+            var masks = controller.editedMasks
+            let index = try XCTUnwrap(masks.firstIndex(where: { $0.lensBlurRole == .focus }))
+            for part in masks[index].components.indices {
+                if case .subject(var selection) = masks[index].components[part].shape {
+                    selection.refine = refine
+                    masks[index].components[part].shape = .subject(selection)
+                }
+            }
+            let edited = Date()
+            let unchanged = controller.settings
+            controller.editedMasks = masks
+            // Refine Edge 0 on a new area changes nothing: the kept full-size frame is right then.
+            let changed = controller.settings != unchanged
+            try await settle()
+            let redMS = Int(Date().timeIntervalSince(edited) * 1000)
+            let runs = FineEdges.runs
+            previous = changed ? controller.fullImage : nil
+            let off = Date()
+            controller.showMaskOverlay = false
+            let fullMS = try await fullFrame(nil, timeout: 300, since: off, after: previous)
+            print("LENSBLUR: zoomed Refine Edge \(Int(refine)): overlay frame settled in \(redMS) ms; "
+                + "Show Overlay off to the full-size frame \(fullMS) ms (Fine Edges runs \(FineEdges.runs - runs))")
+            slowest = max(slowest, fullMS)
+            // A second toggle with nothing changed shows the kept full-size frame at once.
+            controller.showMaskOverlay = true
+            _ = try? await frame("overlay on", after: nil, timeout: 30, quiet: true) { self.redFraction($0) > 0.01 }
+            let again = Date()
+            controller.showMaskOverlay = false
+            let againMS = try await fullFrame(nil, timeout: 300, since: again)
+            print("LENSBLUR: zoomed Refine Edge \(Int(refine)): toggled again, full-size frame in \(againMS) ms")
+            slowest = max(slowest, againMS)
+        }
+        print("LENSBLUR: zoomed overlay slowest: \(slowest) ms")
+        XCTAssertLessThan(slowest, 15000, "zoomed in, Show Overlay off took over 15 s to show the photo")
+    }
+
+    /// Waits until nothing works in the background (Fine Edges, Lens Blur's own work) for 1 s.
+    private func idle() async throws {
+        let started = Date()
+        var quietSince = Date()
+        while Date().timeIntervalSince(quietSince) < 1, Date().timeIntervalSince(started) < 180 {
+            if FineEdges.isWorking || controller.lensBlurWork != nil { quietSince = Date() }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+    }
+
+    /// Waits until a full-size render for the current settings (other than `previous`) is what's
+    /// shown; its ms.
+    @discardableResult
+    private func fullFrame(_ what: String?, timeout: Double, since: Date = Date(), after previous: NSImage? = nil) async throws -> Int {
+        while Date().timeIntervalSince(since) < timeout {
+            if let full = controller.fullImage, full !== previous, controller.displayImage === full {
+                let ms = Int(Date().timeIntervalSince(since) * 1000)
+                if let what { print("LENSBLUR: \(what): \(ms) ms to the full-size frame") }
+                return ms
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTFail("\(what ?? "overlay off"): no full-size frame in \(Int(timeout)) s")
+        return Int(timeout * 1000)
+    }
+
     // MARK: Every option
 
     func testEveryOptionChangesThePhoto() async throws {

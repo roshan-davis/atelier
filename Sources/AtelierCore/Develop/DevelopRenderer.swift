@@ -740,14 +740,15 @@ public final class DevelopSession: @unchecked Sendable {
     /// Lens Blur on `source`, from the cache when nothing it reads changed. Call with the lock held.
     private func lensBlurred(_ source: CIImage, depth: CIImage, settings: DevelopSettings,
                              provider: @escaping MaskProvider) -> CIImage {
-        let make = { [interactive, renderer] () -> CIImage in
+        let make = { [renderer] () -> CIImage in
             // Focus and Blur areas: masks with Lens Focus, on the same uncropped frame.
             var areas = LensBlur.areas(settings, on: source, provider: provider)
-            // A full-size render (Save, export) draws them once into a bitmap: left as a graph
-            // (Vision's mask, Fine Edges' matte, feathers), Core Image redrew them for every tile
-            // of every blur pass: Save with a Select Subject area went from 43 s to 15 s (Mac
-            // check of PR #153, Nov 16, 2026).
-            if !interactive, let graph = areas { areas = LensBlur.drawnOnce(graph, context: renderer.context) }
+            // Drawn once into a bitmap, in the editor too: left as a graph (Vision's mask, Fine
+            // Edges' matte, Refine Edge's guided filter on the photo, feathers), Core Image redrew
+            // them for every tile of every blur pass. Save with a Select Subject area went from
+            // 43 s to 15 s; zoomed in, Show Overlay off after Refine Edge 50 or 100 went from
+            // 104–123 s to 8 s (Rosh, Nov 16, 2026: it took minutes zoomed in).
+            if let graph = areas { areas = LensBlur.drawnOnce(graph, context: renderer.context) }
             return LensBlur.apply(source, depth: depth, settings: settings, areas: areas)
         }
         guard interactive else { return make() }
