@@ -1377,6 +1377,16 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 
 **Limits:** the TIFF bakes the original's Develop edits as they were at Save; later Develop edits on the original show "Update". No unsaved-changes question on Cancel (by design: Cancel discards). Another photo or leaving Develop cancels the mode.
 
+## AT-075 — Fine Edges: get the other model from the mask panel
+
+**Status:** Built, awaiting Mac build and Rosh's acceptance. **Owner:** Claude (project thread). **Branch:** `claude/fine-edges-get-model`. **Dependencies:** AT-044.
+
+**Why (Rosh, Nov 16, 2026):** with one Fine Edges model downloaded, the panel showed its name as plain text, so nothing said a second model existed; it could only be found in Settings > AI. Rosh asked for a download there or a pointer to Settings.
+
+**Scope:** `FineEdgesControl` (shared by Masking and Lens Blur's Refine): beside the Fine Edges checkbox, a menu always names the model that runs. Downloaded models are ticked choices; a model not downloaded is "Get Fast (115 MB)" / "Get Hair Detail (470 MB)", which downloads it with a progress bar and Cancel under the row and then picks it (as Settings does). Settings > AI unchanged.
+
+**Validation:** Swift unbuilt (cloud). Needs a Mac build, a look at the menu with one and with both models, and Rosh's acceptance.
+
 ## AT-071 — Cull: compare the suggested keeper and runner-up with linked zoom
 
 **Status:** Proposed / discuss. **Owner:** unassigned. **Dependencies:** AT-059 (Pick By ranking), AT-060 (shared Cull zoom and pan).

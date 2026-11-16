@@ -110,7 +110,7 @@
       <div class="row" data-pin="5"><span class="check"><i class="on"></i>Show Overlay</span></div>
       <div class="gh">Select People</div>
       <div class="row" data-pin="2"><span class="check"><i class="on"></i>Entire Person</span><span class="check"><i></i>Entire Face</span></div>
-      <div class="row" data-pin="3" data-pin-side="right"><span class="check"><i class="on"></i>Fine Edges</span><span style="flex:1"></span><span style="color:var(--app-text-2);font-size:11px">Hair Detail</span></div>
+      <div class="row" data-pin="3" data-pin-side="right"><span class="check"><i class="on"></i>Fine Edges</span><span style="flex:1"></span><span class="popup">Hair Detail</span></div>
       <div class="sl" data-name="Grow" data-value="0" data-at="0.5" data-def="0.5"></div>
       <div class="sl" data-name="Refine Edge" data-value="0" data-at="0" data-def="0"></div>
       <div class="sl" data-pin="4" data-name="Feather" data-value="0" data-at="0" data-def="0.1"></div>
@@ -124,7 +124,7 @@
 </figure>
 <ol class="steps">
   <li>Open the photo in Lens Blur (<b>Photo › Lens Blur…</b>), tick <b>Apply</b> and set <b>Blur Amount</b>. Tick <b>Visualize Depth</b>: the face and hair should be drawn lighter (in the Focal Range). If not, click the <b>⌖</b> picker, then an eye. Untick it.</li>
-  <li>Click <b>Refine…</b>, then <b>Add to Focus › Select People</b> (1). Keep <b>Entire Person</b> (2) and <b>Fine Edges</b> (3) on, with the Hair Detail model if you have it, and wait for the line that says it ran.</li>
+  <li>Click <b>Refine…</b>, then <b>Add to Focus › Select People</b> (1). Keep <b>Entire Person</b> (2) and <b>Fine Edges</b> (3) on, with the Hair Detail model if you have it (the menu at the right of the Fine Edges row switches models, and can get the one you don't have), and wait for the line that says it ran.</li>
   <li>Set the part's <b>Feather</b> to 0 (4), and Grow and Refine Edge to 0. Feather softens the edge outward onto the background, so the background right beside the hair would stay partly sharp.</li>
   <li>Zoom to 100% on the hair and tick <b>Show Overlay</b> (5, or <kbd>O</kbd>). Red is the Focus area: it should cover the strands, not the gaps between them. A strand without red will blur; a gap with red stays sharp.</li>
   <li>Dodge and burn the mask: with <b>Focus</b> selected, <b>Add to Focus › Brush</b> with a small Size, Feather 50 and <b>Flow</b> 15 (6). Each pass over a strand builds it up. Hold <kbd>⌥</kbd> (or use <b>Subtract › Brush</b>) at the same Flow to take red off a gap.</li>
