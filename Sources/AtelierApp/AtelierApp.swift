@@ -90,6 +90,7 @@ private struct ReadyLibraryCommands: Commands {
                 // ⌘S saves in HDR mode; elsewhere it stays Library > Write XMP for Selection.
                 actions.button(AtelierAction.saveHDR)
                 actions.button(AtelierAction.saveHDRAsNew)
+                actions.button(AtelierAction.saveLensBlur)
             }
             // Undo and redo step through the open photo's develop history; text fields keep
             // their own undo.
@@ -147,6 +148,7 @@ private struct ReadyLibraryCommands: Commands {
                 Divider()
                 // Lightroom's key for Photo Merge > HDR.
                 actions.button(AtelierAction.hdr)
+                actions.button(AtelierAction.lensBlur)
                 Menu("Edit In") {
                     ForEach(Array(model.externalEditors.enumerated()), id: \.element.id) { index, editor in
                         actions.button(AtelierAction.editIn, EditorParameters(editor: editor.appPath),

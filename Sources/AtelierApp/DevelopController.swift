@@ -167,6 +167,24 @@ final class DevelopController: ObservableObject {
     @Published var pickerMessage: String?
     /// Why Lens Blur's Subject focus set nothing, for its panel.
     @Published var lensBlurMessage: String?
+    /// The Lens Blur mode (AT-074, Photo > Lens Blur…): the photo with its Lens Blur, and Lens
+    /// Blur's controls in place of Develop's panels. Lens Blur renders only here
+    /// (`DevelopSession.rendersLensBlur`), so Develop's sliders never re-run it; Save makes the
+    /// Lens Blur photo, a TIFF stacked on the original (`LensBlurPhoto`). It stays open from
+    /// photo to photo, as Masking does. See DevelopController+LensBlurMode.
+    @Published var isLensBlurring = false {
+        didSet {
+            guard isLensBlurring != oldValue else { return }
+            lensBlurModeChanged()
+        }
+    }
+    /// Save is rendering the Lens Blur photo.
+    @Published var lensBlurSaving = false
+    /// Why the last Save failed, for the Lens Blur panel.
+    @Published var lensBlurSaveError: String?
+    /// The open photo's Lens Blur photo, if one was saved, and the settings it was saved from
+    /// (nil when unknown), to tell whether it is out of date.
+    @Published var lensBlurPhoto: (id: Int64, madeFrom: DevelopSettings?)?
 
     /// The HSL channel the Targeted Adjustment Tool changes (HSL / Color's view, or the one
     /// chosen from its menu in the All view).
@@ -294,6 +312,7 @@ final class DevelopController: ObservableObject {
         didSet {
             guard isCropping != oldValue else { return }
             if isCropping {
+                isLensBlurring = false
                 showingBefore = false
                 isAIOpen = false
                 isMasking = false
@@ -334,6 +353,7 @@ final class DevelopController: ObservableObject {
             // The AI tool works on the plain photo, without the clipping overlay.
             if showShadowClipping || showHighlightClipping { clippingOverlayChanged() }
             guard isAIOpen else { return }
+            isLensBlurring = false
             isCropping = false
             isMasking = false
             isGuiding = false
@@ -349,6 +369,8 @@ final class DevelopController: ObservableObject {
         didSet {
             guard isMasking != oldValue else { return }
             if isMasking {
+                // Lens Blur's own Refine opens inside its mode; Masking leaves it.
+                if maskScope == .look { isLensBlurring = false }
                 isCropping = false
                 isAIOpen = false
                 isGuiding = false
@@ -374,6 +396,7 @@ final class DevelopController: ObservableObject {
         didSet {
             guard isGuiding != oldValue else { return }
             if isGuiding {
+                isLensBlurring = false
                 picker = nil
                 isCropping = false
                 isAIOpen = false
@@ -394,6 +417,7 @@ final class DevelopController: ObservableObject {
         didSet {
             guard isRemoving != oldValue else { return }
             if isRemoving {
+                isLensBlurring = false
                 isCropping = false
                 isAIOpen = false
                 isMasking = false
@@ -867,10 +891,13 @@ final class DevelopController: ObservableObject {
         previewingPreset = nil
         navigatorPreview = nil
         navigatorSession = nil
+        lensBlurPhoto = nil
+        lensBlurSaveError = nil
         guard let assetID else { return }
 
         settings = (try? catalog.developSettings(for: assetID)) ?? .neutral
         if isMasking { selectedMaskID = editedMasks.last?.id }
+        if isLensBlurring { loadLensBlurPhoto() }
         history = (try? catalog.developHistory(for: assetID)) ?? DevelopHistory()
         committed = settings
         pendingStep = nil
@@ -986,6 +1013,7 @@ final class DevelopController: ObservableObject {
             return
         }
         self.session = session
+        session.rendersLensBlur = isLensBlurring
         self.sourceSize = session.sourceSize
         self.asShotTemperature = session.asShotTemperature
         self.asShotTint = session.asShotTint
@@ -1422,6 +1450,12 @@ final class DevelopController: ObservableObject {
     /// The photo without edits but with the same shape (lens corrections, Transform and crop),
     /// so before and after line up.
     private var beforeSettings: DevelopSettings {
+        // In the Lens Blur mode, Before is the photo without its Lens Blur.
+        if isLensBlurring {
+            var before = settings
+            before[.lensBlurApply] = 0
+            return before
+        }
         var before = settings.lensGeometryKey
         before.crop = settings.crop
         return before
@@ -2572,9 +2606,11 @@ final class DevelopController: ObservableObject {
         let assetID = self.assetID
         let existing = fullSession
         let clipping = clippingOverlay
+        let blurs = isLensBlurring
         fullQueue.async {
             let began = DevelopTimingLog.now()
             let session = existing ?? DevelopRenderer.shared.session(for: url, maxPixelSize: nil, interactive: true)
+            session?.rendersLensBlur = blurs
             let cgImage = RenderSignposts.measure("Full-size render") {
                 session?.renderForDisplay(settings, shadowClipping: clipping.shadows,
                                           highlightClipping: clipping.highlights)?.image
@@ -2586,9 +2622,13 @@ final class DevelopController: ObservableObject {
                     self.fullRendering = false
                     guard self.assetID == assetID, let session else { return }
                     self.fullSession = session
-                    if let cgImage {
+                    session.rendersLensBlur = self.isLensBlurring
+                    // Rendered before the Lens Blur mode opened or closed: render again.
+                    if let cgImage, blurs == self.isLensBlurring {
                         self.fullImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
                         self.fullImageSettings = settings
+                    } else if cgImage != nil {
+                        self.fullNeedsRender = true
                     }
                     if self.fullNeedsRender {
                         self.fullNeedsRender = false
@@ -2775,7 +2815,11 @@ final class DevelopController: ObservableObject {
             }
             let began = DevelopTimingLog.now()
             defer { DevelopTimingLog.shared.log(assetID, "preview stored\(optional ? " (lens-corrected, first open)" : " (saved edit)"): \(DevelopTimingLog.ms(since: began)) ms on the preview queue") }
-            if let cgImage = session.render(settings) {
+            // The original's own previews never show its Lens Blur (only the Lens Blur photo
+            // does), also while the Lens Blur mode has the session rendering it.
+            var unblurred = settings
+            unblurred[.lensBlurApply] = 0
+            if let cgImage = session.render(unblurred) {
                 Self.writePreviews(cgImage, for: assetID, revision: revision, previews: previews, revisions: revisions)
             }
             DispatchQueue.main.async {
@@ -2932,6 +2976,37 @@ extension DevelopController {
         } else {
             insert(MaskComponent(Self.defaultShape(kind)), tool: MaskTool(kind: kind))
         }
+    }
+
+    // MARK: Lens Blur mode
+
+    /// Opening or closing the Lens Blur mode: the other tools close, the live sessions start or
+    /// stop rendering Lens Blur, and the photo renders again (the full-size render too).
+    private func lensBlurModeChanged() {
+        if isLensBlurring {
+            isCropping = false
+            isAIOpen = false
+            isGuiding = false
+            isRemoving = false
+            if isMasking, maskScope == .look { isMasking = false }
+            picker = nil
+            showingBefore = false
+            compareMode = .off
+            // The mode is where Lens Blur is edited: a switched-off panel would show nothing.
+            if !settings.isOn(.lensBlur) { setPanelOn(.lensBlur, true) }
+            loadLensBlurPhoto()
+        } else {
+            visualizesDepth = false
+            finishLensBlurRefine()
+            if picker == .lensFocus { picker = nil }
+            lensBlurSaveError = nil
+        }
+        session?.rendersLensBlur = isLensBlurring
+        fullSession?.rendersLensBlur = isLensBlurring
+        navigatorSession?.rendersLensBlur = isLensBlurring
+        fullImageSettings = nil
+        beforeImage = nil
+        scheduleRender()
     }
 
     // MARK: Lens Blur Refine

@@ -123,7 +123,13 @@ final class LibraryModel: ObservableObject {
     @Published var detail: AssetDetail?
     @Published private var storedMode: ViewMode = .grid {
         didSet {
-            if mode == .develop { develop.open(focusedID) } else if oldValue == .develop { develop.flushSave() }
+            if mode == .develop {
+                develop.open(focusedID)
+            } else if oldValue == .develop {
+                develop.flushSave()
+                // Its settings stay on the photo; only Save makes the Lens Blur photo.
+                develop.isLensBlurring = false
+            }
             if mode == .hdr {
                 if oldValue != .hdr { hdrReturnMode = oldValue }
                 hdr.open(focusedID)
@@ -1106,6 +1112,9 @@ final class LibraryModel: ObservableObject {
             return true
         case 53 where mode == .hdr && hdr.busy: hdr.cancel(); return true  // escape stops an HDR save
         case 53 where mode == .hdr: closeHDR(); return true  // escape: back to the view HDR came from
+        case 53 where mode == .develop && develop.isLensBlurring:  // escape: Refine's Done, then closes Lens Blur
+            if develop.isMasking { develop.finishLensBlurRefine() } else { closeLensBlur() }
+            return true
         case 53 where mode != .grid: mode = .grid; return true        // escape
         default: break
         }

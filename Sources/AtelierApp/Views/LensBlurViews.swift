@@ -137,3 +137,53 @@ struct LensBlurPanel: View {
         }
     }
 }
+
+/// The Lens Blur mode's bar under its panel, in place of Develop's Copy, Paste and Reset:
+/// Before (the photo without the blur), Close and Save, with what Save will do. Save renders
+/// the blur at full size into a TIFF stacked on the photo (`LibraryModel.saveLensBlur`).
+struct LensBlurModeBar: View {
+    @EnvironmentObject private var model: LibraryModel
+    @ObservedObject var develop: DevelopController
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Toggle("Before", isOn: $develop.showingBefore)
+                    .toggleStyle(.button)
+                    .help("Show the photo without the Lens Blur (\\)")
+                Spacer()
+                if develop.lensBlurSaving {
+                    ProgressView().controlSize(.small)
+                }
+                Button("Close") { model.closeLensBlur() }
+                    .help("Back to Develop's panels (Esc). The Lens Blur settings stay on this photo for next time.")
+                Button(saveTitle) { model.saveLensBlur() }
+                    .disabled(develop.lensBlurSaving || develop.assetID == nil)
+                    .help("Render the Lens Blur at full size into a 16-bit TIFF stacked on this photo, then open it (⌘S)")
+            }
+            Text(caption)
+                .font(.caption)
+                .foregroundStyle(develop.lensBlurSaveError == nil ? Color.secondary : Color.orange)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(10)
+    }
+
+    private var saveTitle: String {
+        if develop.lensBlurSaving { return "Saving…" }
+        return develop.lensBlurPhotoState == .none ? "Save" : "Update"
+    }
+
+    private var caption: String {
+        if let error = develop.lensBlurSaveError { return "Not saved: \(error)" }
+        if develop.lensBlurSaving { return "Rendering the full-size photo with its Lens Blur…" }
+        switch develop.lensBlurPhotoState {
+        case .none:
+            return "Only this mode shows the blur. Save makes it a new photo: a 16-bit TIFF stacked on this one, with your Develop edits baked in."
+        case .current:
+            return "The Lens Blur photo stacked on this one is up to date."
+        case .outOfDate:
+            return "This photo changed since its Lens Blur photo was saved. Update renders it again; the Lens Blur photo's own edits stay."
+        }
+    }
+}

@@ -34,7 +34,9 @@ public final class PreviewCache: Sendable {
     ///    (`PeopleParts`) instead of skin color, so photos with a Select People mask look different.
     /// 11: the depth model sees the photo shrunk with Lanczos and in whole pixels (it was
     ///    point-sampled, with a dark half-covered top row), so Depth Range masks differ slightly.
-    public static let version = 11
+    /// 12: Lens Blur renders only in its own mode and in the Lens Blur photo it saves (AT-074),
+    ///    so previews of photos with Lens Blur settings show them unblurred.
+    public static let version = 12
 
     /// Clears previews written by an older version. The old folder is moved aside at once and
     /// deleted in the background, so a large cache doesn't hold up launch.

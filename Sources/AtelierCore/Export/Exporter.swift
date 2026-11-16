@@ -159,8 +159,10 @@ public final class Exporter: Sendable {
 
     /// Exports one photo and returns the written file. `baseName` replaces the original's
     /// name; with `develop` false the photo is rendered without its develop settings.
+    /// `lensBlur` renders the photo's Lens Blur too: only the Lens Blur mode's Save asks for it
+    /// (see `DevelopSession.rendersLensBlur`).
     public func export(_ assetID: Int64, settings: ExportSettings, baseName: String? = nil,
-                       develop applyDevelop: Bool = true) throws -> URL {
+                       develop applyDevelop: Bool = true, lensBlur: Bool = false) throws -> URL {
         guard let detail = try catalog.detail(for: assetID) else { throw ExportError("The photo is no longer in the catalog.") }
         guard let source = detail.fileURL, FileManager.default.fileExists(atPath: source.path) else {
             throw ExportError("The original is offline. Connect its drive and export again.")
@@ -175,8 +177,11 @@ public final class Exporter: Sendable {
             let fraction = max(cropped.width, cropped.height) / max(full.width, full.height)
             decodeEdge = Int((Double(longEdge) / max(0.05, Double(fraction))).rounded(.up))
         }
-        guard let session = renderer.session(for: source, maxPixelSize: decodeEdge),
-              var image = session.image(with: develop) else {
+        guard let session = renderer.session(for: source, maxPixelSize: decodeEdge) else {
+            throw ExportError("This file can't be rendered.")
+        }
+        session.rendersLensBlur = lensBlur
+        guard var image = session.image(with: develop) else {
             throw ExportError("This file can't be rendered.")
         }
 

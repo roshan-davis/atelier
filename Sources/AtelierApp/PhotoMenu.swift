@@ -23,6 +23,9 @@ extension LibraryModel {
         if mode != .hdr || ids.first != hdr.assetID {
             menu.addItem(item(AtelierAction.hdr, "Edit in HDR", enabled: ids.count == 1))
         }
+        if !(mode == .develop && develop.isLensBlurring && ids.first == develop.assetID) {
+            menu.addItem(item(AtelierAction.lensBlur, "Edit in Lens Blur", enabled: ids.count == 1))
+        }
         menu.addItem(item(AtelierAction.createVirtualCopy, "Create Virtual Copy\(ids.count > 1 ? "\(count)" : "")"))
         if targetsIncludeVirtualCopy {
             menu.addItem(item(AtelierAction.removeVirtualCopy))

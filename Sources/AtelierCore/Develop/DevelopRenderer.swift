@@ -489,6 +489,16 @@ public final class DevelopSession: @unchecked Sendable {
     /// Whether Apple's RAW engine has lens corrections for this file.
     public let lensCorrectionSupported: Bool
     private let lock = NSLock()
+    /// Lens Blur renders only where it is made: the Lens Blur mode's live renders and its Save
+    /// (AT-074). Everywhere else (Develop, export, previews, the Loupe) a photo's Lens Blur
+    /// settings are left out, so they cost nothing there; the blur reaches the library as the
+    /// saved Lens Blur photo stacked on the original. Off by default.
+    public var rendersLensBlur: Bool {
+        get { gateLock.withLock { lensBlurGate } }
+        set { gateLock.withLock { lensBlurGate = newValue } }
+    }
+    private let gateLock = NSLock()
+    private var lensBlurGate = false
     private let brushCache = BrushCache()
     /// The Remove tool's spot shapes, drawn once per spot.
     private let spotCache = SpotShapeCache()
@@ -632,7 +642,7 @@ public final class DevelopSession: @unchecked Sendable {
                                               sky: { self.skyMask(of: source, key: key) },
                                               guide: source, brushCache: brushCache)
         }
-        if LensBlur.isOn(settings), let depth = depthMap(of: source, key: key) {
+        if rendersLensBlur, LensBlur.isOn(settings), let depth = depthMap(of: source, key: key) {
             image = lensBlurred(source, depth: depth, settings: settings, provider: sourceProvider)
         }
         if let crop {

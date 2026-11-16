@@ -45,7 +45,6 @@ GROUPS = [
         ("lens-corrections.html", "Lens Corrections"),
         ("transform.html", "Transform"),
         ("effects.html", "Effects"),
-        ("lens-blur.html", "Lens Blur"),
         ("calibration.html", "Calibration"),
     ]),
     ("Tools", [
@@ -56,6 +55,7 @@ GROUPS = [
         ("preset-lookbook.html", "Built-in preset lookbook"),
         ("match-look.html", "Match Look"),
         ("ai.html", "AI tools"),
+        ("lens-blur.html", "Lens Blur"),
         ("hdr.html", "Single-image HDR"),
     ]),
     ("Share", [

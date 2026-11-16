@@ -26,6 +26,10 @@ public enum AtelierAction {
         "file.saveHDRAsNew", "Save HDR As New…", place: "File > Save HDR As New…",
         summary: "Saves the HDR edit as a new photo.",
         kind: .writesFiles, shortcut: KeyShortcut("s", [.command, .shift]))
+    public static let saveLensBlur = Action<NoParameters>(
+        "file.saveLensBlur", "Save Lens Blur Photo", place: "File > Save Lens Blur Photo, Lens Blur > Save",
+        summary: "In the Lens Blur mode, renders the photo's Lens Blur at full size and saves it as a TIFF stacked on the original, or updates the one saved before.",
+        kind: .writesFiles, shortcut: KeyShortcut("s"))
 
     // MARK: Edit
 
@@ -125,6 +129,10 @@ public enum AtelierAction {
         "photo.hdr", "HDR…", place: "Photo > HDR…, photo menu > Edit in HDR",
         summary: "Opens one photo in HDR mode.",
         kind: .view, targets: .photos, shortcut: KeyShortcut("h", [.control]))
+    public static let lensBlur = Action<NoParameters>(
+        "photo.lensBlur", "Lens Blur…", place: "Photo > Lens Blur…, photo menu > Edit in Lens Blur",
+        summary: "Opens one photo in the Lens Blur mode, where its depth blur is set and saved as a new photo stacked on it. On a Lens Blur photo it opens the original it was made from.",
+        kind: .view, targets: .photos)
     public static let editIn = Action<EditorParameters>(
         "photo.editIn", "Edit In", place: "Photo > Edit In, photo menu > Edit In",
         summary: "Renders the photo and opens it in another app; the edit comes back as a new photo.",
@@ -277,12 +285,13 @@ public enum AtelierAction {
     /// Every action, in menu order. A test fails if one declared above is missing.
     public static let all: [ActionDescriptor] = [
         importPhotos.descriptor, export.descriptor, saveHDR.descriptor, saveHDRAsNew.descriptor,
+        saveLensBlur.descriptor,
         undo.descriptor, redo.descriptor, zoomIn.descriptor, zoomOut.descriptor, zoomToFit.descriptor,
         zoomTo100.descriptor, toggleZoom.descriptor, setZoom.descriptor, showFilmstrip.descriptor,
         showNotes.descriptor, privatePhotos.descriptor, grid.descriptor, loupe.descriptor, develop.descriptor,
         cullImport.descriptor, writeXMP.descriptor, writeAllXMP.descriptor, refreshVolumes.descriptor,
         createVirtualCopy.descriptor, removeVirtualCopy.descriptor, removePhoto.descriptor,
-        addNote.descriptor, showCullGroup.descriptor, hdr.descriptor, editIn.descriptor, editInOther.descriptor,
+        addNote.descriptor, showCullGroup.descriptor, hdr.descriptor, lensBlur.descriptor, editIn.descriptor, editInOther.descriptor,
         matchLook.descriptor, ai.descriptor, showInFinder.descriptor, setRating.descriptor,
         setFlag.descriptor, toggleLabel.descriptor, addToCollection.descriptor,
         removeFromCollection.descriptor, removeFromImport.descriptor, resetSettings.descriptor,

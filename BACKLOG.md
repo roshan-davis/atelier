@@ -1361,6 +1361,20 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 
 **Limits:** the edge is only as good as the mask (Fine Edges Hair Detail or hand painting); a sharp object touching the subject but outside the area, within 2% of hair, blurs if the background beyond is blurred (add it to the Focus area). Unticking Show Overlay while zoomed shows the preview until the full-size render is done.
 
+## AT-074 — Lens Blur as its own mode that saves a new photo
+
+**Status:** Built, awaiting Mac build and Rosh's acceptance. **Owner:** Claude (project thread). **Branch:** `claude/lens-blur-hair` (PR #153, with AT-073). **Dependencies:** AT-072, AT-073.
+
+**Why (Rosh, Nov 16, 2026):** with Lens Blur applied, every Develop slider took seconds, worst zoomed in: Exposure, white balance and lens corrections are pipeline step 1, under Lens Blur, so each tick re-ran the full blur (c686e9c's cache only helps sliders after it). Rosh proposed Lens Blur as an inline app like HDR whose result is a new image, chose "Own mode, saves a TIFF" on the decision card, then: no Lens Blur section in Develop's right column, all its controls in the mode, built from the shared components.
+
+**Scope:** a Develop mode (`DevelopController.isLensBlurring`), opened from Photo > Lens Blur…, right-click > Edit in Lens Blur, or the aperture button in the tool strip; the Lens Blur panel (all of AT-072/073's controls, Refine with every mask tool) replaces Develop's panels, with Before (without the blur), Close (Esc) and Save (⌘S, File > Save Lens Blur Photo). Lens Blur renders only in the mode and in Save (`DevelopSession.rendersLensBlur`, off by default): Develop, previews, the Loupe, export, Match Look never run it. Save renders the photo with its Develop settings and Lens Blur at full size into a 16-bit ProPhoto TIFF next to the original (`<name>-LensBlur.tif`), stacked on it as a version named "Lens Blur" (`LensBlurPhoto`), then opens it in Develop; saving again replaces the TIFF in place (its own edits, rating and keywords stay). The settings it was saved from are kept on the version row (provenance), so the bar says whether it is up to date (Save / Update). Opening Lens Blur on the TIFF opens its original. The Lens Blur settings stay on the original either way, so nothing is lost by closing.
+
+**Changes existing photos:** `PreviewCache.version` 12: previews of photos with Lens Blur settings now show them unblurred, and their exports are unblurred; open them in Lens Blur and Save for the blurred photo. Agent commands added: `photo.lensBlur` (view), `file.saveLensBlur` (writes files, asks first).
+
+**Validation:** Swift unbuilt (cloud). Core test `LensBlurPhotoTests` (stacking, in-place replace keeping the TIFF's edits, provenance, the render gate). Help page checked in a browser. Needs a Mac build, `swift test`, Frame Diagnostics in Develop on a photo with Lens Blur settings (expect no Lens Blur cost) and Rosh's acceptance.
+
+**Limits:** the TIFF bakes the original's Develop edits as they were at Save; later Develop edits on the original show "Update". No unsaved-changes question on Close (the settings are kept on the original). The mode stays open from photo to photo, as Masking does; leaving Develop closes it.
+
 ## AT-071 — Cull: compare the suggested keeper and runner-up with linked zoom
 
 **Status:** Proposed / discuss. **Owner:** unassigned. **Dependencies:** AT-059 (Pick By ranking), AT-060 (shared Cull zoom and pan).

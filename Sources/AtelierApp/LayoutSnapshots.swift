@@ -94,6 +94,7 @@ enum LayoutSnapshots {
         await snapshotMatchLook(model: model, into: folder)
         await snapshotMasking(model: model, into: folder)
         await snapshotRemove(model: model, into: folder)
+        await snapshotLensBlurMode(model: model, into: folder)
         await snapshotTransform(model: model, into: folder)
         await snapshotPresets(model: model, into: folder)
         // Each theme in Develop at the size in Rosh's screenshot, and the theme picker itself.
@@ -643,6 +644,21 @@ enum LayoutSnapshots {
         develop.isRemoving = false
         develop.spotMode = .heal
         develop.spotSize = DevelopSettings.Spot.defaultSize
+        develop.flushSave()
+    }
+
+    /// The Lens Blur mode (AT-074): its panel in place of Develop's, and the bar with Save.
+    /// Without the depth model (CI) the panel shows its download offer.
+    private static func snapshotLensBlurMode(model: LibraryModel, into folder: URL) async {
+        let develop = model.develop
+        develop.isLensBlurring = true
+        try? await Task.sleep(for: .seconds(1))
+        print("SNAPSHOT: lens blur mode \(develop.isLensBlurring) state \(develop.lensBlurPhotoState)")
+        await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
+                      to: folder.appendingPathComponent("develop-lens-blur-1280x800.png"))
+        await capture(AnyView(DevelopPanel(develop: develop).environmentObject(model)), size: CGSize(width: 320, height: 900),
+                      to: folder.appendingPathComponent("panel-lens-blur-320x900.png"))
+        develop.isLensBlurring = false
         develop.flushSave()
     }
 

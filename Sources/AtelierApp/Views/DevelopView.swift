@@ -79,6 +79,8 @@ struct DevelopImageView: View {
                 }
                 if develop.showingBefore {
                     Badge(text: "Before").padding(14)
+                } else if develop.isLensBlurring {
+                    Badge(text: "Lens Blur").padding(14)
                 }
             }
             .overlay(alignment: .topTrailing) {
@@ -455,7 +457,19 @@ struct DevelopPanel: View {
                             AIPanel(ai: model.ai)
                         }
                     }
-                    ForEach(DevelopSettings.Panel.allCases, id: \.self) { panel in
+                    if develop.isLensBlurring {
+                        // The Lens Blur mode: its controls in place of Develop's panels (AT-074).
+                        PanelSection(title: "Lens Blur", isExpanded: .constant(true), soloMode: $soloMode,
+                                     isModified: develop.isModified(.lensBlur), reset: { develop.reset(.lensBlur) },
+                                     isOn: Binding(get: { develop.isPanelOn(.lensBlur) },
+                                                   set: { develop.setPanelOn(.lensBlur, $0) }),
+                                     expandAll: expandAll, collapseAll: collapseAll) {
+                            LensBlurPanel(develop: develop)
+                        }
+                    }
+                    // Lens Blur is edited only in its mode (Photo > Lens Blur…, the tool strip).
+                    ForEach(develop.isLensBlurring ? [DevelopSettings.Panel]() : DevelopSettings.Panel.allCases.filter { $0 != .lensBlur },
+                            id: \.self) { panel in
                         PanelSection(title: panel.title, isExpanded: isExpanded(panel.rawValue), soloMode: $soloMode,
                                      isModified: develop.isModified(panel), reset: { develop.reset(panel) },
                                      isOn: panel.hasSwitch
@@ -481,8 +495,6 @@ struct DevelopPanel: View {
                                 ColorGradingPanel(develop: develop)
                             case .effects:
                                 EffectsPanel(develop: develop)
-                            case .lensBlur:
-                                LensBlurPanel(develop: develop)
                             default:
                                 VStack(alignment: .leading, spacing: 7) {
                                     ForEach(groups(in: panel), id: \.0) { group in
@@ -507,33 +519,42 @@ struct DevelopPanel: View {
             }
             }
             Divider()
-            VStack(spacing: 8) {
-                HStack {
-                    Button("Copy") { develop.copySettings() }
-                        .help("Copy this photo's settings (⇧⌘C)")
-                    Button("Paste") { develop.pasteSettings() }
-                        .disabled(develop.clipboard == nil)
-                        .help("Paste settings onto this photo (⇧⌘V)")
-                    Spacer()
-                    Toggle("Before", isOn: $develop.showingBefore)
-                        .toggleStyle(.button)
-                        .help("Show the photo without edits (\\)")
-                    Button("Reset") { develop.resetAll() }
-                        .help("Clear all edits on this photo (⇧⌘R)")
-                }
-                Text("Edits save automatically and never change the original. Double-click a slider's name to reset it; click its value to type one.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+            if develop.isLensBlurring {
+                LensBlurModeBar(develop: develop)
+            } else {
+                developBar
             }
-            .padding(10)
         }
         .disabled(develop.assetID == nil)
     }
 
+    private var developBar: some View {
+        VStack(spacing: 8) {
+            HStack {
+                Button("Copy") { develop.copySettings() }
+                    .help("Copy this photo's settings (⇧⌘C)")
+                Button("Paste") { develop.pasteSettings() }
+                    .disabled(develop.clipboard == nil)
+                    .help("Paste settings onto this photo (⇧⌘V)")
+                Spacer()
+                Toggle("Before", isOn: $develop.showingBefore)
+                    .toggleStyle(.button)
+                    .help("Show the photo without edits (\\)")
+                Button("Reset") { develop.resetAll() }
+                    .help("Clear all edits on this photo (⇧⌘R)")
+            }
+            Text("Edits save automatically and never change the original. Double-click a slider's name to reset it; click its value to type one.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(10)
+    }
+
     private func expandAll() {
         soloMode = false
-        expandedList = (["histogram"] + DevelopSettings.Panel.allCases.map(\.rawValue)).joined(separator: ",")
+        expandedList = (["histogram"] + DevelopSettings.Panel.allCases.filter { $0 != .lensBlur }.map(\.rawValue))
+            .joined(separator: ",")
     }
 
     private func collapseAll() {
@@ -932,6 +953,7 @@ private struct ParameterSliderRow: View, Equatable {
 /// slider's view where it has one), and the value (click it to type one).
 /// Lightroom's tool strip under the histogram.
 private struct ToolStrip: View {
+    @EnvironmentObject private var model: LibraryModel
     @ObservedObject var develop: DevelopController
 
     var body: some View {
@@ -951,6 +973,10 @@ private struct ToolStrip: View {
             tool("wand.and.stars", title: "AI: Remove Object, Replace Background, Upscale", active: develop.isAIOpen,
                  modified: false) {
                 develop.isAIOpen.toggle()
+            }
+            tool("camera.aperture", title: "Lens Blur: blur by depth, saved as a new photo (Photo > Lens Blur…)",
+                 active: develop.isLensBlurring, modified: develop.value(.lensBlurApply) >= 0.5) {
+                if develop.isLensBlurring { model.closeLensBlur() } else { model.openLensBlur() }
             }
             Spacer()
         }

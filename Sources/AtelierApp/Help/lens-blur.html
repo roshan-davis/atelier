@@ -11,11 +11,11 @@
 <body>
 <main class="page">
 
-<div class="eyebrow">Develop panel</div>
+<div class="eyebrow">Develop · its own mode</div>
 <h1>Lens Blur</h1>
-<p class="lede">Blurs the photo as a wide-open lens would, from how far away each part is: the background melts away, a foreground can go soft too, and bright points turn into bokeh. Use it to make a subject stand out from a busy scene, or to give a phone or small-sensor photo the look of a fast lens.</p>
+<p class="lede">Blurs the photo as a wide-open lens would, from how far away each part is: the background melts away, a foreground can go soft too, and bright points turn into bokeh. Use it to make a subject stand out from a busy scene, or to give a phone or small-sensor photo the look of a fast lens. Lens Blur has its own mode: set the blur there, then <b>Save</b> makes it a new photo stacked on the original (<a href="#mode">how</a>).</p>
 
-<div class="chips"><a href="#apply">Apply and Blur Amount</a><a href="#bokeh">Bokeh</a><a href="#focal-range">Focal Range</a><a href="#refine">Refine: Focus and Blur</a><a href="#hair-steps">Hair, step by step</a><a href="#visualize">Visualize Depth</a><a href="#zoom">Up close</a><a href="#depth-model">The depth model</a><a href="#notes">Good to know</a></div>
+<div class="chips"><a href="#mode">Open and save</a><a href="#apply">Apply and Blur Amount</a><a href="#bokeh">Bokeh</a><a href="#focal-range">Focal Range</a><a href="#refine">Refine: Focus and Blur</a><a href="#hair-steps">Hair, step by step</a><a href="#visualize">Visualize Depth</a><a href="#zoom">Up close</a><a href="#depth-model">The depth model</a><a href="#notes">Good to know</a></div>
 
 <figure>
   <div class="panel narrow" style="margin:0 auto">
@@ -35,6 +35,10 @@
       <div class="gh">Refine</div>
       <div class="row"><span class="btn">Refine…</span> <span style="color:var(--app-text-2);font-size:11px">Focus: 1 part</span></div>
     </div>
+    <div class="pb" style="border-top:1px solid var(--app-line, #444)">
+      <div class="row"><span class="btn">Before</span><span class="grow" style="flex:1"></span><span class="btn">Close</span> <span class="btn on">Save</span></div>
+      <div class="row" style="color:var(--app-text-2);font-size:11px">Only this mode shows the blur. Save makes it a new photo.</div>
+    </div>
   </div>
 </figure>
 
@@ -42,6 +46,17 @@
   <div class="frame compare" data-before="redwoods.jpg" data-after="lens-blur-after.jpg" data-labels="Before|Lens Blur, focused on the hiker"></div>
   <figcaption>Focal Range on the hiker (Near 70, Far 80) and Blur Amount 50: the logs in front go soft, and the trees behind him a little, as they would through a fast lens.</figcaption>
 </figure>
+
+<h2 id="mode">Open, save and change it</h2>
+<p>Lens Blur is a full-size, depth-aware blur, too heavy to redo on every slider move, so it has its own mode, as HDR does. Develop's panels never run it, and Exposure, Contrast and the rest stay as quick on a Lens Blur photo as on any other.</p>
+<ol>
+  <li>Open a photo in Lens Blur: <b>Photo › Lens Blur…</b>, right-click › <b>Edit in Lens Blur</b>, or the aperture button in Develop's tool strip. Make your Develop edits first: the mode shows the photo as edited.</li>
+  <li>The Lens Blur panel takes the place of Develop's panels, with every control on this page, and the photo shows a <b>Lens Blur</b> label. <b>Before</b> (<kbd>\</kbd>) shows the photo without the blur.</li>
+  <li>Click <b>Save</b> (<kbd>⌘S</kbd>, or File › Save Lens Blur Photo). Atelier renders the photo at full size with its blur into a 16-bit ProPhoto TIFF next to the original, stacks it on the original (its thumbnail says <b>Lens Blur</b>), and opens it in Develop. Your Develop edits are baked in, so the TIFF starts with no edits of its own; edit it like any photo.</li>
+  <li><b>Close</b> (<kbd>Esc</kbd>) goes back to Develop's panels without saving. The Lens Blur settings stay on the original either way, so opening Lens Blur again carries on where you left off.</li>
+</ol>
+<p>To change the blur later, open Lens Blur on the original or on the Lens Blur photo (it opens the original it came from). The bar under the panel says whether the Lens Blur photo is up to date; if you changed the blur, or the original's Develop edits, since it was saved, the button reads <b>Update</b> and renders the same TIFF again. The Lens Blur photo keeps its own edits, rating and keywords.</p>
+<p>Outside the mode the original shows without its blur: in the Grid, in Develop and when you export it. Export the Lens Blur photo for the blurred version.</p>
 
 <h2 id="apply">Apply and Blur Amount</h2>
 <p>Tick <b>Apply</b> to turn Lens Blur on. The first time on a photo, Atelier focuses on its subject for you (see <a href="#focal-range">Focal Range</a>). <b>Blur Amount</b> sets how strong the blur is for the parts farthest from the focus: 100 is about the blur of a portrait lens wide open. The blur is measured against the photo's size, so the preview and an export look the same.</p>
@@ -77,7 +92,7 @@
 <p>Where a Focus area's edge is detailed, as Fine Edges draws hair, it works like a layer mask in Photoshop: the photo is blurred as if the area weren't there, and the sharp photo goes back on top through it. A strand that is half in the mask is half sharp hair over half blurred background. The depth model sees a head of hair as one solid shape, gaps included, so close to hair-like edges (2% of the photo's long edge) Lens Blur doesn't trust the depth: anything there that isn't in the area blurs at least as much as the background beyond it. The background between strands blurs with the rest instead of staying sharp. Along a single outline, such as a hat's or a shoulder's, the depth decides as usual, so a mask that sits a pixel inside the edge doesn't smear the subject's color outward as a halo. Where the edge is smooth, as with a feathered gradient, the area just lowers the blur, so focus falls off gradually.</p>
 <p>So the mask decides the edge. Select People with Fine Edges (Hair Detail) gives strand-by-strand detail; keep its Feather at 0 for hair, since Feather softens the edge outward onto the background. To touch it up by hand, dodge and burn the mask: <b>Add to Focus › Brush</b> with a low <b>Flow</b> (10 to 20) builds sharpness strand by strand as you go over it, and <b>Subtract › Brush</b> with a low Flow takes it back.</p>
 <p>A <b>Blur</b> area blurs like what is around it, so a patch the depth got wrong matches the background next to it. Where everything around it is sharp, it blurs as much as the farthest background.</p>
-<p>The Focus and Blur areas belong to Lens Blur alone: they never show in Masking and never change the photo's look. The panel's switch turns them off with the blur, its reset arrow removes them, the eye beside an area hides it, and each change is one undo step. A preset's <b>Lens Blur</b> part carries them.</p>
+<p>The Focus and Blur areas belong to Lens Blur alone: they never show in Masking and never change the photo's look. The panel's switch turns them off with the blur, its reset arrow (which resets the whole panel) removes them, the eye beside an area hides it, and each change is one undo step. A preset's <b>Lens Blur</b> part carries them.</p>
 <figure>
   <div class="frame compare" data-before="lens-blur-after.jpg" data-after="lens-blur-refine-after.jpg" data-labels="Focused on the hiker|With a Focus area on the log"></div>
   <figcaption>A Focus area over the log in front (a Radial Gradient): the log stays sharp with the hiker, and everything else keeps its blur.</figcaption>
@@ -108,17 +123,17 @@
   </div>
 </figure>
 <ol class="steps">
-  <li><b>Apply</b> Lens Blur and set <b>Blur Amount</b>. Tick <b>Visualize Depth</b>: the face and hair should be drawn lighter (in the Focal Range). If not, click the <b>⌖</b> picker, then an eye. Untick it.</li>
+  <li>Open the photo in Lens Blur (<b>Photo › Lens Blur…</b>), tick <b>Apply</b> and set <b>Blur Amount</b>. Tick <b>Visualize Depth</b>: the face and hair should be drawn lighter (in the Focal Range). If not, click the <b>⌖</b> picker, then an eye. Untick it.</li>
   <li>Click <b>Refine…</b>, then <b>Add to Focus › Select People</b> (1). Keep <b>Entire Person</b> (2) and <b>Fine Edges</b> (3) on, with the Hair Detail model if you have it, and wait for the line that says it ran.</li>
   <li>Set the part's <b>Feather</b> to 0 (4), and Grow and Refine Edge to 0. Feather softens the edge outward onto the background, so the background right beside the hair would stay partly sharp.</li>
   <li>Zoom to 100% on the hair and tick <b>Show Overlay</b> (5, or <kbd>O</kbd>). Red is the Focus area: it should cover the strands, not the gaps between them. A strand without red will blur; a gap with red stays sharp.</li>
   <li>Dodge and burn the mask: with <b>Focus</b> selected, <b>Add to Focus › Brush</b> with a small Size, Feather 50 and <b>Flow</b> 15 (6). Each pass over a strand builds it up. Hold <kbd>⌥</kbd> (or use <b>Subtract › Brush</b>) at the same Flow to take red off a gap.</li>
   <li>If background between strands still looks sharp, paint it with <b>Add to Blur › Brush</b> (7): it blurs like the background around it.</li>
-  <li>Untick <b>Show Overlay</b> to see the result. Zoomed in, the preview shows first and the full-size photo follows a moment later. Click <b>Done</b>.</li>
+  <li>Untick <b>Show Overlay</b> to see the result. Zoomed in, the preview shows first and the full-size photo follows a moment later. Click <b>Done</b>, then <b>Save</b> (<kbd>⌘S</kbd>) for the Lens Blur photo.</li>
 </ol>
 
 <h2 id="visualize">Visualize Depth</h2>
-<p>Shows the photo's depth instead of the photo: warm colors are near, cool colors far, and the parts inside the Focal Range are drawn lighter. Use it to see what the focus covers while you move Near and Far. It turns off when you leave the panel.</p>
+<p>Shows the photo's depth instead of the photo: warm colors are near, cool colors far, and the parts inside the Focal Range are drawn lighter. Use it to see what the focus covers while you move Near and Far. It turns off when you close the Lens Blur mode.</p>
 <figure>
   <img src="images/lens-blur-depth.jpg" alt="The redwoods photo shown as depth: orange logs in front, purple ground, blue trees behind, and the hiker's distance drawn light">
   <figcaption>Visualize Depth on the photo above: the hiker and the ground at his distance are inside the Focal Range.</figcaption>
@@ -138,7 +153,7 @@
 <ul>
   <li>Lens Blur works on the whole, uncropped photo in linear light before the tone and color panels, so highlights spread as light does and your other edits apply to the blurred photo. Masks still select from the sharp photo.</li>
   <li>Edges of the subject stay as sharp as in the photo; something in front of the subject blurs over it, as through a lens. Where the depth model is unsure (fine hair, thin branches) the edge can blur a little: add a <a href="#refine">Focus</a> area with Select People.</li>
-  <li>Turn the panel off with the switch in its header to compare, as with any panel.</li>
+  <li>In the Lens Blur mode, <b>Before</b> or the switch in the panel's header compares with and without the blur.</li>
   <li>New presets have a <b>Lens Blur</b> part, unticked by default, because the focus belongs to the photo it was set on. Copy and Paste Settings and Sync Settings carry it.</li>
 </ul>
 
