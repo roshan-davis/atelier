@@ -2555,9 +2555,14 @@ final class DevelopController: ObservableObject {
         wantsFullResolution && (compareMode == .off || (firstRenderDone && beforeRequest.value == nil))
     }
 
-    /// Full-resolution render for zoomed views, after the proxy settles. Latest wins.
+    /// Full-resolution render for zoomed views, after the proxy settles. Latest wins. Not while
+    /// the mask overlay shows: the photo is then the proxy with the red tint (`displayImage`), so
+    /// a full-size render would never be seen, and on a heavy photo (Lens Blur with Focus areas)
+    /// it held the GPU after every brush stroke, so turning Show Overlay on or off waited
+    /// seconds for it (Rosh, Nov 16, 2026). Turning the overlay off renders, which lands here.
     private func scheduleFullRender() {
-        guard canRenderFullResolution, sliderPreview == nil, !showingBefore, !isCropping, !isGuiding, let url = sourceURL, fullImageSettings != settings else { return }
+        guard canRenderFullResolution, sliderPreview == nil, !showingBefore, !isCropping, !isGuiding,
+              !(isMasking && showMaskOverlay), let url = sourceURL, fullImageSettings != settings else { return }
         if fullRendering {
             fullNeedsRender = true
             return

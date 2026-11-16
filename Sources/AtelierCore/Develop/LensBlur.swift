@@ -66,6 +66,9 @@ public enum LensBlur {
     static let areaMargin = 0.02
     /// The scale a Focus edge's detail is judged at, a share of the long edge (`withAreas`).
     static let detailShare = 0.003
+    /// The scale at which a Focus edge is told apart as hair (many edges) or an outline (one),
+    /// a share of the long edge (`withAreas`).
+    static let hairShare = 0.01
     /// Levels of thirds the background's blur is filled in over, behind and around the areas.
     static let fillLevels = 6
     /// The most samples the gather takes per pixel.
@@ -254,7 +257,7 @@ public enum LensBlur {
     /// the background next to it.
     private static func withAreas(_ coc: CIImage, areas: CIImage, extent: CGRect) -> CIImage? {
         guard let kernels, let nearKernel = kernels["atelierLensBlurNearArea"],
-              let detailKernel = kernels["atelierLensBlurDetail"],
+              let detailKernel = kernels["atelierLensBlurDetail"], let edgesKernel = kernels["atelierLensBlurEdges"],
               let fillWeigh = kernels["atelierLensBlurFillWeigh"], let fillUp = kernels["atelierLensBlurFillUp"],
               let areaKernel = kernels["atelierLensBlurAreaCoC"] else { return nil }
         let same: CIKernelROICallback = { _, rect in rect }
@@ -263,11 +266,20 @@ public enum LensBlur {
         // How detailed the Focus edge is: the mask against itself softened, spread a little.
         let sigma = max(1, detailShare * longEdge)
         let softened = areas.clampedToExtent().applyingGaussianBlur(sigma: sigma).cropped(to: extent)
-        guard let detailFound = detailKernel.apply(extent: extent, roiCallback: same, arguments: [areas, softened])
+        // How many edges the mask has around each pixel: about one along a hat's or a face's
+        // outline, many across hair. Only hair-like edges get the near band below: along a single
+        // outline the mask may sit a pixel or two inside the subject, and the band blurred that
+        // sliver like the background, smearing the hat's color outward as a halo (Rosh, Nov 16).
+        let hairSigma = max(1, hairShare * longEdge)
+        guard let edgesFound = edgesKernel.apply(extent: extent, roiCallback: { _, rect in rect.insetBy(dx: -1, dy: -1) },
+                                                 arguments: [areas.clampedToExtent()]) else { return nil }
+        let edges = edgesFound.clampedToExtent().applyingGaussianBlur(sigma: hairSigma).cropped(to: extent)
+        guard let detailFound = detailKernel.apply(extent: extent, roiCallback: same,
+                                                   arguments: [areas, softened, edges, hairSigma * 2.5066283])
         else { return nil }
         let detail = detailFound.clampedToExtent().applyingGaussianBlur(sigma: 2 * sigma).cropped(to: extent)
             .insertingIntermediate(cache: false)
-        // Near a detailed edge: grown by the margin on a copy where the margin is 8 pixels, softened.
+        // Near a detailed, hair-like edge: grown by the margin on a copy where the margin is 8 pixels, softened.
         let margin = max(1, areaMargin * longEdge)
         let small = min(1, 8 / margin)
         guard let inArea = nearKernel.apply(extent: extent, roiCallback: same, arguments: [detail]) else { return nil }
@@ -388,19 +400,33 @@ public enum LensBlur {
             return float4(color.rgb * w, w);
         }
 
+        // How steeply a Focus area changes here (its gradient's length, per pixel).
+        [[stitchable]] float4 atelierLensBlurEdges(coreimage::sampler areas, coreimage::destination dest) {
+            float2 p = dest.coord();
+            float dx = areas.sample(areas.transform(p + float2(1.0, 0.0))).r - areas.sample(areas.transform(p - float2(1.0, 0.0))).r;
+            float dy = areas.sample(areas.transform(p + float2(0.0, 1.0))).r - areas.sample(areas.transform(p - float2(0.0, 1.0))).r;
+            float g = 0.5 * length(float2(dx, dy));
+            return float4(g, g, g, 1.0);
+        }
+
         // How much a Focus area changes here against its softened self (red): a detailed edge
         // such as hair changes a lot within a few pixels, a feathered gradient hardly at all.
+        // Green: that, only where the area is hair-like. `edges` is the gradient's length softened
+        // at the hair scale; times `scale` (that scale times the square root of 2 pi) it counts
+        // the edges crossed there: about 1 along a single outline, several across hair.
         [[stitchable]] float4 atelierLensBlurDetail(coreimage::sampler areas, coreimage::sampler softened,
-                                                    coreimage::destination dest) {
+                                                    coreimage::sampler edges, float scale, coreimage::destination dest) {
             float a = areas.sample(areas.transform(dest.coord())).r;
             float s = softened.sample(softened.transform(dest.coord())).r;
             float d = smoothstep(0.01, 0.05, abs(a - s));
-            return float4(d, d, d, 1.0);
+            float hair = smoothstep(1.5, 3.0, edges.sample(edges.transform(dest.coord())).r * scale);
+            return float4(d, d * hair, 0.0, 1.0);
         }
 
-        // A detailed Focus edge (its spread detail, times 3, over a half): 1, else 0.
+        // A detailed, hair-like Focus edge (its spread detail in green, times 3, over a half): 1,
+        // else 0.
         [[stitchable]] float4 atelierLensBlurNearArea(coreimage::sampler detail, coreimage::destination dest) {
-            float f = step(0.5, clamp(3.0 * detail.sample(detail.transform(dest.coord())).r, 0.0, 1.0));
+            float f = step(0.5, clamp(3.0 * detail.sample(detail.transform(dest.coord())).g, 0.0, 1.0));
             return float4(f, f, f, 1.0);
         }
 

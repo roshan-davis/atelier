@@ -598,7 +598,7 @@ struct MasksPanelStyle {
         doneHelp: "Close Masking; masks keep working (Return)")
 
     static let lensBlurRefine = MasksPanelStyle(
-        intro: "Paint or select where Lens Blur keeps the photo sharp (Focus) and where it blurs it fully (Blur), whatever the depth. Refine the edges with the part's settings below.",
+        intro: "Paint or select where Lens Blur keeps the photo sharp (Focus) and where it blurs it like the background around it (Blur), whatever the depth. Refine the edges with the part's settings below.",
         addButtons: .lensBlurAreas, maskSettings: .lensBlurArea, canRenameAndDuplicate: false,
         emptyText: nil, doneHelp: "Close Lens Blur's Refine; the areas keep working (Return)")
 }
@@ -631,7 +631,7 @@ struct MasksPanel: View {
                         kindMenu("Add to Focus") { develop.addLensBlurPart($0, to: .focus, mode: .add) }
                             .help("Keep an area sharp whatever its depth: paint it, or select a person, subject or object")
                         kindMenu("Add to Blur") { develop.addLensBlurPart($0, to: .blur, mode: .add) }
-                            .help("Blur an area fully whatever its depth")
+                            .help("Blur an area like the background around it, whatever its depth")
                         if develop.selectedMask != nil {
                             kindMenu("Subtract") { develop.addComponent($0, mode: .subtract) }
                                 .help("Cut a part out of the selected area")

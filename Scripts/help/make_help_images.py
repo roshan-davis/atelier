@@ -484,6 +484,7 @@ def _lens_gather(color, c, R, shape, cat_eye, count, skip, holes=None):
 
 
 LENS_DETAIL = (0.01, 0.05, 0.003, 2.0, 3.0)
+LENS_HAIR_SHARE = 0.01
 
 
 def _push_pull(values, weight, levels=6):
@@ -524,13 +525,21 @@ def lens_blur(image, depth, amount=0.5, near=0.7, far=0.8, shape=0, cat_eye=0.0,
         a0 = areas[..., 0].astype(np.float32)
         lo, hi, share, spread, gain = LENS_DETAIL
         sigma = max(1.0, share * max(W, H))
-        detail = smoothstep(lo, hi, np.abs(a0 - cv2.GaussianBlur(a0, (0, 0), sigma)))
-        detail = np.clip(cv2.GaussianBlur(detail, (0, 0), spread * sigma) * gain, 0, 1)
+        raw = smoothstep(lo, hi, np.abs(a0 - cv2.GaussianBlur(a0, (0, 0), sigma)))
+        detail = np.clip(cv2.GaussianBlur(raw, (0, 0), spread * sigma) * gain, 0, 1)
+        # Hair-like edges (many edges around, not one outline) get the near band; along a single
+        # outline the mask may sit a pixel inside the subject, and the band smeared that sliver
+        # outward as a halo (atelierLensBlurDetail's green).
+        hair_sigma = max(1.0, LENS_HAIR_SHARE * max(W, H))
+        gy, gx = np.gradient(a0)
+        edges = cv2.GaussianBlur(np.hypot(gx, gy).astype(np.float32), (0, 0), hair_sigma) * hair_sigma * 2.5066283
+        hairy = np.clip(cv2.GaussianBlur(raw * smoothstep(1.5, 3.0, edges), (0, 0), spread * sigma) * gain, 0, 1)
         # The depth model sees a hair cloud as one near blob, gaps included, so close to a
-        # detailed edge (2% of the long edge) the depth isn't trusted: the blur there comes from
-        # beyond, and what isn't in the area blurs at least as much as the background past it.
+        # detailed, hair-like edge (2% of the long edge) the depth isn't trusted: the blur there
+        # comes from beyond, and what isn't in the area blurs at least as much as the background
+        # past it.
         margin = max(1, int(round(0.02 * max(W, H))))
-        band = cv2.dilate((detail > 0.5).astype(np.float32), cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * margin + 1, 2 * margin + 1)))
+        band = cv2.dilate((hairy > 0.5).astype(np.float32), cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * margin + 1, 2 * margin + 1)))
         band = np.clip(cv2.GaussianBlur(band, (0, 0), margin / 3), 0, 1)
         filled = _push_pull(coc, (1 - band) * (1 - areas[..., 1]))
         larger = np.where(np.abs(filled) > np.abs(coc), filled, coc)
