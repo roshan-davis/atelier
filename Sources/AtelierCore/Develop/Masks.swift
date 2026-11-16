@@ -37,6 +37,14 @@ extension DevelopSettings {
 
         public var hasAdjustments: Bool { !values.isEmpty || !grade.isEmpty }
 
+        /// For a Lens Blur area (`DevelopSettings.lensBlurAreas`): whether it keeps its area sharp
+        /// or blurs it. Nil for an ordinary mask.
+        public var lensBlurRole: LensBlurRole?
+
+        /// How strongly a Lens Blur area works, 0...1: its Amount (100% is full), as the Focus
+        /// and Blur brushes' strength.
+        public var lensBlurStrength: Double { min(max(amount / 100, 0), 1) }
+
         public mutating func resetAdjustments() {
             values = [:]
             grade = [:]
@@ -75,7 +83,7 @@ extension DevelopSettings {
         }
 
         private enum CodingKeys: String, CodingKey {
-            case id, name, components, isHidden, inverted, amount, values, grade
+            case id, name, components, isHidden, inverted, amount, values, grade, lensBlurRole
         }
 
         /// Missing keys take their defaults, so masks keep loading as fields are added.
@@ -87,6 +95,7 @@ extension DevelopSettings {
             isHidden = try c.decodeIfPresent(Bool.self, forKey: .isHidden) ?? false
             inverted = try c.decodeIfPresent(Bool.self, forKey: .inverted) ?? false
             amount = try c.decodeIfPresent(Double.self, forKey: .amount) ?? 100
+            lensBlurRole = try? c.decodeIfPresent(LensBlurRole.self, forKey: .lensBlurRole)
             let stored = try c.decodeIfPresent([String: Double].self, forKey: .values) ?? [:]
             for (key, value) in stored {
                 if let parameter = LocalParameter(rawValue: key) { self[parameter] = value }
@@ -107,7 +116,16 @@ extension DevelopSettings {
             if amount != 100 { try c.encode(amount, forKey: .amount) }
             if !values.isEmpty { try c.encode(values, forKey: .values) }
             if !grade.isEmpty { try c.encode(grade, forKey: .grade) }
+            try c.encodeIfPresent(lensBlurRole, forKey: .lensBlurRole)
         }
+    }
+
+    /// What a Lens Blur area does: keeps its area in focus (Lightroom's Focus brush) or blurs it
+    /// fully (the Blur brush).
+    public enum LensBlurRole: String, Codable, CaseIterable, Sendable {
+        case focus, blur
+
+        public var title: String { self == .focus ? "Focus" : "Blur" }
     }
 
     /// The sliders a mask has, in Lightroom's order.

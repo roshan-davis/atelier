@@ -128,6 +128,8 @@ final class DevelopController: ObservableObject {
     enum PhotoPicker {
         case whiteBalance, fringe, gradeColor, pointColor
         case targetCurve, targetColor, targetGray
+        /// Lens Blur's focus picker: the click sets the Focal Range.
+        case lensFocus
 
         var hint: String {
             switch self {
@@ -138,6 +140,7 @@ final class DevelopController: ObservableObject {
             case .targetCurve: return "Drag up or down on a tone to lighten or darken it. Esc when done."
             case .targetColor: return "Drag up or down on a color to change it. Esc when done."
             case .targetGray: return "Drag up or down on a color to make its gray lighter or darker. Esc when done."
+            case .lensFocus: return "Click the part of the photo to keep in focus. Esc to cancel."
             }
         }
 
@@ -162,6 +165,8 @@ final class DevelopController: ObservableObject {
     }
     /// Why the last click with the picker that is out set nothing.
     @Published var pickerMessage: String?
+    /// Why Lens Blur's Subject focus set nothing, for its panel.
+    @Published var lensBlurMessage: String?
 
     /// The HSL channel the Targeted Adjustment Tool changes (HSL / Color's view, or the one
     /// chosen from its menu in the All view).
@@ -171,6 +176,14 @@ final class DevelopController: ObservableObject {
     /// The Point Color swatch (0...3) the panel shows and the eyedropper fills.
     @Published var pointColorSwatch = 0 {
         didSet { if pointColorSwatch != oldValue, visualizesPointRange { sliderPreview = .pointColorRange(pointColorSwatch) } }
+    }
+    /// Lens Blur's Visualize Depth: the depth in color instead of the photo.
+    @Published var visualizesDepth = false {
+        didSet {
+            guard visualizesDepth != oldValue else { return }
+            if visualizesDepth { visualizesPointRange = false }
+            sliderPreview = visualizesDepth ? .visualizeDepth : nil
+        }
     }
     /// Point Color's Visualize Range: the photo gray except the colors the swatch selects.
     @Published var visualizesPointRange = false {
@@ -343,9 +356,15 @@ final class DevelopController: ObservableObject {
                 picker = nil
                 showingBefore = false
                 compareMode = .off
-                if selectedMaskID == nil { selectedMaskID = settings.masks.last?.id }
+                if selectedMaskID == nil { selectedMaskID = editedMasks.last?.id }
             } else {
                 maskTool = nil
+                if maskScope == .lensBlur {
+                    // Leaving Lens Blur's Refine: Masking opens on its own masks next time.
+                    maskScope = .look
+                    selectedMaskID = nil
+                    selectedComponentID = nil
+                }
             }
             scheduleRender()
         }
@@ -484,6 +503,9 @@ final class DevelopController: ObservableObject {
     @Published var selectedComponentID: UUID?
     /// What the next drag on the photo draws, if anything.
     @Published var maskTool: MaskTool?
+    /// Which masks the mask tools edit: Masking's, or Lens Blur's Focus and Blur areas (Lens
+    /// Blur's Refine mode, which is Masking's tools on those areas).
+    @Published var maskScope: MaskScope = .look
     /// Tints the selected mask red on the photo (O).
     @Published var showMaskOverlay = UserDefaults.standard.bool(forKey: "masks.showOverlay") {
         didSet {
@@ -848,7 +870,7 @@ final class DevelopController: ObservableObject {
         guard let assetID else { return }
 
         settings = (try? catalog.developSettings(for: assetID)) ?? .neutral
-        if isMasking { selectedMaskID = settings.masks.last?.id }
+        if isMasking { selectedMaskID = editedMasks.last?.id }
         history = (try? catalog.developHistory(for: assetID)) ?? DevelopHistory()
         committed = settings
         pendingStep = nil
@@ -1334,6 +1356,9 @@ final class DevelopController: ObservableObject {
             settings.upright = nil
             settings.constrainCrop = false
             isGuiding = false
+        case .lensBlur:
+            settings.lensBlurAreas = []
+            finishLensBlurRefine()
         default:
             break
         }
@@ -1377,6 +1402,7 @@ final class DevelopController: ObservableObject {
         case .toneCurve where settings.hasPointCurve: return true
         case .lensCorrections where !settings.lensProfileCorrections || settings.removeChromaticAberration: return true
         case .transform where settings.upright != nil || settings.constrainCrop: return true
+        case .lensBlur where !settings.lensBlurAreas.isEmpty: return true
         default: break
         }
         return panel.parameters.contains { parameter in
@@ -2079,6 +2105,13 @@ final class DevelopController: ObservableObject {
         switch parameter.panel {
         case .colorGrading, .detail, .effects, .toneCurve, .lensCorrections, .calibration:
             return "\(parameter.group) \(parameter.label)"
+        case .lensBlur:
+            switch parameter {
+            case .lensBlurAmount: return "Lens Blur Amount"
+            case .lensBlurFocusNear: return "Focal Range Near"
+            case .lensBlurFocusFar: return "Focal Range Far"
+            default: return "Lens Blur \(parameter.label)"
+            }
         default:
             return parameter.label == "Temp" ? "Temperature" : parameter.label
         }
@@ -2815,10 +2848,17 @@ final class DevelopController: ObservableObject {
 // MARK: Masks
 
 /// What a drag on the photo draws next: a new mask, or a part added to the selected one.
+/// Which masks the mask tools edit (see `DevelopController.editedMasks`).
+enum MaskScope: Equatable {
+    case look, lensBlur
+}
+
 struct MaskTool: Equatable {
     var kind: DevelopSettings.MaskComponent.Kind
     var mode: DevelopSettings.MaskComponent.Mode = .add
     var newMask = true
+    /// In Lens Blur's Refine: the area (Focus or Blur) the part goes into.
+    var role: DevelopSettings.LensBlurRole?
 
     var hint: String {
         switch kind {
@@ -2836,22 +2876,32 @@ extension DevelopController {
     typealias Mask = DevelopSettings.Mask
     typealias MaskComponent = DevelopSettings.MaskComponent
 
-    var masks: [Mask] { settings.masks }
+    var masks: [Mask] { editedMasks }
 
-    var selectedMask: Mask? { settings.masks.first { $0.id == selectedMaskID } }
+    /// The masks the mask tools work on: Masking's (`settings.masks`), or Lens Blur's Focus and
+    /// Blur areas (`settings.lensBlurAreas`) while refining Lens Blur. Every mask tool (parts,
+    /// brushes, edge controls, delete, undo) goes through this, so both share one code path.
+    var editedMasks: [Mask] {
+        get { maskScope == .lensBlur ? settings.lensBlurAreas : settings.masks }
+        set {
+            if maskScope == .lensBlur { settings.lensBlurAreas = newValue } else { settings.masks = newValue }
+        }
+    }
+
+    var selectedMask: Mask? { editedMasks.first { $0.id == selectedMaskID } }
 
     var selectedComponent: MaskComponent? {
         selectedMask?.components.first { $0.id == selectedComponentID }
     }
 
     private func maskIndex(_ id: UUID?) -> Int? {
-        settings.masks.firstIndex { $0.id == id }
+        editedMasks.firstIndex { $0.id == id }
     }
 
     /// Keeps the selection pointing at masks that exist after undo, presets or paste.
     fileprivate func validateMaskSelection() {
         guard let mask = selectedMask else {
-            selectedMaskID = isMasking ? settings.masks.last?.id : nil
+            selectedMaskID = isMasking ? editedMasks.last?.id : nil
             selectedComponentID = nil
             return
         }
@@ -2867,10 +2917,66 @@ extension DevelopController {
     /// Create New Mask: drawn kinds wait for a drag on the photo; the others are made now.
     func createMask(_ kind: MaskComponent.Kind) {
         guard assetID != nil else { return }
+        // Refining Lens Blur there are only the two areas: a new part goes into the selected
+        // one (Focus by default), so the mask keys (K, M, ⇧M...) work there too.
+        if maskScope == .lensBlur {
+            return addLensBlurPart(kind, to: selectedMask?.lensBlurRole ?? .focus, mode: .add)
+        }
         if kind.isDrawn {
             maskTool = MaskTool(kind: kind)
         } else {
             insert(MaskComponent(Self.defaultShape(kind)), tool: MaskTool(kind: kind))
+        }
+    }
+
+    // MARK: Lens Blur Refine
+
+    /// Opens Lens Blur's Refine: Masking's tools on Lens Blur's own Focus and Blur areas, with
+    /// the Lens Blur refine panel and Done. The areas never show in Masking.
+    func startLensBlurRefine() {
+        guard assetID != nil else { return }
+        if isMasking, maskScope == .lensBlur { return }
+        if isMasking { isMasking = false }
+        maskScope = .lensBlur
+        selectedMaskID = nil
+        selectedComponentID = nil
+        isMasking = true
+    }
+
+    func finishLensBlurRefine() {
+        guard maskScope == .lensBlur else { return }
+        isMasking = false
+    }
+
+    /// The Focus or Blur area, if the photo has it.
+    func lensBlurArea(_ role: DevelopSettings.LensBlurRole) -> Mask? {
+        settings.lensBlurAreas.first { $0.lensBlurRole == role }
+    }
+
+    /// Adds (or subtracts) a part to Lens Blur's Focus or Blur area, making the area with its
+    /// first part. Drawn kinds wait for a drag on the photo, as in Masking.
+    func addLensBlurPart(_ kind: MaskComponent.Kind, to role: DevelopSettings.LensBlurRole, mode: MaskComponent.Mode) {
+        guard assetID != nil, maskScope == .lensBlur else { return }
+        let existing = lensBlurArea(role)
+        guard existing != nil || mode == .add else { return }
+        selectedMaskID = existing?.id
+        selectedComponentID = nil
+        let tool = MaskTool(kind: kind, mode: mode, newMask: existing == nil, role: role)
+        if kind.isDrawn {
+            maskTool = tool
+        } else {
+            insert(MaskComponent(Self.lensBlurShape(kind), mode: mode), tool: tool)
+        }
+    }
+
+    /// A new part's start in Lens Blur's Refine: a person whole (hair and clothes too, not only
+    /// skin) and AI selections with a tight edge and Fine Edges, since the edge between sharp and
+    /// blurred is what shows (Rosh, Nov 16, 2026: Select People selected only skin).
+    private static func lensBlurShape(_ kind: MaskComponent.Kind) -> MaskComponent.Shape {
+        switch kind {
+        case .people: return .people(DevelopSettings.PeopleSelection(parts: [.entirePerson], feather: 3, fineEdges: true))
+        case .subject: return .subject(DevelopSettings.Selection(feather: 3, fineEdges: true))
+        default: return defaultShape(kind)
         }
     }
 
@@ -2916,16 +3022,25 @@ extension DevelopController {
         if case .sky = component.shape { checkSky() }
         if tool.newMask || selectedMask == nil {
             component.mode = .add
-            let mask = Mask(name: settings.nextMaskName(), components: [component])
-            settings.masks.append(mask)
+            var mask = Mask(name: settings.nextMaskName(), components: [component])
+            var step = "New Mask: \(component.kind.title)"
+            if maskScope == .lensBlur {
+                // A Lens Blur area: Focus or Blur, and Lens Blur on with it.
+                let role = tool.role ?? .focus
+                mask.name = role.title
+                mask.lensBlurRole = role
+                settings[.lensBlurApply] = 1
+                step = "Lens Blur \(role.title): \(component.kind.title)"
+            }
+            editedMasks.append(mask)
             selectedMaskID = mask.id
             selectedComponentID = component.id
-            changed(step: "New Mask: \(component.kind.title)")
+            changed(step: step)
         } else if let index = maskIndex(selectedMaskID) {
-            settings.masks[index].components.append(component)
+            editedMasks[index].components.append(component)
             selectedComponentID = component.id
             let verb = component.mode == .add ? "Add" : component.mode == .subtract ? "Subtract" : "Intersect"
-            changed(step: "\(verb) \(component.kind.title): \(settings.masks[index].name)")
+            changed(step: "\(verb) \(component.kind.title): \(editedMasks[index].name)")
         }
     }
 
@@ -2933,10 +3048,10 @@ extension DevelopController {
     /// `step` names the history step (default "Edit Mask n").
     func updateComponent(_ component: MaskComponent, step: String? = nil) {
         guard let index = maskIndex(selectedMaskID),
-              let part = settings.masks[index].components.firstIndex(where: { $0.id == component.id }),
-              settings.masks[index].components[part] != component else { return }
-        settings.masks[index].components[part] = component
-        changed(step: step ?? "Edit \(settings.masks[index].name)")
+              let part = editedMasks[index].components.firstIndex(where: { $0.id == component.id }),
+              editedMasks[index].components[part] != component else { return }
+        editedMasks[index].components[part] = component
+        changed(step: step ?? "Edit \(editedMasks[index].name)")
     }
 
     /// Color Range: picks the color in `box` (top-left fractions of the upright, uncropped
@@ -3007,6 +3122,74 @@ extension DevelopController {
                     self.maskMessage = nil
                     component.shape = .depth(picked)
                     self.updateComponent(component, step: "\(adding ? "Add Depth" : "Pick Depth"): \(mask.name)")
+                }
+            }
+        }
+    }
+
+    // MARK: Lens Blur
+
+    /// Lens Blur's Apply. Turned on with the Focal Range at its default, it first focuses on the
+    /// subject, as Lightroom's Apply does (one history step either way).
+    func setLensBlurApplied(_ on: Bool) {
+        guard assetID != nil else { return }
+        let atDefault = settings[.lensBlurFocusNear] == DevelopSettings.Parameter.lensBlurFocusNear.defaultValue
+            && settings[.lensBlurFocusFar] == DevelopSettings.Parameter.lensBlurFocusFar.defaultValue
+        setValues([.lensBlurApply: on ? 1 : 0], step: on ? "Lens Blur: Apply" : "Lens Blur: Off")
+        if on, atDefault { focusLensBlurOnSubject() }
+    }
+
+    /// Lens Blur's Subject focus: the Focal Range from the depths under the subject Select Subject
+    /// finds. Read in the background (the first time on a photo it finds the depth, then the
+    /// subject, in about a second).
+    func focusLensBlurOnSubject() {
+        guard let session, let assetID else { return }
+        guard DepthMap.isInstalled else {
+            lensBlurMessage = "Lens Blur needs the depth model: click Download in the Lens Blur panel."
+            return
+        }
+        lensBlurMessage = nil
+        let settings = self.settings
+        queue.async {
+            let depths = session.subjectDepths(settings: settings)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard self.assetID == assetID else { return }
+                    guard let depths, let range = LensBlur.focalRange(for: depths) else {
+                        self.lensBlurMessage = DepthMap.failure
+                            ?? "No subject found. Click the focus picker, then the part of the photo to keep sharp."
+                        return
+                    }
+                    self.setValues([.lensBlurFocusNear: range.near, .lensBlurFocusFar: range.far],
+                                   step: "Lens Blur: Subject Focus")
+                }
+            }
+        }
+    }
+
+    /// Lens Blur's focus picker: the Focal Range from the depths around `point` (0...1 from the
+    /// top left of the cropped photo). The picker stays out, so another click moves the focus.
+    func pickLensFocus(at point: CGPoint) {
+        guard let session, let assetID else { return }
+        guard DepthMap.isInstalled else {
+            pickerMessage = "Lens Blur needs the depth model: click Download in the Lens Blur panel."
+            return
+        }
+        let settings = self.settings
+        queue.async {
+            let depths = session.focusDepths(at: point, settings: settings)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard self.assetID == assetID, self.picker == .lensFocus else { return }
+                    guard let depths, let range = LensBlur.focalRange(for: depths) else {
+                        self.pickerMessage = DepthMap.failure ?? "No depth was found for this photo."
+                        return
+                    }
+                    self.pickerMessage = nil
+                    var values: [DevelopSettings.Parameter: Double] = [.lensBlurFocusNear: range.near,
+                                                                        .lensBlurFocusFar: range.far]
+                    if self.settings[.lensBlurApply] < 0.5 { values[.lensBlurApply] = 1 }
+                    self.setValues(values, step: "Lens Blur: Focus")
                 }
             }
         }
@@ -3105,8 +3288,8 @@ extension DevelopController {
 
     func setMaskValue(_ parameter: DevelopSettings.LocalParameter, to value: Double) {
         guard let index = maskIndex(selectedMaskID) else { return }
-        settings.masks[index][parameter] = value
-        let mask = settings.masks[index]
+        editedMasks[index][parameter] = value
+        let mask = editedMasks[index]
         let formatted = parameter == .exposure ? String(format: "%+.2f", mask[parameter])
             : String(format: "%+.0f", mask[parameter])
         changed(step: "\(mask.name) \(parameter.label == "Temp" ? "Temperature" : parameter.label) \(formatted)")
@@ -3115,46 +3298,46 @@ extension DevelopController {
     /// Changes one mask as one history step named `step` (with the mask's name in front).
     func updateMask(_ id: UUID, step: String, _ change: (inout Mask) -> Void) {
         guard let index = maskIndex(id) else { return }
-        let before = settings.masks[index]
-        change(&settings.masks[index])
-        guard settings.masks[index] != before else { return }
-        changed(step: "\(settings.masks[index].name) \(step)")
+        let before = editedMasks[index]
+        change(&editedMasks[index])
+        guard editedMasks[index] != before else { return }
+        changed(step: "\(editedMasks[index].name) \(step)")
     }
 
     func setMaskAmount(_ amount: Double) {
         guard let index = maskIndex(selectedMaskID) else { return }
-        settings.masks[index].amount = min(200, max(0, amount))
-        changed(step: "\(settings.masks[index].name) Amount \(Int(settings.masks[index].amount.rounded()))%")
+        editedMasks[index].amount = min(200, max(0, amount))
+        changed(step: "\(editedMasks[index].name) Amount \(Int(editedMasks[index].amount.rounded()))%")
     }
 
     func resetMaskSliders() {
         guard let index = maskIndex(selectedMaskID) else { return }
-        settings.masks[index].resetAdjustments()
-        changed(step: "Reset \(settings.masks[index].name) Sliders")
+        editedMasks[index].resetAdjustments()
+        changed(step: "Reset \(editedMasks[index].name) Sliders")
     }
 
     func toggleHidden(_ id: UUID) {
         guard let index = maskIndex(id) else { return }
-        settings.masks[index].isHidden.toggle()
-        changed(step: "\(settings.masks[index].isHidden ? "Hide" : "Show") \(settings.masks[index].name)")
+        editedMasks[index].isHidden.toggle()
+        changed(step: "\(editedMasks[index].isHidden ? "Hide" : "Show") \(editedMasks[index].name)")
     }
 
     func invertMask(_ id: UUID) {
         guard let index = maskIndex(id) else { return }
-        settings.masks[index].inverted.toggle()
-        changed(step: "Invert \(settings.masks[index].name)")
+        editedMasks[index].inverted.toggle()
+        changed(step: "Invert \(editedMasks[index].name)")
     }
 
     func renameMask(_ id: UUID, to name: String) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let index = maskIndex(id), !trimmed.isEmpty, trimmed != settings.masks[index].name else { return }
-        settings.masks[index].name = trimmed
+        guard let index = maskIndex(id), !trimmed.isEmpty, trimmed != editedMasks[index].name else { return }
+        editedMasks[index].name = trimmed
         changed(step: "Rename Mask: \(trimmed)")
     }
 
     func duplicateMask(_ id: UUID) {
         guard let index = maskIndex(id) else { return }
-        var copy = settings.masks[index]
+        var copy = editedMasks[index]
         copy.id = UUID()
         copy.name = "\(copy.name) Copy"
         copy.components = copy.components.map { component in
@@ -3162,18 +3345,18 @@ extension DevelopController {
             fresh.id = UUID()
             return fresh
         }
-        settings.masks.insert(copy, at: index + 1)
+        editedMasks.insert(copy, at: index + 1)
         selectedMaskID = copy.id
         selectedComponentID = nil
-        changed(step: "Duplicate \(settings.masks[index].name)")
+        changed(step: "Duplicate \(editedMasks[index].name)")
     }
 
     func deleteMask(_ id: UUID) {
         guard let index = maskIndex(id) else { return }
-        let name = settings.masks[index].name
-        settings.masks.remove(at: index)
+        let name = editedMasks[index].name
+        editedMasks.remove(at: index)
         if selectedMaskID == id {
-            selectedMaskID = settings.masks.last?.id
+            selectedMaskID = editedMasks.last?.id
             selectedComponentID = nil
         }
         changed(step: "Delete \(name)")
@@ -3181,8 +3364,8 @@ extension DevelopController {
     }
 
     func deleteAllMasks() {
-        guard !settings.masks.isEmpty else { return }
-        settings.masks = []
+        guard !editedMasks.isEmpty else { return }
+        editedMasks = []
         selectedMaskID = nil
         selectedComponentID = nil
         maskTool = nil
@@ -3193,12 +3376,12 @@ extension DevelopController {
     /// Removes a part; the whole mask goes with its last part.
     func deleteComponent(_ id: UUID, in maskID: UUID) {
         guard let index = maskIndex(maskID) else { return }
-        if settings.masks[index].components.count <= 1 { return deleteMask(maskID) }
-        settings.masks[index].components.removeAll { $0.id == id }
+        if editedMasks[index].components.count <= 1 { return deleteMask(maskID) }
+        editedMasks[index].components.removeAll { $0.id == id }
         // The first part always adds.
-        settings.masks[index].components[0].mode = .add
+        editedMasks[index].components[0].mode = .add
         if selectedComponentID == id { selectedComponentID = nil }
-        changed(step: "Delete Part of \(settings.masks[index].name)")
+        changed(step: "Delete Part of \(editedMasks[index].name)")
         DeleteFeedback.play(.remove)
     }
 
@@ -3214,16 +3397,16 @@ extension DevelopController {
 
     func setMode(_ mode: MaskComponent.Mode, of id: UUID, in maskID: UUID) {
         guard let index = maskIndex(maskID),
-              let part = settings.masks[index].components.firstIndex(where: { $0.id == id }), part > 0 else { return }
-        settings.masks[index].components[part].mode = mode
-        changed(step: "Edit \(settings.masks[index].name)")
+              let part = editedMasks[index].components.firstIndex(where: { $0.id == id }), part > 0 else { return }
+        editedMasks[index].components[part].mode = mode
+        changed(step: "Edit \(editedMasks[index].name)")
     }
 
     func invertComponent(_ id: UUID, in maskID: UUID) {
         guard let index = maskIndex(maskID),
-              let part = settings.masks[index].components.firstIndex(where: { $0.id == id }) else { return }
-        settings.masks[index].components[part].inverted.toggle()
-        changed(step: "Invert Part of \(settings.masks[index].name)")
+              let part = editedMasks[index].components.firstIndex(where: { $0.id == id }) else { return }
+        editedMasks[index].components[part].inverted.toggle()
+        changed(step: "Invert Part of \(editedMasks[index].name)")
     }
 }
 

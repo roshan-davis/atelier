@@ -36,6 +36,9 @@ public enum SliderPreview: Hashable, Sendable {
     /// The Remove tool's Visualize Spots: white with the photo's edges in black, so sensor dust
     /// and specks stand out. The amount (0...100) is the panel's slider; higher shows more.
     case visualizeSpots(Double)
+    /// Lens Blur's Visualize Depth: the depth map in color, warm near to cool far, with the
+    /// focal range kept sharp lighter.
+    case visualizeDepth
 
     /// The view Option shows while dragging `parameter`, if it has one.
     public init?(parameter: DevelopSettings.Parameter) {
@@ -73,6 +76,7 @@ public enum SliderPreview: Hashable, Sendable {
         case .defringeAmount: return "Hold Option while dragging to see the fringes being removed (in color, on white)"
         case .defringeHue: return "Hold Option while dragging to see which colors the range covers (the rest turns black)"
         case .visualizeSpots: return "Shows the photo's edges in black on white, so dust and specks stand out"
+        case .visualizeDepth: return "Shows the depth: warm is near, cool is far, and the focal range kept sharp is lighter"
         }
     }
 

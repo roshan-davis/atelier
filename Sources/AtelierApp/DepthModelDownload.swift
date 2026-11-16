@@ -65,8 +65,8 @@ final class DepthModelDownload: ObservableObject {
     }
 }
 
-/// Shows `content` (the Depth Range sliders) once the depth model is downloaded; before that,
-/// what Depth Range needs and a Download button, then a progress bar.
+/// Shows `content` (the Depth Range, Select Sky or Lens Blur controls) once the depth model is
+/// downloaded; before that, what it needs and a Download button, then a progress bar.
 struct DepthModelGate<Content: View>: View {
     @ObservedObject private var download = DepthModelDownload.shared
     @ViewBuilder var content: () -> Content
@@ -87,7 +87,7 @@ struct DepthModelGate<Content: View>: View {
                 }
                 .help("Downloading the depth model (\(DepthMap.downloadSize))")
             } else {
-                Text("Depth Range finds how far away each part of the photo is with a depth model (\(DepthMap.modelName), Apache 2.0 license). Download it once; it then runs on this Mac.")
+                Text("Depth Range, Select Sky and Lens Blur find how far away each part of the photo is with a depth model (\(DepthMap.modelName), Apache 2.0 license). Download it once; it then runs on this Mac.")
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 Button("Download Depth Model (\(DepthMap.downloadSize))") { download.download() }
                     .controlSize(.small)

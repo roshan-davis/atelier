@@ -118,6 +118,7 @@ final class AtelierDevelopToolsTests: XCTestCase {
     func testSyncDefaultLeavesCropAndMasks() {
         XCTAssertFalse(DevelopPart.syncDefault.contains(.crop))
         XCTAssertFalse(DevelopPart.syncDefault.contains(.masks))
-        XCTAssertEqual(DevelopPart.syncDefault.count, DevelopPart.allCases.count - 2)
+        XCTAssertFalse(DevelopPart.syncDefault.contains(.lensBlur), "its focus belongs to the photo")
+        XCTAssertEqual(DevelopPart.syncDefault.count, DevelopPart.allCases.count - 3)
     }
 }

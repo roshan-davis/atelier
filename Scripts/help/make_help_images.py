@@ -437,6 +437,171 @@ def calibration(image, red_hue=0, red_sat=0, green_hue=0, green_sat=0, blue_hue=
     return np.power(np.clip(out, 0, 1), 1 / 2.2)
 
 
+def _lens_gather(color, c, R, shape, cat_eye, count, skip, holes=None):
+    """One level of Lens Blur's gather (atelierLensBlurGather): `c` is the signed blur, capped to
+    this level's radius `R` (in its pixels) and divided by it; `skip` marks the pixels whose own
+    blur belongs to coarser levels (left at 0); `holes` the pixels sharp at this level (no
+    weight in atelierLensBlurWeigh), which take no light of their own and are never gathered.
+    Returns the blur and the spill."""
+    from scipy.ndimage import map_coordinates
+    h, w = c.shape
+    if holes is None:
+        holes = np.zeros((h, w), bool)
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+    half = 0.5 * np.hypot(w, h)
+    vx, vy = (xx - w / 2) / half, (yy - h / 2) / half
+    hf = holes.astype(np.float32)
+    c_reach = np.where(holes, 1.0, c)
+    weight = np.where(holes, 0.0, 1 / np.maximum((np.abs(c) * R) ** 2, 1))
+    total, acc, spill = weight.copy(), color * weight[..., None], np.zeros_like(weight)
+    for i in range(count):
+        r = R * np.sqrt((i + 0.5) / count)
+        a = i * 2.39996323
+        ox, oy = r * np.cos(a), r * np.sin(a)
+        cq = map_coordinates(c, [yy + oy, xx + ox], order=1, mode="nearest")
+        cols = np.dstack([map_coordinates(color[..., k], [yy + oy, xx + ox], order=1, mode="nearest") for k in range(3)])
+        hq = map_coordinates(hf, [yy + oy, xx + ox], order=1, mode="nearest")
+        reach = np.where(cq > c_reach, np.minimum(np.abs(cq), np.abs(c_reach)), np.abs(cq)) * R
+        dx, dy = -ox, -oy
+        limit = 1.0
+        if shape == 2:
+            t = np.mod(np.arctan2(dx, -dy) + 2 * np.pi, 1.2566371) - 0.6283185
+            limit = 0.80901699 / np.cos(t)
+        elif shape == 4:
+            limit = 1 / np.sqrt((dx / max(r, 1e-4) / 0.55) ** 2 + (dy / max(r, 1e-4)) ** 2)
+        cover = np.clip(reach * limit - r + 0.5, 0, 1) * (hq < 0.5)
+        if cat_eye > 0:
+            cover *= np.clip(reach - np.hypot(dx + cat_eye * 0.7 * vx * reach, dy + cat_eye * 0.7 * vy * reach) + 0.5, 0, 1)
+        u = np.clip(r / np.maximum(reach * limit, 1e-3), 0, 1)
+        light = 0.55 + 0.9 * u ** 4 if shape == 1 else (0.12 + smoothstep(0.55, 0.85, u) if shape == 3 else 1.0)
+        wq = cover * light / np.maximum(reach ** 2, 1)
+        acc += cols * wq[..., None]
+        total += wq
+        spill += np.where((cq < c - 0.02) & (np.abs(cq) > np.abs(c)), wq, 0)
+    alpha = np.where(holes, spill / (1 + spill), spill / np.maximum(total, 1e-6))
+    out = np.dstack([acc / np.maximum(total, 1e-6)[..., None], alpha])
+    return np.where((skip & ~holes)[..., None], 0.0, out)
+
+
+def lens_blur(image, depth, amount=0.5, near=0.7, far=0.8, shape=0, cat_eye=0.0, boost=0.5, areas=None):
+    """Lens Blur (AT-072), the same steps as LensBlur.swift: a signed blur from depth (0 near to
+    1 far), changed by the Focus areas (`areas[..., 0]`, toward sharp) and Blur areas
+    (`areas[..., 1]`, toward the most blur), Boost on near-clipped highlights, then a gather at
+    full size and on copies a third, a ninth... the size, each pixel taking its blur from the
+    level that fits it, so edges near the focus stay fine when zoomed in. Sliders 0...1."""
+    H, W = image.shape[:2]
+    lin = np.power(np.clip(image, 0, 1), 2.2).astype(np.float32)
+    d = cv2.resize(depth.astype(np.float32), (W, H), interpolation=cv2.INTER_LINEAR)
+    coc = np.clip((d - far) / 0.5, 0, 1) - np.clip((near - d) / 0.5, 0, 1)
+    if areas is not None:
+        coc = coc * (1 - areas[..., 0])
+        coc = coc + (np.where(coc < 0, -1.0, 1.0) - coc) * areas[..., 1]
+    luma = np.power(np.maximum(lin @ np.array([0.2627, 0.6780, 0.0593], np.float32), 0), 1 / 2.2)
+    boosted = lin * (1 + 2 * boost * smoothstep(0.85, 1.0, luma))[..., None]
+    max_r = amount * 0.025 * max(W, H)
+    if max_r < 0.5:
+        return image
+    levels = []
+    k = 0
+    while True:
+        factor = 3.0 ** -k
+        w, h = max(1, int(W * factor)), max(1, int(H * factor))
+        holes = None
+        if k == 0:
+            color, c = boosted, coc
+        else:
+            # Only pixels that blur by about a level pixel or more feed a coarse level, so a sharp
+            # edge doesn't spread a halo into the background's blur (atelierLensBlurWeigh).
+            wt = smoothstep(0.5, 1.5, np.abs(coc) * max_r * factor).astype(np.float32)
+            small_color = cv2.resize(boosted * wt[..., None], (w, h), interpolation=cv2.INTER_AREA)
+            small = cv2.resize(np.dstack([coc * wt, wt]), (w, h), interpolation=cv2.INTER_AREA)
+            sw = small[..., 1]
+            holes = sw < 0.02
+            color = np.where(holes[..., None], 0, small_color / np.maximum(sw, 1e-6)[..., None])
+            c = np.where(holes, 0, small[..., 0] / np.maximum(sw, 1e-6))
+        R = min(12.0, max_r * factor)
+        last = 12 * 3 ** k >= max_r or k >= 5
+        cutoff = 1e9 if last else 4 * 3 ** (k + 1) * factor
+        skip = (np.abs(c) * max_r * factor >= cutoff) & (True if holes is None else ~holes)
+        c = np.sign(c) * np.minimum(np.abs(c) * max_r * factor, R) / R
+        count = min(112, max(12, round(np.pi * R * R / 3.5)))
+        # Softened by under a pixel first, so fine texture doesn't come out mottled (LensBlur.prefilter).
+        out = _lens_gather(cv2.GaussianBlur(color, (0, 0), 0.8), c, R, shape, cat_eye, count, skip, holes)
+        levels.append(out if k == 0 else cv2.resize(out, (W, H), interpolation=cv2.INTER_LINEAR))
+        if last:
+            break
+        k += 1
+    own_c = np.abs(coc) * max_r
+    f = np.clip(np.log(np.maximum(own_c, 1e-3) / 4) / np.log(3), 0, len(levels) - 1)
+    own = levels[0][..., :3]
+    for index, level in enumerate(levels[1:], 1):
+        t = np.clip(f - (index - 1), 0, 1)[..., None]
+        own = own * (1 - t) + level[..., :3] * t
+    mix_ = smoothstep(0.25, 1.0, own_c)[..., None]
+    out = lin * (1 - mix_) + np.maximum(own, 0) * mix_
+    for level in levels:
+        a = np.clip(level[..., 3:], 0, 1) * (1 - mix_)
+        out = out * (1 - a) + np.maximum(level[..., :3], 0) * a
+    return np.power(np.clip(out, 0, 1), 1 / 2.2)
+
+
+def depth_view(depth, near, far, size):
+    """Visualize Depth: warm near to cool far, the focal range lighter (LensBlur.swift)."""
+    d = np.clip(cv2.resize(depth.astype(np.float32), size, interpolation=cv2.INTER_LINEAR), 0, 1)[..., None]
+    near_c, mid, far_c = (np.array(v, np.float32) for v in ((1.0, 0.55, 0.12), (0.62, 0.36, 0.72), (0.12, 0.32, 0.95)))
+    c = np.where(d < 0.5, near_c + (mid - near_c) * d * 2, mid + (far_c - mid) * (d * 2 - 1))
+    inside = ((d >= near) & (d <= far)).astype(np.float32)
+    return c * 0.8 * (1 - 0.55 * inside) + 0.55 * inside
+
+
+def guided_depth(depth, image, radius_share=0.005, eps=0.0004):
+    """The depth map at the photo's size, its edges snapped to the photo's with a guided filter,
+    as the app places the depth model's map (DepthMap's guided snap)."""
+    H, W = image.shape[:2]
+    d = cv2.resize(depth.astype(np.float32), (W, H), interpolation=cv2.INTER_LINEAR)
+    lin = np.power(np.clip(image, 0, 1), 2.2).astype(np.float32)
+    guide = np.power(np.clip(lin @ np.array([0.2627, 0.6780, 0.0593], np.float32), 0, 1), 1 / 2.2)
+    r = max(1, int(radius_share * max(W, H)))
+    box = lambda x: cv2.blur(x, (2 * r + 1, 2 * r + 1))
+    m_i, m_p, m_ii, m_ip = box(guide), box(d), box(guide * guide), box(guide * d)
+    a = (m_ip - m_i * m_p) / (np.maximum(m_ii - m_i * m_i, 0) + eps)
+    b = m_p - a * m_i
+    return np.clip(box(a) * guide + box(b), 0, 1)
+
+
+def radial_area(shape, center, radius_x, radius_y, feather=0.5):
+    """A Radial Gradient mask (fractions of the photo; radii of its long edge), 1 inside."""
+    H, W = shape[:2]
+    L = max(W, H)
+    yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
+    r = np.hypot((xx - center[0] * W) / (radius_x * L), (yy - center[1] * H) / (radius_y * L))
+    return 1 - smoothstep(1 - feather, 1.0, r)
+
+
+def make_lens_blur_images(red):
+    """The redwoods photo focused on the hiker, from the depth model's map of it (Depth Anything
+    V2 Small, made once and kept in Scripts/help/data so Help builds without the model): the
+    whole photo, a 100% crop from the full-size photo, and a Focus Area on the log in front."""
+    depth = np.asarray(Image.open(os.path.join(ROOT, "Scripts/help/data/splash-redwoods-depth.png"))).astype(np.float32) / 255
+    focus = dict(amount=0.5, near=0.70, far=0.80, boost=0.5)
+    placed = guided_depth(depth, red)
+    after = lens_blur(red, placed, **focus)
+    pair("lens-blur", red, after)
+    save(depth_view(depth, 0.70, 0.80, (red.shape[1], red.shape[0])), "lens-blur-depth.jpg")
+    # Refine: a Focus Area (a Radial Gradient, Lens Focus +100) keeps the log in front sharp too.
+    area = radial_area(red.shape, (0.5, 0.86), 0.19, 0.075)
+    areas = np.dstack([area, np.zeros_like(area)])
+    save(lens_blur(red, placed, areas=areas, **focus), "lens-blur-refine-after.jpg")
+    # 100%: the hiker and the ground around him on the full-size photo, at Blur Amount 100.
+    full = load("splash-redwoods.jpg", width=None)
+    sharp = lens_blur(full, guided_depth(depth, full), **dict(focus, amount=1.0))
+    H, W = full.shape[:2]
+    x, y = int(0.33 * W), int(0.47 * H)
+    box = (slice(y, y + 400), slice(x, x + 600))
+    save(full[box], "lens-blur-zoom-before.jpg")
+    save(sharp[box], "lens-blur-zoom-after.jpg")
+
+
 def pair(name, before, after):
     """Writes name-before.jpg and name-after.jpg, except for a shared picture (redwoods.jpg,
     redwoods-flat.jpg), which the page uses directly."""
@@ -758,6 +923,9 @@ def main():
         SHARED["redwoods-flat.jpg"] = base
         make_mask_slider_images(base)
         return 0
+    if "--lens-blur-only" in sys.argv:
+        make_lens_blur_images(load("splash-redwoods.jpg"))
+        return 0
     if "--calibration-only" in sys.argv:
         base = flat(load("splash-redwoods.jpg"))
         SHARED["redwoods-flat.jpg"] = base
@@ -859,6 +1027,7 @@ def main():
     pair("post-crop-vignette", base, vignette(base, -0.5))
     # Calibration
     make_calibration_images(base)
+    make_lens_blur_images(red)
     grain_view = crop(red_full, 0.42, 0.42, 0.2, 0.15)
     pair("grain", enlarge(grain_view, 2), enlarge(grain(grain_view, 0.45, 1.0), 2))
 

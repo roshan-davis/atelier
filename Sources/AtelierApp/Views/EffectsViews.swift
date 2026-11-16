@@ -44,8 +44,9 @@ struct EffectsPanel: View {
     }
 }
 
-/// A Style menu in a slider's layout: the name, then the choices.
-private struct StyleRow: View {
+/// A Style menu in a slider's layout: the name, then the choices (Effects' styles, Grain's Type,
+/// Lens Blur's Bokeh).
+struct StyleRow: View {
     @ObservedObject var develop: DevelopController
     let parameter: DevelopSettings.Parameter
     let options: [(Int, String)]

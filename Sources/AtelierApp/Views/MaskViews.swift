@@ -574,8 +574,38 @@ private struct MaskOverlay: View {
 
 /// The Masking section of the Develop panel: the masks and their parts, then the selected
 /// part's settings and the selected mask's sliders.
+/// What a `MasksPanel` shows: the one mask panel serves Masking and Lens Blur's Refine, and each
+/// opener says which sections it wants instead of the panel working it out.
+struct MasksPanelStyle {
+    /// Which add buttons: Masking's New Mask / Add / Subtract, or Refine's Add to Focus / Add to
+    /// Blur / Subtract.
+    enum AddButtons { case masks, lensBlurAreas }
+    /// A selected mask's settings: Masking's look sliders, or a Lens Blur area's Amount and Invert.
+    enum MaskSettings { case look, lensBlurArea }
+
+    var intro: String?
+    var addButtons: AddButtons
+    var maskSettings: MaskSettings
+    /// Rename and Duplicate in a mask's right-click menu.
+    var canRenameAndDuplicate: Bool
+    /// Shown when there are no masks yet.
+    var emptyText: String?
+    var doneHelp: String
+
+    static let masking = MasksPanelStyle(
+        intro: nil, addButtons: .masks, maskSettings: .look, canRenameAndDuplicate: true,
+        emptyText: "Masks limit an adjustment to part of the photo: a graduated sky, a lighter face, a darker corner. Create a mask, then move its sliders.",
+        doneHelp: "Close Masking; masks keep working (Return)")
+
+    static let lensBlurRefine = MasksPanelStyle(
+        intro: "Paint or select where Lens Blur keeps the photo sharp (Focus) and where it blurs it fully (Blur), whatever the depth. Refine the edges with the part's settings below.",
+        addButtons: .lensBlurAreas, maskSettings: .lensBlurArea, canRenameAndDuplicate: false,
+        emptyText: nil, doneHelp: "Close Lens Blur's Refine; the areas keep working (Return)")
+}
+
 struct MasksPanel: View {
     @ObservedObject var develop: DevelopController
+    var style: MasksPanelStyle = .masking
     @State private var renaming: UUID?
     @State private var draftName = ""
     @FocusState private var nameFocused: Bool
@@ -584,19 +614,44 @@ struct MasksPanel: View {
     private typealias Mode = DevelopSettings.MaskComponent.Mode
 
     var body: some View {
+        panel
+    }
+
+    private var panel: some View {
         VStack(alignment: .leading, spacing: 10) {
-            maskList
-            HStack(spacing: 6) {
-                kindMenu(develop.masks.isEmpty ? "Create New Mask" : "New Mask") { develop.createMask($0) }
-                    .help("Make a new mask: Brush (K), Linear Gradient (M), Radial Gradient (⇧M), Luminance Range, Color Range (⇧J), Depth Range, Select Subject, Select Sky or Select Background")
-                if develop.selectedMask != nil {
-                    kindMenu("Add") { develop.addComponent($0, mode: .add) }
-                        .help("Add a part to the selected mask")
-                    kindMenu("Subtract") { develop.addComponent($0, mode: .subtract) }
-                        .help("Cut a part out of the selected mask")
+            // One group, so the panel stays within SwiftUI's ten views per builder.
+            Group {
+                if let intro = style.intro {
+                    Text(intro)
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+                maskList
+                if style.addButtons == .lensBlurAreas {
+                    HStack(spacing: 6) {
+                        kindMenu("Add to Focus") { develop.addLensBlurPart($0, to: .focus, mode: .add) }
+                            .help("Keep an area sharp whatever its depth: paint it, or select a person, subject or object")
+                        kindMenu("Add to Blur") { develop.addLensBlurPart($0, to: .blur, mode: .add) }
+                            .help("Blur an area fully whatever its depth")
+                        if develop.selectedMask != nil {
+                            kindMenu("Subtract") { develop.addComponent($0, mode: .subtract) }
+                                .help("Cut a part out of the selected area")
+                        }
+                    }
+                    .controlSize(.small)
+                } else {
+                    HStack(spacing: 6) {
+                        kindMenu(develop.masks.isEmpty ? "Create New Mask" : "New Mask") { develop.createMask($0) }
+                            .help("Make a new mask: Brush (K), Linear Gradient (M), Radial Gradient (⇧M), Luminance Range, Color Range (⇧J), Depth Range, Select Subject, Select Sky or Select Background")
+                        if develop.selectedMask != nil {
+                            kindMenu("Add") { develop.addComponent($0, mode: .add) }
+                                .help("Add a part to the selected mask")
+                            kindMenu("Subtract") { develop.addComponent($0, mode: .subtract) }
+                                .help("Cut a part out of the selected mask")
+                        }
+                    }
+                    .controlSize(.small)
                 }
             }
-            .controlSize(.small)
             Toggle("Show Overlay", isOn: $develop.showMaskOverlay)
                 .help("Tint the selected mask red on the photo (O)")
             if let tool = develop.maskTool {
@@ -621,10 +676,13 @@ struct MasksPanel: View {
             }
             if let mask = develop.selectedMask {
                 Divider()
-                adjustments(mask)
+                switch style.maskSettings {
+                case .look: adjustments(mask)
+                case .lensBlurArea: lensBlurAreaSettings(mask)
+                }
             }
-            if develop.selectedMask == nil, develop.masks.isEmpty, develop.maskTool == nil {
-                Text("Masks limit an adjustment to part of the photo: a graduated sky, a lighter face, a darker corner. Create a mask, then move its sliders.")
+            if let emptyText = style.emptyText, develop.selectedMask == nil, develop.masks.isEmpty, develop.maskTool == nil {
+                Text(emptyText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -633,7 +691,22 @@ struct MasksPanel: View {
                 Spacer()
                 Button("Done") { develop.isMasking = false }
                     .keyboardShortcut(.defaultAction)
-                    .help("Close Masking; masks keep working (Return)")
+                    .help(style.doneHelp)
+            }
+        }
+    }
+
+    /// A Focus or Blur area's own settings: how strongly it works (its Amount, as Lightroom's
+    /// brush Amount) and Invert. No look sliders: the areas change only the blur.
+    private func lensBlurAreaSettings(_ mask: DevelopSettings.Mask) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(mask.name).font(.callout.weight(.semibold))
+            SliderRow(label: "Amount", value: Binding(get: { min(mask.amount, 100) }, set: { develop.setMaskAmount($0) }),
+                      range: 0...100, step: 1, origin: 100, format: { "\(Int($0.rounded()))%" })
+                .help(mask.lensBlurRole == .blur ? "How fully the area blurs" : "How fully the area stays sharp")
+            if develop.selectedComponentID == nil {
+                Toggle("Invert", isOn: Binding(get: { mask.inverted }, set: { _ in develop.invertMask(mask.id) }))
+                    .help(mask.lensBlurRole == .blur ? "Blur everywhere except the area" : "Keep everything sharp except the area")
             }
         }
     }
@@ -707,8 +780,10 @@ struct MasksPanel: View {
         .contentShape(Rectangle())
         .onTapGesture { develop.select(mask: mask.id) }
         .contextMenu {
-            Button("Rename…") { startRename(mask) }
-            Button("Duplicate \(mask.name)") { develop.duplicateMask(mask.id) }
+            if style.canRenameAndDuplicate {
+                Button("Rename…") { startRename(mask) }
+                Button("Duplicate \(mask.name)") { develop.duplicateMask(mask.id) }
+            }
             Button(mask.inverted ? "Uninvert" : "Invert") { develop.invertMask(mask.id) }
             Menu("Intersect Mask With") {
                 ForEach(Kind.allCases, id: \.self) { kind in
@@ -1151,15 +1226,26 @@ private struct LuminanceStrip: View {
     }
 }
 
-/// Near (light) to far (dark) with the chosen range marked, above the Depth Range sliders, as
-/// Lightroom shows depth.
-private struct DepthStrip: View {
-    let range: DevelopSettings.DepthRange
+/// Near (light) to far (dark) with the chosen range marked, above the Depth Range sliders and
+/// Lens Blur's Focal Range, as Lightroom shows depth. `low` and `high` are 0...100.
+struct DepthStrip: View {
+    let low: Double
+    let high: Double
+
+    init(range: DevelopSettings.DepthRange) {
+        low = range.low
+        high = range.high
+    }
+
+    init(low: Double, high: Double) {
+        self.low = low
+        self.high = high
+    }
 
     var body: some View {
         GeometryReader { geometry in
             let width = geometry.size.width
-            let low = min(range.low, range.high) / 100, high = max(range.low, range.high) / 100
+            let low = min(self.low, self.high) / 100, high = max(self.low, self.high) / 100
             ZStack(alignment: .leading) {
                 LinearGradient(colors: [.white, .black], startPoint: .leading, endPoint: .trailing)
                 Rectangle()

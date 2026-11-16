@@ -258,7 +258,7 @@ public final class DevelopRenderer: @unchecked Sendable {
                                     roughness: settings.grainRoughness / 100, type: settings.grainType,
                                     scale: scale, extent: extent)
         }
-        if let overlay, let mask = settings.masks.first(where: { $0.id == overlay }) {
+        if let overlay, let mask = (settings.masks + settings.lensBlurAreas).first(where: { $0.id == overlay }) {
             image = self.overlay(mask, on: image, base: beforeMasks, provider: masks)
         }
         switch preview {
@@ -607,20 +607,41 @@ public final class DevelopSession: @unchecked Sendable {
         }
         let sourceExtent = image.extent
         let source = image
+        let key = settings.lensGeometryKey
         let crop = settings.crop
+        // Visualize Depth: the depth map in color instead of the photo, cropped like it.
+        if preview == .visualizeDepth {
+            let map = depthMap(of: source, key: key)
+            let view = map.flatMap { LensBlur.visualize(depth: $0, settings: settings) }
+                ?? CIImage(color: CIColor(red: 0.18, green: 0.18, blue: 0.18)).cropped(to: sourceExtent)
+            guard let crop else { return view }
+            return DevelopRenderer.applyGeometry(crop, to: view, cropping: cropping)
+        }
+        // Lens Blur, on the uncropped photo in linear light, before every tone and color step (so
+        // highlights spread as light does); masks below still see the sharp `source`. Until the
+        // depth is found in the background the photo shows unblurred.
+        // Masks' parts on the upright, uncropped photo (luminance ranges are worked out later,
+        // from the photo they see).
+        let sourceProvider: MaskProvider = { [self] component in
+            if case .luminance = component.shape { return nil }
+            return DevelopRenderer.sourceMask(component, extent: sourceExtent,
+                                              subject: { self.subject(of: source, key: key, box: $0) },
+                                              people: { self.people(of: source, key: key, selection: $0) },
+                                              fine: { self.fineMatte(of: source, key: key, outline: $0) },
+                                              depth: { self.depthMap(of: source, key: key) },
+                                              sky: { self.skyMask(of: source, key: key) },
+                                              guide: source, brushCache: brushCache)
+        }
+        if LensBlur.isOn(settings), let depth = depthMap(of: source, key: key) {
+            // Focus and Blur areas: masks with Lens Focus, on the same uncropped frame.
+            let areas = LensBlur.areas(settings, on: source, provider: sourceProvider)
+            image = LensBlur.apply(source, depth: depth, settings: settings, areas: areas)
+        }
         if let crop {
             image = DevelopRenderer.applyGeometry(crop, to: image, cropping: cropping)
         }
-        let key = settings.lensGeometryKey
-        let provider: MaskProvider = { [self] component in
-            if case .luminance = component.shape { return nil }
-            guard let mask = DevelopRenderer.sourceMask(component, extent: sourceExtent,
-                                                        subject: { self.subject(of: source, key: key, box: $0) },
-                                                        people: { self.people(of: source, key: key, selection: $0) },
-                                                        fine: { self.fineMatte(of: source, key: key, outline: $0) },
-                                                        depth: { self.depthMap(of: source, key: key) },
-                                                        sky: { self.skyMask(of: source, key: key) },
-                                                        guide: source, brushCache: brushCache) else { return nil }
+        let provider: MaskProvider = { component in
+            guard let mask = sourceProvider(component) else { return nil }
             guard let crop else { return mask }
             return DevelopRenderer.applyGeometry(crop, to: mask, cropping: cropping)
         }
@@ -1073,6 +1094,55 @@ public final class DevelopSession: @unchecked Sendable {
         lock.unlock()
         DispatchQueue.main.async { NotificationCenter.default.post(name: DepthMap.ready, object: nil) }
         return field.values(in: box)
+    }
+
+    /// Lens Blur's focus picker: the depths in a small square around `point` (0...1 from the top
+    /// left of the cropped photo, as the photo view gives clicks), 0 nearest to 1 farthest. Finds
+    /// the depth first if needed, so call it off the main thread. Nil without the depth model.
+    public func focusDepths(at point: CGPoint, settings: DevelopSettings) -> [Float]? {
+        guard let size = maskSourceImage(settings)?.extent.size, size.width > 0, size.height > 0 else { return nil }
+        var spot = CGPoint(x: point.x * size.width, y: point.y * size.height)
+        if let crop = settings.applyingPanelSwitches().crop {
+            let output = crop.outputSize(size)
+            spot = crop.sourcePoint(fromOutput: CGPoint(x: point.x * output.width, y: point.y * output.height),
+                                    sourceSize: size)
+        }
+        let x = Double(spot.x / size.width), y = Double(spot.y / size.height)
+        let half = 0.012
+        let box = DevelopSettings.MaskRect(x: min(1, max(0, x - half)), y: min(1, max(0, y - half)),
+                                           width: 2 * half, height: 2 * half)
+        return depths(in: box, settings: settings)
+    }
+
+    /// Lens Blur's Subject focus: the depths under the photo's subject, as Vision's Select Subject
+    /// finds it, 0 nearest to 1 farthest. Finds the depth and the subject first if needed, so call
+    /// it off the main thread. Nil without the depth model or when no subject is found.
+    public func subjectDepths(settings: DevelopSettings) -> [Float]? {
+        guard depths(in: DevelopSettings.MaskRect(x: 0, y: 0, width: 0, height: 0), settings: settings) != nil,
+              let source = maskSourceImage(settings) else { return nil }
+        let key = settings.applyingPanelSwitches().lensGeometryKey
+        lock.lock()
+        let field = depthFound?.key == key ? depthFound?.field : nil
+        let mask = field == nil ? nil : subject(of: source, key: key, box: nil)
+        lock.unlock()
+        guard let field, let mask else { return nil }
+        // The mask on the depth's grid, rows from the top as the field's are.
+        let extent = source.extent
+        let small = mask.transformed(by: CGAffineTransform(translationX: -extent.minX, y: -extent.minY))
+            .transformed(by: CGAffineTransform(scaleX: CGFloat(field.width) / extent.width,
+                                               y: CGFloat(field.height) / extent.height))
+        var pixels = [Float](repeating: 0, count: field.width * field.height * 4)
+        pixels.withUnsafeMutableBytes { buffer in
+            renderer.context.render(small, toBitmap: buffer.baseAddress!, rowBytes: field.width * 16,
+                                    bounds: CGRect(x: 0, y: 0, width: field.width, height: field.height),
+                                    format: .RGBAf, colorSpace: nil)
+        }
+        // Core Image's bitmap rows run from the top of `bounds`.
+        var found: [Float] = []
+        for index in 0..<(field.width * field.height) where pixels[index * 4] > 0.5 {
+            found.append(field.values[index])
+        }
+        return found.count >= 4 ? found : nil
     }
 
     /// The model's values as a mask over `region` of the photo's frame; nil stays nil.
