@@ -2,6 +2,7 @@ import CoreGraphics
 import CoreImage
 import CoreImage.CIFilterBuiltins
 import Foundation
+import os
 import ImageIO
 import UniformTypeIdentifiers
 import Vision
@@ -145,8 +146,12 @@ public enum AIImaging {
         return context.createCGImage(output, from: extent, format: .RGBA16, colorSpace: base.colorSpace ?? sRGB)
     }
 
+    /// How many times Vision looked for a subject (`subjectMask`), for tests.
+    static let subjectRuns = OSAllocatedUnfairLock(initialState: 0)
+
     /// White where Vision finds the photo's subject (people, animals, objects in front).
     public static func subjectMask(for image: CGImage) throws -> CGImage? {
+        subjectRuns.withLock { $0 += 1 }
         let request = VNGenerateForegroundInstanceMaskRequest()
         let handler = VNImageRequestHandler(cgImage: image)
         try handler.perform([request])

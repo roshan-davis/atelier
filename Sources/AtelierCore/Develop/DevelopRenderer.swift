@@ -749,6 +749,7 @@ public final class DevelopSession: @unchecked Sendable {
             // 43 s to 15 s; zoomed in, Show Overlay off after Refine Edge 50 or 100 went from
             // 104–123 s to 8 s (Rosh, Nov 16, 2026: it took minutes zoomed in).
             if let graph = areas { areas = LensBlur.drawnOnce(graph, context: renderer.context) }
+            LensBlur.applyRuns.withLock { $0 += 1 }
             return LensBlur.apply(source, depth: depth, settings: settings, areas: areas, context: renderer.context)
         }
         guard interactive else { return make() }

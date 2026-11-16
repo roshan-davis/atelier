@@ -47,6 +47,8 @@ public enum DepthMap {
     /// The model is running now (Lens Blur's progress line). `workingChanged` is posted on the
     /// main queue when it starts or stops.
     nonisolated(unsafe) public private(set) static var isWorking = false
+    /// How many times the model ran (`estimate`), for tests.
+    nonisolated(unsafe) static var runs = 0
     public static let workingChanged = Notification.Name("AtelierDepthMapWorkingChanged")
 
     // MARK: Download
@@ -221,6 +223,7 @@ public enum DepthMap {
         let input = inputTensor(pixels, width: size.width, height: size.height)
         lock.lock()
         isWorking = true
+        runs += 1
         DispatchQueue.main.async { NotificationCenter.default.post(name: workingChanged, object: nil) }
         defer {
             isWorking = false

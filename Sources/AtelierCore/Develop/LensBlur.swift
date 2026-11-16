@@ -1,5 +1,6 @@
 import CoreImage
 import Foundation
+import os
 
 /// Lens Blur (AT-072), as in Lightroom: the photo blurred as a wide-open lens would blur it, more
 /// the farther a part is from the Focal Range kept sharp, from the depth model's map (the one
@@ -117,6 +118,10 @@ public enum LensBlur {
         let near = max(0, middle - half), far = min(1, middle + half)
         return ((near * 100).rounded(), (far * 100).rounded())
     }
+
+    /// How many times a photo's render built its blur (`apply` from `DevelopSession`, not the
+    /// warm-up's stand-in), for tests.
+    static let applyRuns = OSAllocatedUnfairLock(initialState: 0)
 
     /// `image` (the corrected photo, linear) with the lens blur `settings` ask for, from `depth`
     /// (0 nearest to 1 farthest in red, on the same frame). The result is kept as a cached

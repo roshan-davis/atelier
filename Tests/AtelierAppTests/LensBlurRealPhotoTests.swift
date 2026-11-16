@@ -527,3 +527,272 @@ final class LensBlurRealPhotoTests: XCTestCase {
         return Array(UnsafeBufferPointer(start: data.assumingMemoryBound(to: UInt8.self), count: width * height * 4))
     }
 }
+
+/// Saved Lens Blur settings cost nothing outside the Lens Blur mode (Rosh, Nov 16, 2026: does a
+/// photo with Lens Blur on slow Develop down?). The same RAW opens in Develop, not in the mode,
+/// with no Lens Blur (A) and with every Lens Blur setting (B: Apply, Amount 80, a Focal Range, a
+/// Select Subject Focus area with Fine Edges and Refine Edge 50, a radial Blur area), in turns.
+/// Each time: open to the first frame, Exposure and Contrast drags at fit and zoomed to 100%, the
+/// full-size render after the zoomed drag and the stored preview write. B must run no depth model,
+/// Fine Edges, Vision subject or Lens Blur, and its frames must be A's. Opt-in like the class
+/// above: `ATELIER_LENS_BLUR_RAW=/path/to/photo.NEF`; `ATELIER_LENS_BLUR_ROUNDS` (default 2) A/B
+/// turns. Times are printed as `LENSBLUR-AB:` lines.
+@MainActor
+final class LensBlurOutsideModeTests: XCTestCase {
+    private var folder: URL!
+    private var catalog: Catalog!
+    private var assetID: Int64!
+    private var pressed = false
+
+    override func setUp() async throws {
+        guard let path = ProcessInfo.processInfo.environment["ATELIER_LENS_BLUR_RAW"] else {
+            throw XCTSkip("Set ATELIER_LENS_BLUR_RAW to a RAW file to run")
+        }
+        try XCTSkipUnless(DepthMap.isInstalled, "The depth model isn't downloaded")
+        folder = FileManager.default.temporaryDirectory.appendingPathComponent("LensBlurAB-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let raw = folder.appendingPathComponent(URL(fileURLWithPath: path).lastPathComponent)
+        try FileManager.default.copyItem(at: URL(fileURLWithPath: path), to: raw)
+        catalog = try Catalog()
+        let result = await Importer(catalog: catalog, previews: nil).run(sources: [raw], options: ImportOptions(buildPreviews: false))
+        assetID = try XCTUnwrap(result.importedAssetIDs.first)
+    }
+
+    override func tearDown() async throws {
+        if let folder { try? FileManager.default.removeItem(at: folder) }
+    }
+
+    /// B's settings: everything the Lens Blur panel and its Refine can store.
+    static func lensBlurSettings() -> DevelopSettings {
+        var settings = DevelopSettings.neutral
+        settings[.lensBlurApply] = 1
+        settings[.lensBlurAmount] = 80
+        settings[.lensBlurFocusNear] = 10
+        settings[.lensBlurFocusFar] = 35
+        var focus = DevelopSettings.Mask(name: "Focus", components: [
+            .init(.subject(DevelopSettings.Selection(feather: 3, refine: 50, fineEdges: true)))])
+        focus.lensBlurRole = .focus
+        var blur = DevelopSettings.Mask(name: "Blur", components: [
+            .init(.radial(.init(center: .init(x: 0.12, y: 0.15), radiusX: 0.1, radiusY: 0.1)))])
+        blur.lensBlurRole = .blur
+        settings.lensBlurAreas = [focus, blur]
+        return settings
+    }
+
+    struct Run {
+        var openMS = 0.0
+        var fit: [Double] = []
+        var zoomed: [Double] = []
+        var fullMS = 0.0
+        var previewMS = 0.0
+        var fitFrame: CGImage?
+        var fullFrame: CGImage?
+        var previews: [String: Data] = [:]
+    }
+
+    struct Work: Equatable {
+        var depth = 0, fineEdges = 0, subject = 0, lensBlur = 0
+        static func now() -> Work {
+            Work(depth: DepthMap.runs, fineEdges: FineEdges.runs, subject: AIImaging.subjectRuns.withLock { $0 },
+                 lensBlur: LensBlur.applyRuns.withLock { $0 })
+        }
+        static func - (a: Work, b: Work) -> Work {
+            Work(depth: a.depth - b.depth, fineEdges: a.fineEdges - b.fineEdges, subject: a.subject - b.subject,
+                 lensBlur: a.lensBlur - b.lensBlur)
+        }
+    }
+
+    func testLensBlurSettingsCostNothingOutsideTheMode() async throws {
+        let rounds = Int(ProcessInfo.processInfo.environment["ATELIER_LENS_BLUR_ROUNDS"] ?? "") ?? 2
+        // A first, untimed: the RAW's decode and Core Image's programs, for both.
+        _ = try await run(lensBlur: false, name: "warm")
+        var a: [Run] = [], b: [Run] = []
+        var sawWork = false
+        let watcher = Task { @MainActor in
+            while !Task.isCancelled {
+                if DepthMap.isWorking || FineEdges.isWorking { sawWork = true }
+                try? await Task.sleep(for: .milliseconds(5))
+            }
+        }
+        defer { watcher.cancel() }
+        for round in 1...rounds {
+            a.append(try await run(lensBlur: false, name: "A\(round)"))
+            let before = Work.now()
+            sawWork = false
+            b.append(try await run(lensBlur: true, name: "B\(round)"))
+            let work = Work.now() - before
+            print("LENSBLUR-AB: B\(round) Lens Blur work outside the mode: depth \(work.depth), Fine Edges \(work.fineEdges), "
+                + "Vision subject \(work.subject), LensBlur.apply \(work.lensBlur), work flags \(sawWork ? "SEEN" : "never")")
+            XCTAssertEqual(work, Work(), "B ran Lens Blur work outside the mode")
+            XCTAssertFalse(sawWork, "the depth model or Fine Edges worked outside the mode")
+        }
+
+        // The same pictures: B's frames and stored previews are A's.
+        for (x, y) in zip(a, b) {
+            XCTAssertTrue(Self.same(x.fitFrame, y.fitFrame), "B's fit frame differs from A's")
+            XCTAssertTrue(Self.same(x.fullFrame, y.fullFrame), "B's full-size frame differs from A's")
+            XCTAssertFalse(x.previews.isEmpty, "no stored previews")
+            XCTAssertEqual(x.previews, y.previews, "B's stored previews differ from A's")
+        }
+
+        func row(_ what: String, _ value: (Run) -> Double) -> (Double, Double) {
+            let av = Self.median(a.map(value)), bv = Self.median(b.map(value))
+            print("LENSBLUR-AB: | \(what) | \(Self.ms(av)) | \(Self.ms(bv)) | \(String(format: "%+.1f%%", (bv - av) / max(av, 0.001) * 100)) |")
+            return (av, bv)
+        }
+        print("LENSBLUR-AB: | step | A (no Lens Blur) | B (Lens Blur saved) | B vs A |")
+        _ = row("open → first frame", { $0.openMS })
+        let fitMedian = row("fit drag, median frame", { Self.median($0.fit) })
+        _ = row("fit drag, p95 frame", { Self.p95($0.fit) })
+        let zoomedMedian = row("100% drag, median frame", { Self.median($0.zoomed) })
+        _ = row("100% drag, p95 frame", { Self.p95($0.zoomed) })
+        _ = row("full-size render after the drag", { $0.fullMS })
+        _ = row("stored preview write", { $0.previewMS })
+        // Frame times swing by a few ms run to run; a real cost shows well past that.
+        XCTAssertLessThan(fitMedian.1, fitMedian.0 * 1.15 + 3, "B's fit drag frames are slower")
+        XCTAssertLessThan(zoomedMedian.1, zoomedMedian.0 * 1.15 + 3, "B's zoomed drag frames are slower")
+    }
+
+    /// One open of the photo with A's or B's settings, timed.
+    private func run(lensBlur: Bool, name: String) async throws -> Run {
+        var settings = lensBlur ? Self.lensBlurSettings() : DevelopSettings.neutral
+        settings[.exposure] = 0
+        try catalog.saveDevelopSettings(settings, for: assetID)
+        let previewsFolder = folder.appendingPathComponent("Previews-\(name)")
+        let controller = DevelopController(catalog: catalog, previews: PreviewCache(rootURL: previewsFolder),
+                                           isPrimaryButtonPressed: { [unowned self] in self.pressed })
+        controller.showMaskOverlay = false
+        var result = Run()
+        var started = Date()
+        controller.open(assetID)
+        while controller.image == nil || controller.isLoading || controller.showsStandIn {
+            guard Date().timeIntervalSince(started) < 60 else { XCTFail("\(name): no first frame"); return result }
+            try await Task.sleep(for: .milliseconds(2))
+        }
+        result.openMS = Self.ms(since: started)
+        XCTAssertFalse(controller.isLensBlurring)
+        // The warm-up, the first-open preview and the neighbours' preload finish first.
+        try await Task.sleep(for: .seconds(3))
+
+        // At fit.
+        result.fit = try await drag(controller, from: 0, to: 0.6)
+        try await settle(controller)
+        result.fitFrame = Self.cg(controller.displayImage)
+        // The stored preview: written when the drag ends (mouse up).
+        var stored = false
+        controller.onPreviewsUpdated = { _ in stored = true }
+        started = Date()
+        pressed = false
+        controller.endPointerEdit()
+        while !stored {
+            guard Date().timeIntervalSince(started) < 30 else { XCTFail("\(name): no preview stored"); break }
+            try await Task.sleep(for: .milliseconds(2))
+        }
+        result.previewMS = Self.ms(since: started)
+        controller.onPreviewsUpdated = nil
+
+        // Zoomed to 100%: the full-size render of the photo first, then the drag.
+        controller.wantsFullResolution = true
+        try await fullFrame(controller, after: nil, name: "\(name) zoom in")
+        result.zoomed = try await drag(controller, from: 0.6, to: 0.2)
+        let previous = controller.fullImage
+        started = Date()
+        pressed = false
+        controller.endPointerEdit()
+        try await fullFrame(controller, after: previous, name: "\(name) after the drag")
+        result.fullMS = Self.ms(since: started)
+        result.fullFrame = Self.cg(controller.fullImage)
+        // The preview queue's write after the zoomed drag, then read what was stored.
+        try await Task.sleep(for: .seconds(2))
+        result.previews = Self.files(in: previewsFolder)
+        controller.open(nil)
+        print("LENSBLUR-AB: \(name): open \(Self.ms(result.openMS)), fit median \(Self.ms(Self.median(result.fit))) "
+            + "p95 \(Self.ms(Self.p95(result.fit))), 100% median \(Self.ms(Self.median(result.zoomed))) p95 \(Self.ms(Self.p95(result.zoomed))), "
+            + "full-size \(Self.ms(result.fullMS)), preview \(Self.ms(result.previewMS)), \(result.previews.count) preview files")
+        return result
+    }
+
+    /// An Exposure drag (`from` to `to`, 20 steps) and a Contrast drag (0 to 40 or back, 20
+    /// steps), the mouse held down throughout: each step's time to its frame on screen.
+    private func drag(_ controller: DevelopController, from: Double, to: Double) async throws -> [Double] {
+        pressed = true
+        controller.beginPointerEdit()
+        var times: [Double] = []
+        let contrastStart = controller.settings[.contrast]
+        let contrastEnd = contrastStart > 20 ? 0.0 : 40
+        let steps = 20
+        for step in 1...steps {
+            times.append(try await frameAfter(controller) { controller.set(.exposure, to: from + (to - from) * Double(step) / Double(steps)) })
+        }
+        for step in 1...steps {
+            let value = contrastStart + (contrastEnd - contrastStart) * Double(step) / Double(steps)
+            times.append(try await frameAfter(controller) { controller.set(.contrast, to: value) })
+        }
+        return times
+    }
+
+    /// `change`, then the ms until a new rendered frame is shown.
+    private func frameAfter(_ controller: DevelopController, _ change: () -> Void) async throws -> Double {
+        let previous = controller.image
+        let started = Date()
+        change()
+        while controller.image === previous {
+            guard Date().timeIntervalSince(started) < 20 else { XCTFail("no frame in 20 s"); break }
+            try await Task.sleep(for: .microseconds(500))
+        }
+        return Self.ms(since: started)
+    }
+
+    private func fullFrame(_ controller: DevelopController, after previous: NSImage?, name: String) async throws {
+        let started = Date()
+        while true {
+            if let full = controller.fullImage, full !== previous, controller.displayImage === full { return }
+            guard Date().timeIntervalSince(started) < 120 else { XCTFail("\(name): no full-size frame in 120 s"); return }
+            try await Task.sleep(for: .milliseconds(1))
+        }
+    }
+
+    private func settle(_ controller: DevelopController) async throws {
+        var last = controller.image
+        var quietSince = Date()
+        let started = Date()
+        while Date().timeIntervalSince(quietSince) < 0.5, Date().timeIntervalSince(started) < 10 {
+            try await Task.sleep(for: .milliseconds(10))
+            if controller.image !== last { last = controller.image; quietSince = Date() }
+        }
+    }
+
+    private static func files(in folder: URL) -> [String: Data] {
+        var found: [String: Data] = [:]
+        let enumerator = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: nil)
+        while let url = enumerator?.nextObject() as? URL {
+            if let data = try? Data(contentsOf: url), !url.hasDirectoryPath {
+                // By the path inside the folder (the folder's own path may resolve through /private).
+                found[url.resolvingSymlinksInPath().path.replacingOccurrences(
+                    of: folder.resolvingSymlinksInPath().path + "/", with: "")] = data
+            }
+        }
+        return found
+    }
+
+    /// The same pixels, bit for bit.
+    private static func same(_ a: CGImage?, _ b: CGImage?) -> Bool {
+        guard let a, let b, a.width == b.width, a.height == b.height,
+              let x = a.dataProvider?.data, let y = b.dataProvider?.data else { return false }
+        return (x as Data) == (y as Data)
+    }
+
+    private static func cg(_ image: NSImage?) -> CGImage? { LensBlurRealPhotoTests.cg(image) }
+    private static func ms(since date: Date) -> Double { Date().timeIntervalSince(date) * 1000 }
+    private static func ms(_ value: Double) -> String { String(format: "%.1f ms", value) }
+    private static func median(_ values: [Double]) -> Double {
+        let sorted = values.sorted()
+        guard !sorted.isEmpty else { return 0 }
+        return sorted.count % 2 == 1 ? sorted[sorted.count / 2] : (sorted[sorted.count / 2 - 1] + sorted[sorted.count / 2]) / 2
+    }
+    private static func p95(_ values: [Double]) -> Double {
+        let sorted = values.sorted()
+        guard !sorted.isEmpty else { return 0 }
+        return sorted[min(sorted.count - 1, Int((Double(sorted.count) * 0.95).rounded(.up)) - 1)]
+    }
+}
