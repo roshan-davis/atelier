@@ -86,8 +86,9 @@ final class DevelopLensBlurModeTests: XCTestCase {
         let assetID = try XCTUnwrap(controller.assetID)
         controller.isLensBlurring = true
         try await waitFor(controller, "blurred in the mode") { $0 < 0.05 }
-        // An edit in the mode is saved, and the photo's own previews are stored again.
-        controller.set(.lensBlurAmount, to: 90)
+        // A Develop edit made while the mode renders the blur: the previews are stored again,
+        // unblurred. (An edit to Lens Blur alone doesn't store them: they never show it.)
+        controller.set(.exposure, to: 0.1)
         controller.flushSave()
         let url = previews.url(for: assetID, size: .preview)
         var contrast: Double?
@@ -99,6 +100,37 @@ final class DevelopLensBlurModeTests: XCTestCase {
             try await Task.sleep(for: .milliseconds(30))
         }
         XCTAssertGreaterThan(contrast ?? 0, 0.15, "The stored preview shows the blur")
+    }
+
+    /// Cancel (and every way out but Save) puts the photo back as it was when the mode opened,
+    /// history included (Rosh, Nov 16, 2026: reopening showed the cancelled values).
+    func testCancelUndoesTheModesChanges() async throws {
+        let (controller, catalog) = try await openBlurredCheckerboardWithCatalog()
+        let assetID = try XCTUnwrap(controller.assetID)
+        try await waitFor(controller, "sharp before the mode") { $0 > 0.15 }
+        let steps = controller.history.steps.count
+        controller.isLensBlurring = true
+        controller.set(.lensBlurAmount, to: 40)
+        controller.flushSave()
+        XCTAssertTrue(controller.lensBlurHasChanges)
+        controller.isLensBlurring = false
+        XCTAssertEqual(controller.settings[.lensBlurAmount], 100, "Cancel puts the amount back")
+        XCTAssertEqual(try catalog.developSettings(for: assetID)[.lensBlurAmount], 100, "and saves it")
+        XCTAssertEqual(controller.history.steps.count, steps, "no history step from the cancelled edit")
+        controller.isLensBlurring = true
+        XCTAssertEqual(controller.settings[.lensBlurAmount], 100, "reopening shows the values from before")
+    }
+
+    /// After a Save the changes stay, whichever way the mode closes.
+    func testSavedChangesStay() async throws {
+        let (controller, _) = try await openBlurredCheckerboard()
+        try await waitFor(controller, "sharp before the mode") { $0 > 0.15 }
+        controller.isLensBlurring = true
+        controller.set(.lensBlurAmount, to: 40)
+        controller.keepLensBlurChanges()
+        XCTAssertFalse(controller.lensBlurHasChanges)
+        controller.isLensBlurring = false
+        XCTAssertEqual(controller.settings[.lensBlurAmount], 40)
     }
 
     func testOtherToolsCloseTheModeButRefineKeepsIt() async throws {
@@ -125,8 +157,18 @@ final class DevelopLensBlurModeTests: XCTestCase {
 
     // MARK: Helpers
 
+    private func openBlurredCheckerboardWithCatalog() async throws -> (DevelopController, Catalog) {
+        let (controller, _, catalog) = try await openBlurredCheckerboardParts()
+        return (controller, catalog)
+    }
+
     /// A 512 px checkerboard of 4 px squares with Lens Blur applied at 100, opened in Develop.
     private func openBlurredCheckerboard() async throws -> (DevelopController, PreviewCache) {
+        let (controller, previews, _) = try await openBlurredCheckerboardParts()
+        return (controller, previews)
+    }
+
+    private func openBlurredCheckerboardParts() async throws -> (DevelopController, PreviewCache, Catalog) {
         let url = folder.appendingPathComponent("Checks.png")
         let squares = CIFilter(name: "CICheckerboardGenerator", parameters: [
             "inputColor0": CIColor.white, "inputColor1": CIColor.black, "inputWidth": 4, "inputSharpness": 1,
@@ -143,7 +185,7 @@ final class DevelopLensBlurModeTests: XCTestCase {
         let previews = PreviewCache(rootURL: folder.appendingPathComponent("Previews"))
         let controller = DevelopController(catalog: catalog, previews: previews)
         controller.open(assetID)
-        return (controller, previews)
+        return (controller, previews, catalog)
     }
 
     /// Waits until the photo on screen (or the full-size image) has a contrast that `matches`.

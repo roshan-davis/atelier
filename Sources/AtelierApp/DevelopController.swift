@@ -173,8 +173,10 @@ final class DevelopController: ObservableObject {
     /// The Lens Blur mode (AT-074, Photo > Lens Blur…): the photo with its Lens Blur, and Lens
     /// Blur's controls in place of Develop's panels. Lens Blur renders only here
     /// (`DevelopSession.rendersLensBlur`), so Develop's sliders never re-run it; Save makes the
-    /// Lens Blur photo, a TIFF stacked on the original (`LensBlurPhoto`). It stays open from
-    /// photo to photo, as Masking does. See DevelopController+LensBlurMode.
+    /// Lens Blur photo, a TIFF stacked on the original (`LensBlurPhoto`). Leaving it any way but
+    /// Save cancels: the photo goes back to how it was when the mode opened, history included
+    /// (Rosh, Nov 16, 2026: "I am cancelling that, right?"). Opening another photo leaves it.
+    /// See DevelopController+LensBlurMode.
     @Published var isLensBlurring = false {
         didSet {
             guard isLensBlurring != oldValue else { return }
@@ -193,9 +195,16 @@ final class DevelopController: ObservableObject {
     /// I know it is slow due that"). Nil when nothing is, and always outside the mode.
     @Published private(set) var lensBlurWork: String?
     private var lensBlurWorkCheck: DispatchWorkItem?
+    /// The settings the open photo's stored previews were last made from (`flushSave`).
+    private var lastPreviewSettings: (assetID: Int64, settings: DevelopSettings)?
     /// The photo as it was shown when Lens Blur opened, unblurred, put back at once when it
     /// closes if nothing but Lens Blur changed (`lensBlurModeChanged`).
     private var lensBlurReturn: LensBlurReturn?
+    /// The photo's settings and history when the mode opened, put back when it closes without
+    /// Save (`keepLensBlurChanges` after a Save drops them).
+    private var lensBlurEntry: (assetID: Int64, generation: Int, settings: DevelopSettings, history: DevelopHistory)?
+    /// Tells the library window the mode opened or closed (it lays the window out for it).
+    var onLensBlurModeChanged: ((Bool) -> Void)?
 
     /// The HSL channel the Targeted Adjustment Tool changes (HSL / Color's view, or the one
     /// chosen from its menu in the All view).
@@ -857,6 +866,8 @@ final class DevelopController: ObservableObject {
 
     func open(_ assetID: Int64?) {
         guard assetID != self.assetID else { return }
+        // The mode is for one photo: another photo cancels it, on the photo it was open on.
+        if isLensBlurring { isLensBlurring = false }
         beforeRequest.value = nil
         flushSave()
         if let owed = previewsOwed, owed == self.assetID {
@@ -2251,7 +2262,7 @@ final class DevelopController: ObservableObject {
         submitRender(ProxyRenderRequest(
             session: session, settings: settings, preview: preview, renderBefore: renderBefore, cropping: cropping,
             overlay: overlay, clipping: clipping, assetID: assetID, count: renderCount,
-            measures: overlay == nil && preview == nil, generation: openGeneration.value,
+            measures: overlay == nil && preview == nil && !isLensBlurring, generation: openGeneration.value,
             queuedAt: DevelopTimingLog.now(), surfaces: direct ? displaySurfaces : nil,
             fallback: liveFramesOff && photoFeed.isAttached && firstRenderDone && cropping ? .liveFramesOff : nil,
             sink: direct ? photoFeed.sink : nil, liveEpoch: photoFeed.sink.currentEpoch,
@@ -2810,7 +2821,14 @@ final class DevelopController: ObservableObject {
             errorMessage = "Could not save: \(error.localizedDescription)"
             return
         }
-        if let session {
+        // Lens Blur never shows in the stored previews, so an edit that changed only Lens Blur
+        // leaves them as they are (each one was a full render and a JPEG write per Lens Blur edit).
+        let onlyLensBlur = lastPreviewSettings.map { $0.assetID == assetID
+            && Self.withoutLensBlur($0.settings) == Self.withoutLensBlur(settings) } ?? false
+        lastPreviewSettings = (assetID, settings)
+        if onlyLensBlur {
+            return
+        } else if let session {
             storePreviews(session: session, settings: settings, assetID: assetID)
         } else {
             // Saved while the editable copy is still decoding: refresh Grid and Loupe once it's
@@ -3027,6 +3045,8 @@ extension DevelopController {
             + " (full-size render \(fullRendering ? "running" : "idle"), render \(rendering ? "running" : "idle"))")
         let restored: Bool
         if isLensBlurring {
+            commitPendingStep()
+            lensBlurEntry = assetID.map { ($0, openGeneration.value, settings, history) }
             lensBlurReturn = shownUnblurred()
             restored = false
             isCropping = false
@@ -3045,11 +3065,13 @@ extension DevelopController {
             finishLensBlurRefine()
             if picker == .lensFocus { picker = nil }
             lensBlurSaveError = nil
+            revertLensBlurChanges()
             restored = restoreUnblurred()
         }
         session?.rendersLensBlur = isLensBlurring
         fullSession?.rendersLensBlur = isLensBlurring
-        navigatorSession?.rendersLensBlur = isLensBlurring
+        // The Navigator isn't shown in the mode: never pay for a second blur there.
+        navigatorSession?.rendersLensBlur = false
         // Blurred frames still on their way must not land after Close (nor unblurred ones after
         // opening the mode).
         photoFeed.sink.invalidate()
@@ -3061,6 +3083,39 @@ extension DevelopController {
         }
         beforeImage = nil
         scheduleRender()
+        onLensBlurModeChanged?(isLensBlurring)
+    }
+
+    /// After a Save: what the mode changed is kept, so closing it no longer cancels anything.
+    func keepLensBlurChanges() {
+        guard let entry = lensBlurEntry, entry.assetID == assetID else { return }
+        commitPendingStep()
+        lensBlurEntry = (entry.assetID, entry.generation, settings, history)
+    }
+
+    /// Whether closing now would throw anything away.
+    var lensBlurHasChanges: Bool {
+        guard let entry = lensBlurEntry, entry.assetID == assetID else { return false }
+        return entry.settings != settings
+    }
+
+    /// Cancel: the settings and history as they were when the mode opened (snapshots made
+    /// meanwhile stay), saved at once.
+    private func revertLensBlurChanges() {
+        defer { lensBlurEntry = nil }
+        guard let entry = lensBlurEntry, entry.assetID == assetID, entry.generation == openGeneration.value else { return }
+        saveTask?.cancel()
+        pendingStep = nil
+        guard entry.settings != settings || entry.history.steps.count != history.steps.count else { return }
+        let snapshots = history.snapshots
+        settings = entry.settings
+        history = entry.history
+        history.snapshots = snapshots
+        committed = settings
+        validateMaskSelection()
+        dirty = true
+        DevelopTimingLog.shared.log(assetID, "Lens Blur cancelled: its changes undone")
+        flushSave()
     }
 
     /// Something may have started or stopped: the progress line is checked a moment later and

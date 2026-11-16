@@ -21,7 +21,7 @@ struct ContentView: View {
     private var dockLayout: DockLayout {
         guard let dockWidth else { return .full }
         // A sidebar the person hid themselves takes no room.
-        let sidebar = columns == .detailOnly && !sidebarHiddenByDock ? 0 : sidebarWidth
+        let sidebar = (columns == .detailOnly && !sidebarHiddenByDock) || model.isInlineApp ? 0 : sidebarWidth
         return .fitting(width: dockWidth, sidebar: sidebar, inspector: showInspector ? panelWidth + 1 : 0)
     }
 
@@ -29,13 +29,15 @@ struct ContentView: View {
         // Like Lightroom Classic, the Filmstrip runs the full width of the window, under
         // both side panels.
         VStack(spacing: 0) {
-            NavigationSplitView(columnVisibility: $columns) {
+            // An inline app (HDR, Lens Blur) has no left column: the photo and its own controls
+            // only (Rosh, Nov 16, 2026). The person's own choice comes back when it closes.
+            NavigationSplitView(columnVisibility: Binding(get: { model.isInlineApp ? .detailOnly : columns },
+                                                          set: { if !model.isInlineApp { columns = $0 } })) {
                 Group {
-                    if model.mode == .develop {
+                    if model.isInlineApp {
+                        Color.clear
+                    } else if model.mode == .develop {
                         DevelopSidebar(develop: model.develop)
-                            .areaFocusFlash(.leftPanel)
-                    } else if model.mode == .hdr {
-                        HDRSidebar(hdr: model.hdr)
                             .areaFocusFlash(.leftPanel)
                     } else {
                         SidebarView()
@@ -52,8 +54,10 @@ struct ContentView: View {
                 // rather than as a full-height inspector the toolbar floats over.
                 HStack(spacing: 0) {
                     VStack(spacing: 0) {
-                        FilterBar()
-                        Divider()
+                        if !model.isInlineApp {
+                            FilterBar()
+                            Divider()
+                        }
                         ZStack {
                             switch model.mode {
                             case .grid:
@@ -65,7 +69,7 @@ struct ContentView: View {
                             case .hdr:
                                 HDRImageView(hdr: model.hdr)
                             }
-                            if model.rows.isEmpty {
+                            if model.rows.isEmpty, !model.isInlineApp {
                                 EmptyLibraryView()
                             }
                         }
@@ -73,7 +77,7 @@ struct ContentView: View {
                         // so it never changes the photo's zoom and pan or the grid's scroll.
                         .overlay {
                             NotesOverlay(catalog: model.catalog,
-                                         assetID: model.mode == .hdr || model.rows.isEmpty ? nil : model.focusedID,
+                                         assetID: model.isInlineApp || model.rows.isEmpty ? nil : model.focusedID,
                                          subtitle: model.notesSubtitle, addTargets: { model.noteTargets },
                                          request: $model.noteRequest)
                         }
@@ -97,8 +101,10 @@ struct ContentView: View {
                     }
                 }
             }
-            FilmstripView()
-                .areaFocusFlash(.photo, enabled: model.usesPanelKeys && filmstripVisible)
+            if !model.isInlineApp {
+                FilmstripView()
+                    .areaFocusFlash(.photo, enabled: model.usesPanelKeys && filmstripVisible)
+            }
         }
         // Dropping folders or photos anywhere on the window starts an import with them.
         .dropDestination(for: URL.self) { urls, _ in

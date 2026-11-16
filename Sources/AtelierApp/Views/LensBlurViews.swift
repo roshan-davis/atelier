@@ -139,7 +139,7 @@ struct LensBlurPanel: View {
 }
 
 /// The Lens Blur mode's bar under its panel, in place of Develop's Copy, Paste and Reset:
-/// Before (the photo without the blur), Close and Save, with what Save will do. Save renders
+/// Before (the photo without the blur), Cancel and Save, with what Save will do. Save renders
 /// the blur at full size into a TIFF stacked on the photo (`LibraryModel.saveLensBlur`).
 struct LensBlurModeBar: View {
     @EnvironmentObject private var model: LibraryModel
@@ -165,8 +165,9 @@ struct LensBlurModeBar: View {
                 if develop.lensBlurSaving {
                     ProgressView().controlSize(.small)
                 }
-                Button("Close") { model.closeLensBlur() }
-                    .help("Back to Develop's panels (Esc). The Lens Blur settings stay on this photo for next time.")
+                Button("Cancel") { model.closeLensBlur() }
+                    .disabled(develop.lensBlurSaving)
+                    .help("Back to Develop without keeping what you changed here (Esc). Only Save keeps it.")
                 Button(saveTitle) { model.saveLensBlur() }
                     .disabled(develop.lensBlurSaving || develop.assetID == nil)
                     .help("Render the Lens Blur at full size into a 16-bit TIFF stacked on this photo, then open it (⌘S)")

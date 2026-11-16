@@ -121,13 +121,20 @@ final class LibraryModel: ObservableObject {
         }
     }
     @Published var detail: AssetDetail?
+    /// The Lens Blur mode is open in Develop (mirrored from `develop.isLensBlurring`, so the
+    /// window's layout doesn't watch the whole Develop controller).
+    @Published private(set) var isLensBlurOpen = false
+    /// An inline app (HDR, Lens Blur, and any later one) has the window: the photo and its own
+    /// controls only, without the Filmstrip, the left column, the filter bar or Develop's
+    /// histogram (Rosh, Nov 16, 2026: "just make that working without much distraction").
+    var isInlineApp: Bool { mode == .hdr || (mode == .develop && isLensBlurOpen) }
     @Published private var storedMode: ViewMode = .grid {
         didSet {
             if mode == .develop {
                 develop.open(focusedID)
             } else if oldValue == .develop {
                 develop.flushSave()
-                // Its settings stay on the photo; only Save makes the Lens Blur photo.
+                // Leaving Develop cancels the Lens Blur mode; only Save keeps its changes.
                 develop.isLensBlurring = false
             }
             if mode == .hdr {
@@ -264,6 +271,10 @@ final class LibraryModel: ObservableObject {
         }
         develop.onSettingsSaved = { [weak self] id in
             if UserDefaults.standard.bool(forKey: "xmp.autoWrite") { self?.autoWriteXMP([id]) }
+        }
+        develop.onLensBlurModeChanged = { [weak self] open in
+            guard let self, self.isLensBlurOpen != open else { return }
+            self.isLensBlurOpen = open
         }
         develop.onPreviewsUpdated = { [weak self] id in
             ThumbnailLoader.shared.invalidate(id)

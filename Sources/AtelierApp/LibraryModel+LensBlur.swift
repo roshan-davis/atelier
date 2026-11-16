@@ -20,9 +20,10 @@ extension LibraryModel {
         develop.isLensBlurring = true
     }
 
-    /// Close (and Esc): back to Develop's panels. The Lens Blur settings stay on the photo, so
-    /// opening Lens Blur again carries on; only Save makes or updates the Lens Blur photo.
+    /// Cancel (and Esc): back to Develop, with every change made in the mode undone; only Save
+    /// keeps them (and makes or updates the Lens Blur photo). Not while Save is rendering.
     func closeLensBlur() {
+        guard !develop.lensBlurSaving else { return }
         develop.isLensBlurring = false
     }
 
@@ -58,7 +59,10 @@ extension LibraryModel {
                 // New pixels under the Lens Blur photo's own edits: its previews and any open copy.
                 editedFileChanged(saved.id)
             }
-            if develop.assetID == source { develop.loadLensBlurPhoto() }
+            if develop.assetID == source {
+                develop.keepLensBlurChanges()
+                develop.loadLensBlurPhoto()
+            }
             status = saved.isNew ? "Saved the Lens Blur photo, stacked on the original"
                 : "Updated the Lens Blur photo"
             // Done here: on to the new photo, as Edit In and HDR bring back theirs. Not if

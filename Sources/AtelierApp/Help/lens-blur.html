@@ -36,7 +36,7 @@
       <div class="row"><span class="btn">Refine…</span> <span style="color:var(--app-text-2);font-size:11px">Focus: 1 part</span></div>
     </div>
     <div class="pb" style="border-top:1px solid var(--app-line, #444)">
-      <div class="row"><span class="btn">Before</span><span class="grow" style="flex:1"></span><span class="btn">Close</span> <span class="btn on">Save</span></div>
+      <div class="row"><span class="btn">Before</span><span class="grow" style="flex:1"></span><span class="btn">Cancel</span> <span class="btn on">Save</span></div>
       <div class="row" style="color:var(--app-text-2);font-size:11px">Only this mode shows the blur. Save makes it a new photo.</div>
     </div>
   </div>
@@ -51,9 +51,9 @@
 <p>Lens Blur is a full-size, depth-aware blur, too heavy to redo on every slider move, so it has its own mode, as HDR does. Develop's panels never run it, and Exposure, Contrast and the rest stay as quick on a Lens Blur photo as on any other.</p>
 <ol>
   <li>Open a photo in Lens Blur: <b>Photo › Lens Blur…</b>, right-click › <b>Edit in Lens Blur</b>, or the aperture button in Develop's tool strip. Make your Develop edits first: the mode shows the photo as edited.</li>
-  <li>The Lens Blur panel takes the place of Develop's panels, with every control on this page, and the photo shows a <b>Lens Blur</b> label. <b>Before</b> (<kbd>\</kbd>) shows the photo without the blur. Presets are hidden in the left column while the mode is open, since the mode doesn't change the Develop look. When something takes more than a moment, a small line beside Before says what is still working: rendering the blur, rendering it at full size, finding the depth, or Fine Edges finding the hair.</li>
+  <li>The Lens Blur panel takes the place of Develop's panels, with every control on this page, and the photo shows a <b>Lens Blur</b> label. <b>Before</b> (<kbd>\</kbd>) shows the photo without the blur. Like HDR, Lens Blur is an inline app: the window shows only the photo and its controls, without the Filmstrip, the left column, the filter bar, Develop's histogram and tool strip, or the Before/After views. When something takes more than a moment, a small line beside Before says what is still working: rendering the blur, rendering it at full size, finding the depth, or Fine Edges finding the hair.</li>
   <li>Click <b>Save</b> (<kbd>⌘S</kbd>, or File › Save Lens Blur Photo). Atelier renders the photo at full size with its blur into a 16-bit ProPhoto TIFF next to the original, stacks it on the original (its thumbnail says <b>Lens Blur</b>), and opens it in Develop. Your Develop edits are baked in, so the TIFF starts with no edits of its own; edit it like any photo.</li>
-  <li><b>Close</b> (<kbd>Esc</kbd>) goes back to Develop's panels without saving, and the photo shows without its blur at once. The Lens Blur settings stay on the original either way, so opening Lens Blur again carries on where you left off.</li>
+  <li><b>Cancel</b> (<kbd>Esc</kbd>) goes back to Develop and throws away everything you changed in the mode, as if you had never opened it; the photo shows without its blur at once. Leaving any other way (another photo, another view) cancels too. Only <b>Save</b> keeps the changes: opening Lens Blur again then carries on from what you saved.</li>
 </ol>
 <p>To change the blur later, open Lens Blur on the original or on the Lens Blur photo (it opens the original it came from). The bar under the panel says whether the Lens Blur photo is up to date; if you changed the blur, or the original's Develop edits, since it was saved, the button reads <b>Update</b> and renders the same TIFF again. The Lens Blur photo keeps its own edits, rating and keywords.</p>
 <p>Outside the mode the original shows without its blur: in the Grid, in Develop and when you export it. Export the Lens Blur photo for the blurred version.</p>

@@ -200,9 +200,12 @@ struct DevelopImageView: View {
 
     private func bottomBar(showHint: Bool, compactZoom: Bool) -> some View {
         HStack(spacing: 10) {
-            comparePicker
-                .disabled(compareDisabled)
-            if showHint, develop.compareMode == .slider {
+            // The Lens Blur mode has its own Before, in its bar; only zoom here.
+            if !develop.isLensBlurring {
+                comparePicker
+                    .disabled(compareDisabled)
+            }
+            if showHint, develop.compareMode == .slider, !develop.isLensBlurring {
                 Text("Drag the divider to compare").foregroundStyle(.secondary).fixedSize()
             }
             Spacer(minLength: 8)
@@ -424,11 +427,15 @@ struct DevelopPanel: View {
             ScrollViewReader { scroll in
             ScrollView(.vertical) {
                 VStack(spacing: 0) {
-                    PanelSection(title: "Histogram", isExpanded: isExpanded("histogram"), soloMode: $soloMode,
-                                 expandAll: expandAll, collapseAll: collapseAll) {
-                        HistogramView(develop: develop)
+                    // The Lens Blur mode is an inline app: its own controls only. Develop's
+                    // histogram (which drags Basic's sliders) and tool strip stay in Develop.
+                    if !develop.isLensBlurring {
+                        PanelSection(title: "Histogram", isExpanded: isExpanded("histogram"), soloMode: $soloMode,
+                                     expandAll: expandAll, collapseAll: collapseAll) {
+                            HistogramView(develop: develop)
+                        }
+                        ToolStrip(develop: develop)
                     }
-                    ToolStrip(develop: develop)
                     if develop.isCropping {
                         PanelSection(title: "Crop & Straighten", isExpanded: .constant(true), soloMode: $soloMode,
                                      isModified: develop.settings.crop != nil, reset: { develop.setCrop(Crop()) },
