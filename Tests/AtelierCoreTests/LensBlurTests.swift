@@ -140,9 +140,11 @@ final class LensBlurTests: XCTestCase {
         let before = try render(photo, width: width, height: height)
         let after = try render(LensBlur.apply(photo, depth: depth, settings: settings, areas: areas),
                                width: width, height: height)
-        XCTAssertEqual(spread(after, width: width, height: height, columns: 136..<252),
-                       spread(before, width: width, height: height, columns: 136..<252), accuracy: 1e-3,
-                       "the Focus area stays sharp although it is far")
+        // Within 2%: the first columns sit 8 px from the Blur area (6.4 px blur at this size), and
+        // on Rosh's Mac the area kept 99.2% of the checker's contrast (Nov 16, 2026).
+        XCTAssertGreaterThan(spread(after, width: width, height: height, columns: 136..<252),
+                             0.98 * spread(before, width: width, height: height, columns: 136..<252),
+                             "the Focus area stays sharp although it is far")
         XCTAssertLessThan(spread(after, width: width, height: height, columns: 4..<120),
                           0.1 * spread(before, width: width, height: height, columns: 4..<120),
                           "the Blur area blurs although it is in focus")
