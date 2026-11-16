@@ -1393,7 +1393,23 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 
 **Evidence:** [Docs/Reviews/Architecture-Review-2026-11-16.md](Docs/Reviews/Architecture-Review-2026-11-16.md), source review of `main` `c146785`, revised after Rosh's source check on PR #155 (head `90abdd8`). Source only: no timing or memory measurement; sizes are pixel payloads and counts are source counts.
 
-**Order agreed in review:** (1) C1: Fine Edges/Depth hold their lock through inference and main-actor Remove waits on it; `failure`/`lastRun`/`isWorking` read on main without the lock (High, S narrow). Then E1: silent `try?` catalog writes in Generative Fill, Match Look and notes (Medium, S per path). (2) Measure in parallel on the same heavy edits: M1 full-size images/session kept until the next open, no memory-pressure handling (High on large RAWs, plausible); P1 history of up to 500 full settings copies encoded and written on main (High if timings confirm; background save M, format change M–L). (3) P2: one transaction per photo in Sync/presets/Match Look, partial completion, non-atomic read-write (Medium, S–M); measure observation cost. (4) D1: one tool state with Lens Blur Refine nested (Medium, M). Others (R1, M2, D2, C2, P3, P4, D4, E2-E4, B1-B3) as listed in the review.
+**Work order (every finding stays in it; Rosh, Nov 16, 2026: "order and skipping are different"):**
+1. **AT-077 memory (PR #157, in progress):** M1 (full-size images and session let go at Fit, leaving Develop, memory pressure; Core Image cache budget), with R1 (one ONNX model host: shared setup, unload when idle or under pressure, the runtime's working memory), M2 (Core Image contexts made per call: HDR decodes, splash), M3 (thumbnail cache byte limit, done in #157) and whatever the real-RAW memory profile shows holds the 16 GB. C1 (model lock held through inference, Remove waits on main, status strings race) is fixed in the same host work.
+2. **E1:** silent `try?` catalog writes (Generative Fill, Match Look, notes) report their error.
+3. **P1:** measure history save time, then a background save; a history format change only if the numbers call for it.
+4. **P2 + R3:** batch edits in one transaction, one path for edits to photos not open; measure the Grid observation cost.
+5. **D1:** one tool state, Lens Blur Refine nested.
+6. **M4 + lifecycle (one small PR):** bounded ShootingInfo, AI Denoise status/failure maps, preview failures, per-session subject/matte maps; observer tokens kept and removed; MCP socket stop, observation cancel and Private Photos teardown on owner teardown.
+7. **P4:** HDR shows the photo first, hashes in the background, Save waits on the hash.
+8. **P3:** Export with two photos in flight, after measuring throughput and peak memory.
+9. **D4:** HDR GPU/CPU parity test (full-size GPU Save separately, later).
+10. **R2:** one download state for Depth and Fine Edges, UIs unchanged.
+11. **E2:** typed keys for shared settings, narrow the global defaults observer; **E3:** `os.Logger` for render, catalog, models, agents.
+12. **B2:** snapshot/smoke hooks behind a compilation condition (check release packaging and the UI harness together); **E4:** Core `Develop` subfolders (mechanical).
+13. **D3:** first Processor adapter for Edit In and ComfyUI (with AT-008).
+14. **P5 + D2:** split DevelopController along concrete ownership problems, `@Observable` where Frame Diagnostics shows view updates cost time.
+15. **C2 + C3:** Swift 6 mode per module (AgentActions, AgentMCP, AtelierActions, HDRCore, Core, app); write down concrete scheduling problems before any rule.
+16. **B1:** a separate models target, once R1's host gives Core an interface to call. **B3:** keep Debug `-O` until measured; revisit when the per-pixel loops move to the GPU.
 
 **Scope to agree:** one item per PR, with measurements before and after where marked "measure first". No broad rewrite is approved by this entry.
 
