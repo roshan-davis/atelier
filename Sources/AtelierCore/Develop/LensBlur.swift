@@ -187,13 +187,15 @@ public enum LensBlur {
         return result.cropped(to: extent).insertingIntermediate(cache: true)
     }
 
-    /// The Focus and Blur areas (AT-072's refine): every visible mask with Lens Focus, drawn on
+    /// The Focus and Blur areas (AT-072's refine): every mask with Lens Focus, hidden or not, drawn on
     /// `base`'s frame, Focus strength in red and Blur strength in green (the strongest where
     /// areas overlap). Nil when no mask has Lens Focus, so photos without areas pay nothing.
     static func areas(_ settings: DevelopSettings, on base: CIImage, provider: MaskProvider?) -> CIImage? {
         let extent = base.extent
         var result: CIImage?
-        for mask in settings.masks where !mask.isHidden {
+        // Hidden masks count too: the eye in Masking hides a mask's look, and Lens Blur's own
+        // Refine menu (Not Used) is what takes it out of the blur (Rosh, Nov 16, 2026).
+        for mask in settings.masks {
             let strength = mask.lensFocusStrength
             guard strength.focus > 0 || strength.blur > 0,
                   let alpha = DevelopRenderer.maskImage(mask, base: base, provider: provider) else { continue }

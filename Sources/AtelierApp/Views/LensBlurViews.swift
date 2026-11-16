@@ -127,8 +127,7 @@ struct LensBlurPanel: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                         .frame(width: 110, alignment: .leading)
-                        .foregroundStyle(mask.isHidden ? .secondary : .primary)
-                        .help(mask.isHidden ? "\(mask.name) is hidden in Masking, so it does nothing here" : mask.name)
+                        .help(mask.isHidden ? "\(mask.name) is hidden in Masking: it doesn't change the look, but Lens Blur can still use it" : mask.name)
                     Picker(mask.name, selection: Binding(get: { LensBlurRole(mask[.lensFocus]) },
                                                          set: { develop.setLensBlurRole($0, of: mask.id) })) {
                         ForEach(LensBlurRole.allCases, id: \.self) { Text($0.title).tag($0) }

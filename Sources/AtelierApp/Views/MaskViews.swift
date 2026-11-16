@@ -584,6 +584,23 @@ struct MasksPanel: View {
     private typealias Mode = DevelopSettings.MaskComponent.Mode
 
     var body: some View {
+        panel
+            .alert(lensBlurDeleteTitle, isPresented: Binding(get: { develop.pendingLensBlurMaskDelete != nil },
+                                                             set: { if !$0 { develop.pendingLensBlurMaskDelete = nil } })) {
+                Button("Keep for Lens Blur Only") { develop.finishLensBlurMaskDelete(keepForLensBlur: true) }
+                Button("Delete", role: .destructive) { develop.finishLensBlurMaskDelete(keepForLensBlur: false) }
+                Button("Cancel", role: .cancel) { develop.pendingLensBlurMaskDelete = nil }
+            } message: {
+                Text("Lens Blur uses it to keep an area sharp or blur it. Delete removes it there too. Keep for Lens Blur Only hides it here, so it no longer changes the photo's look, and Lens Blur keeps using it.")
+            }
+    }
+
+    private var lensBlurDeleteTitle: String {
+        let names = develop.pendingLensBlurMaskDelete?.names ?? []
+        return names.count == 1 ? "“\(names[0])” is used by Lens Blur" : "\(names.count) of these masks are used by Lens Blur"
+    }
+
+    private var panel: some View {
         VStack(alignment: .leading, spacing: 10) {
             maskList
             HStack(spacing: 6) {
@@ -679,7 +696,8 @@ struct MasksPanel: View {
                     .frame(width: 16)
             }
             .buttonStyle(.borderless)
-            .help(mask.isHidden ? "Show this mask's effect" : "Hide this mask's effect")
+            .help(mask.isHidden ? "Show this mask's effect" : mask[.lensFocus] != 0
+                  ? "Hide this mask's effect on the look (Lens Blur keeps using it)" : "Hide this mask's effect")
             Image(systemName: mask.components.first?.kind.symbol ?? "circle.dashed")
                 .foregroundStyle(.secondary)
                 .frame(width: 16)

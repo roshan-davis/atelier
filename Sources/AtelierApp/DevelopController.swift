@@ -497,6 +497,8 @@ final class DevelopController: ObservableObject {
     @Published var selectedComponentID: UUID?
     /// What the next drag on the photo draws, if anything.
     @Published var maskTool: MaskTool?
+    /// A mask delete waiting for the user's answer because Lens Blur uses the mask.
+    @Published var pendingLensBlurMaskDelete: LensBlurMaskDelete?
     /// Tints the selected mask red on the photo (O).
     @Published var showMaskOverlay = UserDefaults.standard.bool(forKey: "masks.showOverlay") {
         didSet {
@@ -3267,8 +3269,50 @@ extension DevelopController {
         changed(step: "Duplicate \(settings.masks[index].name)")
     }
 
+    /// A delete that would take masks out of Lens Blur too, waiting for the user's choice (the
+    /// Masks panel asks: delete, keep for Lens Blur only, or cancel).
+    struct LensBlurMaskDelete: Equatable {
+        /// Every mask the delete would remove, and those of them that Lens Blur uses.
+        let ids: [UUID]
+        let used: [UUID]
+        let names: [String]
+    }
+
+    /// Masks Lens Blur's Refine uses (Keep Sharp or Blur), among `ids`.
+    private func lensBlurUses(_ ids: [UUID]) -> [Mask] {
+        settings.masks.filter { ids.contains($0.id) && $0[.lensFocus] != 0 }
+    }
+
+    /// Asks first when a delete would also take masks out of Lens Blur; true when it asked.
+    private func asksBeforeDeleting(_ ids: [UUID]) -> Bool {
+        let used = lensBlurUses(ids)
+        guard !used.isEmpty else { return false }
+        pendingLensBlurMaskDelete = LensBlurMaskDelete(ids: ids, used: used.map(\.id), names: used.map(\.name))
+        return true
+    }
+
+    /// The answer to `pendingLensBlurMaskDelete`: delete them all, or keep the ones Lens Blur
+    /// uses (hidden in Masking, so they no longer change the look) and delete the rest. One step.
+    func finishLensBlurMaskDelete(keepForLensBlur: Bool) {
+        guard let pending = pendingLensBlurMaskDelete else { return }
+        pendingLensBlurMaskDelete = nil
+        let removed = keepForLensBlur ? pending.ids.filter { !pending.used.contains($0) } : pending.ids
+        if keepForLensBlur {
+            for id in pending.used { if let index = maskIndex(id) { settings.masks[index].isHidden = true } }
+        }
+        settings.masks.removeAll { removed.contains($0.id) }
+        if let selected = selectedMaskID, removed.contains(selected) {
+            selectedMaskID = settings.masks.last?.id
+            selectedComponentID = nil
+        }
+        let names = pending.names.joined(separator: ", ")
+        changed(step: keepForLensBlur ? "Keep \(names) for Lens Blur Only" : (pending.ids.count == 1 ? "Delete \(names)" : "Delete Masks"))
+        if !removed.isEmpty { DeleteFeedback.play(.remove) }
+    }
+
     func deleteMask(_ id: UUID) {
         guard let index = maskIndex(id) else { return }
+        if asksBeforeDeleting([id]) { return }
         let name = settings.masks[index].name
         settings.masks.remove(at: index)
         if selectedMaskID == id {
@@ -3281,6 +3325,7 @@ extension DevelopController {
 
     func deleteAllMasks() {
         guard !settings.masks.isEmpty else { return }
+        if asksBeforeDeleting(settings.masks.map(\.id)) { return }
         settings.masks = []
         selectedMaskID = nil
         selectedComponentID = nil

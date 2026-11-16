@@ -119,7 +119,9 @@ final class LensBlurTests: XCTestCase {
         XCTAssertEqual(pixels[inside + 1], 0, accuracy: 0.01)
         XCTAssertEqual(pixels[outside], 0, accuracy: 0.01)
         settings.masks[0].isHidden = true
-        XCTAssertNil(LensBlur.areas(settings, on: base, provider: nil), "a hidden area does nothing")
+        XCTAssertNotNil(LensBlur.areas(settings, on: base, provider: nil), "hidden in Masking, still used by Lens Blur")
+        settings.masks[0][.lensFocus] = 0
+        XCTAssertNil(LensBlur.areas(settings, on: base, provider: nil), "Not Used takes it out")
     }
 
     /// The far half of the checker, under a Focus area, stays sharp; the near half, under a Blur
