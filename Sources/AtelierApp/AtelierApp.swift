@@ -211,16 +211,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Snapshot runs (ATELIER_SNAPSHOTS) stay in the background: no Dock icon, never the
+        // active app, every window off screen (LayoutSnapshots.hideOffScreen), so a check on
+        // Rosh's Mac shows nothing while they work.
+        let snapshots = LayoutSnapshots.outputFolder != nil
         // Launched from `swift run` the process has no bundle; make it a regular foreground app.
-        NSApp.setActivationPolicy(.regular)
+        NSApp.setActivationPolicy(snapshots ? .accessory : .regular)
         if let iconURL = AtelierResources.bundle.url(forResource: "AppIcon", withExtension: "icns"),
            let icon = NSImage(contentsOf: iconURL) {
             NSApp.applicationIconImage = icon
         }
         MainActor.assumeIsolated {
             Theme.current.apply()
+            if snapshots { LayoutSnapshots.hideOffScreen() }
         }
-        NSApp.activate(ignoringOtherApps: true)
+        if !snapshots { NSApp.activate(ignoringOtherApps: true) }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

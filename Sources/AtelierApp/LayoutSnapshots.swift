@@ -21,7 +21,21 @@ enum LayoutSnapshots {
             .split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty })
     }
 
+    /// Far outside every screen: snapshot windows are drawn there, never where Rosh can see them.
+    static let offScreen = CGPoint(x: -40_000, y: -40_000)
+
+    /// Called once at launch of a snapshot run: moves the library window (and any other) off
+    /// screen, and keeps moving new ones there, so nothing appears on the Mac's display.
+    static func hideOffScreen() {
+        for window in NSApp.windows { window.setFrameOrigin(offScreen) }
+        NotificationCenter.default.addObserver(forName: NSWindow.didUpdateNotification, object: nil, queue: .main) { note in
+            guard let window = note.object as? NSWindow, window.frame.origin != offScreen else { return }
+            MainActor.assumeIsolated { window.setFrameOrigin(offScreen) }
+        }
+    }
+
     static func run(model: LibraryModel, into folder: URL) async {
+        for window in NSApp.windows { window.setFrameOrigin(offScreen) }
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         // This picker is independent of the snapshot catalog and fits in a standalone window.
         await capture(AnyView(BuiltInReferencePicker(selection: .furyRoadScene) { _ in }),
@@ -1131,7 +1145,8 @@ enum LayoutSnapshots {
 
     /// Renders a layer-backed AppKit view, such as the splash, at 2x.
     private static func capture(_ view: NSView, to url: URL) {
-        let window = NSWindow(contentRect: view.bounds, styleMask: [.borderless], backing: .buffered, defer: false)
+        let window = NSWindow(contentRect: CGRect(origin: offScreen, size: view.bounds.size),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
         window.contentView = view
         view.layoutSubtreeIfNeeded()
         view.display()
@@ -1149,14 +1164,16 @@ enum LayoutSnapshots {
 
     private static func capture(_ view: AnyView, size: CGSize, to url: URL) async {
         // Borderless, so the window isn't limited to the CI machine's small screen.
-        let window = NSWindow(contentRect: CGRect(origin: .zero, size: size),
+        // Off screen, so the check never shows a window on Rosh's display.
+        let window = NSWindow(contentRect: CGRect(origin: offScreen, size: size),
                               styleMask: [.borderless], backing: .buffered, defer: false)
         window.appearance = NSApp.appearance
         // cacheDisplay draws only the view, not the window's background behind it, so paint that in.
         let host = NSHostingView(rootView: view.background(Color(nsColor: .windowBackgroundColor)))
         window.contentView = host
         window.setContentSize(size)
-        window.orderFront(nil)
+        window.setFrameOrigin(offScreen)
+        window.orderFrontRegardless()
         // Let SwiftUI lay out and AppKit controls settle.
         try? await Task.sleep(for: .seconds(2))
         host.layoutSubtreeIfNeeded()
