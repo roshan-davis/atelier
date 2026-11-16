@@ -15,7 +15,7 @@
 <h1>Lens Blur</h1>
 <p class="lede">Blurs the photo as a wide-open lens would, from how far away each part is: the background melts away, a foreground can go soft too, and bright points turn into bokeh. Use it to make a subject stand out from a busy scene, or to give a phone or small-sensor photo the look of a fast lens.</p>
 
-<div class="chips"><a href="#apply">Apply and Blur Amount</a><a href="#bokeh">Bokeh</a><a href="#focal-range">Focal Range</a><a href="#refine">Refine: Focus and Blur</a><a href="#visualize">Visualize Depth</a><a href="#zoom">Up close</a><a href="#depth-model">The depth model</a><a href="#notes">Good to know</a></div>
+<div class="chips"><a href="#apply">Apply and Blur Amount</a><a href="#bokeh">Bokeh</a><a href="#focal-range">Focal Range</a><a href="#refine">Refine: Focus and Blur</a><a href="#hair-steps">Hair, step by step</a><a href="#visualize">Visualize Depth</a><a href="#zoom">Up close</a><a href="#depth-model">The depth model</a><a href="#notes">Good to know</a></div>
 
 <figure>
   <div class="panel narrow" style="margin:0 auto">
@@ -82,6 +82,40 @@
   <div class="frame compare" data-before="lens-blur-after.jpg" data-after="lens-blur-refine-after.jpg" data-labels="Focused on the hiker|With a Focus area on the log"></div>
   <figcaption>A Focus area over the log in front (a Radial Gradient): the log stays sharp with the hiker, and everything else keeps its blur.</figcaption>
 </figure>
+
+<h3 id="hair-steps">Step by step: a portrait with hair</h3>
+<figure>
+  <div class="pins pinned">
+  <div class="panel narrow" style="margin:0 auto">
+    <div class="ph"><span class="chev">›</span>Lens Blur · Refine<span class="grow"></span></div>
+    <div class="pb">
+      <div class="row" style="background:#3a3f4b;border-radius:5px;padding:2px 6px">👁 Focus</div>
+      <div class="row" style="padding-left:22px">● Select People</div>
+      <div class="row"><span class="btn" data-pin="1">Add to Focus ⌄</span><span class="btn" data-pin="7" data-pin-side="right">Add to Blur ⌄</span><span class="btn">Subtract ⌄</span></div>
+      <div class="row" data-pin="5"><span class="check"><i class="on"></i>Show Overlay</span></div>
+      <div class="gh">Select People</div>
+      <div class="row" data-pin="2"><span class="check"><i class="on"></i>Entire Person</span><span class="check"><i></i>Entire Face</span></div>
+      <div class="row" data-pin="3" data-pin-side="right"><span class="check"><i class="on"></i>Fine Edges</span><span style="flex:1"></span><span style="color:var(--app-text-2);font-size:11px">Hair Detail</span></div>
+      <div class="sl" data-name="Grow" data-value="0" data-at="0.5" data-def="0.5"></div>
+      <div class="sl" data-name="Refine Edge" data-value="0" data-at="0" data-def="0"></div>
+      <div class="sl" data-pin="4" data-name="Feather" data-value="0" data-at="0" data-def="0.1"></div>
+      <div class="gh">Brush</div>
+      <div class="sl" data-name="Size" data-value="1.5" data-at="0.03" data-def="0"></div>
+      <div class="sl" data-name="Feather" data-value="50" data-at="0.5" data-def="0"></div>
+      <div class="sl" data-pin="6" data-pin-side="right" data-name="Flow" data-value="15" data-at="0.14" data-def="0"></div>
+    </div>
+  </div>
+  </div>
+</figure>
+<ol class="steps">
+  <li><b>Apply</b> Lens Blur and set <b>Blur Amount</b>. Tick <b>Visualize Depth</b>: the face and hair should be drawn lighter (in the Focal Range). If not, click the <b>⌖</b> picker, then an eye. Untick it.</li>
+  <li>Click <b>Refine…</b>, then <b>Add to Focus › Select People</b> (1). Keep <b>Entire Person</b> (2) and <b>Fine Edges</b> (3) on, with the Hair Detail model if you have it, and wait for the line that says it ran.</li>
+  <li>Set the part's <b>Feather</b> to 0 (4), and Grow and Refine Edge to 0. Feather softens the edge outward onto the background, so the background right beside the hair would stay partly sharp.</li>
+  <li>Zoom to 100% on the hair and tick <b>Show Overlay</b> (5, or <kbd>O</kbd>). Red is the Focus area: it should cover the strands, not the gaps between them. A strand without red will blur; a gap with red stays sharp.</li>
+  <li>Dodge and burn the mask: with <b>Focus</b> selected, <b>Add to Focus › Brush</b> with a small Size, Feather 50 and <b>Flow</b> 15 (6). Each pass over a strand builds it up. Hold <kbd>⌥</kbd> (or use <b>Subtract › Brush</b>) at the same Flow to take red off a gap.</li>
+  <li>If background between strands still looks sharp, paint it with <b>Add to Blur › Brush</b> (7): it blurs like the background around it.</li>
+  <li>Untick <b>Show Overlay</b> to see the result. Zoomed in, the preview shows first and the full-size photo follows a moment later. Click <b>Done</b>.</li>
+</ol>
 
 <h2 id="visualize">Visualize Depth</h2>
 <p>Shows the photo's depth instead of the photo: warm colors are near, cool colors far, and the parts inside the Focal Range are drawn lighter. Use it to see what the focus covers while you move Near and Far. It turns off when you leave the panel.</p>
