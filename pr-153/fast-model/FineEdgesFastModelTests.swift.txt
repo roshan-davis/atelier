@@ -1,0 +1,219 @@
+import CoreGraphics
+import Foundation
+import ImageIO
+import UniformTypeIdentifiers
+import XCTest
+@testable import AtelierCore
+
+/// PR #153 measurement (local only): Select Subject with Fine Edges, Fast vs Hair Detail, CPU vs
+/// Core ML, on real photos; the mattes and Lens Blur saves are written for side-by-side crops.
+/// One variant per process, with HOME pointing at a sandbox whose Models folder holds only the
+/// model under test:
+///   FE_VARIANT=hd-cpu|fast-cpu|fast-coreml-all|fast-coreml-cpugpu FE_PHOTO=… FE_NAME=… FE_OUT=… [FE_SAVE=1]
+/// testCompose then reads FE_OUT/FE_NAME and writes the crops.
+final class FineEdgesFastModelTests: XCTestCase {
+    private func log(_ line: String, _ out: URL) {
+        print("FASTBENCH: \(line)")
+        let file = out.appendingPathComponent("results.txt")
+        let data = Data(("\(line)\n").utf8)
+        if let handle = try? FileHandle(forWritingTo: file) {
+            handle.seekToEndOfFile(); handle.write(data); try? handle.close()
+        } else {
+            try? data.write(to: file)
+        }
+    }
+
+    func testMeasure() throws {
+        let env = ProcessInfo.processInfo.environment
+        guard let variant = env["FE_VARIANT"], let photo = env["FE_PHOTO"], let name = env["FE_NAME"], let outRoot = env["FE_OUT"] else {
+            throw XCTSkip("Set FE_VARIANT, FE_PHOTO, FE_NAME, FE_OUT")
+        }
+        let out = URL(fileURLWithPath: outRoot).appendingPathComponent(name)
+        try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+        let model = try XCTUnwrap(FineEdges.active, "no Fine Edges model under HOME")
+        XCTAssertEqual(model, variant.hasPrefix("hd") ? .hairDetail : .fast, "wrong model installed in this HOME")
+
+        FineEdges.prefersCoreML = variant.contains("coreml")
+        if FineEdges.prefersCoreML {
+            let units = variant.hasSuffix("cpugpu") ? "CPUAndGPU" : "ALL"
+            let cache = FileManager.default.temporaryDirectory.appendingPathComponent("FastBench-\(units)-\(UUID().uuidString)")
+            try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
+            FineEdges.coreMLOptionsOverride = ["ModelFormat": ProcessInfo.processInfo.environment["FE_FORMAT"] ?? "MLProgram", "MLComputeUnits": units, "ModelCacheDirectory": cache.path]
+        }
+        FineEdges.forgetSession()
+        FineMatteCache.shared.removeAll()
+
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("FastBench-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let copy = folder.appendingPathComponent(URL(fileURLWithPath: photo).lastPathComponent)
+        try FileManager.default.copyItem(at: URL(fileURLWithPath: photo), to: copy)
+        let catalog = try Catalog()
+        let semaphore = DispatchSemaphore(value: 0)
+        nonisolated(unsafe) var imported: Int64?
+        Task.detached {
+            let result = await Importer(catalog: catalog, previews: nil).run(sources: [copy], options: ImportOptions(buildPreviews: false))
+            imported = result.importedAssetIDs.first
+            semaphore.signal()
+        }
+        semaphore.wait()
+        let assetID = try XCTUnwrap(imported)
+        let url = try XCTUnwrap(try catalog.fileURL(for: assetID))
+        let base = try catalog.developSettings(for: assetID)
+        let renderer = DevelopRenderer()
+
+        if variant == "fast-cpu" {
+            let session = try XCTUnwrap(renderer.session(for: url, maxPixelSize: nil))
+            let started = Date()
+            let vision = session.subjectMask(base, feather: 3, fineEdges: false)
+            log("\(name) vision: Select Subject without Fine Edges \(ms(started)) ms", out)
+            if let vision { write(vision, out.appendingPathComponent("vision-matte.png")) }
+        }
+
+        var matteImage: CGImage?
+        for run in 1...2 {
+            if run == 2 { FineMatteCache.shared.removeAll() }
+            let session = try XCTUnwrap(renderer.session(for: url, maxPixelSize: nil))
+            let runsBefore = FineEdges.runs
+            let started = Date()
+            let mask = session.subjectMask(base, feather: 3, fineEdges: true)
+            log("\(name) \(variant) run \(run): Select Subject + Fine Edges \(ms(started)) ms; model runs \(FineEdges.runs - runsBefore); "
+                + "\(FineEdges.lastRun ?? "-"); failure \(FineEdges.failure ?? "none")", out)
+            if run == 1 { matteImage = mask }
+        }
+        let matte = try XCTUnwrap(matteImage, "no matte")
+        write(matte, out.appendingPathComponent("\(variant)-matte.png"))
+
+        guard env["FE_SAVE"] != nil else { return }
+        // Lens Blur saves with a Select Subject Focus area as Lens Blur's Refine makes it.
+        func save(fine: Bool, label: String, warm: Bool) throws {
+            var settings = base
+            settings[.lensBlurApply] = 1
+            settings[.lensBlurAmount] = 100
+            var area = DevelopSettings.Mask(name: "Focus", components: [.init(.subject(DevelopSettings.Selection(feather: 3, fineEdges: fine)))])
+            area.lensBlurRole = .focus
+            settings.lensBlurAreas = [area]
+            try catalog.saveDevelopSettings(settings, for: assetID)
+            if !warm { FineMatteCache.shared.removeAll() }
+            let runsBefore = FineEdges.runs
+            let started = Date()
+            let saved = try LensBlurPhoto.save(assetID, catalog: catalog, importer: Importer(catalog: catalog, previews: nil))
+            log("\(name) \(label) Save (\(warm ? "matte already found" : "matte not found yet")): \(ms(started)) ms; model runs \(FineEdges.runs - runsBefore)", out)
+            let target = out.appendingPathComponent("\(label)-lensblur.tif")
+            try? FileManager.default.removeItem(at: target)
+            try FileManager.default.copyItem(at: saved.url, to: target)
+        }
+        if variant == "fast-cpu" { try save(fine: false, label: "vision", warm: true) }
+        try save(fine: true, label: variant, warm: true)
+        try save(fine: true, label: variant, warm: false)
+    }
+
+    // MARK: Crops
+
+    func testCompose() throws {
+        let env = ProcessInfo.processInfo.environment
+        guard let name = env["FE_NAME"], let outRoot = env["FE_OUT"] else { throw XCTSkip("Set FE_NAME, FE_OUT") }
+        let out = URL(fileURLWithPath: outRoot).appendingPathComponent(name)
+        let side = Int(env["FE_CROP"] ?? "192") ?? 192
+        func gray(_ file: String) -> (values: [UInt8], width: Int, height: Int)? {
+            guard let image = load(out.appendingPathComponent(file)) else { return nil }
+            let w = image.width, h = image.height
+            var px = [UInt8](repeating: 0, count: w * h)
+            let ctx = CGContext(data: &px, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w,
+                                space: CGColorSpace(name: CGColorSpace.linearGray)!, bitmapInfo: CGImageAlphaInfo.none.rawValue)!
+            ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+            return (px, w, h)
+        }
+        let vision = try XCTUnwrap(gray("vision-matte.png")), fast = try XCTUnwrap(gray("fast-cpu-matte.png"))
+        let hd = try XCTUnwrap(gray("hd-cpu-matte.png"))
+        let w = fast.width, h = fast.height
+        XCTAssertEqual(hd.width, w); XCTAssertEqual(vision.width, w)
+
+        // Matte differences between the Fast variants and Fast on the CPU, and Fast vs Hair Detail.
+        for other in ["fast-coreml-all", "fast-coreml-cpugpu", "hd-cpu"] {
+            guard let o = gray("\(other)-matte.png"), o.values.count == fast.values.count else { continue }
+            var maxDiff = 0, sum = 0, over = 0
+            for i in 0..<o.values.count {
+                let d = abs(Int(o.values[i]) - Int(fast.values[i]))
+                maxDiff = max(maxDiff, d); sum += d; if d > 25 { over += 1 }
+            }
+            log("\(name) matte \(other) vs fast-cpu: max \(String(format: "%.4f", Double(maxDiff) / 255)), mean "
+                + "\(String(format: "%.5f", Double(sum) / Double(o.values.count) / 255)), pixels off by >10%: \(over)", out)
+        }
+
+        // Three crops where Hair Detail differs most from Fast (and from Vision): the hair edge.
+        var score = [Float](repeating: 0, count: w * h)
+        for i in 0..<(w * h) {
+            score[i] = Float(abs(Int(hd.values[i]) - Int(fast.values[i]))) + 0.5 * Float(abs(Int(hd.values[i]) - Int(vision.values[i])))
+        }
+        // Integral image for window sums.
+        var integral = [Double](repeating: 0, count: (w + 1) * (h + 1))
+        for y in 0..<h {
+            var row = 0.0
+            for x in 0..<w {
+                row += Double(score[y * w + x])
+                integral[(y + 1) * (w + 1) + x + 1] = integral[y * (w + 1) + x + 1] + row
+            }
+        }
+        func sum(_ x: Int, _ y: Int) -> Double {
+            integral[(y + side) * (w + 1) + x + side] - integral[y * (w + 1) + x + side]
+                - integral[(y + side) * (w + 1) + x] + integral[y * (w + 1) + x]
+        }
+        var picked: [CGPoint] = []
+        let step = max(4, side / 16)
+        for _ in 0..<3 {
+            var best = (-1.0, 0, 0)
+            for y in stride(from: 0, through: h - side, by: step) {
+                for x in stride(from: 0, through: w - side, by: step) {
+                    if picked.contains(where: { abs(Int($0.x) - x) < side && abs(Int($0.y) - y) < side }) { continue }
+                    let s = sum(x, y)
+                    if s > best.0 { best = (s, x, y) }
+                }
+            }
+            guard best.0 >= 0 else { break }
+            picked.append(CGPoint(x: best.1, y: best.2))
+        }
+
+        let tiffs = ["vision", "fast-cpu", "hd-cpu"].map { load(out.appendingPathComponent("\($0)-lensblur.tif")) }
+        let mattes = ["vision-matte.png", "fast-cpu-matte.png", "hd-cpu-matte.png"].map { load(out.appendingPathComponent($0)) }
+        for (index, point) in picked.enumerated() {
+            // 3 columns (Vision, Fast, Hair Detail) × 2 rows (matte, Lens Blur), 100%, 6 px gaps.
+            let gap = 6, cw = side * 3 + gap * 2, ch = side * 2 + gap
+            let ctx = CGContext(data: nil, width: cw, height: ch, bitsPerComponent: 8, bytesPerRow: 0,
+                                space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+            ctx.setFillColor(CGColor(red: 1, green: 0, blue: 1, alpha: 1))
+            ctx.fill(CGRect(x: 0, y: 0, width: cw, height: ch))
+            ctx.interpolationQuality = .none
+            for column in 0..<3 {
+                let x = column * (side + gap)
+                for (row, image) in [mattes[column], tiffs[column]].enumerated() {
+                    guard let image else { continue }
+                    // Scale for a TIFF a pixel or two off the matte's size.
+                    let sx = Double(image.width) / Double(w), sy = Double(image.height) / Double(h)
+                    let rect = CGRect(x: Double(point.x) * sx, y: Double(point.y) * sy, width: Double(side) * sx, height: Double(side) * sy).integral
+                    guard let piece = image.cropping(to: rect) else { continue }
+                    let y = ch - (row * (side + gap)) - side
+                    ctx.draw(piece, in: CGRect(x: x, y: y, width: side, height: side))
+                }
+            }
+            let file = out.appendingPathComponent("\(name)-crop\(index + 1)-x\(Int(point.x))-y\(Int(point.y)).png")
+            write(ctx.makeImage()!, file)
+            log("\(name) crop \(index + 1) at x \(Int(point.x)), y \(Int(point.y)), \(side) px: \(file.lastPathComponent)", out)
+        }
+    }
+
+    // MARK: Helpers
+
+    private func ms(_ start: Date) -> Int { Int(Date().timeIntervalSince(start) * 1000) }
+
+    private func load(_ url: URL) -> CGImage? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        return CGImageSourceCreateImageAtIndex(source, 0, nil)
+    }
+
+    private func write(_ image: CGImage, _ url: URL) {
+        guard let destination = CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil) else { return }
+        CGImageDestinationAddImage(destination, image, nil)
+        CGImageDestinationFinalize(destination)
+    }
+}

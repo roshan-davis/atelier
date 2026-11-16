@@ -1,0 +1,82 @@
+z62 vision: Select Subject without Fine Edges 217 ms
+z62 fast-cpu run 1: Select Subject + Fine Edges 3831 ms; model runs 1; Fine Edges (Fast) ran in 3.7 s (CPU); 15% of the photo is foreground; failure none
+z62 fast-cpu run 2: Select Subject + Fine Edges 2230 ms; model runs 1; Fine Edges (Fast) ran in 2.1 s (CPU); 15% of the photo is foreground; failure none
+z62 vision Save (matte already found): 13062 ms; model runs 0
+z62 fast-cpu Save (matte already found): 13452 ms; model runs 0
+z62 fast-cpu Save (matte not found yet): 16365 ms; model runs 1
+z62 fast-coreml-all run 1: Select Subject + Fine Edges 75917 ms; model runs 1; Fine Edges (Fast) ran in 75.6 s (CPU); 15% of the photo is foreground; failure none
+z62 fast-coreml-all run 2: Select Subject + Fine Edges 2569 ms; model runs 1; Fine Edges (Fast) ran in 2.5 s (CPU); 15% of the photo is foreground; failure none
+z62 fast-coreml-cpugpu run 1: Select Subject + Fine Edges 56290 ms; model runs 1; Fine Edges (Fast) ran in 56.0 s (CPU); 15% of the photo is foreground; failure none
+z62 fast-coreml-cpugpu run 2: Select Subject + Fine Edges 2514 ms; model runs 1; Fine Edges (Fast) ran in 2.4 s (CPU); 15% of the photo is foreground; failure none
+z62 hd-cpu run 1: Select Subject + Fine Edges 25607 ms; model runs 1; Fine Edges (Hair Detail) ran in 24.6 s (CPU); 15% of the photo is foreground; failure none
+z62 hd-cpu run 2: Select Subject + Fine Edges 30870 ms; model runs 1; Fine Edges (Hair Detail) ran in 29.5 s (CPU); 15% of the photo is foreground; failure none
+z62 hd-cpu Save (matte already found): 17528 ms; model runs 0
+z62 hd-cpu Save (matte not found yet): 41364 ms; model runs 1
+z62 matte fast-coreml-all vs fast-cpu: max 0.0000, mean 0.00000, pixels off by >10%: 0
+z62 matte fast-coreml-cpugpu vs fast-cpu: max 0.0000, mean 0.00000, pixels off by >10%: 0
+z62 matte hd-cpu vs fast-cpu: max 0.9843, mean 0.00030, pixels off by >10%: 19150
+z62 crop 1 at x 1840, y 2272, 256 px: z62-crop1-x1840-y2272.png
+z62 crop 2 at x 1872, y 3392, 256 px: z62-crop2-x1872-y3392.png
+z62 crop 3 at x 1584, y 3424, 256 px: z62-crop3-x1584-y3424.png
+portrait vision: Select Subject without Fine Edges 170 ms
+portrait fast-cpu run 1: Select Subject + Fine Edges 4239 ms; model runs 1; Fine Edges (Fast) ran in 4.2 s (CPU); 33% of the photo is foreground; failure none
+portrait fast-cpu run 2: Select Subject + Fine Edges 2536 ms; model runs 1; Fine Edges (Fast) ran in 2.5 s (CPU); 33% of the photo is foreground; failure none
+portrait vision Save (matte already found): 758 ms; model runs 0
+portrait fast-cpu Save (matte already found): 597 ms; model runs 0
+portrait fast-cpu Save (matte not found yet): 2883 ms; model runs 1
+portrait fast-coreml-all run 1: Select Subject + Fine Edges 75571 ms; model runs 1; Fine Edges (Fast) ran in 75.4 s (CPU); 33% of the photo is foreground; failure none
+portrait fast-coreml-all run 2: Select Subject + Fine Edges 2424 ms; model runs 1; Fine Edges (Fast) ran in 2.4 s (CPU); 33% of the photo is foreground; failure none
+portrait fast-coreml-cpugpu run 1: Select Subject + Fine Edges 56998 ms; model runs 1; Fine Edges (Fast) ran in 56.9 s (CPU); 33% of the photo is foreground; failure none
+portrait fast-coreml-cpugpu run 2: Select Subject + Fine Edges 2503 ms; model runs 1; Fine Edges (Fast) ran in 2.5 s (CPU); 33% of the photo is foreground; failure none
+portrait hd-cpu run 1: Select Subject + Fine Edges 24834 ms; model runs 1; Fine Edges (Hair Detail) ran in 24.6 s (CPU); 34% of the photo is foreground; failure none
+portrait hd-cpu run 2: Select Subject + Fine Edges 34753 ms; model runs 1; Fine Edges (Hair Detail) ran in 34.5 s (CPU); 34% of the photo is foreground; failure none
+portrait hd-cpu Save (matte already found): 2308 ms; model runs 0
+portrait hd-cpu Save (matte not found yet): 24731 ms; model runs 1
+portrait matte fast-coreml-all vs fast-cpu: max 0.0000, mean 0.00000, pixels off by >10%: 0
+portrait matte fast-coreml-cpugpu vs fast-cpu: max 0.0000, mean 0.00000, pixels off by >10%: 0
+portrait matte hd-cpu vs fast-cpu: max 0.6392, mean 0.00422, pixels off by >10%: 13333
+portrait crop 1 at x 396, y 396, 192 px: portrait-crop1-x396-y396.png
+portrait crop 2 at x 768, y 360, 192 px: portrait-crop2-x768-y360.png
+portrait crop 3 at x 468, y 0, 192 px: portrait-crop3-x468-y0.png
+kids vision: Select Subject without Fine Edges 168 ms
+kids fast-cpu run 1: Select Subject + Fine Edges 4294 ms; model runs 1; Fine Edges (Fast) ran in 4.2 s (CPU); 54% of the photo is foreground; failure none
+kids fast-cpu run 2: Select Subject + Fine Edges 2559 ms; model runs 1; Fine Edges (Fast) ran in 2.5 s (CPU); 54% of the photo is foreground; failure none
+kids vision Save (matte already found): 772 ms; model runs 0
+kids fast-cpu Save (matte already found): 633 ms; model runs 0
+kids fast-cpu Save (matte not found yet): 2854 ms; model runs 1
+kids fast-coreml-all run 1: Select Subject + Fine Edges 76612 ms; model runs 1; Fine Edges (Fast) ran in 76.5 s (CPU); 54% of the photo is foreground; failure none
+kids fast-coreml-all run 2: Select Subject + Fine Edges 2632 ms; model runs 1; Fine Edges (Fast) ran in 2.6 s (CPU); 54% of the photo is foreground; failure none
+kids fast-coreml-cpugpu run 1: Select Subject + Fine Edges 57990 ms; model runs 1; Fine Edges (Fast) ran in 57.8 s (CPU); 54% of the photo is foreground; failure none
+kids fast-coreml-cpugpu run 2: Select Subject + Fine Edges 2554 ms; model runs 1; Fine Edges (Fast) ran in 2.5 s (CPU); 54% of the photo is foreground; failure none
+kids hd-cpu run 1: Select Subject + Fine Edges 26850 ms; model runs 1; Fine Edges (Hair Detail) ran in 26.6 s (CPU); 55% of the photo is foreground; failure none
+kids hd-cpu run 2: Select Subject + Fine Edges 40055 ms; model runs 1; Fine Edges (Hair Detail) ran in 39.6 s (CPU); 55% of the photo is foreground; failure none
+kids hd-cpu Save (matte already found): 2338 ms; model runs 0
+kids hd-cpu Save (matte not found yet): 37154 ms; model runs 1
+kids matte fast-coreml-all vs fast-cpu: max 0.0000, mean 0.00000, pixels off by >10%: 0
+kids matte fast-coreml-cpugpu vs fast-cpu: max 0.0000, mean 0.00000, pixels off by >10%: 0
+kids matte hd-cpu vs fast-cpu: max 0.6706, mean 0.00439, pixels off by >10%: 14209
+kids crop 1 at x 576, y 60, 192 px: kids-crop1-x576-y60.png
+kids crop 2 at x 180, y 48, 192 px: kids-crop2-x180-y48.png
+kids crop 3 at x 792, y 576, 192 px: kids-crop3-x792-y576.png
+group5 vision: Select Subject without Fine Edges 150 ms
+group5 fast-cpu run 1: Select Subject + Fine Edges 4300 ms; model runs 1; Fine Edges (Fast) ran in 4.3 s (CPU); 69% of the photo is foreground; failure none
+group5 fast-cpu run 2: Select Subject + Fine Edges 2803 ms; model runs 1; Fine Edges (Fast) ran in 2.8 s (CPU); 69% of the photo is foreground; failure none
+group5 vision Save (matte already found): 824 ms; model runs 0
+group5 fast-cpu Save (matte already found): 694 ms; model runs 0
+group5 fast-cpu Save (matte not found yet): 3078 ms; model runs 1
+group5 fast-coreml-all run 1: Select Subject + Fine Edges 78052 ms; model runs 1; Fine Edges (Fast) ran in 77.9 s (CPU); 69% of the photo is foreground; failure none
+group5 fast-coreml-all run 2: Select Subject + Fine Edges 2606 ms; model runs 1; Fine Edges (Fast) ran in 2.6 s (CPU); 69% of the photo is foreground; failure none
+group5 fast-coreml-cpugpu run 1: Select Subject + Fine Edges 56970 ms; model runs 1; Fine Edges (Fast) ran in 56.8 s (CPU); 69% of the photo is foreground; failure none
+group5 fast-coreml-cpugpu run 2: Select Subject + Fine Edges 2461 ms; model runs 1; Fine Edges (Fast) ran in 2.4 s (CPU); 69% of the photo is foreground; failure none
+group5 hd-cpu run 1: Select Subject + Fine Edges 25068 ms; model runs 1; Fine Edges (Hair Detail) ran in 24.9 s (CPU); 69% of the photo is foreground; failure none
+group5 hd-cpu run 2: Select Subject + Fine Edges 37702 ms; model runs 1; Fine Edges (Hair Detail) ran in 37.6 s (CPU); 69% of the photo is foreground; failure none
+group5 hd-cpu Save (matte already found): 1929 ms; model runs 0
+group5 hd-cpu Save (matte not found yet): 28389 ms; model runs 1
+group5 matte fast-coreml-all vs fast-cpu: max 0.0000, mean 0.00000, pixels off by >10%: 0
+group5 matte fast-coreml-cpugpu vs fast-cpu: max 0.0000, mean 0.00000, pixels off by >10%: 0
+group5 matte hd-cpu vs fast-cpu: max 0.7765, mean 0.00327, pixels off by >10%: 9751
+group5 crop 1 at x 216, y 252, 192 px: group5-crop1-x216-y252.png
+group5 crop 2 at x 840, y 180, 192 px: group5-crop2-x840-y180.png
+group5 crop 3 at x 456, y 156, 192 px: group5-crop3-x456-y156.png
+nn-check fast-coreml-all run 1: Select Subject + Fine Edges 4631 ms; model runs 1; Fine Edges (Fast) ran in 4.5 s (Core ML); 33% of the photo is foreground; failure none
+nn-check fast-coreml-all run 2: Select Subject + Fine Edges 2709 ms; model runs 1; Fine Edges (Fast) ran in 2.7 s (Core ML); 33% of the photo is foreground; failure none

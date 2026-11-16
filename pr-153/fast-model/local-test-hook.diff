@@ -1,0 +1,20 @@
+diff --git a/Sources/AtelierCore/Develop/DevelopRenderer.swift b/Sources/AtelierCore/Develop/DevelopRenderer.swift
+index fd485ce..f3400ac 100644
+--- a/Sources/AtelierCore/Develop/DevelopRenderer.swift
++++ b/Sources/AtelierCore/Develop/DevelopRenderer.swift
+@@ -1318,13 +1318,13 @@ public final class DevelopSession: @unchecked Sendable {
+     /// Select Subject's mask on the cropped photo, as `renderSRGB` frames it (white is the
+     /// subject), or nil when Vision finds nothing. Match Look's Subject & Background measures the
+     /// subject and the background with it, so it sees the same subject the mask it adds will.
+-    public func subjectMask(_ settings: DevelopSettings, feather: Double = LookMatcher.subjectFeather) -> CGImage? {
++    public func subjectMask(_ settings: DevelopSettings, feather: Double = LookMatcher.subjectFeather, fineEdges: Bool = false) -> CGImage? {
+         let settings = settings.applyingPanelSwitches()
+         lock.lock()
+         defer { lock.unlock() }
+         guard let source = corrected(settings) else { return nil }
+         let key = settings.lensGeometryKey
+-        let component = DevelopSettings.MaskComponent(.subject(DevelopSettings.Selection(feather: feather)))
++        let component = DevelopSettings.MaskComponent(.subject(DevelopSettings.Selection(feather: feather, fineEdges: fineEdges)))
+         guard var mask = DevelopRenderer.sourceMask(component, extent: source.extent,
+                                                     subject: { self.subject(of: source, key: key, box: $0) },
+                                                     fine: { self.fineMatte(of: source, key: key, outline: $0) },
