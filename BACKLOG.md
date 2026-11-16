@@ -1387,6 +1387,14 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 
 **Validation:** Swift unbuilt (cloud). Needs a Mac build, a look at the menu with one and with both models, and Rosh's acceptance.
 
+## AT-076 — Architecture review follow-ups (memory, saves, model hosting, tool state)
+
+**Status:** Proposed / discuss. **Owner:** unassigned (review by Claude, project thread "Review Atelier architecture for improvements"). **Dependencies:** AT-008 (Processor contract), AT-011 (measurements).
+
+**Evidence:** [Docs/Reviews/Architecture-Review-2026-11-16.md](Docs/Reviews/Architecture-Review-2026-11-16.md), source review of `main` `c146785`, not built or timed. Top items: M1 full-size images, sessions and Core Image caches kept until the next photo opens and no memory-pressure handling; P1 history stores up to 500 full settings copies, encoded on the main thread each save; C1 Fine Edges/Depth hold their lock for a whole model run that Settings' Remove also takes (main-thread hang), and status strings race; P2 batch edits commit and refetch the Grid once per photo, read-then-write not atomic; D1 six Develop tool flags that switch each other off by hand; E1 silent `try?` catalog writes; R1 three copies of the ONNX host; M2 eleven Core Image contexts (one per HDR decode); D2 DevelopController split and `@Observable`; C2 Swift 6 mode per module.
+
+**Scope to agree:** pick items one at a time; each is its own PR with Mac timings (Frame Diagnostics, `DevelopTimingLog`, Instruments for memory) before and after where marked "measure first". No broad rewrite is approved by this entry.
+
 ## AT-071 — Cull: compare the suggested keeper and runner-up with linked zoom
 
 **Status:** Proposed / discuss. **Owner:** unassigned. **Dependencies:** AT-059 (Pick By ranking), AT-060 (shared Cull zoom and pan).
