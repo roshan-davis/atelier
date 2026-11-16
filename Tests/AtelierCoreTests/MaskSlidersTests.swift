@@ -12,7 +12,8 @@ final class MaskSlidersTests: XCTestCase {
     func testNewSlidersSitWhereLightroomHasThemAndOldMasksDecodeAtZero() throws {
         let all = Parameter.allCases
         XCTAssertEqual(all.firstIndex(of: .hue)! + 1, all.firstIndex(of: .saturation)!)
-        XCTAssertEqual(Array(all.suffix(4)), [.sharpness, .noise, .moire, .defringe])
+        XCTAssertEqual(Array(all.dropLast().suffix(4)), [.sharpness, .noise, .moire, .defringe])
+        XCTAssertEqual(all.last, .lensFocus, "Lens Blur's refine comes last, in its own group")
         XCTAssertEqual(Parameter.moire.label, "Moiré")
         XCTAssertEqual(Parameter.hue.range, -180...180)
         XCTAssertEqual(Parameter.defringe.range, 0...100)

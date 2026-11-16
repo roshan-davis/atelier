@@ -1091,7 +1091,7 @@ struct MasksPanel: View {
                 Toggle("Invert", isOn: Binding(get: { mask.inverted }, set: { _ in develop.invertMask(mask.id) }))
                     .help("Apply the sliders everywhere except the mask")
             }
-            ForEach(DevelopSettings.LocalParameter.allCases, id: \.self) { parameter in
+            ForEach(shownParameters(mask), id: \.self) { parameter in
                 if parameter.group > 0, parameter == DevelopSettings.LocalParameter.allCases.first(where: { $0.group == parameter.group }) {
                     Spacer().frame(height: 2)
                 }
@@ -1113,6 +1113,13 @@ struct MasksPanel: View {
         }
     }
 
+    /// The mask's sliders: Lens Focus only once Lens Blur is applied or the mask already has it
+    /// (a Focus or Blur Area), since it does nothing else.
+    private func shownParameters(_ mask: DevelopSettings.Mask) -> [DevelopSettings.LocalParameter] {
+        let showsFocus = develop.value(.lensBlurApply) >= 0.5 || mask[.lensFocus] != 0
+        return DevelopSettings.LocalParameter.allCases.filter { $0 != .lensFocus || showsFocus }
+    }
+
     /// The mask Hue track, -180 to 180 around red: cyan, blue, magenta, red, yellow, green, cyan.
     private static let hueTrack: [Color] = {
         let hues: [Double] = [0.5, 0.667, 0.833, 0, 0.167, 0.333, 0.5]
@@ -1126,6 +1133,8 @@ struct MasksPanel: View {
         case .saturation: return [Color.gray, Color(red: 1, green: 0.4, blue: 0.2), Color(red: 0.3, green: 0.6, blue: 1)]
         // Where red goes: left through magenta and blue, right through yellow and green.
         case .hue: return Self.hueTrack
+        // Blur on the left, sharp (focus) on the right.
+        case .lensFocus: return [Color(red: 0.55, green: 0.6, blue: 0.75), Color(red: 1, green: 0.75, blue: 0.3)]
         default: return nil
         }
     }

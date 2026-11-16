@@ -620,21 +620,28 @@ public final class DevelopSession: @unchecked Sendable {
         // Lens Blur, on the uncropped photo in linear light, before every tone and color step (so
         // highlights spread as light does); masks below still see the sharp `source`. Until the
         // depth is found in the background the photo shows unblurred.
+        // Masks' parts on the upright, uncropped photo (luminance ranges are worked out later,
+        // from the photo they see).
+        let sourceProvider: MaskProvider = { [self] component in
+            if case .luminance = component.shape { return nil }
+            return DevelopRenderer.sourceMask(component, extent: sourceExtent,
+                                              subject: { self.subject(of: source, key: key, box: $0) },
+                                              people: { self.people(of: source, key: key, selection: $0) },
+                                              fine: { self.fineMatte(of: source, key: key, outline: $0) },
+                                              depth: { self.depthMap(of: source, key: key) },
+                                              sky: { self.skyMask(of: source, key: key) },
+                                              guide: source, brushCache: brushCache)
+        }
         if LensBlur.isOn(settings), let depth = depthMap(of: source, key: key) {
-            image = LensBlur.apply(source, depth: depth, settings: settings)
+            // Focus and Blur areas: masks with Lens Focus, on the same uncropped frame.
+            let areas = LensBlur.areas(settings, on: source, provider: sourceProvider)
+            image = LensBlur.apply(source, depth: depth, settings: settings, areas: areas)
         }
         if let crop {
             image = DevelopRenderer.applyGeometry(crop, to: image, cropping: cropping)
         }
-        let provider: MaskProvider = { [self] component in
-            if case .luminance = component.shape { return nil }
-            guard let mask = DevelopRenderer.sourceMask(component, extent: sourceExtent,
-                                                        subject: { self.subject(of: source, key: key, box: $0) },
-                                                        people: { self.people(of: source, key: key, selection: $0) },
-                                                        fine: { self.fineMatte(of: source, key: key, outline: $0) },
-                                                        depth: { self.depthMap(of: source, key: key) },
-                                                        sky: { self.skyMask(of: source, key: key) },
-                                                        guide: source, brushCache: brushCache) else { return nil }
+        let provider: MaskProvider = { component in
+            guard let mask = sourceProvider(component) else { return nil }
             guard let crop else { return mask }
             return DevelopRenderer.applyGeometry(crop, to: mask, cropping: cropping)
         }

@@ -83,6 +83,91 @@ final class LensBlurTests: XCTestCase {
         XCTAssertEqual(after[edge], before[edge], accuracy: 0.02, "the far blur doesn't spill onto the sharp edge")
     }
 
+    /// Focus and Blur areas are masks with Lens Focus: they don't change the look themselves,
+    /// they hold their strength with Amount, and they reach Lens Blur as red (focus) and green (blur).
+    func testFocusAndBlurAreasAreMasksWithLensFocus() throws {
+        var focus = DevelopSettings.Mask(name: "Focus Area 1",
+                                         components: [.init(.radial(.init(center: .init(x: 0.75, y: 0.5),
+                                                                           radiusX: 0.2, radiusY: 0.4)))])
+        focus[.lensFocus] = 100
+        XCTAssertTrue(focus.hasAdjustments)
+        XCTAssertFalse(focus.hasLookAdjustments, "a Focus Area changes nothing but the blur")
+        XCTAssertEqual(focus.lensFocusStrength.focus, 1)
+        XCTAssertEqual(focus.lensFocusStrength.blur, 0)
+        focus.amount = 50
+        XCTAssertEqual(focus.lensFocusStrength.focus, 0.5, accuracy: 1e-9)
+        focus.amount = 100
+        var blur = DevelopSettings.Mask(name: "Blur Area 1")
+        blur[.lensFocus] = -60
+        XCTAssertEqual(blur.lensFocusStrength.blur, 0.6, accuracy: 1e-9)
+        blur[.exposure] = 0.5
+        XCTAssertTrue(blur.hasLookAdjustments)
+
+        var settings = DevelopSettings()
+        XCTAssertEqual(settings.nextMaskName("Focus Area"), "Focus Area 1")
+        settings.masks = [focus]
+        XCTAssertEqual(settings.nextMaskName("Focus Area"), "Focus Area 2")
+        XCTAssertEqual(settings.nextMaskName(), "Mask 1")
+        XCTAssertEqual(try DevelopSettings.decoded(from: settings.encoded()), settings)
+
+        let base = CIImage(color: .gray).cropped(to: CGRect(x: 0, y: 0, width: 64, height: 32))
+        XCTAssertNil(LensBlur.areas(DevelopSettings(), on: base, provider: nil), "no areas, nothing to pay")
+        let areas = try XCTUnwrap(LensBlur.areas(settings, on: base, provider: nil))
+        let pixels = try render(areas, width: 64, height: 32)
+        let inside = (16 * 64 + 48) * 4, outside = (16 * 64 + 4) * 4
+        XCTAssertEqual(pixels[inside], 1, accuracy: 0.05, "focus strength in red")
+        XCTAssertEqual(pixels[inside + 1], 0, accuracy: 0.01)
+        XCTAssertEqual(pixels[outside], 0, accuracy: 0.01)
+        settings.masks[0].isHidden = true
+        XCTAssertNil(LensBlur.areas(settings, on: base, provider: nil), "a hidden area does nothing")
+    }
+
+    /// The far half of the checker, under a Focus area, stays sharp; the near half, under a Blur
+    /// area, blurs although it is in the focal range.
+    func testAreasOverrideTheDepth() throws {
+        let width = 256, height = 64
+        let photo = checker(width: width, height: height)
+        let depth = CIImage(color: .black).cropped(to: CGRect(x: 0, y: 0, width: width / 2, height: height))
+            .composited(over: CIImage(color: .white).cropped(to: photo.extent))
+        let areas = CIImage(color: CIColor(red: 0, green: 1, blue: 0)).cropped(to: CGRect(x: 0, y: 0, width: width / 2, height: height))
+            .composited(over: CIImage(color: CIColor(red: 1, green: 0, blue: 0)).cropped(to: photo.extent))
+        var settings = DevelopSettings()
+        settings[.lensBlurApply] = 1
+        settings[.lensBlurAmount] = 100
+        settings[.lensBlurBoost] = 0
+        settings[.lensBlurFocusNear] = 0
+        settings[.lensBlurFocusFar] = 10
+        let before = try render(photo, width: width, height: height)
+        let after = try render(LensBlur.apply(photo, depth: depth, settings: settings, areas: areas),
+                               width: width, height: height)
+        XCTAssertEqual(spread(after, width: width, height: height, columns: 136..<252),
+                       spread(before, width: width, height: height, columns: 136..<252), accuracy: 1e-3,
+                       "the Focus area stays sharp although it is far")
+        XCTAssertLessThan(spread(after, width: width, height: height, columns: 4..<120),
+                          0.1 * spread(before, width: width, height: height, columns: 4..<120),
+                          "the Blur area blurs although it is in focus")
+    }
+
+    private func checker(width: Int, height: Int) -> CIImage {
+        var pixels = [Float](repeating: 1, count: width * height * 4)
+        for y in 0..<height {
+            for x in 0..<width {
+                let level: Float = (x / 2 + y / 2) % 2 == 0 ? 0.8 : 0.05
+                for c in 0..<3 { pixels[(y * width + x) * 4 + c] = level }
+            }
+        }
+        let data = pixels.withUnsafeBufferPointer { Data(buffer: $0) }
+        return CIImage(bitmapData: data, bytesPerRow: width * 16, size: CGSize(width: width, height: height),
+                       format: .RGBAf, colorSpace: DevelopRenderer.workingSpace)
+    }
+
+    private func spread(_ values: [Float], width: Int, height: Int, columns: Range<Int>) -> Float {
+        var all: [Float] = []
+        for y in 8..<(height - 8) { for x in columns { all.append(values[(y * width + x) * 4]) } }
+        let mean = all.reduce(0, +) / Float(all.count)
+        return all.map { ($0 - mean) * ($0 - mean) }.reduce(0, +) / Float(all.count)
+    }
+
     func testOffLeavesTheImageAlone() {
         let image = CIImage(color: .gray).cropped(to: CGRect(x: 0, y: 0, width: 8, height: 8))
         XCTAssertTrue(LensBlur.apply(image, depth: image, settings: DevelopSettings()) === image)

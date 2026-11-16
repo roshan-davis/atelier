@@ -329,7 +329,8 @@ public struct AddMaskParameters: ActionParameters, Hashable, PhotoTargeting {
         "amount": FieldNote("New mask only: scales all of its sliders, percent (default 100).", minimum: 0, maximum: 200),
         "settings": FieldNote("New mask only: its sliders as \"name=value\": temperature, tint, exposure, contrast, "
                               + "highlights, shadows, whites, blacks, texture, clarity, dehaze, hue (degrees, -180 to 180), "
-                              + "saturation, sharpness, noise, moire, defringe; and its own Color Grading: grade_shadows_hue, "
+                              + "saturation, sharpness, noise, moire, defringe, lens_focus (Lens Blur only: 100 keeps the area sharp, "
+                              + "-100 blurs it fully); and its own Color Grading: grade_shadows_hue, "
                               + "grade_shadows_sat, grade_shadows_lum (also midtones, highlights, global), grade_blending, "
                               + "grade_balance. Example [\"exposure=-0.5\", \"clarity=20\"]."),
     ]) { $1 }

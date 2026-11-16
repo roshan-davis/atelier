@@ -15,7 +15,7 @@
 <h1>Lens Blur</h1>
 <p class="lede">Blurs the photo as a wide-open lens would, from how far away each part is: the background melts away, a foreground can go soft too, and bright points turn into bokeh. Use it to make a subject stand out from a busy scene, or to give a phone or small-sensor photo the look of a fast lens.</p>
 
-<div class="chips"><a href="#apply">Apply and Blur Amount</a><a href="#bokeh">Bokeh</a><a href="#focal-range">Focal Range</a><a href="#visualize">Visualize Depth</a><a href="#depth-model">The depth model</a><a href="#notes">Good to know</a></div>
+<div class="chips"><a href="#apply">Apply and Blur Amount</a><a href="#bokeh">Bokeh</a><a href="#focal-range">Focal Range</a><a href="#refine">Focus and Blur Areas</a><a href="#visualize">Visualize Depth</a><a href="#zoom">Up close</a><a href="#depth-model">The depth model</a><a href="#notes">Good to know</a></div>
 
 <figure>
   <div class="panel narrow" style="margin:0 auto">
@@ -32,6 +32,8 @@
       <div class="sl" data-name="Near" data-value="70" data-at="0.7" data-def="0"></div>
       <div class="sl" data-name="Far" data-value="80" data-at="0.8" data-def="0.2"></div>
       <div class="row"><span style="color:var(--app-text-2)">⌖</span> <span class="btn">Subject</span><span class="grow" style="flex:1"></span><span>☐ Visualize Depth</span></div>
+      <div class="gh">Refine</div>
+      <div class="row"><span class="btn">⌖ Focus Area ▾</span> <span class="btn">💧 Blur Area ▾</span></div>
     </div>
   </div>
 </figure>
@@ -64,11 +66,30 @@
   <tr><td>Near, Far</td><td>Fine-tune the range by hand. A narrow range gives a thin plane of focus; a wide one keeps more of the scene sharp.</td></tr>
 </table>
 
+<h2 id="refine">Focus and Blur Areas</h2>
+<p>The depth model is good but not perfect: a strand of hair, a hand held out, or a sign at the subject's side can land at the wrong depth. <b>Refine</b> fixes that, like Lightroom's Focus and Blur brushes, with every mask tool instead of a brush alone.</p>
+<table class="keys">
+  <tr><td>Focus Area</td><td>Keeps an area sharp whatever its depth. Pick how to draw it from the menu: Brush, Linear Gradient, Radial Gradient, Select Subject, Select People or Select Object.</td></tr>
+  <tr><td>Blur Area</td><td>Blurs an area fully whatever its depth: a distracting patch, a bright edge, a busy background the depth model put too close.</td></tr>
+</table>
+<p>Each area is a mask, named Focus Area 1, Blur Area 1 and so on, so Atelier opens <a href="masking.html">Masking</a> to draw it, and you refine it there like any mask: add or subtract parts, brush its edge, use Fine Edges for hair, Invert, or hide it with the eye. Its <b>Lens Focus</b> slider sets how strongly it works: +100 keeps the area fully sharp, −100 blurs it fully, and in between does part of that. The mask's Amount scales it too. Lens Focus changes nothing but Lens Blur, and any mask can have it once Lens Blur is applied, so a mask that also brightens a face can keep it sharp. Undo steps back through each area like any other edit.</p>
+<figure>
+  <div class="frame compare" data-before="lens-blur-after.jpg" data-after="lens-blur-refine-after.jpg" data-labels="Focused on the hiker|With a Focus Area on the log"></div>
+  <figcaption>A Focus Area drawn with Radial Gradient over the log in front: the log stays sharp with the hiker, and everything else keeps its blur.</figcaption>
+</figure>
+
 <h2 id="visualize">Visualize Depth</h2>
 <p>Shows the photo's depth instead of the photo: warm colors are near, cool colors far, and the parts inside the Focal Range are drawn lighter. Use it to see what the focus covers while you move Near and Far. It turns off when you leave the panel.</p>
 <figure>
   <img src="images/lens-blur-depth.jpg" alt="The redwoods photo shown as depth: orange logs in front, purple ground, blue trees behind, and the hiker's distance drawn light">
   <figcaption>Visualize Depth on the photo above: the hiker and the ground at his distance are inside the Focal Range.</figcaption>
+</figure>
+
+<h2 id="zoom">Up close</h2>
+<p>Lens Blur is meant to look like a lens, not a phone's portrait mode, even at 100%. Each pixel's blur grows smoothly with its distance from the focus: the ground just behind the subject is a little soft, farther away it melts, and the edge between subject and background stays as fine as in the photo. Atelier blurs at the full size of the photo where the blur is small and on smaller copies only where it is large enough that nobody could tell, so zooming in never shows a band or a halo where the blur changes.</p>
+<figure>
+  <div class="frame compare" data-before="lens-blur-zoom-before.jpg" data-after="lens-blur-zoom-after.jpg" data-labels="Before, 100%|Lens Blur, 100%"></div>
+  <figcaption>The full-size photo at 100% with Blur Amount 100: the hiker stays crisp, the moss in front goes soft, and the path behind him blurs gradually with distance.</figcaption>
 </figure>
 
 <h2 id="depth-model">The depth model</h2>
@@ -77,10 +98,9 @@
 <h2 id="notes">Good to know</h2>
 <ul>
   <li>Lens Blur works on the whole, uncropped photo in linear light before the tone and color panels, so highlights spread as light does and your other edits apply to the blurred photo. Masks still select from the sharp photo.</li>
-  <li>Edges of the subject stay as sharp as in the photo; something in front of the subject blurs over it, as through a lens. Where the depth model is unsure (fine hair, thin branches) the edge can blur a little; widen the Focal Range or lower Blur Amount.</li>
+  <li>Edges of the subject stay as sharp as in the photo; something in front of the subject blurs over it, as through a lens. Where the depth model is unsure (fine hair, thin branches) the edge can blur a little: add a <a href="#refine">Focus Area</a> with Select People or Select Subject and Fine Edges.</li>
   <li>Turn the panel off with the switch in its header to compare, as with any panel.</li>
   <li>New presets have a <b>Lens Blur</b> part, unticked by default, because the focus belongs to the photo it was set on. Copy and Paste Settings and Sync Settings carry it.</li>
-  <li>Lightroom's Focus and Blur refine brushes are not here yet.</li>
 </ul>
 
 </main>

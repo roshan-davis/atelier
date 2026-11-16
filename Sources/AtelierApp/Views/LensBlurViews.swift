@@ -23,6 +23,7 @@ struct LensBlurPanel: View {
                     blur
                     bokehControls
                     focalRange
+                    refine
                 }
             }
         }
@@ -86,6 +87,46 @@ struct LensBlurPanel: View {
             Text("0 is the nearest part of the photo, 100 the farthest. Parts outside the Focal Range blur more the farther they are from it, in front as well as behind.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    /// The mask tools a Focus or Blur Area can start from (the rest are in Masking's Add menu).
+    private static let areaTools: [DevelopSettings.MaskComponent.Kind] = [.brush, .linear, .radial, .subject, .people, .object]
+
+    /// Refine, like Lightroom's Focus and Blur brushes but with every mask tool: a Focus Area
+    /// stays sharp whatever its depth, a Blur Area blurs fully. Each is a mask with Lens Focus,
+    /// so it is drawn, refined (Fine Edges, Subtract, Feather) and undone like any mask.
+    private var refine: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            GroupHeading(title: "Refine")
+            HStack(spacing: 8) {
+                areaMenu(title: "Focus Area", symbol: "scope", focus: true,
+                         help: "Keep an area sharp whatever its depth: hair the depth missed, a hand, a sign")
+                areaMenu(title: "Blur Area", symbol: "drop", focus: false,
+                         help: "Blur an area fully whatever its depth: a distracting edge, a busy patch")
+                Spacer(minLength: 0)
+            }
+            let areas = develop.settings.masks.filter { $0[.lensFocus] != 0 }
+            if !areas.isEmpty {
+                Text(areas.map(\.name).joined(separator: ", ") + ". Edit them in Masking, where Lens Focus sets how strongly each keeps sharp (+) or blurs (-).")
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func areaMenu(title: String, symbol: String, focus: Bool, help: String) -> some View {
+        Menu {
+            ForEach(Self.areaTools, id: \.self) { kind in
+                Button { develop.createLensFocusArea(kind, focus: focus) } label: {
+                    Label(kind.title, systemImage: kind.symbol)
+                }
+            }
+        } label: {
+            Label(title, systemImage: symbol)
+        }
+        .menuStyle(.borderlessButton)
+        .controlSize(.small)
+        .fixedSize()
+        .help(help)
     }
 
     private static func symbol(_ shape: LensBlur.Bokeh) -> String {

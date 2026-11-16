@@ -37,6 +37,19 @@ extension DevelopSettings {
 
         public var hasAdjustments: Bool { !values.isEmpty || !grade.isEmpty }
 
+        /// Whether the mask changes the photo's look (tone, color, detail): every slider but Lens
+        /// Focus, which only tells Lens Blur where to stay sharp or blur (a Focus or Blur area).
+        public var hasLookAdjustments: Bool {
+            !grade.isEmpty || values.keys.contains { $0 != LocalParameter.lensFocus.rawValue }
+        }
+
+        /// How strongly the mask keeps its area sharp (`focus`) or blurs it (`blur`) for Lens
+        /// Blur, 0...1 each, with Amount applied.
+        public var lensFocusStrength: (focus: Double, blur: Double) {
+            let value = min(max(effective(.lensFocus) / 100, -1), 1)
+            return (max(value, 0), max(-value, 0))
+        }
+
         public mutating func resetAdjustments() {
             values = [:]
             grade = [:]
@@ -117,11 +130,15 @@ extension DevelopSettings {
         case texture, clarity, dehaze
         case hue, saturation
         case sharpness, noise, moire, defringe
+        /// Lens Blur's refine (AT-072): + keeps the area sharp (Focus), - blurs it fully (Blur).
+        /// Only Lens Blur reads it, so a mask with only this changes nothing else.
+        case lensFocus
 
         public var label: String {
             switch self {
             case .temperature: return "Temp"
             case .moire: return "Moiré"
+            case .lensFocus: return "Lens Focus"
             default: return rawValue.prefix(1).uppercased() + rawValue.dropFirst()
             }
         }
@@ -145,6 +162,7 @@ extension DevelopSettings {
             case .texture, .clarity, .dehaze: return 2
             case .hue, .saturation: return 3
             case .sharpness, .noise, .moire, .defringe: return 4
+            case .lensFocus: return 5
             }
         }
     }
@@ -618,12 +636,13 @@ extension DevelopSettings {
     }
 
     /// The next free "Mask n" name.
-    public func nextMaskName() -> String {
+    public func nextMaskName(_ base: String = "Mask") -> String {
+        let prefix = base + " "
         let used = masks.compactMap { mask -> Int? in
-            guard mask.name.hasPrefix("Mask ") else { return nil }
-            return Int(mask.name.dropFirst(5))
+            guard mask.name.hasPrefix(prefix) else { return nil }
+            return Int(mask.name.dropFirst(prefix.count))
         }
-        return "Mask \((used.max() ?? 0) + 1)"
+        return "\(base) \((used.max() ?? 0) + 1)"
     }
 }
 
