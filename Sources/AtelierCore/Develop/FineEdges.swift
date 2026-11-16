@@ -201,6 +201,13 @@ public enum FineEdges {
         announce()
     }
 
+    /// Whether Fine Edges tries ONNX Runtime's Core ML provider. Off: with the provider really
+    /// loading (ALL, not All), Core ML can't compile BiRefNet HR-matting ("Unable to parse ML
+    /// Program … Div_1"), and the CPU session made after that failure crashed the app (SIGSEGV in
+    /// ONNX Runtime's planner, Mac check of PR #153, Nov 16, 2026). Until then it ran on the
+    /// CPU anyway ("All" was refused). LensBlurRealPhotoTests times both.
+    nonisolated(unsafe) static var prefersCoreML = false
+
     /// `model`, loaded; Core ML runs what it can (ML Program, Neural Engine and GPU), ONNX
     /// Runtime's CPU code the rest. Call with the lock held.
     private static func loadedSession(_ model: Model) throws -> ORTSession {
@@ -224,9 +231,9 @@ public enum FineEdges {
             return options
         }
         let made: ORTSession
-        usesCoreML = true
+        usesCoreML = prefersCoreML
         do {
-            made = try ORTSession(env: env, modelPath: modelURL.path, sessionOptions: options(coreML: true))
+            made = try ORTSession(env: env, modelPath: modelURL.path, sessionOptions: options(coreML: prefersCoreML))
         } catch {
             // Core ML can refuse a model this large; ONNX Runtime's own CPU code still runs it.
             NSLog("Atelier: Fine Edges with Core ML failed (%@), using the CPU", "\(error)")
