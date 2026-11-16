@@ -101,7 +101,7 @@ struct LensBlurPanel: View {
             if develop.isMasking, develop.maskScope == .lensBlur {
                 // The refine tools open right here, under the button that opened them: the
                 // Masking panel's tools on Lens Blur's own areas, with Done.
-                MasksPanel(develop: develop)
+                MasksPanel(develop: develop, style: .lensBlurRefine)
                     .padding(8)
                     .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.accentColor.opacity(0.5)))

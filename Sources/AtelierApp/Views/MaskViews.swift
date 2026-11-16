@@ -574,8 +574,38 @@ private struct MaskOverlay: View {
 
 /// The Masking section of the Develop panel: the masks and their parts, then the selected
 /// part's settings and the selected mask's sliders.
+/// What a `MasksPanel` shows: the one mask panel serves Masking and Lens Blur's Refine, and each
+/// opener says which sections it wants instead of the panel working it out.
+struct MasksPanelStyle {
+    /// Which add buttons: Masking's New Mask / Add / Subtract, or Refine's Add to Focus / Add to
+    /// Blur / Subtract.
+    enum AddButtons { case masks, lensBlurAreas }
+    /// A selected mask's settings: Masking's look sliders, or a Lens Blur area's Amount and Invert.
+    enum MaskSettings { case look, lensBlurArea }
+
+    var intro: String?
+    var addButtons: AddButtons
+    var maskSettings: MaskSettings
+    /// Rename and Duplicate in a mask's right-click menu.
+    var canRenameAndDuplicate: Bool
+    /// Shown when there are no masks yet.
+    var emptyText: String?
+    var doneHelp: String
+
+    static let masking = MasksPanelStyle(
+        intro: nil, addButtons: .masks, maskSettings: .look, canRenameAndDuplicate: true,
+        emptyText: "Masks limit an adjustment to part of the photo: a graduated sky, a lighter face, a darker corner. Create a mask, then move its sliders.",
+        doneHelp: "Close Masking; masks keep working (Return)")
+
+    static let lensBlurRefine = MasksPanelStyle(
+        intro: "Paint or select where Lens Blur keeps the photo sharp (Focus) and where it blurs it fully (Blur), whatever the depth. Refine the edges with the part's settings below.",
+        addButtons: .lensBlurAreas, maskSettings: .lensBlurArea, canRenameAndDuplicate: false,
+        emptyText: nil, doneHelp: "Close Lens Blur's Refine; the areas keep working (Return)")
+}
+
 struct MasksPanel: View {
     @ObservedObject var develop: DevelopController
+    var style: MasksPanelStyle = .masking
     @State private var renaming: UUID?
     @State private var draftName = ""
     @FocusState private var nameFocused: Bool
@@ -591,12 +621,12 @@ struct MasksPanel: View {
         VStack(alignment: .leading, spacing: 10) {
             // One group, so the panel stays within SwiftUI's ten views per builder.
             Group {
-                if refiningLensBlur {
-                    Text("Paint or select where Lens Blur keeps the photo sharp (Focus) and where it blurs it fully (Blur), whatever the depth. Refine the edges with the part's settings below.")
+                if let intro = style.intro {
+                    Text(intro)
                         .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
                 maskList
-                if refiningLensBlur {
+                if style.addButtons == .lensBlurAreas {
                     HStack(spacing: 6) {
                         kindMenu("Add to Focus") { develop.addLensBlurPart($0, to: .focus, mode: .add) }
                             .help("Keep an area sharp whatever its depth: paint it, or select a person, subject or object")
@@ -646,10 +676,13 @@ struct MasksPanel: View {
             }
             if let mask = develop.selectedMask {
                 Divider()
-                if refiningLensBlur { lensBlurAreaSettings(mask) } else { adjustments(mask) }
+                switch style.maskSettings {
+                case .look: adjustments(mask)
+                case .lensBlurArea: lensBlurAreaSettings(mask)
+                }
             }
-            if !refiningLensBlur, develop.selectedMask == nil, develop.masks.isEmpty, develop.maskTool == nil {
-                Text("Masks limit an adjustment to part of the photo: a graduated sky, a lighter face, a darker corner. Create a mask, then move its sliders.")
+            if let emptyText = style.emptyText, develop.selectedMask == nil, develop.masks.isEmpty, develop.maskTool == nil {
+                Text(emptyText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -658,14 +691,10 @@ struct MasksPanel: View {
                 Spacer()
                 Button("Done") { develop.isMasking = false }
                     .keyboardShortcut(.defaultAction)
-                    .help(refiningLensBlur ? "Close Lens Blur's Refine; the areas keep working (Return)"
-                          : "Close Masking; masks keep working (Return)")
+                    .help(style.doneHelp)
             }
         }
     }
-
-    /// Lens Blur's Refine: these are the mask tools on Lens Blur's Focus and Blur areas.
-    private var refiningLensBlur: Bool { develop.maskScope == .lensBlur }
 
     /// A Focus or Blur area's own settings: how strongly it works (its Amount, as Lightroom's
     /// brush Amount) and Invert. No look sliders: the areas change only the blur.
@@ -751,7 +780,7 @@ struct MasksPanel: View {
         .contentShape(Rectangle())
         .onTapGesture { develop.select(mask: mask.id) }
         .contextMenu {
-            if !refiningLensBlur {
+            if style.canRenameAndDuplicate {
                 Button("Rename…") { startRename(mask) }
                 Button("Duplicate \(mask.name)") { develop.duplicateMask(mask.id) }
             }
