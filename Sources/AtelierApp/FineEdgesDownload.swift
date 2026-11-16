@@ -94,8 +94,9 @@ final class FineEdgesDownload: ObservableObject {
 }
 
 /// The Fine Edges switch under an AI selection's edge sliders: a checkbox once a model is
-/// downloaded (with a Fast / Hair Detail choice when both are), otherwise a Get menu with each
-/// model's size, then a progress bar.
+/// downloaded, with a menu beside it naming the model that runs (pick another, or get the one not
+/// downloaded yet, with a progress bar under the row), otherwise a Get menu with each model's
+/// size, then a progress bar.
 struct FineEdgesControl: View {
     @Binding var isOn: Bool
     @ObservedObject private var download = FineEdgesDownload.shared
@@ -107,19 +108,14 @@ struct FineEdgesControl: View {
                     Toggle("Fine Edges", isOn: $isOn)
                         .help("Redraws the edge with the Fine Edges model: single hairs, fur, lace")
                     Spacer()
-                    if download.installed.count > 1 {
-                        Picker("Model", selection: Binding(get: { download.active ?? download.chosen },
-                                                           set: { download.choose($0) })) {
-                            ForEach(FineEdges.Model.allCases) { Text($0.name).tag($0) }
-                        }
-                        .labelsHidden()
-                        .pickerStyle(.menu)
-                        .fixedSize()
-                        .controlSize(.small)
-                        .help("Which Fine Edges model runs, for every selection: Fast takes seconds, Hair Detail about half a minute for finer hair")
-                    } else if let active = download.active {
-                        Text(active.name).font(.caption).foregroundStyle(.secondary)
+                    if let active = download.active {
+                        modelMenu(active: active)
                     }
+                }
+                if let progress = download.progress, let model = download.downloading {
+                    downloadProgress(progress, model: model)
+                } else if let error = download.error {
+                    Text(error).font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
                 }
                 if isOn, let failure = download.runFailure {
                     Label(failure, systemImage: "exclamationmark.triangle")
@@ -129,12 +125,7 @@ struct FineEdgesControl: View {
                         .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
             } else if let progress = download.progress, let model = download.downloading {
-                HStack {
-                    ProgressView(value: progress)
-                    Text("\(Int((progress * 100).rounded()))%").font(.caption).monospacedDigit().foregroundStyle(.secondary)
-                    Button("Cancel") { download.cancel() }.controlSize(.small)
-                }
-                .help("Downloading the Fine Edges \(model.name) model (\(model.downloadSize))")
+                downloadProgress(progress, model: model)
             } else {
                 HStack {
                     Text("Fine Edges")
@@ -151,11 +142,69 @@ struct FineEdgesControl: View {
                     .fixedSize()
                     .controlSize(.small)
                 }
-                .help("Downloads a Fine Edges model once (BiRefNet, MIT license); it then runs on this Mac. Fast takes seconds; Hair Detail about half a minute for finer hair. Settings > AI can get the other one later.")
+                .help("Downloads a Fine Edges model once (BiRefNet, MIT license); it then runs on this Mac. Fast takes seconds; Hair Detail about half a minute for finer hair. The menu beside Fine Edges (or Settings > AI) can get the other one later.")
                 if let error = download.error {
                     Text(error).font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
+    }
+
+    /// Which model runs, as a menu beside the checkbox: the downloaded models to pick from
+    /// (ticked: the one that runs, for every selection), and a Get item for each one not
+    /// downloaded yet, which downloads it here and then picks it (Rosh, Nov 16, 2026: nothing in
+    /// the panel said a second model existed; before, it was only in Settings > AI).
+    private func modelMenu(active: FineEdges.Model) -> some View {
+        Menu {
+            ForEach(Self.menuItems(installed: download.installed, active: active,
+                                   downloading: download.downloading)) { item in
+                if item.isGet {
+                    Button(item.title) { download.download(item.model) }
+                        .disabled(!item.isEnabled)
+                        .help(item.model.detail)
+                } else {
+                    Toggle(item.title, isOn: Binding(get: { item.isTicked },
+                                                     set: { if $0 { download.choose(item.model) } }))
+                        .help(item.model.detail)
+                }
+            }
+        } label: {
+            Text(active.name)
+        }
+        .fixedSize()
+        .controlSize(.small)
+        .help("Which Fine Edges model runs, for every selection: Fast takes seconds, Hair Detail about half a minute for finer hair. A model not downloaded yet can be got from here.")
+    }
+
+    /// One line of the model menu: a downloaded model to pick (ticked when it runs), or Get for
+    /// one not downloaded (disabled while another download runs).
+    struct MenuItem: Identifiable, Equatable {
+        let model: FineEdges.Model
+        let title: String
+        let isGet: Bool
+        let isTicked: Bool
+        let isEnabled: Bool
+        var id: FineEdges.Model { model }
+    }
+
+    /// The model menu's lines, in the models' order (worked out apart from the view so tests can
+    /// read them: SwiftUI fills a menu only when it opens on screen).
+    nonisolated static func menuItems(installed: Set<FineEdges.Model>, active: FineEdges.Model,
+                                      downloading: FineEdges.Model?) -> [MenuItem] {
+        FineEdges.Model.allCases.map { model in
+            installed.contains(model)
+                ? MenuItem(model: model, title: model.name, isGet: false, isTicked: model == active, isEnabled: true)
+                : MenuItem(model: model, title: "Get \(model.name) (\(model.downloadSize))", isGet: true,
+                           isTicked: false, isEnabled: downloading == nil)
+        }
+    }
+
+    private func downloadProgress(_ progress: Double, model: FineEdges.Model) -> some View {
+        HStack {
+            ProgressView(value: progress)
+            Text("\(Int((progress * 100).rounded()))%").font(.caption).monospacedDigit().foregroundStyle(.secondary)
+            Button("Cancel") { download.cancel() }.controlSize(.small)
+        }
+        .help("Downloading the Fine Edges \(model.name) model (\(model.downloadSize))")
     }
 }
