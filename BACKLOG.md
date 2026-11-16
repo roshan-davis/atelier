@@ -1335,7 +1335,7 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 
 ## AT-072 — Develop: Lens Blur
 
-**Status:** Built, awaiting Mac build and Rosh's acceptance. **Owner:** Claude (project thread). **Branch:** `claude/develop-lens-blur`. **Dependencies:** AT-068 Depth Range (the depth model and `depthMap`), Select Subject. Split out of AT-070; Rosh picked it on Nov 15, 2026.
+**Status:** Merged (#152, 217a6df, Nov 16, 2026, at Rosh's instruction after trying it on his Mac); hair follow-up AT-073. **Owner:** Claude (project thread). **Branch:** `claude/develop-lens-blur`. **Dependencies:** AT-068 Depth Range (the depth model and `depthMap`), Select Subject. Split out of AT-070; Rosh picked it on Nov 15, 2026.
 
 **Scope:** Lightroom's Lens Blur panel: Apply, Blur Amount, Bokeh (Circle, Bubble, 5-Blade, Ring, Anamorphic), Cat Eye, Boost, Focal Range (Near/Far on a depth strip, focus picker, Subject), Visualize Depth, and Refine (Rosh, Nov 16, 2026, in the same PR): Lens Blur's own Focus and Blur areas in a Refine mode with every mask tool and edge control (Rosh, Nov 16, 2026, after two versions linking Masking's masks: self-contained, refinement in its own mode). **Later:** Area (drag a box) focus.
 
@@ -1344,6 +1344,20 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 **Validation:** Swift unbuilt (cloud). The algorithm was checked in a Python port with the real depth model on six photos (portrait, football player with crowd, Rosh's Eiffel Tower couple, two people indoors, the redwoods splash, a plant) and on synthetic bokeh points for every shape. The first Boost (up to 4× from 70% luma) blew sunlit logs into flat blobs, so it now acts only on near-clipped highlights (up to 3×). `LensBlurTests` (settings, focal range, a near half stays sharp and a far half blurs on a checker, no far spill onto the sharp edge, Focus/Blur areas override the depth, areas as masks) added; the warm-up test updated. Needs a Mac build, `swift test`, a Frame Diagnostics check of a Blur Amount drag, and Rosh's acceptance.
 
 **Limits:** depth is relative per photo, so Blur Amount 100 isn't a fixed f-number; fine hair can blur a little where the depth model's edge is soft; a soft depth edge on fine hair needs a Focus area (Select People, which starts with Entire Person and Fine Edges).
+
+## AT-073 — Lens Blur: hair-level Focus areas, Blur areas that match their surroundings
+
+**Status:** Built, awaiting Mac build and Rosh's acceptance. **Owner:** Claude (project thread). **Branch:** `claude/lens-blur-hair`. **Dependencies:** AT-072.
+
+**Why (Rosh, Nov 16, 2026):** at 100% on a portrait, the gaps between hair strands stayed sharp: the depth model sees the hair cloud as one near blob, and a Focus area only lowered each pixel's blur. Painting a Blur area there jumped to the most blur, not the background's. Rosh asked for hair-level refinement like Photoshop's dodge and burn on a mask.
+
+**Scope:** Focus areas as a layer mask where their edge is detailed (blur without the area, its pixels left out of the gather and their blur filled in from around; the sharp photo back on top through the area), lowering the blur where smooth (a layer mask ghosted a feathered gradient in testing); within 2% of the long edge of a detailed edge, what isn't in the area blurs at least as much as the background beyond; Blur areas take the surrounding blur (the most where that is sharp). Dodge and burn = the brush's existing Flow, documented.
+
+**As built:** `LensBlur.withAreas` (kernels `atelierLensBlurDetail`, `atelierLensBlurNearArea`, `atelierLensBlurFillWeigh`, `atelierLensBlurFillUp`, `atelierLensBlurAreaCoC`; near band grown on a copy where it is 8 px, a 6-level weighted pyramid of thirds); the blur sizes carry the Focus strength in green, read by `atelierLensBlurWeigh` (area pixels feed no level), the composite (sharp back through the area) and the spill. Warm-up renders with stand-in areas (`LensBlur.warmUpAreas`). Python port in `make_help_images.py`.
+
+**Validation:** Swift unbuilt (cloud). Python port on a synthetic head with 260 hair strands over the redwoods photo, depth as the model sees hair (one blob): error just outside the hair 0.031 → 0.011, in the hair band 0.049 → 0.035 (true matte); with a 1.5 px soft matte 0.031 → 0.013 outside, 0.049 → 0.046 in the band. A feathered Radial Gradient Focus area (the help's log) renders exactly as before. New `LensBlurTests.testNextToAFocusAreaTheBackgroundBeyondDecides`. Needs a Mac build, `swift test`, Rosh's check at 100% on hair.
+
+**Limits:** the edge is only as good as the mask (Fine Edges Hair Detail or hand painting); a sharp object touching the subject but outside the area, within 2% of it, blurs if the background beyond is blurred (add it to the Focus area).
 
 ## AT-071 — Cull: compare the suggested keeper and runner-up with linked zoom
 

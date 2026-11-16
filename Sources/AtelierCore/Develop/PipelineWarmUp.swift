@@ -36,7 +36,8 @@ extension DevelopRenderer {
         // Lens Blur runs before the adjustments, on the depth map, so it gets a render of its own
         // (with a stand-in depth ramp) when the photo doesn't use it yet.
         if Self.warmsLensBlur(settings), isCurrent() {
-            let image = LensBlur.apply(input, depth: LensBlur.warmUpDepth(input.extent), settings: LensBlur.warmUpSettings)
+            let image = LensBlur.apply(input, depth: LensBlur.warmUpDepth(input.extent), settings: LensBlur.warmUpSettings,
+                                       areas: LensBlur.warmUpAreas(input.extent))
             let destination = CIRenderDestination(ioSurface: surface)
             destination.colorSpace = Self.displaySpace
             destination.isFlipped = Self.surfaceNeedsFlip

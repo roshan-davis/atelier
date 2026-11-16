@@ -62,6 +62,12 @@ public enum LensBlur {
     static let gatherRadius = 12.0
     /// Each level is this much smaller than the one before.
     static let levelStep = 3.0
+    /// How far from a Focus area the depth isn't trusted, a share of the long edge (`withAreas`).
+    static let areaMargin = 0.02
+    /// The scale a Focus edge's detail is judged at, a share of the long edge (`withAreas`).
+    static let detailShare = 0.003
+    /// Levels of thirds the background's blur is filled in over, behind and around the areas.
+    static let fillLevels = 6
     /// The most samples the gather takes per pixel.
     static let maxSamples = 112
     /// The softening before each level's gather, in its pixels (see `apply`).
@@ -119,8 +125,8 @@ public enum LensBlur {
         let focus = focalRange(settings)
         let same: CIKernelROICallback = { _, rect in rect }
         let noAreas = CIImage(color: CIColor(red: 0, green: 0, blue: 0)).cropped(to: extent)
-        guard let cocFound = cocKernel.apply(extent: extent, roiCallback: same,
-                                             arguments: [depth, (areas ?? noAreas).clampedToExtent(),
+        guard let depthCoC = cocKernel.apply(extent: extent, roiCallback: same,
+                                             arguments: [depth, noAreas.clampedToExtent(),
                                                          CIVector(x: focus.near, y: focus.far, z: reach)]),
               let boostFound = boostKernel.apply(extent: extent, roiCallback: same,
                                                  arguments: [image, settings[.lensBlurBoost] / 100])
@@ -128,6 +134,7 @@ public enum LensBlur {
         // Every level, the level mix, the composite and each spill read the blur sizes, and every
         // level reads the boosted photo: render each once per frame instead of once per reader
         // (the areas' masks, Fine Edges included, sit under the blur sizes).
+        let cocFound = areas.flatMap { withAreas(depthCoC, areas: $0, extent: extent) } ?? depthCoC
         let coc = cocFound.insertingIntermediate(cache: false)
         let boosted = boostFound.insertingIntermediate(cache: false)
 
@@ -195,7 +202,8 @@ public enum LensBlur {
             else { return image }
             own = mixed
         }
-        // Sharp to blurred by its own blur, then the foreground spilling over it at every level.
+        // Sharp to blurred by its own blur, then the sharp photo back through the Focus areas (a
+        // layer mask), then the foreground spilling over it at every level.
         guard var result = composite.apply(extent: extent, roiCallback: same, arguments: [image, own, coc, maxRadius])
         else { return image }
         for blurred in levels {
@@ -232,6 +240,75 @@ public enum LensBlur {
         return result?.cropped(to: extent)
     }
 
+    /// The blur sizes with the Focus and Blur areas (`areas`: Focus in red, Blur in green), and
+    /// each pixel's Focus strength in green for the gather and the composite.
+    ///
+    /// Where a Focus area's edge is detailed (hair: the mask changes within a few pixels) it
+    /// works as a layer mask: its pixels take the background's blur, are left out of the gather
+    /// and go back on top sharp through the area. Where it is smooth (a feathered gradient) it
+    /// lowers the blur, as Lightroom's Focus brush does. The depth model sees a hair cloud as one
+    /// near blob, gaps included, so close to a detailed edge (`areaMargin` of the long edge) the
+    /// depth isn't trusted: what isn't in the area blurs at least as much as the background
+    /// beyond. Blur areas take the blur of what is around them, or the most blur where that is
+    /// sharp. Rosh, Nov 16, 2026: the gaps in hair stayed sharp, and a Blur area didn't match
+    /// the background next to it.
+    private static func withAreas(_ coc: CIImage, areas: CIImage, extent: CGRect) -> CIImage? {
+        guard let kernels, let nearKernel = kernels["atelierLensBlurNearArea"],
+              let detailKernel = kernels["atelierLensBlurDetail"],
+              let fillWeigh = kernels["atelierLensBlurFillWeigh"], let fillUp = kernels["atelierLensBlurFillUp"],
+              let areaKernel = kernels["atelierLensBlurAreaCoC"] else { return nil }
+        let same: CIKernelROICallback = { _, rect in rect }
+        let toOrigin = CGAffineTransform(translationX: -extent.minX, y: -extent.minY)
+        let longEdge = max(extent.width, extent.height)
+        // How detailed the Focus edge is: the mask against itself softened, spread a little.
+        let sigma = max(1, detailShare * longEdge)
+        let softened = areas.clampedToExtent().applyingGaussianBlur(sigma: sigma).cropped(to: extent)
+        guard let detailFound = detailKernel.apply(extent: extent, roiCallback: same, arguments: [areas, softened])
+        else { return nil }
+        let detail = detailFound.clampedToExtent().applyingGaussianBlur(sigma: 2 * sigma).cropped(to: extent)
+            .insertingIntermediate(cache: false)
+        // Near a detailed edge: grown by the margin on a copy where the margin is 8 pixels, softened.
+        let margin = max(1, areaMargin * longEdge)
+        let small = min(1, 8 / margin)
+        guard let inArea = nearKernel.apply(extent: extent, roiCallback: same, arguments: [detail]) else { return nil }
+        let smallFrame = CGRect(x: 0, y: 0, width: extent.width * small, height: extent.height * small)
+        let grown = inArea.transformed(by: toOrigin).clampedToExtent()
+            .transformed(by: CGAffineTransform(scaleX: small, y: small))
+            .cropped(to: smallFrame.insetBy(dx: -2 * margin * small, dy: -2 * margin * small))
+            .applyingFilter("CIMorphologyMaximum", parameters: [kCIInputRadiusKey: margin * small])
+            .applyingGaussianBlur(sigma: margin * small / 3)
+            .transformed(by: CGAffineTransform(scaleX: 1 / small, y: 1 / small))
+            .transformed(by: toOrigin.inverted()).cropped(to: extent)
+            .insertingIntermediate(cache: false)
+        // The blur sizes filled in from outside (the near band and the Blur areas): a weighted
+        // pyramid of thirds, then back up, each level taking its own value where it has weight.
+        guard let weighed = fillWeigh.apply(extent: extent, roiCallback: same, arguments: [coc, grown, areas])
+        else { return nil }
+        var pyramid: [CIImage] = [weighed.transformed(by: toOrigin)]
+        var size = extent.size
+        for _ in 0..<fillLevels {
+            size = CGSize(width: max(1, (size.width / levelStep).rounded(.down)), height: max(1, (size.height / levelStep).rounded(.down)))
+            guard let last = pyramid.last, size.width >= 2, size.height >= 2 else { break }
+            pyramid.append(last.clampedToExtent().applyingGaussianBlur(sigma: 0.5 * levelStep)
+                .transformed(by: CGAffineTransform(scaleX: size.width / last.extent.width, y: size.height / last.extent.height))
+                .cropped(to: CGRect(origin: .zero, size: size)).insertingIntermediate(cache: false))
+        }
+        // The coarsest level on its own (no coarser one to fall back on), then back up.
+        guard let coarsest = pyramid.last,
+              var filled = fillUp.apply(extent: coarsest.extent, roiCallback: same,
+                                        arguments: [coarsest, CIImage(color: .black).cropped(to: coarsest.extent)])
+        else { return nil }
+        for finer in pyramid.dropLast().reversed() {
+            let up = filled.clampedToExtent()
+                .transformed(by: CGAffineTransform(scaleX: finer.extent.width / filled.extent.width,
+                                                   y: finer.extent.height / filled.extent.height))
+            guard let next = fillUp.apply(extent: finer.extent, roiCallback: same, arguments: [finer, up]) else { return nil }
+            filled = next
+        }
+        let background = filled.transformed(by: toOrigin.inverted()).cropped(to: extent)
+        return areaKernel.apply(extent: extent, roiCallback: same, arguments: [coc, background, grown, areas, detail])
+    }
+
     /// Visualize Depth: the depth in color, warm near to cool far as Lightroom shows it, with the
     /// focal range kept sharp drawn lighter. Linear, on `depth`'s frame.
     static func visualize(depth: CIImage, settings: DevelopSettings) -> CIImage? {
@@ -260,6 +337,17 @@ public enum LensBlur {
         return ramp.cropped(to: extent)
     }
 
+    /// Focus and Blur areas for the warm-up: Focus on the left third, Blur on the right third,
+    /// so the areas' kernels (`withAreas`) are built too.
+    static func warmUpAreas(_ extent: CGRect) -> CIImage {
+        let third = extent.width / 3
+        let focus = CIImage(color: CIColor(red: 1, green: 0, blue: 0))
+            .cropped(to: CGRect(x: extent.minX, y: extent.minY, width: third, height: extent.height))
+        let blur = CIImage(color: CIColor(red: 0, green: 1, blue: 0))
+            .cropped(to: CGRect(x: extent.maxX - third, y: extent.minY, width: third, height: extent.height))
+        return focus.composited(over: blur).composited(over: CIImage(color: .black)).cropped(to: extent)
+    }
+
     /// Whether the kernels built, for tests.
     static var kernelAvailable: Bool { kernels != nil }
 
@@ -281,7 +369,8 @@ public enum LensBlur {
             float2 a = clamp(areas.sample(areas.transform(dest.coord())).rg, 0.0, 1.0);
             c *= 1.0 - a.x;
             c = mix(c, c < 0.0 ? -1.0 : 1.0, a.y);
-            return float4(c, c, c, 1.0);
+            // Green is the Focus strength the areas add (atelierLensBlurAreaCoC); none here.
+            return float4(c, 0.0, 0.0, 1.0);
         }
 
         // A level's input, weighted by whether the pixel blurs by about a level pixel or more
@@ -290,11 +379,74 @@ public enum LensBlur {
         // the weight in red, the weight in green. The gather divides the weight back out.
         [[stitchable]] float4 atelierLensBlurWeigh(coreimage::sampler image, coreimage::sampler coc, float2 params,
                                                    coreimage::destination dest) {
-            float c = coc.sample(coc.transform(dest.coord())).r;
-            float w = params.x < 0.0 ? 1.0 : smoothstep(0.5, 1.5, abs(c) * params.x);
+            float2 cf = coc.sample(coc.transform(dest.coord())).rg;
+            float c = cf.x;
+            // A Focus area's pixels (green) feed no level: they go back on top, sharp.
+            float w = (params.x < 0.0 ? 1.0 : smoothstep(0.5, 1.5, abs(c) * params.x)) * (1.0 - clamp(cf.y, 0.0, 1.0));
             if (params.y > 0.5) { return float4(c * w, w, 0.0, 1.0); }
             float4 color = image.sample(image.transform(dest.coord()));
             return float4(color.rgb * w, w);
+        }
+
+        // How much a Focus area changes here against its softened self (red): a detailed edge
+        // such as hair changes a lot within a few pixels, a feathered gradient hardly at all.
+        [[stitchable]] float4 atelierLensBlurDetail(coreimage::sampler areas, coreimage::sampler softened,
+                                                    coreimage::destination dest) {
+            float a = areas.sample(areas.transform(dest.coord())).r;
+            float s = softened.sample(softened.transform(dest.coord())).r;
+            float d = smoothstep(0.01, 0.05, abs(a - s));
+            return float4(d, d, d, 1.0);
+        }
+
+        // A detailed Focus edge (its spread detail, times 3, over a half): 1, else 0.
+        [[stitchable]] float4 atelierLensBlurNearArea(coreimage::sampler detail, coreimage::destination dest) {
+            float f = step(0.5, clamp(3.0 * detail.sample(detail.transform(dest.coord())).r, 0.0, 1.0));
+            return float4(f, f, f, 1.0);
+        }
+
+        // The blur sizes weighted for filling in: weight 0 near a Focus area and in Blur areas.
+        // Out: blur times weight, weight.
+        [[stitchable]] float4 atelierLensBlurFillWeigh(coreimage::sampler coc, coreimage::sampler near,
+                                                       coreimage::sampler areas, coreimage::destination dest) {
+            float c = coc.sample(coc.transform(dest.coord())).r;
+            float n = clamp(near.sample(near.transform(dest.coord())).r, 0.0, 1.0);
+            float b = clamp(areas.sample(areas.transform(dest.coord())).g, 0.0, 1.0);
+            float w = (1.0 - n) * (1.0 - b);
+            return float4(c * w, w, 0.0, 1.0);
+        }
+
+        // One step back up the fill pyramid: this level's own value where it has weight, the
+        // coarser level's filled value elsewhere. Out: value, 1 (weight).
+        [[stitchable]] float4 atelierLensBlurFillUp(coreimage::sampler level, coreimage::sampler coarser,
+                                                    coreimage::destination dest) {
+            float2 v = level.sample(level.transform(dest.coord())).rg;
+            float up = coarser.sample(coarser.transform(dest.coord())).r;
+            float own = v.y > 0.0001 ? v.x / v.y : 0.0;
+            float t = smoothstep(0.0, 0.3, v.y);
+            float filled = mix(up, own, t);
+            return float4(filled, 1.0, 0.0, 1.0);
+        }
+
+        // The blur sizes with the areas: near a detailed Focus edge at least the background's
+        // blur beyond it, and in the area there the background's blur; the area as a layer mask
+        // where its edge is detailed (Focus strength in green), lowering the blur where smooth;
+        // in a Blur area the blur around it, or the most where that is sharp.
+        [[stitchable]] float4 atelierLensBlurAreaCoC(coreimage::sampler coc, coreimage::sampler filled,
+                                                     coreimage::sampler near, coreimage::sampler areas,
+                                                     coreimage::sampler detail, coreimage::destination dest) {
+            float c = coc.sample(coc.transform(dest.coord())).r;
+            float f = filled.sample(filled.transform(dest.coord())).r;
+            float n = clamp(near.sample(near.transform(dest.coord())).r, 0.0, 1.0);
+            float2 a = clamp(areas.sample(areas.transform(dest.coord())).rg, 0.0, 1.0);
+            float d = clamp(3.0 * detail.sample(detail.transform(dest.coord())).r, 0.0, 1.0);
+            float larger = abs(f) > abs(c) ? f : c;
+            c = mix(c, larger, n);
+            c = mix(c, f, smoothstep(0.0, 0.25, a.x) * n);
+            c *= 1.0 - a.x * (1.0 - d);
+            float side = f < 0.0 ? -1.0 : 1.0;
+            float blurred = mix(side, f, smoothstep(0.05, 0.2, abs(f)));
+            c = mix(c, blurred, a.y);
+            return float4(c, a.x * d, 0.0, 1.0);
         }
 
         // Boost: the brightest highlights (near clipping) brighter, so they spread as bright
@@ -395,9 +547,11 @@ public enum LensBlur {
                                                        coreimage::sampler coc, float radius, coreimage::destination dest) {
             float4 s = sharp.sample(sharp.transform(dest.coord()));
             float4 b = blurred.sample(blurred.transform(dest.coord()));
-            float c = abs(coc.sample(coc.transform(dest.coord())).r) * radius;
-            float t = smoothstep(0.25, 1.0, c);
-            return float4(mix(s.rgb, max(b.rgb, float3(0.0)), t), s.a);
+            float2 cf = coc.sample(coc.transform(dest.coord())).rg;
+            float t = smoothstep(0.25, 1.0, abs(cf.x) * radius);
+            // Then the sharp photo through the Focus areas, as a layer mask.
+            float3 rgb = mix(mix(s.rgb, max(b.rgb, float3(0.0)), t), s.rgb, clamp(cf.y, 0.0, 1.0));
+            return float4(rgb, s.a);
         }
 
         // The foreground a level found spilling over a pixel that is sharp or nearly so.
@@ -405,7 +559,8 @@ public enum LensBlur {
                                                    coreimage::sampler coc, float radius, coreimage::destination dest) {
             float4 s = current.sample(current.transform(dest.coord()));
             float4 b = level.sample(level.transform(dest.coord()));
-            float c = abs(coc.sample(coc.transform(dest.coord())).r) * radius;
+            float2 cf = coc.sample(coc.transform(dest.coord())).rg;
+            float c = abs(cf.x) * (1.0 - clamp(cf.y, 0.0, 1.0)) * radius;
             float a = clamp(b.a, 0.0, 1.0) * (1.0 - smoothstep(0.25, 1.0, c));
             return float4(mix(s.rgb, max(b.rgb, float3(0.0)), a), s.a);
         }
