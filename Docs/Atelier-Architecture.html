@@ -1,0 +1,669 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Atelier Architecture</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a single reading column with a sticky contents rail on wide screens; diagrams break out to the column's full width. */
+:root {
+  --bg: #f4f5f6;
+  --surface: #ffffff;
+  --fg: #1b2026;
+  --muted: #5b6672;
+  --line: #d5dae0;
+  --accent: #0e7383;
+  --app: #0e7383;   --app-tint: #e3f2f4;
+  --core: #a5661a;  --core-tint: #f8eddd;
+  --agent: #6a52b8; --agent-tint: #ece8f8;
+  --ext: #5b6672;   --ext-tint: #eceef1;
+  --warn: #a8461f;  --warn-tint: #f9e6dc;
+  --ok: #2f7a43;
+  --font-display: "Instrument Sans", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Inter", -apple-system, "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111418; --surface: #181c21; --fg: #e4e8ec; --muted: #9aa5b1; --line: #2d343c;
+    --accent: #4fc0cf;
+    --app: #4fc0cf; --app-tint: #13292d;
+    --core: #e0a456; --core-tint: #2c2216;
+    --agent: #a993f0; --agent-tint: #231d36;
+    --ext: #9aa5b1; --ext-tint: #20252b;
+    --warn: #f0905f; --warn-tint: #331e15; --ok: #6fc485;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111418; --surface: #181c21; --fg: #e4e8ec; --muted: #9aa5b1; --line: #2d343c;
+  --accent: #4fc0cf;
+  --app: #4fc0cf; --app-tint: #13292d;
+  --core: #e0a456; --core-tint: #2c2216;
+  --agent: #a993f0; --agent-tint: #231d36;
+  --ext: #9aa5b1; --ext-tint: #20252b;
+  --warn: #f0905f; --warn-tint: #331e15; --ok: #6fc485;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg);
+  font: 15px/1.6 var(--font-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 64px;
+}
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 48px; }
+@media (max-width: 900px) { .wrap { grid-template-columns: minmax(0, 1fr); gap: 0; } nav.toc { display: none; } }
+nav.toc { position: sticky; top: env(safe-area-inset-top, 0px); align-self: start; padding-top: 40px; max-height: 100vh; overflow-y: auto; }
+nav.toc h2 { font: 600 11px/1 var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 12px; }
+nav.toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; counter-reset: s; }
+nav.toc a { display: block; padding: 4px 8px; border-radius: 6px; color: var(--muted); text-decoration: none; font-size: 13px; line-height: 1.35; }
+nav.toc a:hover, nav.toc a:focus-visible { color: var(--fg); background: var(--surface); outline: none; }
+main { min-width: 0; }
+header.top { padding-block: 40px 24px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+.eyebrow { font: 600 11px/1 var(--font-body); letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
+h1 { font: 700 clamp(30px, 5vw, 44px)/1.1 var(--font-display); margin: 10px 0 12px; text-wrap: balance; letter-spacing: -.01em; }
+h2 { font: 650 26px/1.2 var(--font-display); margin: 56px 0 12px; text-wrap: balance; scroll-margin-top: 16px; }
+h2 .n { color: var(--muted); font-weight: 500; margin-right: 8px; font-variant-numeric: tabular-nums; }
+h3 { font: 600 17px/1.3 var(--font-display); margin: 28px 0 8px; }
+p, li { max-width: 72ch; }
+p { margin: 0 0 12px; }
+ul, ol { padding-left: 20px; margin: 0 0 12px; }
+li { margin-bottom: 4px; }
+a { color: var(--accent); }
+code, .mono { font-family: var(--font-mono); font-size: .86em; }
+code { background: var(--ext-tint); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+.lede { font-size: 17px; color: var(--muted); max-width: 70ch; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 13px; color: var(--muted); margin-top: 16px; }
+.meta b { color: var(--fg); font-weight: 600; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin: 20px 0 8px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.stat .v { font: 600 24px/1.1 var(--font-display); font-variant-numeric: tabular-nums; }
+.stat .k { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.fig { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin: 16px 0 8px; overflow-x: auto; }
+.fig svg { display: block; width: 100%; min-width: 760px; height: auto; color: var(--muted); }
+.fig figcaption, .cap { font-size: 13px; color: var(--muted); margin-top: 10px; max-width: 80ch; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--muted); margin: 8px 0 0; }
+.legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; border: 1.5px solid; }
+.lg-app::before { background: var(--app-tint); border-color: var(--app) !important; }
+.lg-core::before { background: var(--core-tint); border-color: var(--core) !important; }
+.lg-agent::before { background: var(--agent-tint); border-color: var(--agent) !important; }
+.lg-ext::before { background: var(--ext-tint); border-color: var(--ext) !important; }
+/* SVG classes */
+svg text { fill: var(--fg); font-family: var(--font-body); font-size: 13px; }
+svg .t-s { font-size: 11px; fill: var(--muted); }
+svg .t-m { font-family: var(--font-mono); font-size: 11px; fill: var(--muted); }
+svg .t-h { font-family: var(--font-display); font-weight: 600; font-size: 14px; }
+svg .t-band { font-family: var(--font-body); font-weight: 600; font-size: 11px; letter-spacing: .08em; fill: var(--muted); }
+svg .b-app { fill: var(--app-tint); stroke: var(--app); stroke-width: 1.5; }
+svg .b-core { fill: var(--core-tint); stroke: var(--core); stroke-width: 1.5; }
+svg .b-agent { fill: var(--agent-tint); stroke: var(--agent); stroke-width: 1.5; }
+svg .b-ext { fill: var(--ext-tint); stroke: var(--ext); stroke-width: 1.5; stroke-dasharray: 4 3; }
+svg .b-plain { fill: var(--surface); stroke: var(--line); stroke-width: 1.2; }
+svg .band { fill: var(--bg); stroke: none; }
+svg .ln { stroke: var(--muted); stroke-width: 1.4; fill: none; }
+svg .ln-d { stroke: var(--muted); stroke-width: 1.3; fill: none; stroke-dasharray: 5 4; }
+svg .ln-a { stroke: var(--accent); stroke-width: 2; fill: none; }
+svg .ah { fill: var(--muted); }
+svg .ah-a { fill: var(--accent); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+.tbl { overflow-x: auto; margin: 12px 0 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font: 600 12px/1.3 var(--font-body); letter-spacing: .04em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tr:last-child td { border-bottom: none; }
+td code { white-space: nowrap; }
+.pill { display: inline-block; font: 600 11px/1 var(--font-body); padding: 4px 7px; border-radius: 99px; letter-spacing: .03em; white-space: nowrap; }
+.p-app { background: var(--app-tint); color: var(--app); }
+.p-core { background: var(--core-tint); color: var(--core); }
+.p-agent { background: var(--agent-tint); color: var(--agent); }
+.p-ext { background: var(--ext-tint); color: var(--ext); }
+.p-warn { background: var(--warn-tint); color: var(--warn); }
+.p-ok { background: var(--ext-tint); color: var(--ok); }
+.note { border-left: 3px solid var(--accent); background: var(--surface); padding: 10px 14px; border-radius: 0 8px 8px 0; margin: 12px 0; max-width: 80ch; font-size: 14px; }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.cols > div { min-width: 0; }
+footer { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+
+</head><body>
+<div class="wrap">
+<nav class="toc" aria-label="Contents">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#glance">At a glance</a></li>
+    <li><a href="#targets">Package and targets</a></li>
+    <li><a href="#layers">Runtime layers</a></li>
+    <li><a href="#shell">App shell and state</a></li>
+    <li><a href="#catalog">Catalog and data model</a></li>
+    <li><a href="#import">Import</a></li>
+    <li><a href="#previews">Previews and thumbnails</a></li>
+    <li><a href="#pipeline">Develop render pipeline</a></li>
+    <li><a href="#threads">Develop threading and display</a></li>
+    <li><a href="#models">Masks and on-device models</a></li>
+    <li><a href="#outside">Editors, AI and inline apps</a></li>
+    <li><a href="#agents">Agents and MCP</a></li>
+    <li><a href="#other">Cull, Match Look, Export, XMP</a></li>
+    <li><a href="#concurrency">Concurrency inventory</a></li>
+    <li><a href="#testing">Tests and tooling</a></li>
+    <li><a href="#prd">Where code and PRD differ</a></li>
+    <li><a href="#files">Key files</a></li>
+  </ol>
+</nav>
+
+<main>
+<header class="top">
+  <div class="eyebrow">Architecture reference</div>
+  <h1>Atelier Architecture</h1>
+  <p class="lede">How Atelier is built today: the Swift targets, the catalog, the Develop render path and its threads, the on-device models, the outside tools and the MCP server for chat apps. It describes what the code on <code>main</code> does, read from the source, and marks where that differs from the PRD.</p>
+  <div class="meta">
+    <span>Revision <b class="mono">c146785</b> (main, Nov 16, 2026)</span>
+    <span>Spec: <b>Requirements/Atelier-PRD.md</b></span>
+    <span>Diagrams overview: <a href="https://claude.ai/artifact/1T8xvdGuJTcGPTHStzDJvn">live diagram doc</a></span>
+  </div>
+</header>
+
+<section id="glance">
+<h2><span class="n">1</span>At a glance</h2>
+<div class="stats">
+  <div class="stat"><div class="v">69.6k</div><div class="k">lines of Swift in Sources</div></div>
+  <div class="stat"><div class="v">271</div><div class="k">Swift source files</div></div>
+  <div class="stat"><div class="v">9</div><div class="k">source targets (5 libraries, 4 executables)</div></div>
+  <div class="stat"><div class="v">663</div><div class="k">XCTest methods in 6 test targets plus a UI suite</div></div>
+  <div class="stat"><div class="v">11</div><div class="k">catalog migrations (v1 to v11)</div></div>
+  <div class="stat"><div class="v">72</div><div class="k">registry actions reachable by menus, keys and agents</div></div>
+</div>
+<p>Atelier is one native macOS process (SwiftUI with AppKit where SwiftUI is too slow) over a SQLite catalog. Develop renders with Core Image on the GPU from the original file, decoded once per open photo and kept in a session; Grid and Loupe show cached JPEG previews. Edits are a JSON document per photo. Outside tools (Edit In apps, ComfyUI) run in their own processes; small selection, face, depth and denoise models run inside the app through Vision, Core ML and ONNX Runtime (CPU at this revision). Chat apps reach the app through a small stdio helper that relays to a private Unix socket.</p>
+<p>The two big source areas are <code>AtelierApp</code> (35.8k lines: views and controllers, with <code>DevelopController.swift</code> alone at 3,720) and <code>AtelierCore</code> (27.3k lines, of which Develop is 18.2k).</p>
+</section>
+
+<section id="targets">
+<h2><span class="n">2</span>Package and targets</h2>
+<p>One Swift package (<code>Package.swift</code>, tools 6.0, Swift 5 language mode, macOS 15). External dependencies are only GRDB 7 (SQLite) and ONNX Runtime 1.24.2 (MIT).</p>
+<figure class="fig">
+<svg viewBox="0 0 960 400" role="img" aria-label="Target dependency graph">
+  <defs><marker id="ar1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker></defs>
+  <!-- executables row -->
+  <rect x="300" y="20" width="200" height="56" rx="8" class="b-app"/><text x="400" y="44" text-anchor="middle" class="t-h">AtelierApp</text><text x="400" y="62" text-anchor="middle" class="t-s">executable · views, controllers</text>
+  <rect x="560" y="20" width="180" height="56" rx="8" class="b-agent"/><text x="650" y="44" text-anchor="middle" class="t-h">AtelierMCPHelper</text><text x="650" y="62" text-anchor="middle" class="t-s">product atelier-mcp (stdio)</text>
+  <rect x="40" y="20" width="200" height="56" rx="8" class="b-plain"/><text x="140" y="44" text-anchor="middle" class="t-h">Qualification tools</text><text x="140" y="62" text-anchor="middle" class="t-s">PresetQualification, HDRQualification</text>
+  <!-- libraries -->
+  <rect x="40" y="170" width="180" height="56" rx="8" class="b-core"/><text x="130" y="194" text-anchor="middle" class="t-h">AtelierCore</text><text x="130" y="212" text-anchor="middle" class="t-s">catalog, render, import, AI</text>
+  <rect x="250" y="170" width="160" height="56" rx="8" class="b-core"/><text x="330" y="194" text-anchor="middle" class="t-h">AtelierHDRCore</text><text x="330" y="212" text-anchor="middle" class="t-s">tone mapper, GPU preview</text>
+  <rect x="440" y="170" width="160" height="56" rx="8" class="b-agent"/><text x="520" y="194" text-anchor="middle" class="t-h">AtelierActions</text><text x="520" y="212" text-anchor="middle" class="t-s">72 actions, typed tools</text>
+  <rect x="640" y="170" width="140" height="56" rx="8" class="b-agent"/><text x="710" y="194" text-anchor="middle" class="t-h">AgentMCP</text><text x="710" y="212" text-anchor="middle" class="t-s">JSON-RPC, socket</text>
+  <rect x="800" y="290" width="140" height="56" rx="8" class="b-agent"/><text x="870" y="314" text-anchor="middle" class="t-h">AgentActions</text><text x="870" y="332" text-anchor="middle" class="t-s">app-neutral registry</text>
+  <!-- external -->
+  <rect x="40" y="310" width="160" height="50" rx="8" class="b-ext"/><text x="120" y="331" text-anchor="middle" class="t-h">GRDB 7</text><text x="120" y="348" text-anchor="middle" class="t-s">SQLite, WAL</text>
+  <rect x="220" y="310" width="180" height="50" rx="8" class="b-ext"/><text x="310" y="331" text-anchor="middle" class="t-h">ONNX Runtime 1.24.2</text><text x="310" y="348" text-anchor="middle" class="t-s">Core ML execution provider</text>
+  <!-- edges -->
+  <path d="M340 76 L160 168" class="ln" marker-end="url(#ar1)"/>
+  <path d="M370 76 L335 168" class="ln" marker-end="url(#ar1)"/>
+  <path d="M430 76 L510 168" class="ln" marker-end="url(#ar1)"/>
+  <path d="M470 76 L690 168" class="ln" marker-end="url(#ar1)"/>
+  <path d="M490 70 C 760 90, 860 200, 870 288" class="ln" marker-end="url(#ar1)"/>
+  <path d="M650 76 L700 168" class="ln" marker-end="url(#ar1)"/>
+  <path d="M600 198 L638 198" class="ln" marker-end="url(#ar1)"/>
+  <path d="M560 226 C 620 290, 760 318, 798 318" class="ln" marker-end="url(#ar1)"/>
+  <path d="M760 226 L840 288" class="ln" marker-end="url(#ar1)"/>
+  <path d="M110 226 L115 308" class="ln" marker-end="url(#ar1)"/>
+  <path d="M170 226 L290 308" class="ln" marker-end="url(#ar1)"/>
+  <path d="M120 76 L125 168" class="ln" marker-end="url(#ar1)"/>
+  <path d="M170 76 L300 168" class="ln" marker-end="url(#ar1)"/>
+  <text x="420" y="372" class="t-s">AtelierApp also links GRDB directly (catalog observation in LibraryModel).</text><text x="420" y="390" class="t-s">PresetQualification → AtelierCore; HDRQualification → AtelierHDRCore + AtelierCore.</text>
+</svg>
+<div class="legend"><span class="lg-app">App executable</span><span class="lg-core">Photo libraries</span><span class="lg-agent">Agent libraries (shared with Easel)</span><span class="lg-ext">Third-party packages</span></div>
+</figure>
+<div class="tbl"><table>
+<thead><tr><th>Target</th><th>Kind</th><th>What it holds</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>AtelierCore</code></td><td><span class="pill p-core">library</span></td><td>Catalog (GRDB records, migrations), import, previews, Develop settings and renderer, masks, models, cull analysis, Match Look, export, XMP, ComfyUI client, processor documents.</td><td>Built with <code>-O</code> in Debug too, because Match Look, histograms and color cubes run per-pixel Swift loops. Bundles <code>Models/</code> (Core ML packages, <code>PMRID.onnx</code>).</td></tr>
+<tr><td><code>AtelierHDRCore</code></td><td><span class="pill p-core">library</span></td><td>Single-image HDR: <code>HDRImage</code>, tone mapper, GPU preview renderer, presets, project store (an <code>actor</code>).</td><td>The tone mapper is Swift on the CPU, split across cores by rows; <code>HDRPreviewRenderer</code> runs the same math as a Core Image kernel for previews, with the CPU as fallback. Also <code>-O</code> in Debug.</td></tr>
+<tr><td><code>AgentActions</code></td><td><span class="pill p-agent">library</span></td><td>Action, kind, tier, parameter schemas, <code>ActionRegistry</code>, menu builders, <code>JSONValue</code>.</td><td>No photo concepts; tests use an Easel-shaped host.</td></tr>
+<tr><td><code>AgentMCP</code></td><td><span class="pill p-agent">library</span></td><td>MCP sessions, Unix socket server and helper relay, client identity, grants, change log, docking, MCP Apps.</td><td>Depends on <code>AgentActions</code>; otherwise Foundation only, so it builds on Linux.</td></tr>
+<tr><td><code>AtelierActions</code></td><td><span class="pill p-agent">library</span></td><td>Atelier's action catalog (ids, kinds, parameters) and the typed agent tool schemas, without handlers. Depends on <code>AgentActions</code> and <code>AgentMCP</code>.</td><td>Handlers are bound in the app (<code>LibraryModel+Actions.swift</code>).</td></tr>
+<tr><td><code>AtelierApp</code></td><td><span class="pill p-app">executable</span></td><td>SwiftUI scenes, AppKit grid and photo view, controllers, Agents, Help pages, resources (icon, splash, studies).</td><td>Run from Xcode (scheme AtelierApp).</td></tr>
+<tr><td><code>AtelierMCPHelper</code></td><td><span class="pill p-agent">executable</span></td><td><code>atelier-mcp</code>: 28 lines that call <code>MCPRelay.run</code>.</td><td>Copied into <code>Contents/MacOS</code> by the build script.</td></tr>
+<tr><td><code>PresetQualification</code>, <code>HDRQualification</code></td><td><span class="pill p-ext">tools</span></td><td>Command-line checks for built-in presets and HDR output.</td><td>Not part of the app.</td></tr>
+</tbody></table></div>
+</section>
+
+<section id="layers">
+<h2><span class="n">3</span>Runtime layers</h2>
+<p>At run time the app is a main-actor view layer, a set of main-actor controllers that own state, and Core services that do the work on background queues. Storage is the catalog package plus a few files in Application Support and Caches; everything else is another process or a file on a drive.</p>
+<figure class="fig">
+<svg viewBox="0 0 960 520" role="img" aria-label="Runtime layers">
+  <defs><marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker></defs>
+  <rect x="0" y="0" width="960" height="92" class="band"/><text x="12" y="18" class="t-band">VIEWS · SWIFTUI + APPKIT · MAIN THREAD</text>
+  <rect x="0" y="104" width="960" height="112" class="band"/><text x="12" y="122" class="t-band">CONTROLLERS · @MAINACTOR OBSERVABLEOBJECTS</text>
+  <rect x="0" y="228" width="960" height="140" class="band"/><text x="12" y="246" class="t-band">CORE SERVICES · ATELIERCORE · BACKGROUND</text>
+  <rect x="0" y="380" width="960" height="140" class="band"/><text x="12" y="398" class="t-band">STORAGE AND OTHER PROCESSES</text>
+  <!-- views -->
+  <g>
+  <rect x="12" y="28" width="140" height="52" rx="7" class="b-app"/><text x="82" y="50" text-anchor="middle">Grid</text><text x="82" y="67" text-anchor="middle" class="t-s">NSCollectionView</text>
+  <rect x="162" y="28" width="140" height="52" rx="7" class="b-app"/><text x="232" y="50" text-anchor="middle">Photo view</text><text x="232" y="67" text-anchor="middle" class="t-s">ZoomScrollView, CALayer</text>
+  <rect x="312" y="28" width="140" height="52" rx="7" class="b-app"/><text x="382" y="50" text-anchor="middle">Panels and sidebars</text><text x="382" y="67" text-anchor="middle" class="t-s">SwiftUI</text>
+  <rect x="462" y="28" width="140" height="52" rx="7" class="b-app"/><text x="532" y="50" text-anchor="middle">Filmstrip, Cull</text><text x="532" y="67" text-anchor="middle" class="t-s">SwiftUI</text>
+  <rect x="612" y="28" width="160" height="52" rx="7" class="b-app"/><text x="692" y="50" text-anchor="middle">Sheets</text><text x="692" y="67" text-anchor="middle" class="t-s">Import, Export, Match Look</text>
+  <rect x="782" y="28" width="166" height="52" rx="7" class="b-app"/><text x="865" y="50" text-anchor="middle">Settings, Help window</text><text x="865" y="67" text-anchor="middle" class="t-s">10 panes · WKWebView</text>
+  </g>
+  <!-- controllers -->
+  <rect x="12" y="132" width="230" height="72" rx="7" class="b-app"/><text x="127" y="156" text-anchor="middle" class="t-h">LibraryModel</text><text x="127" y="174" text-anchor="middle" class="t-s">rows, selection, mode, filter,</text><text x="127" y="190" text-anchor="middle" class="t-s">sidebar, jobs; owns the others</text>
+  <rect x="252" y="132" width="170" height="72" rx="7" class="b-app"/><text x="337" y="156" text-anchor="middle" class="t-h">DevelopController</text><text x="337" y="174" text-anchor="middle" class="t-s">settings, history, renders,</text><text x="337" y="190" text-anchor="middle" class="t-s">presets, Lens Blur mode</text>
+  <rect x="432" y="132" width="120" height="72" rx="7" class="b-app"/><text x="492" y="156" text-anchor="middle" class="t-h">HDRController</text><text x="492" y="174" text-anchor="middle" class="t-s">HDR mode</text>
+  <rect x="562" y="132" width="110" height="72" rx="7" class="b-app"/><text x="617" y="156" text-anchor="middle" class="t-h">CullModel</text><text x="617" y="174" text-anchor="middle" class="t-s">per cull session</text>
+  <rect x="682" y="132" width="110" height="72" rx="7" class="b-app"/><text x="737" y="156" text-anchor="middle" class="t-h">AIController</text><text x="737" y="174" text-anchor="middle" class="t-s">ComfyUI tool</text>
+  <rect x="802" y="132" width="146" height="72" rx="7" class="b-agent"/><text x="875" y="156" text-anchor="middle" class="t-h">AgentServer</text><text x="875" y="174" text-anchor="middle" class="t-s">grants, tools, notices,</text><text x="875" y="190" text-anchor="middle" class="t-s">change log, docking</text>
+  <!-- core -->
+  <rect x="12" y="256" width="120" height="96" rx="7" class="b-core"/><text x="72" y="280" text-anchor="middle" class="t-h">Catalog</text><text x="72" y="298" text-anchor="middle" class="t-s">DatabasePool</text><text x="72" y="314" text-anchor="middle" class="t-s">+ extensions</text>
+  <rect x="142" y="256" width="120" height="96" rx="7" class="b-core"/><text x="202" y="280" text-anchor="middle" class="t-h">Importer</text><text x="202" y="298" text-anchor="middle" class="t-s">ImportStager</text><text x="202" y="314" text-anchor="middle" class="t-s">task group</text>
+  <rect x="272" y="256" width="130" height="96" rx="7" class="b-core"/><text x="337" y="280" text-anchor="middle" class="t-h">PreviewScheduler</text><text x="337" y="298" text-anchor="middle" class="t-s">PreviewCache</text><text x="337" y="314" text-anchor="middle" class="t-s">2 OperationQueues</text>
+  <rect x="412" y="256" width="150" height="96" rx="7" class="b-core"/><text x="487" y="280" text-anchor="middle" class="t-h">DevelopRenderer</text><text x="487" y="298" text-anchor="middle" class="t-s">one CIContext</text><text x="487" y="314" text-anchor="middle" class="t-s">session per photo</text><text x="487" y="330" text-anchor="middle" class="t-s">masks, models</text>
+  <rect x="572" y="256" width="110" height="96" rx="7" class="b-core"/><text x="627" y="280" text-anchor="middle" class="t-h">Exporter</text><text x="627" y="298" text-anchor="middle" class="t-s">XMPSidecar</text><text x="627" y="314" text-anchor="middle" class="t-s">Watermark</text>
+  <rect x="692" y="256" width="110" height="96" rx="7" class="b-core"/><text x="747" y="280" text-anchor="middle" class="t-h">Culling</text><text x="747" y="298" text-anchor="middle" class="t-s">LookMatcher</text><text x="747" y="314" text-anchor="middle" class="t-s">AIRunner</text>
+  <rect x="812" y="256" width="136" height="96" rx="7" class="b-agent"/><text x="880" y="280" text-anchor="middle" class="t-h">MCPSocketServer</text><text x="880" y="298" text-anchor="middle" class="t-s">thread per client</text><text x="880" y="314" text-anchor="middle" class="t-s">MCPSession</text>
+  <!-- storage -->
+  <rect x="12" y="408" width="200" height="98" rx="7" class="b-plain"/><text x="112" y="430" text-anchor="middle" class="t-h">Atelier Catalog.atelier</text><text x="112" y="448" text-anchor="middle" class="t-m">catalog.sqlite (WAL)</text><text x="112" y="464" text-anchor="middle" class="t-m">Previews/xx/id-256|2560.jpg</text><text x="112" y="480" text-anchor="middle" class="t-m">Backups/ (last 10)</text>
+  <rect x="222" y="408" width="200" height="98" rx="7" class="b-plain"/><text x="322" y="430" text-anchor="middle" class="t-h">App Support, Caches</text><text x="322" y="448" text-anchor="middle" class="t-m">Presets.json, Models/,</text><text x="322" y="464" text-anchor="middle" class="t-m">Spot Patches/, Agents/sock</text><text x="322" y="480" text-anchor="middle" class="t-m">Core ML compile caches</text>
+  <rect x="432" y="408" width="170" height="98" rx="7" class="b-ext"/><text x="517" y="430" text-anchor="middle" class="t-h">Originals</text><text x="517" y="448" text-anchor="middle" class="t-s">local drives, megham NAS</text><text x="517" y="464" text-anchor="middle" class="t-s">XMP sidecars, edits, TIFFs</text>
+  <rect x="612" y="408" width="160" height="98" rx="7" class="b-ext"/><text x="692" y="430" text-anchor="middle" class="t-h">Other apps</text><text x="692" y="448" text-anchor="middle" class="t-s">Edit In editors</text><text x="692" y="464" text-anchor="middle" class="t-s">ComfyUI (HTTP + WS)</text>
+  <rect x="782" y="408" width="166" height="98" rx="7" class="b-ext"/><text x="865" y="430" text-anchor="middle" class="t-h">Chat apps</text><text x="865" y="448" text-anchor="middle" class="t-s">start atelier-mcp</text><text x="865" y="464" text-anchor="middle" class="t-s">(stdio relay)</text>
+  <!-- arrows -->
+  <path d="M127 204 L72 254" class="ln" marker-end="url(#ar2)"/>
+  <path d="M160 204 L200 254" class="ln" marker-end="url(#ar2)"/>
+  <path d="M220 204 L320 254" class="ln" marker-end="url(#ar2)"/>
+  <path d="M337 204 L470 254" class="ln" marker-end="url(#ar2)"/>
+  <path d="M875 204 L880 254" class="ln" marker-end="url(#ar2)"/>
+  <path d="M72 352 L90 406" class="ln" marker-end="url(#ar2)"/>
+  <path d="M337 352 L150 406" class="ln" marker-end="url(#ar2)"/>
+  <path d="M487 352 L510 406" class="ln" marker-end="url(#ar2)"/>
+  <path d="M747 352 L700 406" class="ln" marker-end="url(#ar2)"/>
+  <path d="M865 406 L880 354" class="ln" marker-end="url(#ar2)"/>
+  <path d="M232 80 L300 130" class="ln-d" marker-end="url(#ar2)"/>
+  <path d="M82 80 L110 130" class="ln-d" marker-end="url(#ar2)"/>
+</svg>
+<figcaption>Solid arrows: calls and ownership. Dashed: the photo view and grid read controller state. Core services are not all background work: many run synchronously on the caller, for example Develop saves its settings and history on the main thread (<code>flushSave</code>). The live Develop frame skips the controller and SwiftUI (section 9).</figcaption>
+</figure>
+</section>
+
+<section id="shell">
+<h2><span class="n">4</span>App shell and state</h2>
+<ul>
+  <li><b>Launch.</b> <code>AtelierApp</code> is a SwiftUI <code>App</code> with one <code>WindowGroup("Atelier")</code> and a <code>Settings</code> scene. <code>CatalogLaunch</code> opens the catalog on the splash screen and builds <code>LibraryModel</code>; if the catalog can't open, it offers to try again rather than starting empty. <code>AppDelegate</code> turns off window tabbing, takes a catalog snapshot on quit and asks about unsaved HDR changes.</li>
+  <li><b>One hub.</b> <code>LibraryModel</code> (1,240 lines plus extensions for actions, HDR, Lens Blur, notes, import, private photos) owns the catalog, preview cache and scheduler, <code>DevelopController</code>, <code>HDRController</code>, <code>AIController</code>, <code>AgentServer</code>, the action registry, <code>EditWatcher</code> and the shared <code>ZoomState</code>. Modes are a <code>ViewMode</code> enum: grid, loupe, develop, hdr; Lens Blur is a sub-mode of Develop (<code>develop.isLensBlurring</code>).</li>
+  <li><b>Library rows are live queries.</b> <code>observeRows()</code> and <code>observeSidebar()</code> are two separate GRDB <code>ValueObservation</code>s, iterated in main-actor <code>Task</code>s. Each tracks the database region its query reads: a commit that touches that region re-runs it, a write elsewhere doesn't, and GRDB may fold several commits into one publication. A changed filter cancels and restarts the rows observation.</li>
+  <li><b>State that outlives a mode</b> (zoom, pan, focused photo) lives on <code>LibraryModel</code> / <code>ZoomState</code>, which every photo view reads and writes. <code>SessionRestore</code> saves view, sidebar item, filter, photo, zoom and grid scroll as a <code>SavedSession</code> in <code>UserDefaults</code>.</li>
+  <li><b>Preferences</b> are <code>UserDefaults</code> (about 50 keys, read directly in 169 places). Develop, Tone Curve and Color Grading presets, import presets and export presets are JSON files in <code>~/Library/Application Support/Atelier</code>, shared across catalogs.</li>
+  <li><b>Shared UI pieces</b> named in AGENTS.md: <code>ZoomViewport</code>, <code>Cursors</code>, <code>ClickGestures</code>, <code>DeleteFeedback</code>, <code>PanelSection</code>, <code>SliderRow</code>/<code>DevelopSlider</code>/<code>SliderGeometry</code>, <code>GroupHeading</code>, <code>PhotoPicker</code>, one <code>PhotoMenu</code>, <code>KeyBindings</code> and the action registry. Tests (<code>ClickGestureTests</code>, <code>AtelierActionsTests</code>) fail on some bypasses.</li>
+</ul>
+</section>
+
+<section id="catalog">
+<h2><span class="n">5</span>Catalog and data model</h2>
+<p><code>Catalog</code> is a <code>final class</code> marked <code>Sendable</code> around a GRDB <code>DatabasePool</code> (WAL, foreign keys on). Features add tables through extensions (<code>Catalog+Cull</code>, <code>+Stacks</code>, <code>+VirtualCopies</code>, <code>+Pairs</code>, <code>+Private</code>, <code>+Notes</code>, <code>+Processors</code>), each registering its own migration; the Develop tables come from <code>v3-develop</code> in <code>Develop/Catalog+Develop.swift</code> and the processor tables from <code>v8-processor-documents</code> in <code>Processors/Catalog+Processors.swift</code>. Reads and writes are synchronous calls on <code>writer.read</code>/<code>writer.write</code>, made from whichever thread the caller is on.</p>
+<figure class="fig">
+<svg viewBox="0 0 960 400" role="img" aria-label="Catalog tables">
+  <defs><marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker></defs>
+  <rect x="20" y="30" width="140" height="64" rx="7" class="b-core"/><text x="90" y="54" text-anchor="middle" class="t-h">volume</text><text x="90" y="72" text-anchor="middle" class="t-m">identityKey (UUID)</text><text x="90" y="86" text-anchor="middle" class="t-m">kind, isOnline</text>
+  <rect x="200" y="30" width="140" height="64" rx="7" class="b-core"/><text x="270" y="54" text-anchor="middle" class="t-h">folder</text><text x="270" y="72" text-anchor="middle" class="t-m">volumeId</text><text x="270" y="86" text-anchor="middle" class="t-m">relativePath</text>
+  <rect x="380" y="20" width="200" height="110" rx="7" class="b-core"/><text x="480" y="44" text-anchor="middle" class="t-h">asset</text><text x="480" y="62" text-anchor="middle" class="t-m">folderId, filename</text><text x="480" y="77" text-anchor="middle" class="t-m">contentHash (SHA-256)</text><text x="480" y="92" text-anchor="middle" class="t-m">EXIF columns, uti</text><text x="480" y="107" text-anchor="middle" class="t-m">virtualCopyOf, pair columns</text>
+  <rect x="620" y="30" width="140" height="64" rx="7" class="b-core"/><text x="690" y="54" text-anchor="middle" class="t-h">metadata</text><text x="690" y="72" text-anchor="middle" class="t-m">rating, flag, label</text><text x="690" y="86" text-anchor="middle" class="t-m">title, caption, xmpDirty</text>
+  <rect x="800" y="20" width="140" height="48" rx="7" class="b-plain"/><text x="870" y="40" text-anchor="middle">keyword</text><text x="870" y="56" text-anchor="middle" class="t-m">assetKeyword</text>
+  <rect x="800" y="76" width="140" height="48" rx="7" class="b-plain"/><text x="870" y="96" text-anchor="middle">collection</text><text x="870" y="112" text-anchor="middle" class="t-m">collectionAsset</text>
+  <rect x="380" y="190" width="200" height="94" rx="7" class="b-core"/><text x="480" y="214" text-anchor="middle" class="t-h">version</text><text x="480" y="232" text-anchor="middle" class="t-m">kind: master | virtualCopy |</text><text x="480" y="247" text-anchor="middle" class="t-m">externalEdit | ai</text><text x="480" y="262" text-anchor="middle" class="t-m">derivedAssetId, provenance</text>
+  <rect x="620" y="190" width="160" height="94" rx="7" class="b-core"/><text x="700" y="214" text-anchor="middle" class="t-h">developSettings</text><text x="700" y="232" text-anchor="middle" class="t-m">versionId (PK)</text><text x="700" y="247" text-anchor="middle" class="t-m">json (schema 3)</text><text x="700" y="262" text-anchor="middle" class="t-m">historyJson</text>
+  <rect x="20" y="190" width="160" height="48" rx="7" class="b-plain"/><text x="100" y="210" text-anchor="middle">importGroup</text><text x="100" y="226" text-anchor="middle" class="t-m">importGroupAsset</text>
+  <rect x="200" y="190" width="160" height="48" rx="7" class="b-plain"/><text x="280" y="210" text-anchor="middle">cullGroup</text><text x="280" y="226" text-anchor="middle" class="t-m">cullGroupAsset</text>
+  <rect x="20" y="250" width="160" height="48" rx="7" class="b-plain"/><text x="100" y="270" text-anchor="middle">note</text><text x="100" y="286" text-anchor="middle" class="t-m">source, spot (v11)</text>
+  <rect x="200" y="250" width="160" height="48" rx="7" class="b-plain"/><text x="280" y="270" text-anchor="middle">processorOutput</text><text x="280" y="286" text-anchor="middle" class="t-m">processorCompletion</text>
+  <rect x="800" y="190" width="140" height="94" rx="7" class="b-plain"/><text x="870" y="214" text-anchor="middle">isPrivate (v9)</text><text x="870" y="232" text-anchor="middle" class="t-s">column on</text><text x="870" y="247" text-anchor="middle" class="t-s">importGroup and</text><text x="870" y="262" text-anchor="middle" class="t-s">collection</text>
+  <path d="M160 62 L198 62" class="ln" marker-end="url(#ar3)"/>
+  <path d="M340 62 L378 62" class="ln" marker-end="url(#ar3)"/>
+  <path d="M580 62 L618 62" class="ln" marker-end="url(#ar3)"/>
+  <path d="M580 50 C 700 10, 760 30, 798 44" class="ln" marker-end="url(#ar3)"/>
+  <path d="M580 100 L798 100" class="ln" marker-end="url(#ar3)"/>
+  <path d="M480 130 L480 188" class="ln" marker-end="url(#ar3)"/>
+  <path d="M580 237 L618 237" class="ln" marker-end="url(#ar3)"/>
+  <path d="M380 110 C 300 140, 200 160, 120 188" class="ln-d" marker-end="url(#ar3)"/>
+  <path d="M390 125 C 340 150, 300 170, 290 188" class="ln-d" marker-end="url(#ar3)"/>
+  <text x="20" y="330" class="t-s">Arrows point from a row to the rows that reference it. Most of these foreign keys cascade on delete; version.parentVersionId points to another version and is SET NULL on delete.</text><text x="20" y="348" class="t-s">version.assetId is the source photo; version.derivedAssetId is the derived file's own asset row (edit, AI, HDR, Lens Blur TIFF), also cascading.</text>
+  <text x="20" y="366" class="t-s">Masks, spots, crop and panel switches live inside developSettings.json; there is no mask, model or job table.</text>
+</svg>
+</figure>
+<ul>
+  <li><b>Package layout:</b> <code>~/Pictures/Atelier/Atelier Catalog.atelier/</code> holds <code>catalog.sqlite</code>, <code>Previews/</code> and <code>Backups/</code>. <code>snapshot(keep:)</code> runs GRDB's online backup on quit and keeps the newest N (Settings default 10).</li>
+  <li><b>Develop settings</b> are one <code>DevelopSettings</code> struct (schema 3), stored sparsely: a <code>[Parameter: Double]</code> map plus typed fields for crop, curves, masks, Lens Blur areas, spots, profile and Upright. Anything at its default is left out, so equal looks compare equal and old JSON decodes with neutral defaults.</li>
+  <li><b>History</b> (<code>DevelopHistory</code>) is a list of named steps with full settings and snapshots, serialized next to the settings.</li>
+  <li><b>Volumes</b> are matched by volume UUID (<code>VolumeIdentity</code>); mount and unmount notifications refresh online state.</li>
+  <li><b>Private photos:</b> import entries and collections carry a private flag; <code>LibraryFilter.privacy</code> hides them from the library queries (rows, sidebar, counts) until Touch ID or the password (<code>LAContext</code> in <code>PrivatePhotos</code>). Agent tools check visibility separately and treat a private photo as missing, whatever the view shows.</li>
+</ul>
+</section>
+
+<section id="import">
+<h2><span class="n">6</span>Import</h2>
+<figure class="fig">
+<svg viewBox="0 0 960 246" role="img" aria-label="Import flow">
+  <defs><marker id="ar4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker></defs>
+  <rect x="10" y="40" width="140" height="70" rx="7" class="b-app"/><text x="80" y="64" text-anchor="middle" class="t-h">Import sheet</text><text x="80" y="82" text-anchor="middle" class="t-s">Choose Photos,</text><text x="80" y="97" text-anchor="middle" class="t-s">optional Cull</text>
+  <rect x="190" y="40" width="160" height="70" rx="7" class="b-core"/><text x="270" y="64" text-anchor="middle" class="t-h">ImportStager</text><text x="270" y="82" text-anchor="middle" class="t-s">copies or hashes ahead</text><text x="270" y="97" text-anchor="middle" class="t-m">.Atelier Staging/</text>
+  <rect x="390" y="40" width="170" height="70" rx="7" class="b-core"/><text x="475" y="64" text-anchor="middle" class="t-h">Importer.run</text><text x="475" y="82" text-anchor="middle" class="t-s">withTaskGroup, N workers</text><text x="475" y="97" text-anchor="middle" class="t-s">(by mode)</text>
+  <rect x="600" y="20" width="160" height="50" rx="7" class="b-core"/><text x="680" y="42" text-anchor="middle">per file</text><text x="680" y="58" text-anchor="middle" class="t-s">hash, metadata, pair</text>
+  <rect x="600" y="84" width="160" height="50" rx="7" class="b-core"/><text x="680" y="106" text-anchor="middle">catalog write</text><text x="680" y="122" text-anchor="middle" class="t-s">asset, group, presets</text>
+  <rect x="800" y="40" width="150" height="70" rx="7" class="b-core"/><text x="875" y="64" text-anchor="middle" class="t-h">buildPreviews</text><text x="875" y="82" text-anchor="middle" class="t-s">256 then 2560 px</text>
+  <path d="M150 75 L188 75" class="ln" marker-end="url(#ar4)"/>
+  <path d="M350 75 L388 75" class="ln" marker-end="url(#ar4)"/>
+  <path d="M560 60 L598 48" class="ln" marker-end="url(#ar4)"/>
+  <path d="M680 70 L680 82" class="ln" marker-end="url(#ar4)"/>
+  <path d="M760 100 L798 85" class="ln" marker-end="url(#ar4)"/>
+  <text x="10" y="160" class="t-s">Workers overlap: one file is hashing or copying while another reads metadata or is written to the catalog. Previews are a separate pass after cataloging.</text><text x="10" y="214" class="t-s">Copy mode: each file goes through a staged copy on the destination volume, verified by SHA-256 when it is made,</text><text x="10" y="232" class="t-s">then renamed into YYYY/YYYY-MM-DD Event/ without hashing again.</text>
+  <text x="10" y="178" class="t-s">Reference mode: files stay in place; already-cataloged files are not hashed again. Metadata is read from the local copy when there is one (NAS round trips).</text>
+  <text x="10" y="196" class="t-s">Import presets apply a Develop preset, then Tone Curve and Color Grading panel presets, each as its own history step; settings recovered from an XMP sidecar win over them.</text>
+</svg>
+</figure>
+<p><code>ImportFlow</code> in the app drives progress (<code>ImportStatus</code>: files, bytes, speed, time left). Metadata comes from ImageIO (<code>MetadataReader</code>, <code>ShootingInfo</code>); XMP sidecars found on import restore Develop settings, history and notes (<code>DevelopRecovery</code>, <code>HistoryRecovery</code>, <code>NotesRecovery</code>).</p>
+</section>
+
+<section id="previews">
+<h2><span class="n">7</span>Previews and thumbnails</h2>
+<div class="cols">
+<div>
+<h3>On disk</h3>
+<ul>
+  <li><code>PreviewCache</code>: two sizes, 256 px and 2560 px JPEG, sharded by <code>id &amp; 0xff</code>. Thumbnails use the embedded RAW preview when it is large enough.</li>
+  <li><code>PreviewCache.version</code> (now 12) is written to <code>version.txt</code>; an older folder is moved aside at launch and deleted in the background.</li>
+  <li><code>PreviewScheduler</code>: two <code>OperationQueue</code> lanes (thumbnails with max(2, active cores / 2) workers, previews with 2), de-duplicated by asset and size, cancellable, with a failed set that is retried only when something changes. Edited photos render through Develop settings.</li>
+</ul>
+</div>
+<div>
+<h3>In memory</h3>
+<ul>
+  <li><code>ThumbnailLoader</code> (grid): an <code>NSCache</code> of decoded thumbnails, decoded off the main thread.</li>
+  <li><code>PreviewImages</code> (Loupe, Develop open): an LRU of 8 decoded 2560 px previews (the code's comment estimates about 18 MB each at 2560 × 1707; the real size depends on aspect ratio and decoded format), keyed by asset and file date, decoded in a detached task so the first draw doesn't decode on the main thread.</li>
+  <li>The import sheet has its own <code>NSCache</code> of file thumbnails.</li>
+</ul>
+</div>
+</div>
+</section>
+
+<section id="pipeline">
+<h2><span class="n">8</span>Develop render pipeline</h2>
+<p>Develop renders start from the original file, decoded once when the photo opens and kept in a session, so a slider tick doesn't decode it again. <code>DevelopRenderer.shared</code> owns one <code>CIContext</code> (linear Rec. 2020 working space, half-float, <code>cacheIntermediates: false</code>). A <code>DevelopSession</code> holds one opened file: the <code>CIRAWFilter</code> (or decoded image) and caches for that photo. <code>session.image(with:)</code> builds the Core Image graph under the session's lock.</p>
+<figure class="fig">
+<svg viewBox="0 0 960 330" role="img" aria-label="Render pipeline stages">
+  <defs><marker id="ar5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker></defs>
+  <rect x="10" y="20" width="230" height="140" rx="8" class="b-core"/>
+  <text x="22" y="42" class="t-h">1 · decodeAndCorrect</text>
+  <text x="22" y="62" class="t-s">CIRAWFilter: WB, exposure, lens profile</text>
+  <text x="22" y="78" class="t-s">AI Denoise residual (RAW only)</text>
+  <text x="22" y="94" class="t-s">Camera match profile or Apple Neutral</text>
+  <text x="22" y="110" class="t-s">Remove CA, Defringe, manual lens</text>
+  <text x="22" y="126" class="t-s">Upright and Transform</text>
+  <text x="22" y="148" class="t-m">cached by CorrectedKey (2 kept)</text>
+  <rect x="260" y="20" width="160" height="140" rx="8" class="b-core"/>
+  <text x="272" y="42" class="t-h">Before geometry</text>
+  <text x="272" y="62" class="t-s">Remove tool spots</text>
+  <text x="272" y="78" class="t-s">(heal, clone, fill)</text>
+  <text x="272" y="96" class="t-m">↳ mask source image</text>
+  <text x="272" y="114" class="t-s">Lens Blur, only while</text>
+  <text x="272" y="130" class="t-s">its mode or Save renders</text>
+  <text x="272" y="148" class="t-s">(masks stay sharp)</text>
+  <rect x="440" y="20" width="110" height="140" rx="8" class="b-core"/>
+  <text x="452" y="42" class="t-h">2 · Geometry</text>
+  <text x="452" y="62" class="t-s">quarter turns</text>
+  <text x="452" y="78" class="t-s">flips</text>
+  <text x="452" y="94" class="t-s">straighten</text>
+  <text x="452" y="110" class="t-s">crop</text>
+  <rect x="570" y="20" width="380" height="140" rx="8" class="b-core"/>
+  <text x="582" y="42" class="t-h">3 to 8 · applyAdjustments</text>
+  <text x="582" y="62" class="t-s">Calibration · Highlights/Shadows (LocalContrast)</text>
+  <text x="582" y="78" class="t-s">Tone curve LUT (hue-preserving) · R/G/B curves · Dehaze</text>
+  <text x="582" y="94" class="t-s">Clarity, Texture · Vibrance, Saturation</text>
+  <text x="582" y="110" class="t-s">HSL + Point Color/B&amp;W + Grading: one 32³ P3 color cube</text>
+  <text x="582" y="126" class="t-s">Noise reduction, sharpening · masks (applyMasks)</text>
+  <text x="582" y="142" class="t-s">Glow · post-crop vignette · grain · Option-drag views</text>
+  <path d="M240 90 L258 90" class="ln" marker-end="url(#ar5)"/>
+  <path d="M420 90 L438 90" class="ln" marker-end="url(#ar5)"/>
+  <path d="M550 90 L568 90" class="ln" marker-end="url(#ar5)"/>
+  <rect x="10" y="200" width="300" height="100" rx="8" class="b-plain"/>
+  <text x="22" y="222" class="t-h">Mask providers (lazy, per session)</text>
+  <text x="22" y="242" class="t-s">Subject/Object: Vision on ≤1024 px copy</text>
+  <text x="22" y="258" class="t-s">People: MediaPipe parts + Vision faces</text>
+  <text x="22" y="274" class="t-s">Fine Edges, Depth: ONNX · Sky: from the depth</text>
+  <text x="22" y="290" class="t-s">Brush, gradients drawn · luminance later</text>
+  <rect x="330" y="200" width="300" height="100" rx="8" class="b-plain"/>
+  <text x="342" y="222" class="t-h">Caches that keep drags cheap</text>
+  <text x="342" y="242" class="t-s">correctedCache: step 1 output, 2 entries</text>
+  <text x="342" y="258" class="t-s">insertingIntermediate stage caches (interactive)</text>
+  <text x="342" y="274" class="t-s">NSCache: camera matches, lateral CA</text>
+  <text x="342" y="290" class="t-s">Brush, spot shape and spot fill caches</text>
+  <rect x="650" y="200" width="300" height="100" rx="8" class="b-plain"/>
+  <text x="662" y="222" class="t-h">Outputs</text>
+  <text x="662" y="242" class="t-s">renderToSurface → IOSurface (live frames)</text>
+  <text x="662" y="258" class="t-s">renderForDisplay → CGImage + small copy</text>
+  <text x="662" y="274" class="t-s">Exporter: same session, full size, sRGB/P3</text>
+  <text x="662" y="290" class="t-s">PreviewScheduler: 2560 px developed JPEG</text>
+  <path d="M160 200 L320 162" class="ln-d" marker-end="url(#ar5)"/>
+</svg>
+</figure>
+<ul>
+  <li><b>Mask sources</b> come from the sharp photo after the Remove spots and before Lens Blur, on the uncropped frame; each mask is then put through the same crop as the photo. Luminance ranges are worked out later, from the photo the mask sees. Fine Edges mattes are shared app-wide through <code>FineMatteCache</code>; Select Sky is derived from the depth model's output, not a model of its own.</li>
+  <li><b>Option-drag views</b> branch off or return early: Defringe's views show step 1 alone, Visualize Depth replaces the photo, and the clipping and sharpening views replace the result at the end.</li>
+  <li><b>Panel switches</b> are applied first (<code>applyingPanelSwitches()</code>), so a panel that is off is absent from the graph. Tools at their neutral value return the input unchanged.</li>
+  <li><b>Per-pixel work</b> in the live path is Core Image filters or runtime Metal kernels (<code>RuntimeKernels.build</code>). Small CPU tables (curve LUTs, the color cube) are built in Swift.</li>
+  <li><b>Warm-up:</b> <code>PipelineWarmUp.warmUpVariants</code> renders every tool once off screen, so the first drag of a tool doesn't compile its kernel on the photo.</li>
+  <li><b>Lens Blur</b> is gated by <code>session.rendersLensBlur</code>; Develop, previews, export and Loupe leave it out, and the result reaches the library as a stacked TIFF (<code>LensBlurPhoto</code>).</li>
+  <li><b>Full size:</b> when an edit rests, a second, full-resolution session renders on <code>atelier.develop.full</code> so zoomed views are sharp; the proxy is 2560 px long edge.</li>
+</ul>
+</section>
+
+<section id="threads">
+<h2><span class="n">9</span>Develop threading and display</h2>
+<p>The goal of this path (AT-025, AT-036, AT-039) is that a slider drag never waits on the main thread or SwiftUI. The render queue presents its own frames.</p>
+<figure class="fig">
+<svg viewBox="0 0 960 360" role="img" aria-label="Develop threading">
+  <defs>
+    <marker id="ar6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker>
+    <marker id="ar6a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah-a"/></marker>
+  </defs>
+  <text x="10" y="20" class="t-band">MAIN THREAD</text>
+  <text x="10" y="150" class="t-band">ATELIER.DEVELOP (USERINTERACTIVE, SERIAL)</text>
+  <text x="10" y="270" class="t-band">ATELIER.DEVELOP.MEASURE</text>
+  <rect x="10" y="30" width="150" height="64" rx="7" class="b-app"/><text x="85" y="54" text-anchor="middle" class="t-h">Slider drag</text><text x="85" y="72" text-anchor="middle" class="t-s">SliderRow / DevelopSlider</text>
+  <rect x="190" y="30" width="170" height="64" rx="7" class="b-app"/><text x="275" y="54" text-anchor="middle" class="t-h">submitRender</text><text x="275" y="72" text-anchor="middle" class="t-s">LatestJob.submit</text>
+  <rect x="560" y="30" width="170" height="64" rx="7" class="b-app"/><text x="645" y="54" text-anchor="middle" class="t-h">finishRender</text><text x="645" y="72" text-anchor="middle" class="t-s">bookkeeping only</text>
+  <rect x="760" y="30" width="190" height="64" rx="7" class="b-app"/><text x="855" y="54" text-anchor="middle" class="t-h">settle (0.12 s)</text><text x="855" y="72" text-anchor="middle" class="t-s">publish image, history step</text>
+  <rect x="190" y="160" width="170" height="70" rx="7" class="b-core"/><text x="275" y="184" text-anchor="middle" class="t-h">renderNext</text><text x="275" y="202" text-anchor="middle" class="t-s">take newest request</text><text x="275" y="218" text-anchor="middle" class="t-s">session.renderToSurface</text>
+  <rect x="390" y="160" width="160" height="70" rx="7" class="b-core"/><text x="470" y="184" text-anchor="middle" class="t-h">DisplaySurfaces</text><text x="470" y="202" text-anchor="middle" class="t-s">IOSurface pool</text>
+  <rect x="580" y="160" width="170" height="70" rx="7" class="b-app"/><text x="665" y="184" text-anchor="middle" class="t-h">LiveFrameSink</text><text x="665" y="202" text-anchor="middle" class="t-s">sets CALayer contents</text><text x="665" y="218" text-anchor="middle" class="t-s">if key and epoch match</text>
+  <rect x="190" y="280" width="170" height="64" rx="7" class="b-core"/><text x="275" y="304" text-anchor="middle" class="t-h">measure</text><text x="275" y="322" text-anchor="middle" class="t-s">LatestJob, histogram, scope</text>
+  <rect x="390" y="280" width="200" height="64" rx="7" class="b-app"/><text x="490" y="304" text-anchor="middle" class="t-h">HistogramSink</text><text x="490" y="322" text-anchor="middle" class="t-s">draws off main (AT-040)</text>
+  <rect x="620" y="280" width="200" height="64" rx="7" class="b-app"/><text x="720" y="304" text-anchor="middle" class="t-h">DevelopMeasures</text><text x="720" y="322" text-anchor="middle" class="t-s">@Published, rate-limited</text>
+  <path d="M160 62 L188 62" class="ln" marker-end="url(#ar6)"/>
+  <path d="M275 94 L275 158" class="ln" marker-end="url(#ar6)"/>
+  <path d="M360 195 L388 195" class="ln-a" marker-end="url(#ar6a)"/>
+  <path d="M550 195 L578 195" class="ln-a" marker-end="url(#ar6a)"/>
+  <path d="M340 160 C 420 110, 500 80, 558 66" class="ln-d" marker-end="url(#ar6)"/>
+  <path d="M730 62 L758 62" class="ln" marker-end="url(#ar6)"/>
+  <path d="M275 230 L275 278" class="ln" marker-end="url(#ar6)"/>
+  <path d="M360 312 L388 312" class="ln" marker-end="url(#ar6)"/>
+  <path d="M590 312 L618 312" class="ln-d" marker-end="url(#ar6)"/>
+  <path d="M230 230 C 150 250, 140 200, 200 168" class="ln" marker-end="url(#ar6)"/>
+  <text x="96" y="248" class="t-s">re-queues itself</text>
+  <text x="780" y="200" class="t-s">accent path: the frame</text>
+  <text x="780" y="216" class="t-s">never touches the main</text>
+  <text x="780" y="232" class="t-s">thread or SwiftUI</text>
+</svg>
+</figure>
+<ul>
+  <li><b>Where the direct path applies.</b> When the photo view is attached to the live feed and a frame fits it, the render queue sets the layer's contents itself after epoch, count and size checks. Otherwise (no surface free, an incompatible frame, a view without the live feed, the crop tool, the mask overlay, Option-drag views) the render comes back as a <code>CGImage</code> and the main thread shows it. The main thread still handles input and builds each request.</li>
+  <li><b>Settle and save are separate.</b> 0.12 s after the last frame the image is published to SwiftUI and the history step settles. Writing to the catalog is its own 400 ms debounce (<code>saveTask</code>, then <code>flushSave</code> on the main thread).</li>
+  <li><b>Latest wins.</b> <code>LatestJob</code> keeps at most one waiting request; a newer one replaces it. The render queue drains itself, so a busy main thread cannot hold the GPU idle. Measuring has its own <code>LatestJob</code> so the histogram never builds a backlog.</li>
+  <li><b>Generations and epochs.</b> Requests carry <code>openGeneration</code> and a live epoch; frames for a photo you have left, or for another view key, are dropped and their surfaces returned to the pool.</li>
+  <li><b>Opening photos.</b> Decodes run on a concurrent <code>atelier.develop.open</code> queue and start only after ← → rest for 0.15 s. Neighbours in the Filmstrip are decoded on <code>atelier.develop.prefetch</code> (utility) after 0.8 s without a render. The cached 2560 px preview shows first.</li>
+  <li><b>Other Develop queues:</b> <code>.full</code> (full-size render when idle), <code>.navigator</code> (560 px preset hover previews), <code>.warm-up</code>, <code>.previews</code> (stored preview refresh), <code>.timing-log</code>.</li>
+  <li><b>SwiftUI isolation.</b> <code>DevelopController</code> has 87 <code>@Published</code> properties, so per-tick values are kept out of it: the histogram and color scope live on <code>DevelopMeasures</code>, slider values flow through equatable rows, and Frame Diagnostics (<code>DevelopFrameHUD</code>) reads timings from the render queue.</li>
+</ul>
+</section>
+
+<section id="models">
+<h2><span class="n">10</span>Masks and on-device models</h2>
+<p>Masks are instructions stored in the settings (shape, parameters, add/subtract/intersect components); their pixels are found on demand by the session and kept in memory for the current lens geometry. AI masks are not written to disk.</p>
+<div class="tbl"><table>
+<thead><tr><th>Model or API</th><th>Runtime</th><th>Shipped how</th><th>Used by</th></tr></thead>
+<tbody>
+<tr><td>Vision foreground, person instance and segmentation, saliency</td><td>Vision</td><td><span class="pill p-ok">OS</span></td><td>Select Subject, Object, Background, People outlines, splash crop, Cull subject</td></tr>
+<tr><td>Vision faces, landmarks, capture quality, body and hand pose, feature prints</td><td>Vision</td><td><span class="pill p-ok">OS</span></td><td>Select People, Cull (faces, similarity), Find Faces</td></tr>
+<tr><td>MediaPipe Multiclass Selfie (PeopleParts)</td><td>Core ML</td><td><span class="pill p-core">bundled</span> mlpackage</td><td>Select People parts: face skin, body skin, hair, clothes</td></tr>
+<tr><td>MediaPipe Face Landmarker: FaceMesh, FaceBlendshapes, FaceDetector</td><td>Core ML</td><td><span class="pill p-core">bundled</span> mlpackages</td><td>Cull blinks and smiles, Find Faces (MediaPipe or Both)</td></tr>
+<tr><td>PMRID raw denoiser</td><td>ONNX Runtime, CPU</td><td><span class="pill p-core">bundled</span> 4.1 MB onnx</td><td>AI Denoise (step 1, RAW only): full resolution, 512 px tiles processed one after another, one photo at a time; residuals in <code>NSCache</code></td></tr>
+<tr><td>Depth Anything V2 Small</td><td>ONNX Runtime, CPU</td><td><span class="pill p-agent">download</span> pinned revision, SHA-256</td><td>Depth Range, Select Sky, Lens Blur depth</td></tr>
+<tr><td>BiRefNet lite / HR matting</td><td>ONNX Runtime, CPU by default</td><td><span class="pill p-agent">download</span> pinned revision, SHA-256</td><td>Fine Edges on AI selections; <code>FineMatteCache</code> shared by proxy, full size and Save</td></tr>
+</tbody></table></div>
+<ul>
+  <li><code>BundledModel</code> compiles a bundled mlpackage once into Caches and loads it lazily. <code>ModelDownload</code> puts downloads in <code>Application Support/Atelier/Models</code>, named by checksum.</li>
+  <li><b>ONNX models run on the CPU at this revision.</b> The Core ML execution provider is wired in through shared <code>CoreMLProviderOptions</code> (<code>MLComputeUnits: "ALL"</code>, MLProgram, a compile cache), but PMRID and Depth set <code>usesCoreML = false</code> and Fine Edges defaults <code>prefersCoreML = false</code>. The bundled MediaPipe models are the ones that actually run through Core ML.</li>
+  <li>Models run in the app process on background threads. Selection and depth models see downscaled copies (Vision at up to 1024 px, depth at up to 1036 px); PMRID works on the full-resolution RAW.</li>
+</ul>
+</section>
+
+<section id="outside">
+<h2><span class="n">11</span>Editors, AI and inline apps</h2>
+<p>Every outside result lands the same way: a new asset row for the file, stacked on its source with a <code>version</code> row (<code>Importer.addStacked</code> or <code>Catalog.stack</code>), which, when the derivative is first stacked, copies rating, label, keywords, collections and import entries onto it. How each tool gets there differs.</p>
+<div class="tbl"><table>
+<thead><tr><th>Tool</th><th>Where it runs</th><th>Hand-off</th><th>Recorded as</th></tr></thead>
+<tbody>
+<tr><td>Edit In (Photoshop, Affinity, Pixelmator…)</td><td>Other app</td><td>Renders a 16-bit TIFF or a JPEG next to the original, opens the editor; <code>EditWatcher</code> watches the folder with a <code>DispatchSource</code> vnode source and re-checks on app activation.</td><td><code>externalEdit</code> version; preview refreshed on save</td></tr>
+<tr><td>AI: Remove Object, Replace Background, Upscale</td><td>ComfyUI process (HTTP + WebSocket)</td><td><code>AIRunner</code> binds a workflow template (by node titles), uploads image and mask, queues, follows progress via <code>ComfyMonitor</code>; for the masked recipes (Remove Object, Replace Background) composites the masked region back onto the original.</td><td><code>ai</code> version, provenance JSON (recipe, models, licenses, prompt, seed)</td></tr>
+<tr><td>HDR mode</td><td>In process, <code>AtelierHDRCore</code>: GPU preview, CPU fallback, CPU full size and Save</td><td><code>HDRController</code> tone-maps a linear source; Save writes a 16-bit TIFF and an <code>.atelierhdr</code> project. The <code>ProcessorDocument</code>/<code>ProcessorReceipt</code> identity checks from the former separate HDR app now run in-process. Leaving with unsaved changes asks Save, Don't Save or Cancel.</td><td><code>externalEdit</code> version + <code>processorOutput</code> row</td></tr>
+<tr><td>Lens Blur mode</td><td>In process, Core Image</td><td>Develop's photo view in the focused shell with Lens Blur controls; Save renders full size off main, and later saves update the same stacked TIFF in place. Closing without Save cancels the changes.</td><td><code>externalEdit</code> version named "Lens Blur"</td></tr>
+</tbody></table></div>
+<p>The inline apps (HDR, Lens Blur) use a focused shell: no filmstrip, Navigator, histogram or presets (Rosh, Nov 16, 2026).</p>
+</section>
+
+<section id="agents">
+<h2><span class="n">12</span>Agents and MCP</h2>
+<figure class="fig">
+<svg viewBox="0 0 960 300" role="img" aria-label="MCP topology">
+  <defs><marker id="ar7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker></defs>
+  <rect x="10" y="40" width="160" height="70" rx="7" class="b-ext"/><text x="90" y="64" text-anchor="middle" class="t-h">Chat app</text><text x="90" y="82" text-anchor="middle" class="t-s">Docent, Claude, OpenCode,</text><text x="90" y="97" text-anchor="middle" class="t-s">LM Studio…</text>
+  <rect x="210" y="40" width="160" height="70" rx="7" class="b-agent"/><text x="290" y="64" text-anchor="middle" class="t-h">atelier-mcp</text><text x="290" y="82" text-anchor="middle" class="t-s">stdio ↔ socket relay</text><text x="290" y="97" text-anchor="middle" class="t-s">--profile is a request</text>
+  <rect x="410" y="20" width="200" height="110" rx="7" class="b-agent"/><text x="510" y="44" text-anchor="middle" class="t-h">MCPSocketServer</text><text x="510" y="62" text-anchor="middle" class="t-m">Agents/atelier.sock 0600</text><text x="510" y="78" text-anchor="middle" class="t-s">peer uid check, ClientIdentity</text><text x="510" y="94" text-anchor="middle" class="t-s">(process tree + code signature)</text><text x="510" y="110" text-anchor="middle" class="t-s">MCPSession per connection</text>
+  <rect x="650" y="20" width="150" height="110" rx="7" class="b-app"/><text x="725" y="44" text-anchor="middle" class="t-h">AgentServer</text><text x="725" y="62" text-anchor="middle" class="t-s">authorize: grants</text><text x="725" y="78" text-anchor="middle" class="t-s">Look, Organize,</text><text x="725" y="94" text-anchor="middle" class="t-s">Edit, Everything</text><text x="725" y="110" text-anchor="middle" class="t-s">asks in window</text>
+  <rect x="830" y="20" width="120" height="50" rx="7" class="b-app"/><text x="890" y="42" text-anchor="middle">Typed tools</text><text x="890" y="58" text-anchor="middle" class="t-s">Look/Organize/Edit</text>
+  <rect x="830" y="80" width="120" height="50" rx="7" class="b-app"/><text x="890" y="102" text-anchor="middle">command_run</text><text x="890" y="118" text-anchor="middle" class="t-s">any exposed action</text>
+  <rect x="650" y="180" width="300" height="90" rx="7" class="b-agent"/><text x="800" y="204" text-anchor="middle" class="t-h">ActionRegistry (LibraryModel.actions)</text><text x="800" y="222" text-anchor="middle" class="t-s">72 actions: view 37, edit 19, writesFiles 7,</text><text x="800" y="238" text-anchor="middle" class="t-s">deletes 4, opensApp 3, reads 2</text><text x="800" y="254" text-anchor="middle" class="t-s">kind → tier: runs, undoable, asksFirst, never</text>
+  <rect x="300" y="180" width="300" height="90" rx="7" class="b-app"/><text x="450" y="204" text-anchor="middle" class="t-h">Menus, keys, photo menu</text><text x="450" y="222" text-anchor="middle" class="t-s">actions.button / toggle / menuItem</text><text x="450" y="238" text-anchor="middle" class="t-s">KeyAction.run(in:)</text><text x="450" y="254" text-anchor="middle" class="t-s">same handlers as agents</text>
+  <path d="M170 75 L208 75" class="ln" marker-end="url(#ar7)"/>
+  <path d="M370 75 L408 75" class="ln" marker-end="url(#ar7)"/>
+  <path d="M610 75 L648 75" class="ln" marker-end="url(#ar7)"/>
+  <path d="M800 50 L828 45" class="ln" marker-end="url(#ar7)"/>
+  <path d="M800 100 L828 105" class="ln" marker-end="url(#ar7)"/>
+  <path d="M890 130 L860 178" class="ln" marker-end="url(#ar7)"/>
+  <path d="M600 225 L648 225" class="ln" marker-end="url(#ar7)"/>
+  <text x="10" y="200" class="t-s">docking/* JSON-RPC methods sit</text>
+  <text x="10" y="216" class="t-s">outside tools/list: only the client</text>
+  <text x="10" y="232" class="t-s">app can move the window.</text>
+</svg>
+</figure>
+<ul>
+  <li><b>One command path.</b> Each <code>AtelierAction</code> is declared once with a kind and Swift parameter types; JSON schemas are generated from the types; <code>Docs/agent-actions-catalog.json</code> is regenerated by <code>Scripts/agent_catalog.py</code> and a test fails when it is stale.</li>
+  <li><b>Changes:</b> every agent write names its targets (<code>ids</code>, <code>selection</code> or <code>current</code>). Library and Develop edits that are recorded get a change id and an Undo notice; a change above Settings > Agents' photo limit (50) asks first. <code>command_batch</code> runs up to 50 of the supported write steps; <code>atomic</code> makes those all or nothing. Private photos read as missing.</li>
+  <li><b>Threads:</b> the socket server accepts on a <code>Thread</code> and serves each connection on its own <code>Thread</code>. Some Look reads run off the main thread; other tools hop to the main actor because their handlers use <code>LibraryModel</code>. A Develop call made during a drag waits for the drag to end and is refused, with a retry message, if waiting fails.</li>
+  <li><b>MCP Apps:</b> <code>ui://atelier/photos</code> is a carousel view for clients that declare the UI extension; its thumbnails come from a view-only <code>get_thumbnails</code> tool.</li>
+</ul>
+</section>
+
+<section id="other">
+<h2><span class="n">13</span>Cull, Match Look, Export, XMP</h2>
+<div class="cols">
+<div>
+<h3>Cull</h3>
+<p><code>CullModel</code> runs per session, on files before import or on cataloged photos. <code>Culling</code> builds <code>CullSignals</code> per photo (Vision feature print, Laplacian sharpness on 1024 px, faces with eye openness, subject sharpness, layout grid), groups similar shots and picks with <code>CullPick</code> (Pick By modes). Groups and reasons are saved in <code>cullGroup</code> tables and notes.</p>
+<h3>Match Look</h3>
+<p><code>LookMatcher</code> (Core, with Tone, Skin, Regions and Emulator extensions) fits Develop settings so a photo matches a reference or one of the built-in SVG studies; <code>MatchLookModel</code> in the app runs fits on <code>atelier.matchlook.fit</code> and previews on <code>.preview</code>. Fitting is CPU Swift on small copies.</p>
+</div>
+<div>
+<h3>Export</h3>
+<p><code>Exporter</code> opens a non-interactive <code>DevelopSession</code> per photo at the export size, renders in the chosen color space and writes JPEG, HEIC, TIFF or PNG with metadata and an optional watermark. Export presets are JSON in Application Support.</p>
+<h3>XMP</h3>
+<p>ImageIO reads standard metadata on import (<code>MetadataReader</code>). Atelier's own <code>XMPSidecar</code> reads and writes sidecars: standard fields plus three custom packets (<code>atelier:DevelopRecovery</code>, <code>HistoryRecovery</code>, <code>Notes</code>) on demand or automatically (Settings > Metadata, <code>xmpDirty</code> flag). They are read back on import to recover edits. Exiv2 is not used.</p>
+</div>
+</div>
+</section>
+
+<section id="concurrency">
+<h2><span class="n">14</span>Concurrency inventory</h2>
+<p>Atelier mixes four concurrency styles. Counts are source sites found by grep in <code>Sources/</code> at <code>c146785</code>, not live queues or threads.</p>
+<div class="tbl"><table>
+<thead><tr><th>Mechanism</th><th>Count</th><th>Where it is used</th></tr></thead>
+<tbody>
+<tr><td><code>@MainActor</code> controllers</td><td class="mono">all</td><td>Every <code>ObservableObject</code> controller and the action registry.</td></tr>
+<tr><td>Named <code>DispatchQueue</code>s</td><td class="mono">14</td><td>Develop (render, measure, open, prefetch, full, navigator, warm-up, previews, timing log), thumbnails, Match Look fit and preview, AI Denoise, HDR live frames.</td></tr>
+<tr><td><code>OperationQueue</code></td><td class="mono">2</td><td><code>PreviewScheduler</code> lanes.</td></tr>
+<tr><td><code>Task.detached</code></td><td class="mono">43</td><td>One-off background work; most in <code>HDRController</code> (11), <code>CullModel</code> (5) and <code>LibraryModel</code> (4).</td></tr>
+<tr><td><code>withTaskGroup</code></td><td class="mono">import</td><td><code>Importer.run</code> workers.</td></tr>
+<tr><td><code>actor</code></td><td class="mono">1</td><td><code>HDRProjectStore</code>.</td></tr>
+<tr><td><code>NSLock</code></td><td class="mono">36</td><td>Session caches, <code>LatestJob</code>, <code>LockedValue</code>, schedulers, socket server, model stores.</td></tr>
+<tr><td><code>@unchecked Sendable</code></td><td class="mono">44</td><td>Classes guarded by locks or confined to one queue (renderer, sessions, caches, models).</td></tr>
+<tr><td><code>MainActor.assumeIsolated</code></td><td class="mono">76</td><td>Callbacks from <code>DispatchQueue.main</code> and notification blocks back into main-actor code.</td></tr>
+<tr><td><code>Thread</code></td><td class="mono">2 sites</td><td>MCP accept loop and one per connection.</td></tr>
+</tbody></table></div>
+</section>
+
+<section id="testing">
+<h2><span class="n">15</span>Tests and tooling</h2>
+<ul>
+  <li><b>Test targets:</b> <code>AtelierCoreTests</code> (the bulk: render math, catalog, import, masks, models, Lens Blur), <code>AtelierHDRCoreTests</code>, <code>AtelierAppTests</code> (registry, click gestures, Develop modes, histogram sink), <code>AgentActionsTests</code>, <code>AgentMCPTests</code>, <code>AtelierActionsTests</code>, plus <code>Tests/AtelierUITests</code> (native smoke suite). Some tests need sample RAWs and skip without them.</li>
+  <li><b>Checks:</b> <code>Scripts/check_pr.py</code> (whitespace, help index, build, tests; logs in <code>.build/local-checks/</code>), <code>Scripts/check_ui.py</code> and <code>LayoutSnapshots.swift</code> (screenshots off screen), <code>compare_snapshots.swift</code>.</li>
+  <li><b>Builds:</b> <code>Scripts/build_macos_app.py --arch arm64|x86_64|universal|all</code> makes an ad-hoc-signed <code>Atelier.app</code> with the helper inside.</li>
+  <li><b>Help:</b> HTML pages in <code>Sources/AtelierApp/Help</code>, index from <code>Scripts/help/build_help_index.py</code>, before/after pictures from <code>make_help_images.py</code>.</li>
+  <li><b>CI:</b> <code>.github/workflows/build.yml</code> (macOS 15 runner: build, tests with sample NEFs, UI smoke). Operational note, not something the source shows: runs have often failed without starting because of GitHub billing, so Mac-local checks are the main gate.</li>
+</ul>
+</section>
+
+<section id="prd">
+<h2><span class="n">16</span>Where code and PRD differ</h2>
+<p>Read against <code>Requirements/Atelier-PRD.md</code> at the same revision. These are facts for discussion; the separate review document weighs them. Some are already acknowledged as "not built yet" in the README.</p>
+<div class="tbl"><table>
+<thead><tr><th>PRD says</th><th>Code does</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td>One Processor contract for Edit In apps, plugins and AI backends (External editor integration; AGENTS.md product rule).</td><td>No general Processor host or durable job queue. Edit In (<code>EditIn.swift</code>), ComfyUI (<code>AIRunner</code>) and HDR are three separate paths that share only the stacking step. HDR does have typed request and result identity (<code>ProcessorDocument</code>, <code>processorID "atelier.hdr"</code>) and completion records, consistent with the PRD's inline HDR section.</td><td><span class="pill p-warn">differs</span></td></tr>
+<tr><td>Processor plugins: folder with <code>manifest.json</code>, child process over stdin/stdout JSON, auto-generated form.</td><td>Not present.</td><td><span class="pill p-ext">not built</span></td></tr>
+<tr><td>"AI backends and plugins run as separate processes"; NFR: AI jobs run in a separate process.</td><td>ComfyUI is separate. Depth Anything, BiRefNet and PMRID run in-process through ONNX Runtime, and the MediaPipe models through Core ML. AGENTS.md names MediaPipe and BiRefNet as explicit exceptions; PMRID and Depth Anything are not named there.</td><td><span class="pill p-warn">differs</span></td></tr>
+<tr><td>Tech stack: actors for the catalog and job queue.</td><td><code>Catalog</code> is a <code>Sendable</code> class over GRDB's pool; there is no job queue type. The only actor is the HDR project store (<code>HDRProjectStore</code>); other work runs on GCD queues and detached tasks.</td><td><span class="pill p-warn">differs</span></td></tr>
+<tr><td>Data model: Mask, Model, Job and Processor entities; AI masks cached as 8-bit PNG.</td><td>Masks are inside <code>developSettings.json</code>; AI masks are in memory only. No model or job tables; provenance is a text column on <code>version</code>. <code>processorOutput</code> covers HDR only.</td><td><span class="pill p-warn">differs</span></td></tr>
+<tr><td>Model registry JSON with license and allowed use; license gate on export.</td><td>The bundled recipe definitions (<code>AIRecipe</code>, <code>AIModel</code>) carry license and allowed use, which go into provenance, but there is no editable registry file and no export gate.</td><td><span class="pill p-ext">not built</span></td></tr>
+<tr><td>File watching with FSEvents and security-scoped bookmarks; App Sandbox.</td><td>Edit In uses a vnode <code>DispatchSource</code> per folder plus a check on app activation. No bookmarks, no sandbox (README: not built yet).</td><td><span class="pill p-ext">not built</span></td></tr>
+<tr><td>Metadata through ImageIO plus Exiv2.</td><td>ImageIO plus Atelier's own XMP sidecar reader and writer; no Exiv2.</td><td><span class="pill p-ext">not built</span></td></tr>
+<tr><td>Asset has a perceptual hash (duplicate detection, v1).</td><td>A nullable column; import writes nil and nothing reads it.</td><td><span class="pill p-ext">not built</span></td></tr>
+<tr><td>Pipeline order lists steps 1 to 9.</td><td>Code also runs Calibration first in step 3, Remove tool spots and Lens Blur between steps 1 and 2. The detailed PRD sections say where they run; the numbered list doesn't.</td><td><span class="pill p-agent">doc drift</span></td></tr>
+<tr><td>UI: AppKit for grid and loupe (NSCollectionView, Metal-backed views).</td><td>Grid is <code>NSCollectionView</code>; the photo view is an AppKit <code>ZoomScrollView</code> whose layer shows IOSurfaces from the render queue.</td><td><span class="pill p-ok">matches</span></td></tr>
+<tr><td>Catalog: SQLite via GRDB in WAL, in a <code>.atelier</code> package on the local SSD; previews beside it; snapshot on quit, keep 10.</td><td>As specified.</td><td><span class="pill p-ok">matches</span></td></tr>
+<tr><td>Agents connect only through the local helper and a private socket; previews and location off by default.</td><td>As specified.</td><td><span class="pill p-ok">matches</span></td></tr>
+</tbody></table></div>
+</section>
+
+<section id="files">
+<h2><span class="n">17</span>Key files</h2>
+<div class="tbl"><table>
+<thead><tr><th>Area</th><th>Start reading at</th></tr></thead>
+<tbody>
+<tr><td>App start, menus</td><td><code>AtelierApp/AtelierApp.swift</code>, <code>CatalogLaunch.swift</code>, <code>LibraryModel+Actions.swift</code></td></tr>
+<tr><td>Library state</td><td><code>AtelierApp/LibraryModel.swift</code>, <code>SessionRestore.swift</code>, <code>AtelierCore/Catalog/LibraryFilter.swift</code></td></tr>
+<tr><td>Catalog</td><td><code>AtelierCore/Catalog/Catalog.swift</code>, <code>Records.swift</code>, <code>Catalog+*.swift</code></td></tr>
+<tr><td>Import</td><td><code>AtelierCore/Import/Importer.swift</code>, <code>ImportStager.swift</code>, <code>AtelierApp/ImportFlow.swift</code></td></tr>
+<tr><td>Previews</td><td><code>AtelierCore/Previews/PreviewCache.swift</code>, <code>PreviewScheduler.swift</code>, <code>AtelierApp/PreviewImages.swift</code></td></tr>
+<tr><td>Render</td><td><code>AtelierCore/Develop/DevelopRenderer.swift</code>, <code>DevelopSettings.swift</code>, <code>DisplaySurfaces.swift</code>, <code>PipelineWarmUp.swift</code></td></tr>
+<tr><td>Develop UI and threads</td><td><code>AtelierApp/DevelopController.swift</code>, <code>Views/PhotoFeed.swift</code>, <code>Views/ZoomableImageView.swift</code>, <code>Views/DevelopView.swift</code></td></tr>
+<tr><td>Masks and models</td><td><code>Develop/Masks.swift</code>, <code>MaskRenderer.swift</code>, <code>PeopleParts.swift</code>, <code>FineEdges.swift</code>, <code>DepthMap.swift</code>, <code>AIDenoise.swift</code>, <code>AI/BundledModel.swift</code></td></tr>
+<tr><td>Outside tools</td><td><code>AtelierApp/EditIn.swift</code>, <code>AtelierCore/AI/AIRunner.swift</code>, <code>ComfyClient.swift</code>, <code>Processors/</code>, <code>AtelierApp/HDRController.swift</code>, <code>LibraryModel+LensBlur.swift</code></td></tr>
+<tr><td>Agents</td><td><code>AgentActions/ActionRegistry.swift</code>, <code>AtelierActions/AtelierActions.swift</code>, <code>AgentMCP/MCPSession.swift</code>, <code>MCPSocketServer.swift</code>, <code>AtelierApp/Agents/AgentServer.swift</code>, <code>Docs/Atelier-Agent-Actions.md</code></td></tr>
+</tbody></table></div>
+</section>
+
+<footer>Written from the source of roshan-davis/atelier at <span class="mono">c146785</span> on Nov 16, 2026. Line and call counts come from grep over <code>Sources/</code>; behaviour descriptions come from reading the files named above. Revised the same day after a source review on PR #156 (ONNX backends, mask sources, catalog keys, threading and hand-off details). When the code changes, regenerate the numbers before trusting them.</footer>
+</main>
+</div>
+</body></html>
