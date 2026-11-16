@@ -8,7 +8,7 @@ extension DevelopController {
     /// What the Lens Blur panel says about the saved photo.
     enum LensBlurPhotoState: Equatable {
         /// No Lens Blur photo yet: Save makes one.
-        case none
+        case notSaved
         /// The Lens Blur photo matches the photo's settings now.
         case current
         /// Something changed since the last Save (here or in Develop): Save updates it.
@@ -16,7 +16,7 @@ extension DevelopController {
     }
 
     var lensBlurPhotoState: LensBlurPhotoState {
-        guard let saved = lensBlurPhoto else { return .none }
+        guard let saved = lensBlurPhoto else { return .notSaved }
         guard let madeFrom = saved.madeFrom else { return .outOfDate }
         return madeFrom == settings ? .current : .outOfDate
     }

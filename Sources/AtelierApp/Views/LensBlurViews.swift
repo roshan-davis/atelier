@@ -171,14 +171,14 @@ struct LensBlurModeBar: View {
 
     private var saveTitle: String {
         if develop.lensBlurSaving { return "Saving…" }
-        return develop.lensBlurPhotoState == .none ? "Save" : "Update"
+        return develop.lensBlurPhotoState == .notSaved ? "Save" : "Update"
     }
 
     private var caption: String {
         if let error = develop.lensBlurSaveError { return "Not saved: \(error)" }
         if develop.lensBlurSaving { return "Rendering the full-size photo with its Lens Blur…" }
         switch develop.lensBlurPhotoState {
-        case .none:
+        case .notSaved:
             return "Only this mode shows the blur. Save makes it a new photo: a 16-bit TIFF stacked on this one, with your Develop edits baked in."
         case .current:
             return "The Lens Blur photo stacked on this one is up to date."
