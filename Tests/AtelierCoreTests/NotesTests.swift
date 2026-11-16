@@ -175,7 +175,7 @@ final class NotesTests: XCTestCase {
         _ = try catalog.updateNote(emptied, text: "")
         let result = try catalog.writeXMPSidecars(for: ids)
         XCTAssertEqual(result.written, 1)
-        let dirty = try catalog.writer.read { db in
+        let dirty = try await catalog.writer.read { db in
             try Bool.fetchOne(db, sql: "SELECT xmpDirty FROM metadata WHERE assetId = ?", arguments: [ids[0]])
         }
         XCTAssertEqual(dirty, false)
