@@ -33,7 +33,25 @@ struct ContentView: View {
             // The library layout below isn't touched while it is open (its columns, Filmstrip and
             // panels come back exactly as they were), and nothing in it runs (Rosh, Nov 16, 2026).
             if model.mode == .develop && model.isLensBlurOpen {
-                LensBlurScreen(panelWidth: $panelWidth)
+                InlineAppScreen(panelWidth: $panelWidth) {
+                    DevelopImageView(develop: model.develop)
+                } panel: {
+                    DevelopPanel(develop: model.develop)
+                }
+            } else if model.mode == .hdr {
+                // HDR the same way: its own screen with its own left column (presets, source,
+                // result) and panel exactly as before, no Filmstrip, filter bar or notes.
+                InlineAppScreen(panelWidth: $panelWidth) {
+                    HDRSidebar(hdr: model.hdr)
+                        .frame(width: 240)
+                        .background(Color(nsColor: theme.panel))
+                        .areaFocusFlash(.leftPanel)
+                    Divider()
+                } photo: {
+                    HDRImageView(hdr: model.hdr)
+                } panel: {
+                    HDRPanel(hdr: model.hdr)
+                }
             } else {
                 NavigationSplitView(columnVisibility: $columns) {
                     Group {
@@ -221,18 +239,23 @@ private struct EmptyLibraryView: View {
     }
 }
 
-/// The Lens Blur mode's screen (AT-074): the photo (Develop's photo view, so zoom and pan carry
-/// over) with Lens Blur's panel beside it, and the status line. No Filmstrip, left column, filter
-/// bar, histogram or tool strip.
-private struct LensBlurScreen: View {
+/// The screen of an inline app (the Lens Blur mode, AT-074, and HDR): an optional left column of
+/// the app's own, the photo with the status line, and the app's panel. No Filmstrip, filter bar,
+/// notes or Develop chrome, and the library layout (its columns and Filmstrip) is never touched,
+/// so it comes back exactly as it was (Rosh, Nov 16, 2026).
+private struct InlineAppScreen<Leading: View, Photo: View, Panel: View>: View {
     @EnvironmentObject private var model: LibraryModel
     @AppStorage(Theme.defaultsKey) private var theme: Theme = .system
     @Binding var panelWidth: Double
+    @ViewBuilder var leading: Leading
+    @ViewBuilder var photo: Photo
+    @ViewBuilder var panel: Panel
 
     var body: some View {
         HStack(spacing: 0) {
+            leading
             VStack(spacing: 0) {
-                DevelopImageView(develop: model.develop)
+                photo
                     .overlay(alignment: .bottom) { AgentNoticeView(agents: model.agents) }
                 Divider()
                 StatusBar()
@@ -241,12 +264,19 @@ private struct LensBlurScreen: View {
             .background(Color(nsColor: theme.chrome))
             .clipped()
             PanelResizeHandle(width: $panelWidth, range: 280...560, panel: .trailing)
-            DevelopPanel(develop: model.develop)
+            panel
                 .frame(width: panelWidth)
                 .clipped()
+                .areaFocusFlash(.rightPanel)
                 .layoutPriority(1)
                 .background(Color(nsColor: theme.panel))
         }
+    }
+}
+
+extension InlineAppScreen where Leading == EmptyView {
+    init(panelWidth: Binding<Double>, @ViewBuilder photo: () -> Photo, @ViewBuilder panel: () -> Panel) {
+        self.init(panelWidth: panelWidth, leading: { EmptyView() }, photo: photo, panel: panel)
     }
 }
 
