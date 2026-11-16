@@ -174,9 +174,7 @@ public enum DepthMap {
             let cache = coreMLCacheURL
             try? FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
             if coreML {
-                try options.appendCoreMLExecutionProvider(withOptionsV2: ["ModelFormat": "MLProgram",
-                                                                         "MLComputeUnits": "All",
-                                                                         "ModelCacheDirectory": cache.path])
+                try options.appendCoreMLExecutionProvider(withOptionsV2: CoreMLProviderOptions.options(cache: cache))
             }
             return options
         }

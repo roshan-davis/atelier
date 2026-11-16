@@ -355,13 +355,23 @@ public enum LensBlur {
         return ramp.cropped(to: extent)
     }
 
+    /// An areas image of one Focus strength (red) and Blur strength (green), exactly those values.
+    /// A plain `CIColor(red:green:blue:)` is sRGB, which Core Image converts into the linear
+    /// Rec. 2020 working space: its red 1 arrives as about 0.63 red and 0.07 green, a weak Focus
+    /// area with a little Blur in it (why two Lens Blur tests failed on Rosh's Mac, Nov 16, 2026).
+    static func areaColor(focus: Double, blur: Double) -> CIImage {
+        guard let color = CIColor(red: focus, green: blur, blue: 0, alpha: 1, colorSpace: DevelopRenderer.workingSpace)
+        else { return CIImage(color: CIColor(red: focus, green: blur, blue: 0)) }
+        return CIImage(color: color)
+    }
+
     /// Focus and Blur areas for the warm-up: Focus on the left third, Blur on the right third,
     /// so the areas' kernels (`withAreas`) are built too.
     static func warmUpAreas(_ extent: CGRect) -> CIImage {
         let third = extent.width / 3
-        let focus = CIImage(color: CIColor(red: 1, green: 0, blue: 0))
+        let focus = areaColor(focus: 1, blur: 0)
             .cropped(to: CGRect(x: extent.minX, y: extent.minY, width: third, height: extent.height))
-        let blur = CIImage(color: CIColor(red: 0, green: 1, blue: 0))
+        let blur = areaColor(focus: 0, blur: 1)
             .cropped(to: CGRect(x: extent.maxX - third, y: extent.minY, width: third, height: extent.height))
         return focus.composited(over: blur).composited(over: CIImage(color: .black)).cropped(to: extent)
     }

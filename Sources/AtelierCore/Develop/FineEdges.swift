@@ -215,9 +215,7 @@ public enum FineEdges {
             // again every launch, which takes most of the first run's time.
             let cache = model.coreMLCacheURL
             try? FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
-            if coreML, (try? options.appendCoreMLExecutionProvider(withOptionsV2: ["ModelFormat": "MLProgram",
-                                                                                  "MLComputeUnits": "All",
-                                                                                  "ModelCacheDirectory": cache.path])) == nil {
+            if coreML, (try? options.appendCoreMLExecutionProvider(withOptionsV2: CoreMLProviderOptions.options(cache: cache))) == nil {
                 NSLog("Atelier: Fine Edges runs without Core ML")
                 usesCoreML = false
             }

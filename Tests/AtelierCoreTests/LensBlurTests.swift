@@ -129,8 +129,8 @@ final class LensBlurTests: XCTestCase {
         let photo = checker(width: width, height: height)
         let depth = CIImage(color: .black).cropped(to: CGRect(x: 0, y: 0, width: width / 2, height: height))
             .composited(over: CIImage(color: .white).cropped(to: photo.extent))
-        let areas = CIImage(color: CIColor(red: 0, green: 1, blue: 0)).cropped(to: CGRect(x: 0, y: 0, width: width / 2, height: height))
-            .composited(over: CIImage(color: CIColor(red: 1, green: 0, blue: 0)).cropped(to: photo.extent))
+        let areas = LensBlur.areaColor(focus: 0, blur: 1).cropped(to: CGRect(x: 0, y: 0, width: width / 2, height: height))
+            .composited(over: LensBlur.areaColor(focus: 1, blur: 0).cropped(to: photo.extent))
         var settings = DevelopSettings()
         settings[.lensBlurApply] = 1
         settings[.lensBlurAmount] = 100
@@ -155,9 +155,9 @@ final class LensBlurTests: XCTestCase {
         let photo = checker(width: width, height: height)
         // The Focus area (the hair): solid up to x = 200, then 2-pixel strands every 4 pixels up
         // to 240; 240...250 is a gap the model sees as near as the hair.
-        var areas = CIImage(color: CIColor(red: 1, green: 0, blue: 0)).cropped(to: CGRect(x: 0, y: 0, width: 200, height: height))
+        var areas = LensBlur.areaColor(focus: 1, blur: 0).cropped(to: CGRect(x: 0, y: 0, width: 200, height: height))
         for x in stride(from: 200, to: 240, by: 4) {
-            areas = CIImage(color: CIColor(red: 1, green: 0, blue: 0))
+            areas = LensBlur.areaColor(focus: 1, blur: 0)
                 .cropped(to: CGRect(x: x, y: 0, width: 2, height: height)).composited(over: areas)
         }
         areas = areas.composited(over: CIImage(color: .black).cropped(to: photo.extent))
@@ -180,7 +180,7 @@ final class LensBlurTests: XCTestCase {
         // what the depth sees as near beside it stays sharp instead of smearing it outward.
         let width = 512, height = 64
         let photo = checker(width: width, height: height)
-        let areas = CIImage(color: CIColor(red: 1, green: 0, blue: 0)).cropped(to: CGRect(x: 0, y: 0, width: 240, height: height))
+        let areas = LensBlur.areaColor(focus: 1, blur: 0).cropped(to: CGRect(x: 0, y: 0, width: 240, height: height))
             .composited(over: CIImage(color: .black).cropped(to: photo.extent))
         let before = try render(photo, width: width, height: height)
         let after = try render(LensBlur.apply(photo, depth: nearUpTo250(photo, height: height), settings: focusedNear,

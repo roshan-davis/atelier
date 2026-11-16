@@ -520,9 +520,7 @@ public enum AIDenoise {
             let options = try ORTSessionOptions()
             try options.setGraphOptimizationLevel(.all)
             if coreML {
-                try options.appendCoreMLExecutionProvider(withOptionsV2: ["ModelFormat": "MLProgram",
-                                                                         "MLComputeUnits": "All",
-                                                                         "ModelCacheDirectory": cache.path])
+                try options.appendCoreMLExecutionProvider(withOptionsV2: CoreMLProviderOptions.options(cache: cache))
             }
             return options
         }
