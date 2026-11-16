@@ -166,7 +166,9 @@ public enum LensBlur {
                                                          CIVector(x: radius, y: shape, z: catEye, w: Double(samples)),
                                                          center, CIVector(x: maxRadius * factor, y: cutoff)])
             else { return image }
-            let placed = level == 0 ? blurred : blurred.cropped(to: frame).clampedToExtent()
+            // Read twice (the level mix and the spill): rendered once, at the level's own size.
+            let gathered = blurred.cropped(to: frame).insertingIntermediate(cache: false)
+            let placed = level == 0 ? gathered : gathered.clampedToExtent()
                 .transformed(by: CGAffineTransform(scaleX: extent.width / frame.width, y: extent.height / frame.height))
             levels.append(placed.transformed(by: toOrigin.inverted()).cropped(to: extent))
             if isLast { break }
