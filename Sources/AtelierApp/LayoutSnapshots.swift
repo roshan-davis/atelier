@@ -27,15 +27,27 @@ enum LayoutSnapshots {
     /// Called once at launch of a snapshot run: moves the library window (and any other) off
     /// screen, and keeps moving new ones there, so nothing appears on the Mac's display.
     static func hideOffScreen() {
-        for window in NSApp.windows { window.setFrameOrigin(offScreen) }
+        for window in NSApp.windows { hide(window) }
         NotificationCenter.default.addObserver(forName: NSWindow.didUpdateNotification, object: nil, queue: .main) { note in
-            guard let window = note.object as? NSWindow, window.frame.origin != offScreen else { return }
-            MainActor.assumeIsolated { window.setFrameOrigin(offScreen) }
+            guard let window = note.object as? NSWindow else { return }
+            MainActor.assumeIsolated { hide(window) }
+        }
+    }
+
+    /// AppKit keeps part of a titled window (the library window) on a screen however far it is
+    /// moved: on the Mac check of PR #153 its corner stayed at the display's bottom left. So a
+    /// titled window is also fully transparent and takes no clicks. The borderless capture
+    /// windows aren't held on screen, and `cacheDisplay` draws their views whatever the alpha.
+    private static func hide(_ window: NSWindow) {
+        if window.frame.origin != offScreen { window.setFrameOrigin(offScreen) }
+        if window.styleMask.contains(.titled), window.alphaValue != 0 {
+            window.alphaValue = 0
+            window.ignoresMouseEvents = true
         }
     }
 
     static func run(model: LibraryModel, into folder: URL) async {
-        for window in NSApp.windows { window.setFrameOrigin(offScreen) }
+        for window in NSApp.windows { hide(window) }
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         // This picker is independent of the snapshot catalog and fits in a standalone window.
         await capture(AnyView(BuiltInReferencePicker(selection: .furyRoadScene) { _ in }),

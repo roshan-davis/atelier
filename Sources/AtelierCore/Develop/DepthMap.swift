@@ -162,6 +162,13 @@ public enum DepthMap {
         lock.unlock()
     }
 
+    /// Whether the depth model tries ONNX Runtime's Core ML provider. Off: with the provider
+    /// really loading (ALL, not All), ONNX Runtime splits this half-precision export into 60 Core
+    /// ML partitions, and the first Lens Blur frame on a Z6 II NEF took 6.2 s (3.6 s of it making
+    /// the session) against 0.74 s on the CPU, with the same result (Mac check of PR #153,
+    /// Nov 16, 2026). Until then it ran on the CPU anyway ("All" was refused).
+    static let usesCoreML = false
+
     /// The model, loaded once: Core ML runs what it can, ONNX Runtime's CPU code the rest. Call
     /// with the lock held.
     private static func loadedSession() throws -> ORTSession {
@@ -184,7 +191,7 @@ public enum DepthMap {
         }
         let made: ORTSession
         do {
-            made = try ORTSession(env: env, modelPath: modelURL.path, sessionOptions: options(coreML: true))
+            made = try ORTSession(env: env, modelPath: modelURL.path, sessionOptions: options(coreML: usesCoreML))
         } catch {
             NSLog("Atelier: Depth Range with Core ML failed (%@), using the CPU", "\(error)")
             do {
