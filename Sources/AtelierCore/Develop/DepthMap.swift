@@ -30,7 +30,13 @@ public enum DepthMap {
         return caches.appendingPathComponent("Atelier/Models/DepthAnything-CoreML-\(sha256.prefix(12))", isDirectory: true)
     }
 
-    public static var isInstalled: Bool { FileManager.default.fileExists(atPath: modelURL.path) }
+    public static var isInstalled: Bool {
+        standIn != nil || FileManager.default.fileExists(atPath: modelURL.path)
+    }
+
+    /// Tests only: answers `estimate` in place of the model, so Lens Blur and Depth Range can be
+    /// checked end to end on a machine without the download.
+    nonisolated(unsafe) static var standIn: ((CGImage) -> Field?)?
 
     /// Posted on the main queue when a depth map found in the background is ready, or the model
     /// was downloaded or removed, so the editor renders again.
@@ -38,6 +44,12 @@ public enum DepthMap {
 
     /// Why the model last failed, for the mask panel; nil when it worked.
     nonisolated(unsafe) public private(set) static var failure: String?
+    /// The model is running now (Lens Blur's progress line). `workingChanged` is posted on the
+    /// main queue when it starts or stops.
+    nonisolated(unsafe) public private(set) static var isWorking = false
+    /// How many times the model ran (`estimate`), for tests.
+    nonisolated(unsafe) static var runs = 0
+    public static let workingChanged = Notification.Name("AtelierDepthMapWorkingChanged")
 
     // MARK: Download
 
@@ -152,6 +164,13 @@ public enum DepthMap {
         lock.unlock()
     }
 
+    /// Whether the depth model tries ONNX Runtime's Core ML provider. Off: with the provider
+    /// really loading (ALL, not All), ONNX Runtime splits this half-precision export into 60 Core
+    /// ML partitions, and the first Lens Blur frame on a Z6 II NEF took 6.2 s (3.6 s of it making
+    /// the session) against 0.74 s on the CPU, with the same result (Mac check of PR #153,
+    /// Nov 16, 2026). Until then it ran on the CPU anyway ("All" was refused).
+    static let usesCoreML = false
+
     /// The model, loaded once: Core ML runs what it can, ONNX Runtime's CPU code the rest. Call
     /// with the lock held.
     private static func loadedSession() throws -> ORTSession {
@@ -168,15 +187,13 @@ public enum DepthMap {
             let cache = coreMLCacheURL
             try? FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
             if coreML {
-                try options.appendCoreMLExecutionProvider(withOptionsV2: ["ModelFormat": "MLProgram",
-                                                                         "MLComputeUnits": "All",
-                                                                         "ModelCacheDirectory": cache.path])
+                try options.appendCoreMLExecutionProvider(withOptionsV2: CoreMLProviderOptions.options(cache: cache))
             }
             return options
         }
         let made: ORTSession
         do {
-            made = try ORTSession(env: env, modelPath: modelURL.path, sessionOptions: options(coreML: true))
+            made = try ORTSession(env: env, modelPath: modelURL.path, sessionOptions: options(coreML: usesCoreML))
         } catch {
             NSLog("Atelier: Depth Range with Core ML failed (%@), using the CPU", "\(error)")
             do {
@@ -200,11 +217,19 @@ public enum DepthMap {
     /// downloaded or fails (`failure` says why). Takes under a second; call it off the main
     /// thread.
     public static func estimate(_ image: CGImage) -> Field? {
+        if let standIn { return standIn(image) }
         let size = inputSize(width: image.width, height: image.height)
         guard let pixels = rgba(image, width: size.width, height: size.height) else { return nil }
         let input = inputTensor(pixels, width: size.width, height: size.height)
         lock.lock()
-        defer { lock.unlock() }
+        isWorking = true
+        runs += 1
+        DispatchQueue.main.async { NotificationCenter.default.post(name: workingChanged, object: nil) }
+        defer {
+            isWorking = false
+            lock.unlock()
+            DispatchQueue.main.async { NotificationCenter.default.post(name: workingChanged, object: nil) }
+        }
         do {
             let session = try loadedSession()
             guard let inputName = try session.inputNames().first,

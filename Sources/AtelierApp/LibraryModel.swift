@@ -121,9 +121,19 @@ final class LibraryModel: ObservableObject {
         }
     }
     @Published var detail: AssetDetail?
+    /// The Lens Blur mode is open in Develop (mirrored from `develop.isLensBlurring`, so the
+    /// window, which shows the mode as a screen of its own, doesn't watch the whole Develop
+    /// controller).
+    @Published private(set) var isLensBlurOpen = false
     @Published private var storedMode: ViewMode = .grid {
         didSet {
-            if mode == .develop { develop.open(focusedID) } else if oldValue == .develop { develop.flushSave() }
+            if mode == .develop {
+                develop.open(focusedID)
+            } else if oldValue == .develop {
+                develop.flushSave()
+                // Leaving Develop cancels the Lens Blur mode; only Save keeps its changes.
+                develop.isLensBlurring = false
+            }
             if mode == .hdr {
                 if oldValue != .hdr { hdrReturnMode = oldValue }
                 hdr.open(focusedID)
@@ -258,6 +268,10 @@ final class LibraryModel: ObservableObject {
         }
         develop.onSettingsSaved = { [weak self] id in
             if UserDefaults.standard.bool(forKey: "xmp.autoWrite") { self?.autoWriteXMP([id]) }
+        }
+        develop.onLensBlurModeChanged = { [weak self] open in
+            guard let self, self.isLensBlurOpen != open else { return }
+            self.isLensBlurOpen = open
         }
         develop.onPreviewsUpdated = { [weak self] id in
             ThumbnailLoader.shared.invalidate(id)
@@ -1106,6 +1120,9 @@ final class LibraryModel: ObservableObject {
             return true
         case 53 where mode == .hdr && hdr.busy: hdr.cancel(); return true  // escape stops an HDR save
         case 53 where mode == .hdr: closeHDR(); return true  // escape: back to the view HDR came from
+        case 53 where mode == .develop && develop.isLensBlurring:  // escape: Refine's Done, then closes Lens Blur
+            if develop.isMasking { develop.finishLensBlurRefine() } else { closeLensBlur() }
+            return true
         case 53 where mode != .grid: mode = .grid; return true        // escape
         default: break
         }

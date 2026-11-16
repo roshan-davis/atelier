@@ -95,22 +95,11 @@ final class SelectSkyTests: XCTestCase {
     func testSunsetFollowsTheGradientAndStopsAtTheSkyline() {
         var rows: [[(Float, [UInt8])]] = []
         for row in 0..<20 {
-            rows.append((0..<32).map { column -> (Float, [UInt8]) in
-                let t = Double(max(0, column - 16)) / 15
-                let pink: [Double] = [230 - row * 3, 150 + row * 5, 170 + row * 2].map { Double($0) }
-                let blue: [Double] = [110, 150, 205]
-                let sky: [UInt8] = (0..<3).map { UInt8((pink[$0] * (1 - t) + blue[$0] * t).rounded()) }
-                if row <= 11 {
-                    if column == 6 || column == 7 {
-                        return row == 5 || row == 8 ? (0.99, sky) : (0.6, [40, 35, 30])
-                    }
-                    if (3...4).contains(row), (2...4).contains(column) { return (1, [235, 225, 230]) }
-                    return (1, sky)
-                }
-                if row <= 13 { return (column % 5 == 0 ? 1 : 0.995, [70, 60, 65]) }
-                if row == 14 { return (0.95, [60, 70, 50]) }
-                return (0.3, [120, 115, 110])
-            })
+            var cells: [(Float, [UInt8])] = []
+            for column in 0..<32 {
+                cells.append(sunsetCell(row: row, column: column))
+            }
+            rows.append(cells)
         }
         let sky = scene(rows).sky
         func at(_ row: Int, _ column: Int) -> Float { sky[row * 32 + column] }
@@ -188,5 +177,31 @@ final class SelectSkyTests: XCTestCase {
         let bare = try DevelopSettings.decoded(from: #"{"masks":[{"name":"Mask 1","components":[{"kind":"sky"}]}]}"#)
         XCTAssertEqual(bare.masks.first?.components.first?.shape, .sky(DevelopSettings.SkySelection()))
         XCTAssertEqual(DevelopSettings.SkySelection().refine, 60)
+    }
+
+    /// One cell of `testSunsetFollowsTheGradientAndStopsAtTheSkyline`'s scene (kept out of a
+    /// closure so the type checker answers quickly).
+    private func sunsetCell(row: Int, column: Int) -> (Float, [UInt8]) {
+        let t = Double(max(0, column - 16)) / 15
+        let pinkRed = Double(230 - row * 3)
+        let pinkGreen = Double(150 + row * 5)
+        let pinkBlue = Double(170 + row * 2)
+        let pink: [Double] = [pinkRed, pinkGreen, pinkBlue]
+        let blue: [Double] = [110, 150, 205]
+        var sky: [UInt8] = []
+        for channel in 0..<3 {
+            let mixed: Double = pink[channel] * (1 - t) + blue[channel] * t
+            sky.append(UInt8(mixed.rounded()))
+        }
+        if row <= 11 {
+            if column == 6 || column == 7 {
+                return row == 5 || row == 8 ? (0.99, sky) : (0.6, [40, 35, 30])
+            }
+            if (3...4).contains(row), (2...4).contains(column) { return (1, [235, 225, 230]) }
+            return (1, sky)
+        }
+        if row <= 13 { return (column % 5 == 0 ? 1 : 0.995, [70, 60, 65]) }
+        if row == 14 { return (0.95, [60, 70, 50]) }
+        return (0.3, [120, 115, 110])
     }
 }

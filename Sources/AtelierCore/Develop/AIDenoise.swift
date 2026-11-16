@@ -504,6 +504,9 @@ public enum AIDenoise {
     /// The built-in model in AtelierCore's resources.
     static var modelURL: URL? { BundledModel.resourceURL(name: "PMRID", extension: "onnx") }
 
+    /// Whether PMRID tries ONNX Runtime's Core ML provider (off: see `loadedSession`).
+    static let usesCoreML = false
+
     /// The model, loaded once: Core ML runs what it can, ONNX Runtime's CPU code the rest.
     private static func loadedSession() throws -> (ORTSession, coreML: Bool) {
         sessionLock.lock()
@@ -520,15 +523,17 @@ public enum AIDenoise {
             let options = try ORTSessionOptions()
             try options.setGraphOptimizationLevel(.all)
             if coreML {
-                try options.appendCoreMLExecutionProvider(withOptionsV2: ["ModelFormat": "MLProgram",
-                                                                         "MLComputeUnits": "All",
-                                                                         "ModelCacheDirectory": cache.path])
+                try options.appendCoreMLExecutionProvider(withOptionsV2: CoreMLProviderOptions.options(cache: cache))
             }
             return options
         }
         let cpu = try ORTSession(env: env, modelPath: url.path, sessionOptions: options(coreML: false))
         var made = (session: cpu, coreML: false)
-        do {
+        // Core ML stays off for PMRID: with the provider really loading (ALL, not All), ONNX
+        // Runtime 1.24.2's Core ML ConvTranspose check crashes the app (SIGSEGV in
+        // ConvTransposeOpBuilder::IsOpSupportedImpl, Mac check of PR #153, Nov 16, 2026), and a
+        // crash can't be caught. Until then AI Denoise ran on the CPU anyway ("All" was refused).
+        if usesCoreML { do {
             let accelerated = try ORTSession(env: env, modelPath: url.path, sessionOptions: options(coreML: true))
             // Core ML may run in half precision on the Neural Engine: check its answer once against
             // the CPU's on a textured tile, and keep the CPU if they disagree.
@@ -539,7 +544,7 @@ public enum AIDenoise {
             made = (session: accelerated, coreML: true)
         } catch {
             NSLog("Atelier: AI Denoise runs on the CPU (%@)", "\(error)")
-        }
+        } }
         session = made
         return (made.session, coreML: made.coreML)
     }

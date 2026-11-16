@@ -90,6 +90,7 @@ private struct ReadyLibraryCommands: Commands {
                 // ⌘S saves in HDR mode; elsewhere it stays Library > Write XMP for Selection.
                 actions.button(AtelierAction.saveHDR)
                 actions.button(AtelierAction.saveHDRAsNew)
+                actions.button(AtelierAction.saveLensBlur)
             }
             // Undo and redo step through the open photo's develop history; text fields keep
             // their own undo.
@@ -147,6 +148,7 @@ private struct ReadyLibraryCommands: Commands {
                 Divider()
                 // Lightroom's key for Photo Merge > HDR.
                 actions.button(AtelierAction.hdr)
+                actions.button(AtelierAction.lensBlur)
                 Menu("Edit In") {
                     ForEach(Array(model.externalEditors.enumerated()), id: \.element.id) { index, editor in
                         actions.button(AtelierAction.editIn, EditorParameters(editor: editor.appPath),
@@ -209,16 +211,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Snapshot runs (ATELIER_SNAPSHOTS) stay in the background: no Dock icon, never the
+        // active app, every window off screen (LayoutSnapshots.hideOffScreen), so a check on
+        // Rosh's Mac shows nothing while they work.
+        let snapshots = LayoutSnapshots.outputFolder != nil
         // Launched from `swift run` the process has no bundle; make it a regular foreground app.
-        NSApp.setActivationPolicy(.regular)
+        NSApp.setActivationPolicy(snapshots ? .accessory : .regular)
         if let iconURL = AtelierResources.bundle.url(forResource: "AppIcon", withExtension: "icns"),
            let icon = NSImage(contentsOf: iconURL) {
             NSApp.applicationIconImage = icon
         }
         MainActor.assumeIsolated {
             Theme.current.apply()
+            if snapshots { LayoutSnapshots.hideOffScreen() }
         }
-        NSApp.activate(ignoringOtherApps: true)
+        if !snapshots { NSApp.activate(ignoringOtherApps: true) }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

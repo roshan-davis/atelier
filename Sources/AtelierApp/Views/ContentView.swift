@@ -29,76 +29,101 @@ struct ContentView: View {
         // Like Lightroom Classic, the Filmstrip runs the full width of the window, under
         // both side panels.
         VStack(spacing: 0) {
-            NavigationSplitView(columnVisibility: $columns) {
-                Group {
-                    if model.mode == .develop {
-                        DevelopSidebar(develop: model.develop)
-                            .areaFocusFlash(.leftPanel)
-                    } else if model.mode == .hdr {
-                        HDRSidebar(hdr: model.hdr)
-                            .areaFocusFlash(.leftPanel)
-                    } else {
-                        SidebarView()
+            // The Lens Blur mode is a screen of its own: the photo and Lens Blur's panel only.
+            // The library layout below isn't touched while it is open (its columns, Filmstrip and
+            // panels come back exactly as they were), and nothing in it runs (Rosh, Nov 16, 2026).
+            if model.mode == .develop && model.isLensBlurOpen {
+                InlineAppScreen(panelWidth: $panelWidth) {
+                    DevelopImageView(develop: model.develop)
+                } panel: {
+                    DevelopPanel(develop: model.develop)
+                }
+            } else if model.mode == .hdr {
+                // HDR the same way: its own screen with its own left column (presets, source,
+                // result) and panel exactly as before, no Filmstrip, filter bar or notes.
+                InlineAppScreen(panelWidth: $panelWidth) {
+                    HDRSidebar(hdr: model.hdr)
+                        .frame(width: 240)
+                        .background(Color(nsColor: theme.panel))
+                        .areaFocusFlash(.leftPanel)
+                    Divider()
+                } photo: {
+                    HDRImageView(hdr: model.hdr)
+                } panel: {
+                    HDRPanel(hdr: model.hdr)
+                }
+            } else {
+                NavigationSplitView(columnVisibility: $columns) {
+                    Group {
+                        if model.mode == .develop {
+                            DevelopSidebar(develop: model.develop)
+                                .areaFocusFlash(.leftPanel)
+                        } else if model.mode == .hdr {
+                            HDRSidebar(hdr: model.hdr)
+                                .areaFocusFlash(.leftPanel)
+                        } else {
+                            SidebarView()
+                        }
+                    }
+                    .navigationSplitViewColumnWidth(min: 200, ideal: 240)
+                    .background(GeometryReader { geometry in
+                        Color.clear.onChange(of: geometry.size.width, initial: true) { _, width in
+                            if width > 100 { sidebarWidth = width }
+                        }
+                    })
+                } detail: {
+                    // The right panel sits beside the content, below the toolbar, like Lightroom's,
+                    // rather than as a full-height inspector the toolbar floats over.
+                    HStack(spacing: 0) {
+                        VStack(spacing: 0) {
+                            FilterBar()
+                            Divider()
+                            ZStack {
+                                switch model.mode {
+                                case .grid:
+                                    GridView(model: model, background: theme.gridBackground)
+                                case .loupe:
+                                    LoupeView(zoom: model.zoomState)
+                                case .develop:
+                                    DevelopImageView(develop: model.develop)
+                                case .hdr:
+                                    HDRImageView(hdr: model.hdr)
+                                }
+                                if model.rows.isEmpty {
+                                    EmptyLibraryView()
+                                }
+                            }
+                            // The focused photo's sticky notes (View > Show Notes, AT-058). An overlay,
+                            // so it never changes the photo's zoom and pan or the grid's scroll.
+                            .overlay {
+                                NotesOverlay(catalog: model.catalog,
+                                             assetID: model.mode == .hdr || model.rows.isEmpty ? nil : model.focusedID,
+                                             subtitle: model.notesSubtitle, addTargets: { model.noteTargets },
+                                             request: $model.noteRequest)
+                            }
+                            // A chat app's change, with Undo (Settings > Agents, AT-050c).
+                            .overlay(alignment: .bottom) { AgentNoticeView(agents: model.agents) }
+                            Divider()
+                            StatusBar()
+                        }
+                        // Let the photo column shrink to whatever is left and never draw past it.
+                        .frame(minWidth: 0, maxWidth: .infinity)
+                        .background(Color(nsColor: theme.chrome))
+                        .clipped()
+                        if showInspector && dockLayout.showsInspector {
+                            PanelResizeHandle(width: $panelWidth, range: 280...560, panel: .trailing)
+                            InspectorView()
+                                .frame(width: panelWidth)
+                                .clipped()
+                                .areaFocusFlash(.rightPanel)
+                                .layoutPriority(1)
+                                .background(Color(nsColor: theme.panel))
+                        }
                     }
                 }
-                .navigationSplitViewColumnWidth(min: 200, ideal: 240)
-                .background(GeometryReader { geometry in
-                    Color.clear.onChange(of: geometry.size.width, initial: true) { _, width in
-                        if width > 100 { sidebarWidth = width }
-                    }
-                })
-            } detail: {
-                // The right panel sits beside the content, below the toolbar, like Lightroom's,
-                // rather than as a full-height inspector the toolbar floats over.
-                HStack(spacing: 0) {
-                    VStack(spacing: 0) {
-                        FilterBar()
-                        Divider()
-                        ZStack {
-                            switch model.mode {
-                            case .grid:
-                                GridView(model: model, background: theme.gridBackground)
-                            case .loupe:
-                                LoupeView(zoom: model.zoomState)
-                            case .develop:
-                                DevelopImageView(develop: model.develop)
-                            case .hdr:
-                                HDRImageView(hdr: model.hdr)
-                            }
-                            if model.rows.isEmpty {
-                                EmptyLibraryView()
-                            }
-                        }
-                        // The focused photo's sticky notes (View > Show Notes, AT-058). An overlay,
-                        // so it never changes the photo's zoom and pan or the grid's scroll.
-                        .overlay {
-                            NotesOverlay(catalog: model.catalog,
-                                         assetID: model.mode == .hdr || model.rows.isEmpty ? nil : model.focusedID,
-                                         subtitle: model.notesSubtitle, addTargets: { model.noteTargets },
-                                         request: $model.noteRequest)
-                        }
-                        // A chat app's change, with Undo (Settings > Agents, AT-050c).
-                        .overlay(alignment: .bottom) { AgentNoticeView(agents: model.agents) }
-                        Divider()
-                        StatusBar()
-                    }
-                    // Let the photo column shrink to whatever is left and never draw past it.
-                    .frame(minWidth: 0, maxWidth: .infinity)
-                    .background(Color(nsColor: theme.chrome))
-                    .clipped()
-                    if showInspector && dockLayout.showsInspector {
-                        PanelResizeHandle(width: $panelWidth, range: 280...560, panel: .trailing)
-                        InspectorView()
-                            .frame(width: panelWidth)
-                            .clipped()
-                            .areaFocusFlash(.rightPanel)
-                            .layoutPriority(1)
-                            .background(Color(nsColor: theme.panel))
-                    }
-                }
+                FilmstripView()
+                    .areaFocusFlash(.photo, enabled: model.usesPanelKeys && filmstripVisible)
             }
-            FilmstripView()
-                .areaFocusFlash(.photo, enabled: model.usesPanelKeys && filmstripVisible)
         }
         // Dropping folders or photos anywhere on the window starts an import with them.
         .dropDestination(for: URL.self) { urls, _ in
@@ -211,6 +236,47 @@ private struct EmptyLibraryView: View {
                     .controlSize(.large)
             }
         }
+    }
+}
+
+/// The screen of an inline app (the Lens Blur mode, AT-074, and HDR): an optional left column of
+/// the app's own, the photo with the status line, and the app's panel. No Filmstrip, filter bar,
+/// notes or Develop chrome, and the library layout (its columns and Filmstrip) is never touched,
+/// so it comes back exactly as it was (Rosh, Nov 16, 2026).
+private struct InlineAppScreen<Leading: View, Photo: View, Panel: View>: View {
+    @EnvironmentObject private var model: LibraryModel
+    @AppStorage(Theme.defaultsKey) private var theme: Theme = .system
+    @Binding var panelWidth: Double
+    @ViewBuilder var leading: Leading
+    @ViewBuilder var photo: Photo
+    @ViewBuilder var panel: Panel
+
+    var body: some View {
+        HStack(spacing: 0) {
+            leading
+            VStack(spacing: 0) {
+                photo
+                    .overlay(alignment: .bottom) { AgentNoticeView(agents: model.agents) }
+                Divider()
+                StatusBar()
+            }
+            .frame(minWidth: 0, maxWidth: .infinity)
+            .background(Color(nsColor: theme.chrome))
+            .clipped()
+            PanelResizeHandle(width: $panelWidth, range: 280...560, panel: .trailing)
+            panel
+                .frame(width: panelWidth)
+                .clipped()
+                .areaFocusFlash(.rightPanel)
+                .layoutPriority(1)
+                .background(Color(nsColor: theme.panel))
+        }
+    }
+}
+
+extension InlineAppScreen where Leading == EmptyView {
+    init(panelWidth: Binding<Double>, @ViewBuilder photo: () -> Photo, @ViewBuilder panel: () -> Panel) {
+        self.init(panelWidth: panelWidth, leading: { EmptyView() }, photo: photo, panel: panel)
     }
 }
 

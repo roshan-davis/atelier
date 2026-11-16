@@ -10,8 +10,13 @@ final class CullPickTests: XCTestCase {
     func testEyeOpennessFromAnOutline() throws {
         // An eye 30 px wide and 9 px tall, tilted: openness 0.3 whatever the tilt.
         let angle = 0.3
-        let outline = [(-15.0, 0.0), (-8, 4.5), (0, 4.5), (8, 4.5), (15, 0), (8, -4.5), (0, -4.5), (-8, -4.5)].map { x, y in
-            CGPoint(x: 100 + x * cos(angle) - y * sin(angle), y: 50 + x * sin(angle) + y * cos(angle))
+        let corners: [(Double, Double)] = [(-15, 0), (-8, 4.5), (0, 4.5), (8, 4.5), (15, 0), (8, -4.5), (0, -4.5), (-8, -4.5)]
+        let cosine = cos(angle), sine = sin(angle)
+        var outline: [CGPoint] = []
+        for (x, y) in corners {
+            let px: Double = 100 + x * cosine - y * sine
+            let py: Double = 50 + x * sine + y * cosine
+            outline.append(CGPoint(x: px, y: py))
         }
         let read = try XCTUnwrap(CullFaceReading.openness(of: outline))
         XCTAssertEqual(read.openness, 0.3, accuracy: 0.01)

@@ -120,8 +120,9 @@ final class AgentEditToolsTests: XCTestCase {
         let session = try XCTUnwrap(DevelopRenderer.shared.session(for: url, maxPixelSize: DevelopController.proxySize))
         let expected = try XCTUnwrap(AutoTone.apply(session: session, settings: .neutral))
 
-        let result = try XCTUnwrap(await library.agents.callMeasuring("auto", ["ids": .array([.int(Int(id))])],
-                                                                      client: client, profile: .edit))
+        let resultAnswer = await library.agents.callMeasuring("auto", ["ids": .array([.int(Int(id))])],
+                                                       client: client, profile: .edit)
+        let result = try XCTUnwrap(resultAnswer)
         XCTAssertFalse(result.isError, result.text)
         let saved = try library.catalog.developSettings(for: id)
         for parameter in AutoTone.parameters {
@@ -136,9 +137,10 @@ final class AgentEditToolsTests: XCTestCase {
     func testMatchLookToAStudyAndCancel() async throws {
         let (library, ids) = try await makeLibrary(["landscape", "street"])
         let all: JSONValue = .array(ids.map { .int(Int($0)) })
-        let result = try XCTUnwrap(await library.agents.callMeasuring(
+        let resultAnswer = await library.agents.callMeasuring(
             "match_look", ["ids": all, "study": .string("mad max fury road - desert action"), "strength": .number(80)],
-            client: client, profile: .edit))
+            client: client, profile: .edit)
+        let result = try XCTUnwrap(resultAnswer)
         XCTAssertFalse(result.isError, result.text)
         for id in ids {
             XCTAssertNotEqual(try library.catalog.developSettings(for: id), .neutral)
@@ -146,9 +148,10 @@ final class AgentEditToolsTests: XCTestCase {
                            "Match Look: Mad Max: Fury Road — Desert Action (Test)")
         }
 
-        let wide = try XCTUnwrap(await library.agents.callMeasuring(
+        let wideAnswer = await library.agents.callMeasuring(
             "match_look", ["ids": all, "study": .string("The Dark Knight — Urban Night"), "areas": .string("subject")],
-            client: client, profile: .edit))
+            client: client, profile: .edit)
+        let wide = try XCTUnwrap(wideAnswer)
         XCTAssertTrue(wide.isError)
         XCTAssertTrue(wide.text.contains("wide study"), wide.text)
 
@@ -165,7 +168,8 @@ final class AgentEditToolsTests: XCTestCase {
         while library.agentJob == nil, clock.now < deadline { await Task.yield() }
         XCTAssertNotNil(library.agentProgress)
         library.agentJob?.cancel()
-        let cancelled = try XCTUnwrap(await running.value)
+        let cancelledAnswer = await running.value
+        let cancelled = try XCTUnwrap(cancelledAnswer)
         XCTAssertTrue(cancelled.isError)
         XCTAssertTrue(cancelled.text.contains("cancelled"), cancelled.text)
         XCTAssertEqual(try ids.map { try library.catalog.developSettings(for: $0) }, before)

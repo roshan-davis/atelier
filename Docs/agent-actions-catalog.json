@@ -566,6 +566,23 @@
       "version": 1
     },
     {
+      "exposed": true,
+      "id": "file.saveLensBlur",
+      "kind": "writesFiles",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "File > Save Lens Blur Photo, Lens Blur > Save",
+      "shortcut": "⌘S",
+      "summary": "In the Lens Blur mode, renders the photo's Lens Blur at full size and saves it as a TIFF stacked on the original, or updates the one saved before.",
+      "tier": "asksFirst",
+      "title": "Save Lens Blur Photo",
+      "version": 1
+    },
+    {
       "exposed": false,
       "hiddenReason": "Moves the keyboard focus, which means nothing without a keyboard.",
       "id": "focus.nextArea",
@@ -878,6 +895,23 @@
       "targets": "photos",
       "tier": "runs",
       "title": "HDR…",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "photo.lensBlur",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Photo > Lens Blur…, photo menu > Edit in Lens Blur",
+      "summary": "Opens one photo in the Lens Blur mode, where its depth blur is set and saved as a new photo stacked on it. On a Lens Blur photo it opens the original it was made from.",
+      "targets": "photos",
+      "tier": "runs",
+      "title": "Lens Blur…",
       "version": 1
     },
     {

@@ -129,8 +129,8 @@ final class LensBlurTests: XCTestCase {
         let photo = checker(width: width, height: height)
         let depth = CIImage(color: .black).cropped(to: CGRect(x: 0, y: 0, width: width / 2, height: height))
             .composited(over: CIImage(color: .white).cropped(to: photo.extent))
-        let areas = CIImage(color: CIColor(red: 0, green: 1, blue: 0)).cropped(to: CGRect(x: 0, y: 0, width: width / 2, height: height))
-            .composited(over: CIImage(color: CIColor(red: 1, green: 0, blue: 0)).cropped(to: photo.extent))
+        let areas = LensBlur.areaColor(focus: 0, blur: 1).cropped(to: CGRect(x: 0, y: 0, width: width / 2, height: height))
+            .composited(over: LensBlur.areaColor(focus: 1, blur: 0).cropped(to: photo.extent))
         var settings = DevelopSettings()
         settings[.lensBlurApply] = 1
         settings[.lensBlurAmount] = 100
@@ -140,12 +140,75 @@ final class LensBlurTests: XCTestCase {
         let before = try render(photo, width: width, height: height)
         let after = try render(LensBlur.apply(photo, depth: depth, settings: settings, areas: areas),
                                width: width, height: height)
-        XCTAssertEqual(spread(after, width: width, height: height, columns: 136..<252),
-                       spread(before, width: width, height: height, columns: 136..<252), accuracy: 1e-3,
-                       "the Focus area stays sharp although it is far")
+        // Within 2%: the first columns sit 8 px from the Blur area (6.4 px blur at this size), and
+        // on Rosh's Mac the area kept 99.2% of the checker's contrast (Nov 16, 2026).
+        XCTAssertGreaterThan(spread(after, width: width, height: height, columns: 136..<252),
+                             0.98 * spread(before, width: width, height: height, columns: 136..<252),
+                             "the Focus area stays sharp although it is far")
         XCTAssertLessThan(spread(after, width: width, height: height, columns: 4..<120),
                           0.1 * spread(before, width: width, height: height, columns: 4..<120),
                           "the Blur area blurs although it is in focus")
+    }
+
+    /// The depth model sees a hair cloud as one near blob: the gaps next to a Focus area that it
+    /// calls near must still blur like the background beyond them (Rosh, Nov 16, 2026).
+    func testNextToHairTheBackgroundBeyondDecides() throws {
+        let width = 512, height = 64
+        let photo = checker(width: width, height: height)
+        // The Focus area (the hair): solid up to x = 200, then 2-pixel strands every 4 pixels up
+        // to 240; 240...250 is a gap the model sees as near as the hair.
+        var areas = LensBlur.areaColor(focus: 1, blur: 0).cropped(to: CGRect(x: 0, y: 0, width: 200, height: height))
+        for x in stride(from: 200, to: 240, by: 4) {
+            areas = LensBlur.areaColor(focus: 1, blur: 0)
+                .cropped(to: CGRect(x: x, y: 0, width: 2, height: height)).composited(over: areas)
+        }
+        areas = areas.composited(over: CIImage(color: .black).cropped(to: photo.extent))
+        let before = try render(photo, width: width, height: height)
+        let after = try render(LensBlur.apply(photo, depth: nearUpTo250(photo, height: height), settings: focusedNear,
+                                              areas: areas), width: width, height: height)
+        XCTAssertLessThan(spread(after, width: width, height: height, columns: 242..<248),
+                          0.3 * spread(before, width: width, height: height, columns: 242..<248),
+                          "the gap beyond the hair blurs like the background beyond it")
+        XCTAssertEqual(spread(after, width: width, height: height, columns: 100..<190),
+                       spread(before, width: width, height: height, columns: 100..<190), accuracy: 1e-3,
+                       "the Focus area stays sharp")
+        XCTAssertLessThan(spread(after, width: width, height: height, columns: 300..<500),
+                          0.1 * spread(before, width: width, height: height, columns: 300..<500),
+                          "the far background blurs")
+    }
+
+    func testNextToAnOutlineTheDepthDecides() throws {
+        // A single outline, as a hat's: the mask may sit a pixel or two inside the subject, so
+        // what the depth sees as near beside it stays sharp instead of smearing it outward.
+        let width = 512, height = 64
+        let photo = checker(width: width, height: height)
+        let areas = LensBlur.areaColor(focus: 1, blur: 0).cropped(to: CGRect(x: 0, y: 0, width: 240, height: height))
+            .composited(over: CIImage(color: .black).cropped(to: photo.extent))
+        let before = try render(photo, width: width, height: height)
+        let after = try render(LensBlur.apply(photo, depth: nearUpTo250(photo, height: height), settings: focusedNear,
+                                              areas: areas), width: width, height: height)
+        XCTAssertGreaterThan(spread(after, width: width, height: height, columns: 242..<248),
+                             0.7 * spread(before, width: width, height: height, columns: 242..<248),
+                             "beside an outline the near pixels stay sharp")
+        XCTAssertLessThan(spread(after, width: width, height: height, columns: 300..<500),
+                          0.1 * spread(before, width: width, height: height, columns: 300..<500),
+                          "the far background blurs")
+    }
+
+    /// Near (in focus) up to x = 250, far beyond.
+    private func nearUpTo250(_ photo: CIImage, height: Int) -> CIImage {
+        CIImage(color: .black).cropped(to: CGRect(x: 0, y: 0, width: 250, height: height))
+            .composited(over: CIImage(color: .white).cropped(to: photo.extent))
+    }
+
+    private var focusedNear: DevelopSettings {
+        var settings = DevelopSettings()
+        settings[.lensBlurApply] = 1
+        settings[.lensBlurAmount] = 100
+        settings[.lensBlurBoost] = 0
+        settings[.lensBlurFocusNear] = 0
+        settings[.lensBlurFocusFar] = 10
+        return settings
     }
 
     private func checker(width: Int, height: Int) -> CIImage {

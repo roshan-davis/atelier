@@ -47,6 +47,13 @@ extension LibraryModel {
                enabled: { $0.mode == .hdr && $0.hdr.hasPhoto && !$0.hdr.busy }) { model, _, _ in
             model.hdr.save(asNew: true)
         }
+        // ⌘S saves the Lens Blur photo in the Lens Blur mode, as it saves in HDR mode.
+        r.bind(AtelierAction.saveLensBlur,
+               enabled: { $0.mode == .develop && $0.develop.isLensBlurring && $0.develop.assetID != nil
+                   && !$0.develop.lensBlurSaving },
+               shortcutWhen: { $0.mode == .develop && $0.develop.isLensBlurring }) { model, _, _ in
+            model.saveLensBlur()
+        }
         r.bind(AtelierAction.undo) { model, _, _ in model.undo() }
         r.bind(AtelierAction.redo) { model, _, _ in model.redo() }
         r.bind(AtelierAction.keyboardShortcuts) { model, _, _ in model.showingShortcuts = true }
@@ -96,7 +103,8 @@ extension LibraryModel {
         }) { model, _, _ in
             if case .importGroup(let id) = model.sidebarSelection { model.beginCull(importGroup: id) }
         }
-        r.bind(AtelierAction.writeXMP, shortcutWhen: { $0.mode != .hdr }) { model, _, ids in
+        r.bind(AtelierAction.writeXMP,
+               shortcutWhen: { $0.mode != .hdr && !($0.mode == .develop && $0.develop.isLensBlurring) }) { model, _, ids in
             model.withTargets(ids) { model.writeXMP(selectionOnly: true) }
         }
         r.bind(AtelierAction.writeAllXMP) { model, _, _ in model.writeXMP(selectionOnly: false) }
@@ -121,6 +129,9 @@ extension LibraryModel {
         }
         r.bind(AtelierAction.hdr, enabled: { $0.targetIDs.count == 1 }) { model, _, ids in
             model.withTargets(ids) { model.openHDR() }
+        }
+        r.bind(AtelierAction.lensBlur, enabled: { $0.targetIDs.count == 1 }) { model, _, ids in
+            model.withTargets(ids) { model.openLensBlur() }
         }
         r.bind(AtelierAction.editIn, enabled: { $0.focusedID != nil }) { model, parameters, ids in
             guard let editor = model.externalEditors.first(where: { $0.appPath == parameters.editor }) else { return }

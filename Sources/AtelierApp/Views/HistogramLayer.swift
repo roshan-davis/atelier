@@ -39,6 +39,16 @@ final class HistogramSink: @unchecked Sendable {
         if let layer { Self.show(picture, on: layer) }
     }
 
+    /// Stops drawing into `layer`, if it is still the target. A view that goes away must not
+    /// clear the layer of the view that replaced it: when the window swaps layouts (the Lens
+    /// Blur and HDR screens, Nov 16, 2026), SwiftUI can make the new histogram before it
+    /// dismantles the old one, and a plain `setTarget(nil)` then left the graph black.
+    func detach(_ layer: CALayer) {
+        lock.lock()
+        if self.layer === layer { self.layer = nil }
+        lock.unlock()
+    }
+
     /// Shows `picture`, counted for open `generation` at `rank`, on the calling thread, unless a
     /// newer one is already shown or another photo has been opened since.
     func present(_ picture: CGImage, generation: Int, rank: Int) {
@@ -80,14 +90,14 @@ struct HistogramLayerView: NSViewRepresentable {
 
     func updateNSView(_ view: PassThroughLayerView, context: Context) {
         if view.sink !== sink {
-            view.sink?.setTarget(nil)
+            view.sink?.detach(view.pictureLayer)
             view.sink = sink
             sink.setTarget(view.pictureLayer)
         }
     }
 
     static func dismantleNSView(_ view: PassThroughLayerView, coordinator: ()) {
-        view.sink?.setTarget(nil)
+        view.sink?.detach(view.pictureLayer)
         view.sink = nil
     }
 

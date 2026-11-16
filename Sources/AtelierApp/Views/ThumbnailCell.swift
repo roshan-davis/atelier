@@ -244,6 +244,8 @@ struct ThumbnailBadges: View {
         switch row.stackKind {
         case .virtualCopy?: badges.append(GroupBadge(symbol: "doc.on.doc", text: row.stackName ?? "Copy", shortText: nil))
         case .ai?: badges.append(GroupBadge(symbol: "sparkles", text: row.stackName ?? "AI", shortText: nil))
+        case .externalEdit? where row.stackName == LensBlurPhoto.versionName:
+            badges.append(GroupBadge(symbol: "camera.aperture", text: "Lens Blur", shortText: nil))
         case .externalEdit?: badges.append(GroupBadge(symbol: "square.split.bottomrightquarter", text: "Edit", shortText: nil))
         default:
             // An original with versions stacked on it: how many photos the stack holds.

@@ -483,6 +483,27 @@ def _lens_gather(color, c, R, shape, cat_eye, count, skip, holes=None):
     return np.where((skip & ~holes)[..., None], 0.0, out)
 
 
+LENS_DETAIL = (0.01, 0.05, 0.003, 2.0, 3.0)
+LENS_HAIR_SHARE = 0.01
+
+
+def _push_pull(values, weight, levels=6):
+    """`values` where `weight` is 1, filled in from around where it is 0 (a weighted pyramid,
+    then back up: atelierLensBlurFill)."""
+    pyramid = [(values * weight, weight)]
+    for _ in range(levels):
+        v, w = pyramid[-1]
+        h, wd = max(1, v.shape[0] // 3), max(1, v.shape[1] // 3)
+        pyramid.append((cv2.resize(v, (wd, h), interpolation=cv2.INTER_AREA), cv2.resize(w, (wd, h), interpolation=cv2.INTER_AREA)))
+    v, w = pyramid[-1]
+    filled = np.where(w > 1e-4, v / np.maximum(w, 1e-4), 0)
+    for v, w in reversed(pyramid[:-1]):
+        up = cv2.resize(filled, (v.shape[1], v.shape[0]), interpolation=cv2.INTER_LINEAR)
+        own = np.where(w > 1e-4, v / np.maximum(w, 1e-4), 0)
+        filled = up + (own - up) * smoothstep(0.0, 0.3, w)
+    return filled.astype(np.float32)
+
+
 def lens_blur(image, depth, amount=0.5, near=0.7, far=0.8, shape=0, cat_eye=0.0, boost=0.5, areas=None):
     """Lens Blur (AT-072), the same steps as LensBlur.swift: a signed blur from depth (0 near to
     1 far), changed by the Focus areas (`areas[..., 0]`, toward sharp) and Blur areas
@@ -493,9 +514,42 @@ def lens_blur(image, depth, amount=0.5, near=0.7, far=0.8, shape=0, cat_eye=0.0,
     lin = np.power(np.clip(image, 0, 1), 2.2).astype(np.float32)
     d = cv2.resize(depth.astype(np.float32), (W, H), interpolation=cv2.INTER_LINEAR)
     coc = np.clip((d - far) / 0.5, 0, 1) - np.clip((near - d) / 0.5, 0, 1)
+    # Focus areas work as a layer mask (atelierLensBlurAreas): the photo is blurred as if the
+    # area weren't there (its blur filled in from around it, its pixels left out of the gather),
+    # then the sharp photo goes back on top through the area. Blur areas take the blur of what
+    # is around them (the farthest blur when that is sharp).
+    focus = np.zeros((H, W), np.float32)
     if areas is not None:
-        coc = coc * (1 - areas[..., 0])
-        coc = coc + (np.where(coc < 0, -1.0, 1.0) - coc) * areas[..., 1]
+        # Detailed Focus edges (hair: the mask changes within a pixel or two) work as a layer
+        # mask; smooth ones (a feathered gradient) lower the blur, as Lightroom's Focus brush.
+        a0 = areas[..., 0].astype(np.float32)
+        lo, hi, share, spread, gain = LENS_DETAIL
+        sigma = max(1.0, share * max(W, H))
+        raw = smoothstep(lo, hi, np.abs(a0 - cv2.GaussianBlur(a0, (0, 0), sigma)))
+        detail = np.clip(cv2.GaussianBlur(raw, (0, 0), spread * sigma) * gain, 0, 1)
+        # Hair-like edges (many edges around, not one outline) get the near band; along a single
+        # outline the mask may sit a pixel inside the subject, and the band smeared that sliver
+        # outward as a halo (atelierLensBlurDetail's green).
+        hair_sigma = max(1.0, LENS_HAIR_SHARE * max(W, H))
+        gy, gx = np.gradient(a0)
+        edges = cv2.GaussianBlur(np.hypot(gx, gy).astype(np.float32), (0, 0), hair_sigma) * hair_sigma * 2.5066283
+        hairy = np.clip(cv2.GaussianBlur(raw * smoothstep(1.5, 3.0, edges), (0, 0), spread * sigma) * gain, 0, 1)
+        # The depth model sees a hair cloud as one near blob, gaps included, so close to a
+        # detailed, hair-like edge (2% of the long edge) the depth isn't trusted: the blur there
+        # comes from beyond, and what isn't in the area blurs at least as much as the background
+        # past it.
+        margin = max(1, int(round(0.02 * max(W, H))))
+        band = cv2.dilate((hairy > 0.5).astype(np.float32), cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * margin + 1, 2 * margin + 1)))
+        band = np.clip(cv2.GaussianBlur(band, (0, 0), margin / 3), 0, 1)
+        filled = _push_pull(coc, (1 - band) * (1 - areas[..., 1]))
+        larger = np.where(np.abs(filled) > np.abs(coc), filled, coc)
+        coc = coc + (larger - coc) * band
+        coc = coc + (filled - coc) * smoothstep(0.0, 0.25, a0) * band
+        focus = a0 * detail
+        coc = coc * (1 - a0 * (1 - detail))
+        sign = np.where(filled < 0, -1.0, 1.0)
+        blur_c = sign + (filled - sign) * smoothstep(0.05, 0.2, np.abs(filled))
+        coc = coc + (blur_c - coc) * areas[..., 1]
     luma = np.power(np.maximum(lin @ np.array([0.2627, 0.6780, 0.0593], np.float32), 0), 1 / 2.2)
     boosted = lin * (1 + 2 * boost * smoothstep(0.85, 1.0, luma))[..., None]
     max_r = amount * 0.025 * max(W, H)
@@ -507,12 +561,14 @@ def lens_blur(image, depth, amount=0.5, near=0.7, far=0.8, shape=0, cat_eye=0.0,
         factor = 3.0 ** -k
         w, h = max(1, int(W * factor)), max(1, int(H * factor))
         holes = None
-        if k == 0:
+        if k == 0 and areas is None:
             color, c = boosted, coc
         else:
             # Only pixels that blur by about a level pixel or more feed a coarse level, so a sharp
-            # edge doesn't spread a halo into the background's blur (atelierLensBlurWeigh).
-            wt = smoothstep(0.5, 1.5, np.abs(coc) * max_r * factor).astype(np.float32)
+            # edge doesn't spread a halo into the background's blur (atelierLensBlurWeigh); a
+            # Focus area's pixels feed none.
+            wt = (1.0 if k == 0 else smoothstep(0.5, 1.5, np.abs(coc) * max_r * factor)) * (1 - focus)
+            wt = np.asarray(wt, np.float32)
             small_color = cv2.resize(boosted * wt[..., None], (w, h), interpolation=cv2.INTER_AREA)
             small = cv2.resize(np.dstack([coc * wt, wt]), (w, h), interpolation=cv2.INTER_AREA)
             sw = small[..., 1]
@@ -539,6 +595,8 @@ def lens_blur(image, depth, amount=0.5, near=0.7, far=0.8, shape=0, cat_eye=0.0,
         own = own * (1 - t) + level[..., :3] * t
     mix_ = smoothstep(0.25, 1.0, own_c)[..., None]
     out = lin * (1 - mix_) + np.maximum(own, 0) * mix_
+    out = out + (lin - out) * focus[..., None]
+    mix_ = smoothstep(0.25, 1.0, own_c * (1 - focus))[..., None]
     for level in levels:
         a = np.clip(level[..., 3:], 0, 1) * (1 - mix_)
         out = out * (1 - a) + np.maximum(level[..., :3], 0) * a
