@@ -175,7 +175,7 @@ footer { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--line);
   <div class="stat"><div class="v">11</div><div class="k">catalog migrations (v1 to v11)</div></div>
   <div class="stat"><div class="v">72</div><div class="k">registry actions reachable by menus, keys and agents</div></div>
 </div>
-<p>Atelier is one native macOS process (SwiftUI with AppKit where SwiftUI is too slow) over a SQLite catalog. Pixels are rendered by Core Image on the GPU from the original file every time; edits are a JSON document per photo. Outside tools (Edit In apps, ComfyUI) run in their own processes; small selection, face, depth and denoise models run inside the app through Vision, Core ML and ONNX Runtime. Chat apps reach the app through a small stdio helper that relays to a private Unix socket.</p>
+<p>Atelier is one native macOS process (SwiftUI with AppKit where SwiftUI is too slow) over a SQLite catalog. Develop renders with Core Image on the GPU from the original file, decoded once per open photo and kept in a session; Grid and Loupe show cached JPEG previews. Edits are a JSON document per photo. Outside tools (Edit In apps, ComfyUI) run in their own processes; small selection, face, depth and denoise models run inside the app through Vision, Core ML and ONNX Runtime (CPU at this revision). Chat apps reach the app through a small stdio helper that relays to a private Unix socket.</p>
 <p>The two big source areas are <code>AtelierApp</code> (35.8k lines: views and controllers, with <code>DevelopController.swift</code> alone at 3,720) and <code>AtelierCore</code> (27.3k lines, of which Develop is 18.2k).</p>
 </section>
 
@@ -191,7 +191,7 @@ footer { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--line);
   <rect x="40" y="20" width="200" height="56" rx="8" class="b-plain"/><text x="140" y="44" text-anchor="middle" class="t-h">Qualification tools</text><text x="140" y="62" text-anchor="middle" class="t-s">PresetQualification, HDRQualification</text>
   <!-- libraries -->
   <rect x="40" y="170" width="180" height="56" rx="8" class="b-core"/><text x="130" y="194" text-anchor="middle" class="t-h">AtelierCore</text><text x="130" y="212" text-anchor="middle" class="t-s">catalog, render, import, AI</text>
-  <rect x="250" y="170" width="160" height="56" rx="8" class="b-core"/><text x="330" y="194" text-anchor="middle" class="t-h">AtelierHDRCore</text><text x="330" y="212" text-anchor="middle" class="t-s">HDR tone mapper (CPU)</text>
+  <rect x="250" y="170" width="160" height="56" rx="8" class="b-core"/><text x="330" y="194" text-anchor="middle" class="t-h">AtelierHDRCore</text><text x="330" y="212" text-anchor="middle" class="t-s">tone mapper, GPU preview</text>
   <rect x="440" y="170" width="160" height="56" rx="8" class="b-agent"/><text x="520" y="194" text-anchor="middle" class="t-h">AtelierActions</text><text x="520" y="212" text-anchor="middle" class="t-s">72 actions, typed tools</text>
   <rect x="640" y="170" width="140" height="56" rx="8" class="b-agent"/><text x="710" y="194" text-anchor="middle" class="t-h">AgentMCP</text><text x="710" y="212" text-anchor="middle" class="t-s">JSON-RPC, socket</text>
   <rect x="800" y="290" width="140" height="56" rx="8" class="b-agent"/><text x="870" y="314" text-anchor="middle" class="t-h">AgentActions</text><text x="870" y="332" text-anchor="middle" class="t-s">app-neutral registry</text>
@@ -212,7 +212,7 @@ footer { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--line);
   <path d="M170 226 L290 308" class="ln" marker-end="url(#ar1)"/>
   <path d="M120 76 L125 168" class="ln" marker-end="url(#ar1)"/>
   <path d="M170 76 L300 168" class="ln" marker-end="url(#ar1)"/>
-  <text x="560" y="386" class="t-s">AtelierApp also links GRDB directly (catalog observation in LibraryModel).</text>
+  <text x="420" y="372" class="t-s">AtelierApp also links GRDB directly (catalog observation in LibraryModel).</text><text x="420" y="390" class="t-s">PresetQualification → AtelierCore; HDRQualification → AtelierHDRCore + AtelierCore.</text>
 </svg>
 <div class="legend"><span class="lg-app">App executable</span><span class="lg-core">Photo libraries</span><span class="lg-agent">Agent libraries (shared with Easel)</span><span class="lg-ext">Third-party packages</span></div>
 </figure>
@@ -220,10 +220,10 @@ footer { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--line);
 <thead><tr><th>Target</th><th>Kind</th><th>What it holds</th><th>Notes</th></tr></thead>
 <tbody>
 <tr><td><code>AtelierCore</code></td><td><span class="pill p-core">library</span></td><td>Catalog (GRDB records, migrations), import, previews, Develop settings and renderer, masks, models, cull analysis, Match Look, export, XMP, ComfyUI client, processor documents.</td><td>Built with <code>-O</code> in Debug too, because Match Look, histograms and color cubes run per-pixel Swift loops. Bundles <code>Models/</code> (Core ML packages, <code>PMRID.onnx</code>).</td></tr>
-<tr><td><code>AtelierHDRCore</code></td><td><span class="pill p-core">library</span></td><td>Single-image HDR: <code>HDRImage</code>, tone mapper, presets, project store (an <code>actor</code>).</td><td>Pure Swift on the CPU, split across cores by rows; also <code>-O</code> in Debug.</td></tr>
+<tr><td><code>AtelierHDRCore</code></td><td><span class="pill p-core">library</span></td><td>Single-image HDR: <code>HDRImage</code>, tone mapper, GPU preview renderer, presets, project store (an <code>actor</code>).</td><td>The tone mapper is Swift on the CPU, split across cores by rows; <code>HDRPreviewRenderer</code> runs the same math as a Core Image kernel for previews, with the CPU as fallback. Also <code>-O</code> in Debug.</td></tr>
 <tr><td><code>AgentActions</code></td><td><span class="pill p-agent">library</span></td><td>Action, kind, tier, parameter schemas, <code>ActionRegistry</code>, menu builders, <code>JSONValue</code>.</td><td>No photo concepts; tests use an Easel-shaped host.</td></tr>
-<tr><td><code>AgentMCP</code></td><td><span class="pill p-agent">library</span></td><td>MCP sessions, Unix socket server and helper relay, client identity, grants, change log, docking, MCP Apps.</td><td>Foundation only; builds on Linux.</td></tr>
-<tr><td><code>AtelierActions</code></td><td><span class="pill p-agent">library</span></td><td>Atelier's action catalog (ids, kinds, parameters) and the typed agent tool schemas, without handlers.</td><td>Handlers are bound in the app (<code>LibraryModel+Actions.swift</code>).</td></tr>
+<tr><td><code>AgentMCP</code></td><td><span class="pill p-agent">library</span></td><td>MCP sessions, Unix socket server and helper relay, client identity, grants, change log, docking, MCP Apps.</td><td>Depends on <code>AgentActions</code>; otherwise Foundation only, so it builds on Linux.</td></tr>
+<tr><td><code>AtelierActions</code></td><td><span class="pill p-agent">library</span></td><td>Atelier's action catalog (ids, kinds, parameters) and the typed agent tool schemas, without handlers. Depends on <code>AgentActions</code> and <code>AgentMCP</code>.</td><td>Handlers are bound in the app (<code>LibraryModel+Actions.swift</code>).</td></tr>
 <tr><td><code>AtelierApp</code></td><td><span class="pill p-app">executable</span></td><td>SwiftUI scenes, AppKit grid and photo view, controllers, Agents, Help pages, resources (icon, splash, studies).</td><td>Run from Xcode (scheme AtelierApp).</td></tr>
 <tr><td><code>AtelierMCPHelper</code></td><td><span class="pill p-agent">executable</span></td><td><code>atelier-mcp</code>: 28 lines that call <code>MCPRelay.run</code>.</td><td>Copied into <code>Contents/MacOS</code> by the build script.</td></tr>
 <tr><td><code>PresetQualification</code>, <code>HDRQualification</code></td><td><span class="pill p-ext">tools</span></td><td>Command-line checks for built-in presets and HDR output.</td><td>Not part of the app.</td></tr>
@@ -284,7 +284,7 @@ footer { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--line);
   <path d="M232 80 L300 130" class="ln-d" marker-end="url(#ar2)"/>
   <path d="M82 80 L110 130" class="ln-d" marker-end="url(#ar2)"/>
 </svg>
-<figcaption>Solid arrows: calls and ownership. Dashed: the photo view and grid read controller state. The live Develop frame skips the controller and SwiftUI entirely (section 9).</figcaption>
+<figcaption>Solid arrows: calls and ownership. Dashed: the photo view and grid read controller state. Core services are not all background work: many run synchronously on the caller, for example Develop saves its settings and history on the main thread (<code>flushSave</code>). The live Develop frame skips the controller and SwiftUI (section 9).</figcaption>
 </figure>
 </section>
 
@@ -293,7 +293,7 @@ footer { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--line);
 <ul>
   <li><b>Launch.</b> <code>AtelierApp</code> is a SwiftUI <code>App</code> with one <code>WindowGroup("Atelier")</code> and a <code>Settings</code> scene. <code>CatalogLaunch</code> opens the catalog on the splash screen and builds <code>LibraryModel</code>; if the catalog can't open, it offers to try again rather than starting empty. <code>AppDelegate</code> turns off window tabbing, takes a catalog snapshot on quit and asks about unsaved HDR changes.</li>
   <li><b>One hub.</b> <code>LibraryModel</code> (1,240 lines plus extensions for actions, HDR, Lens Blur, notes, import, private photos) owns the catalog, preview cache and scheduler, <code>DevelopController</code>, <code>HDRController</code>, <code>AIController</code>, <code>AgentServer</code>, the action registry, <code>EditWatcher</code> and the shared <code>ZoomState</code>. Modes are a <code>ViewMode</code> enum: grid, loupe, develop, hdr; Lens Blur is a sub-mode of Develop (<code>develop.isLensBlurring</code>).</li>
-  <li><b>Library rows are live queries.</b> <code>observeRows()</code> and <code>observeSidebar()</code> run GRDB <code>ValueObservation</code>s, iterated in a main-actor <code>Task</code>. Any catalog write, from any thread, republishes <code>rows</code> and <code>sidebar</code>; a changed filter cancels and restarts the observation.</li>
+  <li><b>Library rows are live queries.</b> <code>observeRows()</code> and <code>observeSidebar()</code> are two separate GRDB <code>ValueObservation</code>s, iterated in main-actor <code>Task</code>s. Each tracks the database region its query reads: a commit that touches that region re-runs it, a write elsewhere doesn't, and GRDB may fold several commits into one publication. A changed filter cancels and restarts the rows observation.</li>
   <li><b>State that outlives a mode</b> (zoom, pan, focused photo) lives on <code>LibraryModel</code> / <code>ZoomState</code>, which every photo view reads and writes. <code>SessionRestore</code> saves view, sidebar item, filter, photo, zoom and grid scroll as a <code>SavedSession</code> in <code>UserDefaults</code>.</li>
   <li><b>Preferences</b> are <code>UserDefaults</code> (about 50 keys, read directly in 169 places). Develop, Tone Curve and Color Grading presets, import presets and export presets are JSON files in <code>~/Library/Application Support/Atelier</code>, shared across catalogs.</li>
   <li><b>Shared UI pieces</b> named in AGENTS.md: <code>ZoomViewport</code>, <code>Cursors</code>, <code>ClickGestures</code>, <code>DeleteFeedback</code>, <code>PanelSection</code>, <code>SliderRow</code>/<code>DevelopSlider</code>/<code>SliderGeometry</code>, <code>GroupHeading</code>, <code>PhotoPicker</code>, one <code>PhotoMenu</code>, <code>KeyBindings</code> and the action registry. Tests (<code>ClickGestureTests</code>, <code>AtelierActionsTests</code>) fail on some bypasses.</li>
@@ -302,7 +302,7 @@ footer { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--line);
 
 <section id="catalog">
 <h2><span class="n">5</span>Catalog and data model</h2>
-<p><code>Catalog</code> is a <code>final class</code> marked <code>Sendable</code> around a GRDB <code>DatabasePool</code> (WAL, foreign keys on). Features add tables through extensions (<code>Catalog+Cull</code>, <code>+Stacks</code>, <code>+VirtualCopies</code>, <code>+Pairs</code>, <code>+Private</code>, <code>+Notes</code>, <code>+Processors</code>), each registering its own migration. Reads and writes are synchronous calls on <code>writer.read</code>/<code>writer.write</code>, made from whichever thread the caller is on.</p>
+<p><code>Catalog</code> is a <code>final class</code> marked <code>Sendable</code> around a GRDB <code>DatabasePool</code> (WAL, foreign keys on). Features add tables through extensions (<code>Catalog+Cull</code>, <code>+Stacks</code>, <code>+VirtualCopies</code>, <code>+Pairs</code>, <code>+Private</code>, <code>+Notes</code>, <code>+Processors</code>), each registering its own migration; the Develop tables come from <code>v3-develop</code> in <code>Develop/Catalog+Develop.swift</code> and the processor tables from <code>v8-processor-documents</code> in <code>Processors/Catalog+Processors.swift</code>. Reads and writes are synchronous calls on <code>writer.read</code>/<code>writer.write</code>, made from whichever thread the caller is on.</p>
 <figure class="fig">
 <svg viewBox="0 0 960 400" role="img" aria-label="Catalog tables">
   <defs><marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker></defs>
@@ -328,8 +328,8 @@ footer { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--line);
   <path d="M580 237 L618 237" class="ln" marker-end="url(#ar3)"/>
   <path d="M380 110 C 300 140, 200 160, 120 188" class="ln-d" marker-end="url(#ar3)"/>
   <path d="M390 125 C 340 150, 300 170, 290 188" class="ln-d" marker-end="url(#ar3)"/>
-  <text x="20" y="340" class="t-s">Arrows point from the owning row to rows that reference it (cascade deletes). A derived asset (edit, AI, HDR, Lens Blur TIFF) is its own asset row, linked to its source through version.derivedAssetId.</text>
-  <text x="20" y="360" class="t-s">Masks, spots, crop and panel switches live inside developSettings.json; there is no mask, model or job table.</text>
+  <text x="20" y="330" class="t-s">Arrows point from a row to the rows that reference it. Most of these foreign keys cascade on delete; version.parentVersionId points to another version and is SET NULL on delete.</text><text x="20" y="348" class="t-s">version.assetId is the source photo; version.derivedAssetId is the derived file's own asset row (edit, AI, HDR, Lens Blur TIFF), also cascading.</text>
+  <text x="20" y="366" class="t-s">Masks, spots, crop and panel switches live inside developSettings.json; there is no mask, model or job table.</text>
 </svg>
 </figure>
 <ul>
@@ -337,14 +337,14 @@ footer { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--line);
   <li><b>Develop settings</b> are one <code>DevelopSettings</code> struct (schema 3), stored sparsely: a <code>[Parameter: Double]</code> map plus typed fields for crop, curves, masks, Lens Blur areas, spots, profile and Upright. Anything at its default is left out, so equal looks compare equal and old JSON decodes with neutral defaults.</li>
   <li><b>History</b> (<code>DevelopHistory</code>) is a list of named steps with full settings and snapshots, serialized next to the settings.</li>
   <li><b>Volumes</b> are matched by volume UUID (<code>VolumeIdentity</code>); mount and unmount notifications refresh online state.</li>
-  <li><b>Private photos:</b> import entries and collections carry a private flag; <code>LibraryFilter.privacy</code> hides them in every query until Touch ID or the password (<code>LAContext</code> in <code>PrivatePhotos</code>).</li>
+  <li><b>Private photos:</b> import entries and collections carry a private flag; <code>LibraryFilter.privacy</code> hides them from the library queries (rows, sidebar, counts) until Touch ID or the password (<code>LAContext</code> in <code>PrivatePhotos</code>). Agent tools check visibility separately and treat a private photo as missing, whatever the view shows.</li>
 </ul>
 </section>
 
 <section id="import">
 <h2><span class="n">6</span>Import</h2>
 <figure class="fig">
-<svg viewBox="0 0 960 230" role="img" aria-label="Import flow">
+<svg viewBox="0 0 960 246" role="img" aria-label="Import flow">
   <defs><marker id="ar4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker></defs>
   <rect x="10" y="40" width="140" height="70" rx="7" class="b-app"/><text x="80" y="64" text-anchor="middle" class="t-h">Import sheet</text><text x="80" y="82" text-anchor="middle" class="t-s">Choose Photos,</text><text x="80" y="97" text-anchor="middle" class="t-s">optional Cull</text>
   <rect x="190" y="40" width="160" height="70" rx="7" class="b-core"/><text x="270" y="64" text-anchor="middle" class="t-h">ImportStager</text><text x="270" y="82" text-anchor="middle" class="t-s">copies or hashes ahead</text><text x="270" y="97" text-anchor="middle" class="t-m">.Atelier Staging/</text>
@@ -357,9 +357,9 @@ footer { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--line);
   <path d="M560 60 L598 48" class="ln" marker-end="url(#ar4)"/>
   <path d="M680 70 L680 82" class="ln" marker-end="url(#ar4)"/>
   <path d="M760 100 L798 85" class="ln" marker-end="url(#ar4)"/>
-  <text x="10" y="160" class="t-s">Copy mode: every file goes through a staged copy on the destination volume, verified by SHA-256, then renamed into YYYY/YYYY-MM-DD Event/.</text>
+  <text x="10" y="160" class="t-s">Workers overlap: one file is hashing or copying while another reads metadata or is written to the catalog. Previews are a separate pass after cataloging.</text><text x="10" y="214" class="t-s">Copy mode: each file goes through a staged copy on the destination volume, verified by SHA-256 when it is made,</text><text x="10" y="232" class="t-s">then renamed into YYYY/YYYY-MM-DD Event/ without hashing again.</text>
   <text x="10" y="178" class="t-s">Reference mode: files stay in place; already-cataloged files are not hashed again. Metadata is read from the local copy when there is one (NAS round trips).</text>
-  <text x="10" y="196" class="t-s">Import presets apply a Develop preset, then Tone Curve and Color Grading panel presets, each as its own history step.</text>
+  <text x="10" y="196" class="t-s">Import presets apply a Develop preset, then Tone Curve and Color Grading panel presets, each as its own history step; settings recovered from an XMP sidecar win over them.</text>
 </svg>
 </figure>
 <p><code>ImportFlow</code> in the app drives progress (<code>ImportStatus</code>: files, bytes, speed, time left). Metadata comes from ImageIO (<code>MetadataReader</code>, <code>ShootingInfo</code>); XMP sidecars found on import restore Develop settings, history and notes (<code>DevelopRecovery</code>, <code>HistoryRecovery</code>, <code>NotesRecovery</code>).</p>
@@ -373,14 +373,14 @@ footer { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--line);
 <ul>
   <li><code>PreviewCache</code>: two sizes, 256 px and 2560 px JPEG, sharded by <code>id &amp; 0xff</code>. Thumbnails use the embedded RAW preview when it is large enough.</li>
   <li><code>PreviewCache.version</code> (now 12) is written to <code>version.txt</code>; an older folder is moved aside at launch and deleted in the background.</li>
-  <li><code>PreviewScheduler</code>: two <code>OperationQueue</code> lanes (thumbnails with cores/2 workers, previews with 2), de-duplicated by asset and size, cancellable, with a failed set that is retried only when something changes. Edited photos render through Develop settings.</li>
+  <li><code>PreviewScheduler</code>: two <code>OperationQueue</code> lanes (thumbnails with max(2, active cores / 2) workers, previews with 2), de-duplicated by asset and size, cancellable, with a failed set that is retried only when something changes. Edited photos render through Develop settings.</li>
 </ul>
 </div>
 <div>
 <h3>In memory</h3>
 <ul>
   <li><code>ThumbnailLoader</code> (grid): an <code>NSCache</code> of decoded thumbnails, decoded off the main thread.</li>
-  <li><code>PreviewImages</code> (Loupe, Develop open): an LRU of 8 decoded 2560 px previews (about 18 MB each), keyed by asset and file date, decoded in a <code>Task</code> so the first draw doesn't decode on the main thread.</li>
+  <li><code>PreviewImages</code> (Loupe, Develop open): an LRU of 8 decoded 2560 px previews (the code's comment estimates about 18 MB each at 2560 × 1707; the real size depends on aspect ratio and decoded format), keyed by asset and file date, decoded in a detached task so the first draw doesn't decode on the main thread.</li>
   <li>The import sheet has its own <code>NSCache</code> of file thumbnails.</li>
 </ul>
 </div>
@@ -389,7 +389,7 @@ footer { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--line);
 
 <section id="pipeline">
 <h2><span class="n">8</span>Develop render pipeline</h2>
-<p>Every render starts from the original. <code>DevelopRenderer.shared</code> owns one <code>CIContext</code> (linear Rec. 2020 working space, half-float, <code>cacheIntermediates: false</code>). A <code>DevelopSession</code> holds one opened file: the <code>CIRAWFilter</code> (or decoded image) and caches for that photo. <code>session.image(with:)</code> builds the Core Image graph under the session's lock.</p>
+<p>Develop renders start from the original file, decoded once when the photo opens and kept in a session, so a slider tick doesn't decode it again. <code>DevelopRenderer.shared</code> owns one <code>CIContext</code> (linear Rec. 2020 working space, half-float, <code>cacheIntermediates: false</code>). A <code>DevelopSession</code> holds one opened file: the <code>CIRAWFilter</code> (or decoded image) and caches for that photo. <code>session.image(with:)</code> builds the Core Image graph under the session's lock.</p>
 <figure class="fig">
 <svg viewBox="0 0 960 330" role="img" aria-label="Render pipeline stages">
   <defs><marker id="ar5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker></defs>
@@ -404,11 +404,11 @@ footer { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--line);
   <rect x="260" y="20" width="160" height="140" rx="8" class="b-core"/>
   <text x="272" y="42" class="t-h">Before geometry</text>
   <text x="272" y="62" class="t-s">Remove tool spots</text>
-  <text x="272" y="78" class="t-s">(heal, clone, content-</text>
-  <text x="272" y="94" class="t-s">aware fill)</text>
-  <text x="272" y="110" class="t-s">Lens Blur, only while</text>
-  <text x="272" y="126" class="t-s">its mode or Save renders</text>
-  <text x="272" y="148" class="t-m">mask sources found here</text>
+  <text x="272" y="78" class="t-s">(heal, clone, fill)</text>
+  <text x="272" y="96" class="t-m">↳ mask source image</text>
+  <text x="272" y="114" class="t-s">Lens Blur, only while</text>
+  <text x="272" y="130" class="t-s">its mode or Save renders</text>
+  <text x="272" y="148" class="t-s">(masks stay sharp)</text>
   <rect x="440" y="20" width="110" height="140" rx="8" class="b-core"/>
   <text x="452" y="42" class="t-h">2 · Geometry</text>
   <text x="452" y="62" class="t-s">quarter turns</text>
@@ -430,8 +430,8 @@ footer { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--line);
   <text x="22" y="222" class="t-h">Mask providers (lazy, per session)</text>
   <text x="22" y="242" class="t-s">Subject/Object: Vision on ≤1024 px copy</text>
   <text x="22" y="258" class="t-s">People: MediaPipe parts + Vision faces</text>
-  <text x="22" y="274" class="t-s">Fine Edges, Depth, Sky: ONNX (FineMatteCache)</text>
-  <text x="22" y="290" class="t-s">Brush, gradients, ranges: drawn or computed</text>
+  <text x="22" y="274" class="t-s">Fine Edges, Depth: ONNX · Sky: from the depth</text>
+  <text x="22" y="290" class="t-s">Brush, gradients drawn · luminance later</text>
   <rect x="330" y="200" width="300" height="100" rx="8" class="b-plain"/>
   <text x="342" y="222" class="t-h">Caches that keep drags cheap</text>
   <text x="342" y="242" class="t-s">correctedCache: step 1 output, 2 entries</text>
@@ -448,6 +448,8 @@ footer { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--line);
 </svg>
 </figure>
 <ul>
+  <li><b>Mask sources</b> come from the sharp photo after the Remove spots and before Lens Blur, on the uncropped frame; each mask is then put through the same crop as the photo. Luminance ranges are worked out later, from the photo the mask sees. Fine Edges mattes are shared app-wide through <code>FineMatteCache</code>; Select Sky is derived from the depth model's output, not a model of its own.</li>
+  <li><b>Option-drag views</b> branch off or return early: Defringe's views show step 1 alone, Visualize Depth replaces the photo, and the clipping and sharpening views replace the result at the end.</li>
   <li><b>Panel switches</b> are applied first (<code>applyingPanelSwitches()</code>), so a panel that is off is absent from the graph. Tools at their neutral value return the input unchanged.</li>
   <li><b>Per-pixel work</b> in the live path is Core Image filters or runtime Metal kernels (<code>RuntimeKernels.build</code>). Small CPU tables (curve LUTs, the color cube) are built in Swift.</li>
   <li><b>Warm-up:</b> <code>PipelineWarmUp.warmUpVariants</code> renders every tool once off screen, so the first drag of a tool doesn't compile its kernel on the photo.</li>
@@ -471,7 +473,7 @@ footer { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--line);
   <rect x="10" y="30" width="150" height="64" rx="7" class="b-app"/><text x="85" y="54" text-anchor="middle" class="t-h">Slider drag</text><text x="85" y="72" text-anchor="middle" class="t-s">SliderRow / DevelopSlider</text>
   <rect x="190" y="30" width="170" height="64" rx="7" class="b-app"/><text x="275" y="54" text-anchor="middle" class="t-h">submitRender</text><text x="275" y="72" text-anchor="middle" class="t-s">LatestJob.submit</text>
   <rect x="560" y="30" width="170" height="64" rx="7" class="b-app"/><text x="645" y="54" text-anchor="middle" class="t-h">finishRender</text><text x="645" y="72" text-anchor="middle" class="t-s">bookkeeping only</text>
-  <rect x="760" y="30" width="190" height="64" rx="7" class="b-app"/><text x="855" y="54" text-anchor="middle" class="t-h">settle (0.12 s)</text><text x="855" y="72" text-anchor="middle" class="t-s">publish image, save, history</text>
+  <rect x="760" y="30" width="190" height="64" rx="7" class="b-app"/><text x="855" y="54" text-anchor="middle" class="t-h">settle (0.12 s)</text><text x="855" y="72" text-anchor="middle" class="t-s">publish image, history step</text>
   <rect x="190" y="160" width="170" height="70" rx="7" class="b-core"/><text x="275" y="184" text-anchor="middle" class="t-h">renderNext</text><text x="275" y="202" text-anchor="middle" class="t-s">take newest request</text><text x="275" y="218" text-anchor="middle" class="t-s">session.renderToSurface</text>
   <rect x="390" y="160" width="160" height="70" rx="7" class="b-core"/><text x="470" y="184" text-anchor="middle" class="t-h">DisplaySurfaces</text><text x="470" y="202" text-anchor="middle" class="t-s">IOSurface pool</text>
   <rect x="580" y="160" width="170" height="70" rx="7" class="b-app"/><text x="665" y="184" text-anchor="middle" class="t-h">LiveFrameSink</text><text x="665" y="202" text-anchor="middle" class="t-s">sets CALayer contents</text><text x="665" y="218" text-anchor="middle" class="t-s">if key and epoch match</text>
@@ -495,6 +497,8 @@ footer { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--line);
 </svg>
 </figure>
 <ul>
+  <li><b>Where the direct path applies.</b> When the photo view is attached to the live feed and a frame fits it, the render queue sets the layer's contents itself after epoch, count and size checks. Otherwise (no surface free, an incompatible frame, a view without the live feed, the crop tool, the mask overlay, Option-drag views) the render comes back as a <code>CGImage</code> and the main thread shows it. The main thread still handles input and builds each request.</li>
+  <li><b>Settle and save are separate.</b> 0.12 s after the last frame the image is published to SwiftUI and the history step settles. Writing to the catalog is its own 400 ms debounce (<code>saveTask</code>, then <code>flushSave</code> on the main thread).</li>
   <li><b>Latest wins.</b> <code>LatestJob</code> keeps at most one waiting request; a newer one replaces it. The render queue drains itself, so a busy main thread cannot hold the GPU idle. Measuring has its own <code>LatestJob</code> so the histogram never builds a backlog.</li>
   <li><b>Generations and epochs.</b> Requests carry <code>openGeneration</code> and a live epoch; frames for a photo you have left, or for another view key, are dropped and their surfaces returned to the pool.</li>
   <li><b>Opening photos.</b> Decodes run on a concurrent <code>atelier.develop.open</code> queue and start only after ← → rest for 0.15 s. Neighbours in the Filmstrip are decoded on <code>atelier.develop.prefetch</code> (utility) after 0.8 s without a render. The cached 2560 px preview shows first.</li>
@@ -513,29 +517,29 @@ footer { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--line);
 <tr><td>Vision faces, landmarks, capture quality, body and hand pose, feature prints</td><td>Vision</td><td><span class="pill p-ok">OS</span></td><td>Select People, Cull (faces, similarity), Find Faces</td></tr>
 <tr><td>MediaPipe Multiclass Selfie (PeopleParts)</td><td>Core ML</td><td><span class="pill p-core">bundled</span> mlpackage</td><td>Select People parts: face skin, body skin, hair, clothes</td></tr>
 <tr><td>MediaPipe Face Landmarker: FaceMesh, FaceBlendshapes, FaceDetector</td><td>Core ML</td><td><span class="pill p-core">bundled</span> mlpackages</td><td>Cull blinks and smiles, Find Faces (MediaPipe or Both)</td></tr>
-<tr><td>PMRID raw denoiser</td><td>ONNX Runtime, Core ML EP</td><td><span class="pill p-core">bundled</span> 4.1 MB onnx</td><td>AI Denoise (step 1, RAW only); one photo at a time, residuals in <code>NSCache</code></td></tr>
-<tr><td>Depth Anything V2 Small</td><td>ONNX Runtime, Core ML EP</td><td><span class="pill p-agent">download</span> pinned revision</td><td>Depth Range, Select Sky, Lens Blur depth</td></tr>
-<tr><td>BiRefNet lite / HR matting</td><td>ONNX Runtime, Core ML EP</td><td><span class="pill p-agent">download</span> pinned revision, SHA-256</td><td>Fine Edges on AI selections; <code>FineMatteCache</code> shared by proxy, full size and Save</td></tr>
+<tr><td>PMRID raw denoiser</td><td>ONNX Runtime, CPU</td><td><span class="pill p-core">bundled</span> 4.1 MB onnx</td><td>AI Denoise (step 1, RAW only): full resolution, 512 px tiles processed one after another, one photo at a time; residuals in <code>NSCache</code></td></tr>
+<tr><td>Depth Anything V2 Small</td><td>ONNX Runtime, CPU</td><td><span class="pill p-agent">download</span> pinned revision, SHA-256</td><td>Depth Range, Select Sky, Lens Blur depth</td></tr>
+<tr><td>BiRefNet lite / HR matting</td><td>ONNX Runtime, CPU by default</td><td><span class="pill p-agent">download</span> pinned revision, SHA-256</td><td>Fine Edges on AI selections; <code>FineMatteCache</code> shared by proxy, full size and Save</td></tr>
 </tbody></table></div>
 <ul>
   <li><code>BundledModel</code> compiles a bundled mlpackage once into Caches and loads it lazily. <code>ModelDownload</code> puts downloads in <code>Application Support/Atelier/Models</code>, named by checksum.</li>
-  <li>All ONNX models share <code>CoreMLProviderOptions</code> (<code>MLComputeUnits: "ALL"</code>, MLProgram, a compile cache). Each falls back to the CPU when Core ML refuses the model; PMRID stays on the CPU path for a known ConvTranspose issue.</li>
-  <li>Models run in the app process, on background threads, on downscaled copies (for example Vision at up to 1024 px, depth at up to 1036 px).</li>
+  <li><b>ONNX models run on the CPU at this revision.</b> The Core ML execution provider is wired in through shared <code>CoreMLProviderOptions</code> (<code>MLComputeUnits: "ALL"</code>, MLProgram, a compile cache), but PMRID and Depth set <code>usesCoreML = false</code> and Fine Edges defaults <code>prefersCoreML = false</code>. The bundled MediaPipe models are the ones that actually run through Core ML.</li>
+  <li>Models run in the app process on background threads. Selection and depth models see downscaled copies (Vision at up to 1024 px, depth at up to 1036 px); PMRID works on the full-resolution RAW.</li>
 </ul>
 </section>
 
 <section id="outside">
 <h2><span class="n">11</span>Editors, AI and inline apps</h2>
-<p>Every outside result lands the same way: a new asset row for the file, stacked on its source with a <code>version</code> row (<code>Importer.addStacked</code> or <code>Catalog.stack</code>), which copies rating, label, keywords, collections and import entries onto it. How each tool gets there differs.</p>
+<p>Every outside result lands the same way: a new asset row for the file, stacked on its source with a <code>version</code> row (<code>Importer.addStacked</code> or <code>Catalog.stack</code>), which, when the derivative is first stacked, copies rating, label, keywords, collections and import entries onto it. How each tool gets there differs.</p>
 <div class="tbl"><table>
 <thead><tr><th>Tool</th><th>Where it runs</th><th>Hand-off</th><th>Recorded as</th></tr></thead>
 <tbody>
-<tr><td>Edit In (Photoshop, Affinity, Pixelmator…)</td><td>Other app</td><td>Renders a TIFF/PSD/JPEG next to the original, opens the editor; <code>EditWatcher</code> watches the folder with a <code>DispatchSource</code> vnode source and re-checks on app activation.</td><td><code>externalEdit</code> version; preview refreshed on save</td></tr>
-<tr><td>AI: Remove Object, Replace Background, Upscale</td><td>ComfyUI process (HTTP + WebSocket)</td><td><code>AIRunner</code> binds a workflow template (by node titles), uploads image and mask, queues, follows progress via <code>ComfyMonitor</code>, composites the masked region back.</td><td><code>ai</code> version, provenance JSON (recipe, models, licenses, prompt, seed)</td></tr>
-<tr><td>HDR mode</td><td>In process, <code>AtelierHDRCore</code> on the CPU</td><td><code>HDRController</code> tone-maps a linear source; Save writes a 16-bit TIFF and an <code>.atelierhdr</code> project, accepted with <code>ProcessorDocument</code>/<code>ProcessorReceipt</code> identity checks.</td><td><code>externalEdit</code> version + <code>processorOutput</code> row</td></tr>
-<tr><td>Lens Blur mode</td><td>In process, Core Image</td><td>Develop's photo view with Lens Blur controls; Save renders full size off main.</td><td><code>externalEdit</code> version named "Lens Blur"</td></tr>
+<tr><td>Edit In (Photoshop, Affinity, Pixelmator…)</td><td>Other app</td><td>Renders a 16-bit TIFF or a JPEG next to the original, opens the editor; <code>EditWatcher</code> watches the folder with a <code>DispatchSource</code> vnode source and re-checks on app activation.</td><td><code>externalEdit</code> version; preview refreshed on save</td></tr>
+<tr><td>AI: Remove Object, Replace Background, Upscale</td><td>ComfyUI process (HTTP + WebSocket)</td><td><code>AIRunner</code> binds a workflow template (by node titles), uploads image and mask, queues, follows progress via <code>ComfyMonitor</code>; for the masked recipes (Remove Object, Replace Background) composites the masked region back onto the original.</td><td><code>ai</code> version, provenance JSON (recipe, models, licenses, prompt, seed)</td></tr>
+<tr><td>HDR mode</td><td>In process, <code>AtelierHDRCore</code>: GPU preview, CPU fallback, CPU full size and Save</td><td><code>HDRController</code> tone-maps a linear source; Save writes a 16-bit TIFF and an <code>.atelierhdr</code> project. The <code>ProcessorDocument</code>/<code>ProcessorReceipt</code> identity checks from the former separate HDR app now run in-process. Leaving with unsaved changes asks Save, Don't Save or Cancel.</td><td><code>externalEdit</code> version + <code>processorOutput</code> row</td></tr>
+<tr><td>Lens Blur mode</td><td>In process, Core Image</td><td>Develop's photo view in the focused shell with Lens Blur controls; Save renders full size off main, and later saves update the same stacked TIFF in place. Closing without Save cancels the changes.</td><td><code>externalEdit</code> version named "Lens Blur"</td></tr>
 </tbody></table></div>
-<p>The inline apps (HDR, Lens Blur) use a focused shell: no filmstrip, Navigator, histogram or presets, and closing discards their changes (Rosh, Nov 16, 2026).</p>
+<p>The inline apps (HDR, Lens Blur) use a focused shell: no filmstrip, Navigator, histogram or presets (Rosh, Nov 16, 2026).</p>
 </section>
 
 <section id="agents">
@@ -565,8 +569,8 @@ footer { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--line);
 </figure>
 <ul>
   <li><b>One command path.</b> Each <code>AtelierAction</code> is declared once with a kind and Swift parameter types; JSON schemas are generated from the types; <code>Docs/agent-actions-catalog.json</code> is regenerated by <code>Scripts/agent_catalog.py</code> and a test fails when it is stale.</li>
-  <li><b>Changes:</b> every agent write names its targets (<code>ids</code>, <code>selection</code> or <code>current</code>), runs as one change with an id and an Undo notice, and asks first above Settings > Agents' photo limit (50). <code>command_batch</code> runs up to 50 steps, optionally atomic. Private photos read as missing.</li>
-  <li><b>Threads:</b> the socket server accepts on a <code>Thread</code> and serves each connection on its own <code>Thread</code>; tool calls hop to the main actor because handlers use <code>LibraryModel</code>. A call during a Develop drag is refused with a retry message.</li>
+  <li><b>Changes:</b> every agent write names its targets (<code>ids</code>, <code>selection</code> or <code>current</code>). Library and Develop edits that are recorded get a change id and an Undo notice; a change above Settings > Agents' photo limit (50) asks first. <code>command_batch</code> runs up to 50 of the supported write steps; <code>atomic</code> makes those all or nothing. Private photos read as missing.</li>
+  <li><b>Threads:</b> the socket server accepts on a <code>Thread</code> and serves each connection on its own <code>Thread</code>. Some Look reads run off the main thread; other tools hop to the main actor because their handlers use <code>LibraryModel</code>. A Develop call made during a drag waits for the drag to end and is refused, with a retry message, if waiting fails.</li>
   <li><b>MCP Apps:</b> <code>ui://atelier/photos</code> is a carousel view for clients that declare the UI extension; its thumbnails come from a view-only <code>get_thumbnails</code> tool.</li>
 </ul>
 </section>
@@ -584,14 +588,14 @@ footer { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--line);
 <h3>Export</h3>
 <p><code>Exporter</code> opens a non-interactive <code>DevelopSession</code> per photo at the export size, renders in the chosen color space and writes JPEG, HEIC, TIFF or PNG with metadata and an optional watermark. Export presets are JSON in Application Support.</p>
 <h3>XMP</h3>
-<p><code>XMPSidecar</code> writes standard metadata plus three custom packets (<code>atelier:DevelopRecovery</code>, <code>HistoryRecovery</code>, <code>Notes</code>) on demand or automatically (Settings > Metadata, <code>xmpDirty</code> flag). They are read back on import to recover edits. Exiv2 is not used.</p>
+<p>ImageIO reads standard metadata on import (<code>MetadataReader</code>). Atelier's own <code>XMPSidecar</code> reads and writes sidecars: standard fields plus three custom packets (<code>atelier:DevelopRecovery</code>, <code>HistoryRecovery</code>, <code>Notes</code>) on demand or automatically (Settings > Metadata, <code>xmpDirty</code> flag). They are read back on import to recover edits. Exiv2 is not used.</p>
 </div>
 </div>
 </section>
 
 <section id="concurrency">
 <h2><span class="n">14</span>Concurrency inventory</h2>
-<p>Atelier mixes four concurrency styles. Counts are from <code>Sources/</code> at <code>c146785</code>.</p>
+<p>Atelier mixes four concurrency styles. Counts are source sites found by grep in <code>Sources/</code> at <code>c146785</code>, not live queues or threads.</p>
 <div class="tbl"><table>
 <thead><tr><th>Mechanism</th><th>Count</th><th>Where it is used</th></tr></thead>
 <tbody>
@@ -615,7 +619,7 @@ footer { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--line);
   <li><b>Checks:</b> <code>Scripts/check_pr.py</code> (whitespace, help index, build, tests; logs in <code>.build/local-checks/</code>), <code>Scripts/check_ui.py</code> and <code>LayoutSnapshots.swift</code> (screenshots off screen), <code>compare_snapshots.swift</code>.</li>
   <li><b>Builds:</b> <code>Scripts/build_macos_app.py --arch arm64|x86_64|universal|all</code> makes an ad-hoc-signed <code>Atelier.app</code> with the helper inside.</li>
   <li><b>Help:</b> HTML pages in <code>Sources/AtelierApp/Help</code>, index from <code>Scripts/help/build_help_index.py</code>, before/after pictures from <code>make_help_images.py</code>.</li>
-  <li><b>CI:</b> <code>.github/workflows/build.yml</code> (macOS 15 runner: build, tests with sample NEFs, UI smoke). Runs are often blocked by GitHub billing, so Mac-local checks are the main gate.</li>
+  <li><b>CI:</b> <code>.github/workflows/build.yml</code> (macOS 15 runner: build, tests with sample NEFs, UI smoke). Operational note, not something the source shows: runs have often failed without starting because of GitHub billing, so Mac-local checks are the main gate.</li>
 </ul>
 </section>
 
@@ -625,16 +629,16 @@ footer { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--line);
 <div class="tbl"><table>
 <thead><tr><th>PRD says</th><th>Code does</th><th>Status</th></tr></thead>
 <tbody>
-<tr><td>One Processor contract for Edit In apps, plugins and AI backends (External editor integration; AGENTS.md product rule).</td><td>No shared <code>Processor</code> type. Edit In (<code>EditIn.swift</code>), ComfyUI (<code>AIRunner</code>) and HDR (<code>ProcessorDocument</code>, hard-coded <code>processorID "atelier.hdr"</code>) are three separate paths. They share only the stacking step.</td><td><span class="pill p-warn">differs</span></td></tr>
+<tr><td>One Processor contract for Edit In apps, plugins and AI backends (External editor integration; AGENTS.md product rule).</td><td>No general Processor host or durable job queue. Edit In (<code>EditIn.swift</code>), ComfyUI (<code>AIRunner</code>) and HDR are three separate paths that share only the stacking step. HDR does have typed request and result identity (<code>ProcessorDocument</code>, <code>processorID "atelier.hdr"</code>) and completion records, consistent with the PRD's inline HDR section.</td><td><span class="pill p-warn">differs</span></td></tr>
 <tr><td>Processor plugins: folder with <code>manifest.json</code>, child process over stdin/stdout JSON, auto-generated form.</td><td>Not present.</td><td><span class="pill p-ext">not built</span></td></tr>
-<tr><td>"AI backends and plugins run as separate processes"; NFR: AI jobs run in a separate process.</td><td>ComfyUI is separate. Depth Anything, BiRefNet and PMRID run in-process through ONNX Runtime; MediaPipe models in-process through Core ML. AGENTS.md allows small mask models in-process; denoise and depth aren't named there.</td><td><span class="pill p-warn">differs</span></td></tr>
-<tr><td>Tech stack: actors for the catalog and job queue.</td><td><code>Catalog</code> is a <code>Sendable</code> class over GRDB's pool; there is no job queue type. The only actor is <code>HDRProjectStore</code>; work runs on GCD queues and detached tasks.</td><td><span class="pill p-warn">differs</span></td></tr>
+<tr><td>"AI backends and plugins run as separate processes"; NFR: AI jobs run in a separate process.</td><td>ComfyUI is separate. Depth Anything, BiRefNet and PMRID run in-process through ONNX Runtime, and the MediaPipe models through Core ML. AGENTS.md names MediaPipe and BiRefNet as explicit exceptions; PMRID and Depth Anything are not named there.</td><td><span class="pill p-warn">differs</span></td></tr>
+<tr><td>Tech stack: actors for the catalog and job queue.</td><td><code>Catalog</code> is a <code>Sendable</code> class over GRDB's pool; there is no job queue type. The only actor is the HDR project store (<code>HDRProjectStore</code>); other work runs on GCD queues and detached tasks.</td><td><span class="pill p-warn">differs</span></td></tr>
 <tr><td>Data model: Mask, Model, Job and Processor entities; AI masks cached as 8-bit PNG.</td><td>Masks are inside <code>developSettings.json</code>; AI masks are in memory only. No model or job tables; provenance is a text column on <code>version</code>. <code>processorOutput</code> covers HDR only.</td><td><span class="pill p-warn">differs</span></td></tr>
-<tr><td>Model registry JSON with license and allowed use; license gate on export.</td><td><code>AIModel</code> has <code>allowedUse</code> and is written into provenance, but there is no registry file or export gate.</td><td><span class="pill p-ext">not built</span></td></tr>
+<tr><td>Model registry JSON with license and allowed use; license gate on export.</td><td>The bundled recipe definitions (<code>AIRecipe</code>, <code>AIModel</code>) carry license and allowed use, which go into provenance, but there is no editable registry file and no export gate.</td><td><span class="pill p-ext">not built</span></td></tr>
 <tr><td>File watching with FSEvents and security-scoped bookmarks; App Sandbox.</td><td>Edit In uses a vnode <code>DispatchSource</code> per folder plus a check on app activation. No bookmarks, no sandbox (README: not built yet).</td><td><span class="pill p-ext">not built</span></td></tr>
-<tr><td>Metadata through ImageIO plus Exiv2.</td><td>ImageIO only.</td><td><span class="pill p-ext">not built</span></td></tr>
-<tr><td>Asset has a perceptual hash (duplicate detection, v1).</td><td>Column exists; import writes nil.</td><td><span class="pill p-ext">not built</span></td></tr>
-<tr><td>Pipeline order lists steps 1 to 9.</td><td>Code also runs Calibration first in step 3, Remove tool spots and Lens Blur between steps 1 and 2. They are described elsewhere in the PRD but not in the pipeline list.</td><td><span class="pill p-agent">doc drift</span></td></tr>
+<tr><td>Metadata through ImageIO plus Exiv2.</td><td>ImageIO plus Atelier's own XMP sidecar reader and writer; no Exiv2.</td><td><span class="pill p-ext">not built</span></td></tr>
+<tr><td>Asset has a perceptual hash (duplicate detection, v1).</td><td>A nullable column; import writes nil and nothing reads it.</td><td><span class="pill p-ext">not built</span></td></tr>
+<tr><td>Pipeline order lists steps 1 to 9.</td><td>Code also runs Calibration first in step 3, Remove tool spots and Lens Blur between steps 1 and 2. The detailed PRD sections say where they run; the numbered list doesn't.</td><td><span class="pill p-agent">doc drift</span></td></tr>
 <tr><td>UI: AppKit for grid and loupe (NSCollectionView, Metal-backed views).</td><td>Grid is <code>NSCollectionView</code>; the photo view is an AppKit <code>ZoomScrollView</code> whose layer shows IOSurfaces from the render queue.</td><td><span class="pill p-ok">matches</span></td></tr>
 <tr><td>Catalog: SQLite via GRDB in WAL, in a <code>.atelier</code> package on the local SSD; previews beside it; snapshot on quit, keep 10.</td><td>As specified.</td><td><span class="pill p-ok">matches</span></td></tr>
 <tr><td>Agents connect only through the local helper and a private socket; previews and location off by default.</td><td>As specified.</td><td><span class="pill p-ok">matches</span></td></tr>
@@ -659,7 +663,7 @@ footer { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--line);
 </tbody></table></div>
 </section>
 
-<footer>Written from the source of roshan-davis/atelier at <span class="mono">c146785</span> on Nov 16, 2026. Line and call counts come from grep over <code>Sources/</code>; behaviour descriptions come from reading the files named above. When the code changes, regenerate the numbers before trusting them.</footer>
+<footer>Written from the source of roshan-davis/atelier at <span class="mono">c146785</span> on Nov 16, 2026. Line and call counts come from grep over <code>Sources/</code>; behaviour descriptions come from reading the files named above. Revised the same day after a source review on PR #156 (ONNX backends, mask sources, catalog keys, threading and hand-off details). When the code changes, regenerate the numbers before trusting them.</footer>
 </main>
 </div>
 </body></html>
