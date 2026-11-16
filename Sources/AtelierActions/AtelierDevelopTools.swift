@@ -29,8 +29,9 @@ public enum DevelopPart: String, AgentEnum {
     case lensBlur = "lens_blur"
     case calibration, crop, masks
 
-    /// Lightroom's Sync Settings leaves crop and masks off unless asked.
-    public static let syncDefault: [DevelopPart] = allCases.filter { $0 != .crop && $0 != .masks }
+    /// Lightroom's Sync Settings leaves crop and masks off unless asked; Lens Blur too, since its
+    /// focus and its Focus and Blur areas belong to the photo (as the preset part's default).
+    public static let syncDefault: [DevelopPart] = allCases.filter { $0 != .crop && $0 != .masks && $0 != .lensBlur }
 }
 
 public struct AdjustParameters: ActionParameters, Hashable, PhotoTargeting {
@@ -231,7 +232,7 @@ public struct SyncParameters: ActionParameters, Hashable, PhotoTargeting {
                                                from: 1, parts: [.tone])
     public static let fieldNotes: [String: FieldNote] = PhotoTargetNotes.notes.merging([
         "from": FieldNote("The photo whose settings are copied."),
-        "parts": FieldNote("Which parts to copy (default: everything but crop and masks, as Lightroom's Sync Settings)."),
+        "parts": FieldNote("Which parts to copy (default: everything but crop, masks and Lens Blur, as Lightroom's Sync Settings)."),
     ]) { $1 }
 }
 
@@ -375,7 +376,7 @@ public extension AtelierAgentTools {
     static let sync = MCPTool(
         name: "sync", title: "Sync settings from a photo",
         description: "Copies Develop settings from one photo onto others, like Lightroom's Sync Settings: the parts you "
-            + "name, or everything but crop and masks. One change; undo_change undoes it.",
+            + "name, or everything but crop, masks and Lens Blur. One change; undo_change undoes it.",
         inputSchema: ParameterSchema.of(SyncParameters.self).json, readOnly: false)
 
     static let reset = MCPTool(

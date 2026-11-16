@@ -15,7 +15,7 @@
 <h1>Lens Blur</h1>
 <p class="lede">Blurs the photo as a wide-open lens would, from how far away each part is: the background melts away, a foreground can go soft too, and bright points turn into bokeh. Use it to make a subject stand out from a busy scene, or to give a phone or small-sensor photo the look of a fast lens.</p>
 
-<div class="chips"><a href="#apply">Apply and Blur Amount</a><a href="#bokeh">Bokeh</a><a href="#focal-range">Focal Range</a><a href="#refine">Refine with masks</a><a href="#visualize">Visualize Depth</a><a href="#zoom">Up close</a><a href="#depth-model">The depth model</a><a href="#notes">Good to know</a></div>
+<div class="chips"><a href="#apply">Apply and Blur Amount</a><a href="#bokeh">Bokeh</a><a href="#focal-range">Focal Range</a><a href="#refine">Refine: Focus and Blur</a><a href="#visualize">Visualize Depth</a><a href="#zoom">Up close</a><a href="#depth-model">The depth model</a><a href="#notes">Good to know</a></div>
 
 <figure>
   <div class="panel narrow" style="margin:0 auto">
@@ -33,10 +33,7 @@
       <div class="sl" data-name="Far" data-value="80" data-at="0.8" data-def="0.2"></div>
       <div class="row"><span style="color:var(--app-text-2)">⌖</span> <span class="btn">Subject</span><span class="grow" style="flex:1"></span><span>☐ Visualize Depth</span></div>
       <div class="gh">Refine</div>
-      <div class="row"><span class="name">Hiker</span><span class="btn">Keep Sharp ▾</span></div>
-      <div class="row"><span class="name">Log</span><span class="btn">Keep Sharp ▾</span></div>
-      <div class="row"><span class="name">Mask 3</span><span class="btn">Not Used ▾</span></div>
-      <div class="row"><span class="btn">Edit Masks…</span></div>
+      <div class="row"><span class="btn">Refine…</span> <span style="color:var(--app-text-2);font-size:11px">Focus: 1 part</span></div>
     </div>
   </div>
 </figure>
@@ -69,16 +66,17 @@
   <tr><td>Near, Far</td><td>Fine-tune the range by hand. A narrow range gives a thin plane of focus; a wide one keeps more of the scene sharp.</td></tr>
 </table>
 
-<h2 id="refine">Refine with masks</h2>
-<p>The depth model is good but not perfect: a strand of hair, a hand held out, or a sign at the subject's side can land at the wrong depth. <b>Refine</b> fixes that, like Lightroom's Focus and Blur brushes, with the masks you build in <a href="masking.html">Masking</a> and every tool there.</p>
+<h2 id="refine">Refine: Focus and Blur</h2>
+<p>The depth model is good but not perfect: a strand of hair, a hand held out, or a sign at the subject's side can land at the wrong depth. <b>Refine</b> fixes that, like Lightroom's Focus and Blur brushes, with the full set of selection tools and edge controls.</p>
 <ol>
-  <li>Click <b>Make a Mask…</b> (or <b>Edit Masks…</b>), or open Masking yourself, and build the mask: for a person, <a href="masking.html#people">Select People</a> with <b>Entire Person</b> (not only skin), then Fine Edges for hair; add or subtract parts, brush the edge, and rename it if you like.</li>
-  <li>Back in the Lens Blur panel, every mask on the photo is listed under Refine by name. Set it to <b>Keep Sharp</b> (its area stays in focus whatever its depth) or <b>Blur</b> (it blurs fully). <b>Not Used</b> leaves it out.</li>
+  <li>Click <b>Refine…</b>. Lens Blur's refine panel opens on the photo, like Masking, with <b>Done</b> to close it.</li>
+  <li><b>Add to Focus</b> marks what stays sharp whatever its depth; <b>Add to Blur</b> what blurs fully. Pick how: <b>Brush</b> to paint (⌥ erases, [ and ] change the size), <b>Select People</b> (starts with Entire Person and Fine Edges, so hair is included), <b>Select Subject</b>, <b>Select Object</b>, a gradient, or a color or luminance range. <b>Subtract</b> cuts a part out.</li>
+  <li>Select a part to refine its edge: <b>Feather</b>, <b>Refine Edge</b>, <b>Grow/Shrink</b> and <b>Fine Edges</b>, the same controls as in Masking. Select the area itself for its <b>Amount</b> (how fully it keeps sharp or blurs) and Invert. <b>Show Overlay</b> (O) tints it on the photo.</li>
 </ol>
-<p>The choice sets the mask's <b>Lens Focus</b> slider in Masking to +100 or −100; move it there to do part of that, and the mask's Amount scales it too. A mask keeps all its other sliders, so the same mask can brighten a face in Masking and keep it sharp here. Hiding a mask with its eye in Masking turns off only its look; Lens Blur keeps using it until you set it to Not Used. Deleting a mask that Lens Blur uses asks first: <b>Delete</b> removes it from both, <b>Keep for Lens Blur Only</b> hides it in Masking and keeps it for the blur. Each choice is one undo step.</p>
+<p>The Focus and Blur areas belong to Lens Blur alone: they never show in Masking and never change the photo's look. The panel's switch turns them off with the blur, the eye beside an area hides it, and each change is one undo step. A preset's <b>Lens Blur</b> part carries them.</p>
 <figure>
-  <div class="frame compare" data-before="lens-blur-after.jpg" data-after="lens-blur-refine-after.jpg" data-labels="Focused on the hiker|The log mask set to Keep Sharp"></div>
-  <figcaption>A Radial Gradient mask over the log in front, set to Keep Sharp: the log stays sharp with the hiker, and everything else keeps its blur.</figcaption>
+  <div class="frame compare" data-before="lens-blur-after.jpg" data-after="lens-blur-refine-after.jpg" data-labels="Focused on the hiker|With a Focus area on the log"></div>
+  <figcaption>A Focus area over the log in front (a Radial Gradient): the log stays sharp with the hiker, and everything else keeps its blur.</figcaption>
 </figure>
 
 <h2 id="visualize">Visualize Depth</h2>
@@ -101,7 +99,7 @@
 <h2 id="notes">Good to know</h2>
 <ul>
   <li>Lens Blur works on the whole, uncropped photo in linear light before the tone and color panels, so highlights spread as light does and your other edits apply to the blurred photo. Masks still select from the sharp photo.</li>
-  <li>Edges of the subject stay as sharp as in the photo; something in front of the subject blurs over it, as through a lens. Where the depth model is unsure (fine hair, thin branches) the edge can blur a little: build a mask with Select People (Entire Person) and Fine Edges, and set it to <a href="#refine">Keep Sharp</a>.</li>
+  <li>Edges of the subject stay as sharp as in the photo; something in front of the subject blurs over it, as through a lens. Where the depth model is unsure (fine hair, thin branches) the edge can blur a little: add a <a href="#refine">Focus</a> area with Select People.</li>
   <li>Turn the panel off with the switch in its header to compare, as with any panel.</li>
   <li>New presets have a <b>Lens Blur</b> part, unticked by default, because the focus belongs to the photo it was set on. Copy and Paste Settings and Sync Settings carry it.</li>
 </ul>

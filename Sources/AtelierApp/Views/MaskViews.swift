@@ -585,35 +585,43 @@ struct MasksPanel: View {
 
     var body: some View {
         panel
-            .alert(lensBlurDeleteTitle, isPresented: Binding(get: { develop.pendingLensBlurMaskDelete != nil },
-                                                             set: { if !$0 { develop.pendingLensBlurMaskDelete = nil } })) {
-                Button("Keep for Lens Blur Only") { develop.finishLensBlurMaskDelete(keepForLensBlur: true) }
-                Button("Delete", role: .destructive) { develop.finishLensBlurMaskDelete(keepForLensBlur: false) }
-                Button("Cancel", role: .cancel) { develop.pendingLensBlurMaskDelete = nil }
-            } message: {
-                Text("Lens Blur uses it to keep an area sharp or blur it. Delete removes it there too. Keep for Lens Blur Only hides it here, so it no longer changes the photo's look, and Lens Blur keeps using it.")
-            }
-    }
-
-    private var lensBlurDeleteTitle: String {
-        let names = develop.pendingLensBlurMaskDelete?.names ?? []
-        return names.count == 1 ? "“\(names[0])” is used by Lens Blur" : "\(names.count) of these masks are used by Lens Blur"
     }
 
     private var panel: some View {
         VStack(alignment: .leading, spacing: 10) {
-            maskList
-            HStack(spacing: 6) {
-                kindMenu(develop.masks.isEmpty ? "Create New Mask" : "New Mask") { develop.createMask($0) }
-                    .help("Make a new mask: Brush (K), Linear Gradient (M), Radial Gradient (⇧M), Luminance Range, Color Range (⇧J), Depth Range, Select Subject, Select Sky or Select Background")
-                if develop.selectedMask != nil {
-                    kindMenu("Add") { develop.addComponent($0, mode: .add) }
-                        .help("Add a part to the selected mask")
-                    kindMenu("Subtract") { develop.addComponent($0, mode: .subtract) }
-                        .help("Cut a part out of the selected mask")
+            // One group, so the panel stays within SwiftUI's ten views per builder.
+            Group {
+                if refiningLensBlur {
+                    Text("Paint or select where Lens Blur keeps the photo sharp (Focus) and where it blurs it fully (Blur), whatever the depth. Refine the edges with the part's settings below.")
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+                maskList
+                if refiningLensBlur {
+                    HStack(spacing: 6) {
+                        kindMenu("Add to Focus") { develop.addLensBlurPart($0, to: .focus, mode: .add) }
+                            .help("Keep an area sharp whatever its depth: paint it, or select a person, subject or object")
+                        kindMenu("Add to Blur") { develop.addLensBlurPart($0, to: .blur, mode: .add) }
+                            .help("Blur an area fully whatever its depth")
+                        if develop.selectedMask != nil {
+                            kindMenu("Subtract") { develop.addComponent($0, mode: .subtract) }
+                                .help("Cut a part out of the selected area")
+                        }
+                    }
+                    .controlSize(.small)
+                } else {
+                    HStack(spacing: 6) {
+                        kindMenu(develop.masks.isEmpty ? "Create New Mask" : "New Mask") { develop.createMask($0) }
+                            .help("Make a new mask: Brush (K), Linear Gradient (M), Radial Gradient (⇧M), Luminance Range, Color Range (⇧J), Depth Range, Select Subject, Select Sky or Select Background")
+                        if develop.selectedMask != nil {
+                            kindMenu("Add") { develop.addComponent($0, mode: .add) }
+                                .help("Add a part to the selected mask")
+                            kindMenu("Subtract") { develop.addComponent($0, mode: .subtract) }
+                                .help("Cut a part out of the selected mask")
+                        }
+                    }
+                    .controlSize(.small)
                 }
             }
-            .controlSize(.small)
             Toggle("Show Overlay", isOn: $develop.showMaskOverlay)
                 .help("Tint the selected mask red on the photo (O)")
             if let tool = develop.maskTool {
@@ -638,9 +646,9 @@ struct MasksPanel: View {
             }
             if let mask = develop.selectedMask {
                 Divider()
-                adjustments(mask)
+                if refiningLensBlur { lensBlurAreaSettings(mask) } else { adjustments(mask) }
             }
-            if develop.selectedMask == nil, develop.masks.isEmpty, develop.maskTool == nil {
+            if !refiningLensBlur, develop.selectedMask == nil, develop.masks.isEmpty, develop.maskTool == nil {
                 Text("Masks limit an adjustment to part of the photo: a graduated sky, a lighter face, a darker corner. Create a mask, then move its sliders.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -650,7 +658,26 @@ struct MasksPanel: View {
                 Spacer()
                 Button("Done") { develop.isMasking = false }
                     .keyboardShortcut(.defaultAction)
-                    .help("Close Masking; masks keep working (Return)")
+                    .help(refiningLensBlur ? "Close Lens Blur's Refine; the areas keep working (Return)"
+                          : "Close Masking; masks keep working (Return)")
+            }
+        }
+    }
+
+    /// Lens Blur's Refine: these are the mask tools on Lens Blur's Focus and Blur areas.
+    private var refiningLensBlur: Bool { develop.maskScope == .lensBlur }
+
+    /// A Focus or Blur area's own settings: how strongly it works (its Amount, as Lightroom's
+    /// brush Amount) and Invert. No look sliders: the areas change only the blur.
+    private func lensBlurAreaSettings(_ mask: DevelopSettings.Mask) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(mask.name).font(.callout.weight(.semibold))
+            SliderRow(label: "Amount", value: Binding(get: { min(mask.amount, 100) }, set: { develop.setMaskAmount($0) }),
+                      range: 0...100, step: 1, origin: 100, format: { "\(Int($0.rounded()))%" })
+                .help(mask.lensBlurRole == .blur ? "How fully the area blurs" : "How fully the area stays sharp")
+            if develop.selectedComponentID == nil {
+                Toggle("Invert", isOn: Binding(get: { mask.inverted }, set: { _ in develop.invertMask(mask.id) }))
+                    .help(mask.lensBlurRole == .blur ? "Blur everywhere except the area" : "Keep everything sharp except the area")
             }
         }
     }
@@ -696,8 +723,7 @@ struct MasksPanel: View {
                     .frame(width: 16)
             }
             .buttonStyle(.borderless)
-            .help(mask.isHidden ? "Show this mask's effect" : mask[.lensFocus] != 0
-                  ? "Hide this mask's effect on the look (Lens Blur keeps using it)" : "Hide this mask's effect")
+            .help(mask.isHidden ? "Show this mask's effect" : "Hide this mask's effect")
             Image(systemName: mask.components.first?.kind.symbol ?? "circle.dashed")
                 .foregroundStyle(.secondary)
                 .frame(width: 16)
@@ -725,8 +751,10 @@ struct MasksPanel: View {
         .contentShape(Rectangle())
         .onTapGesture { develop.select(mask: mask.id) }
         .contextMenu {
-            Button("Rename…") { startRename(mask) }
-            Button("Duplicate \(mask.name)") { develop.duplicateMask(mask.id) }
+            if !refiningLensBlur {
+                Button("Rename…") { startRename(mask) }
+                Button("Duplicate \(mask.name)") { develop.duplicateMask(mask.id) }
+            }
             Button(mask.inverted ? "Uninvert" : "Invert") { develop.invertMask(mask.id) }
             Menu("Intersect Mask With") {
                 ForEach(Kind.allCases, id: \.self) { kind in
@@ -1109,7 +1137,7 @@ struct MasksPanel: View {
                 Toggle("Invert", isOn: Binding(get: { mask.inverted }, set: { _ in develop.invertMask(mask.id) }))
                     .help("Apply the sliders everywhere except the mask")
             }
-            ForEach(shownParameters(mask), id: \.self) { parameter in
+            ForEach(DevelopSettings.LocalParameter.allCases, id: \.self) { parameter in
                 if parameter.group > 0, parameter == DevelopSettings.LocalParameter.allCases.first(where: { $0.group == parameter.group }) {
                     Spacer().frame(height: 2)
                 }
@@ -1131,13 +1159,6 @@ struct MasksPanel: View {
         }
     }
 
-    /// The mask's sliders: Lens Focus only once Lens Blur is applied or the mask already has it
-    /// (a Focus or Blur Area), since it does nothing else.
-    private func shownParameters(_ mask: DevelopSettings.Mask) -> [DevelopSettings.LocalParameter] {
-        let showsFocus = develop.value(.lensBlurApply) >= 0.5 || mask[.lensFocus] != 0
-        return DevelopSettings.LocalParameter.allCases.filter { $0 != .lensFocus || showsFocus }
-    }
-
     /// The mask Hue track, -180 to 180 around red: cyan, blue, magenta, red, yellow, green, cyan.
     private static let hueTrack: [Color] = {
         let hues: [Double] = [0.5, 0.667, 0.833, 0, 0.167, 0.333, 0.5]
@@ -1151,8 +1172,6 @@ struct MasksPanel: View {
         case .saturation: return [Color.gray, Color(red: 1, green: 0.4, blue: 0.2), Color(red: 0.3, green: 0.6, blue: 1)]
         // Where red goes: left through magenta and blue, right through yellow and green.
         case .hue: return Self.hueTrack
-        // Blur on the left, sharp (focus) on the right.
-        case .lensFocus: return [Color(red: 0.55, green: 0.6, blue: 0.75), Color(red: 1, green: 0.75, blue: 0.3)]
         default: return nil
         }
     }

@@ -6,30 +6,6 @@ import SwiftUI
 /// the Focal Range on a near-to-far depth strip, set by the focus picker (click the photo) or
 /// Subject; Visualize Depth shows the depth on the photo. It runs on the depth model, so before
 /// that is downloaded the panel offers it.
-/// What a mask does for Lens Blur, from its Lens Focus slider.
-enum LensBlurRole: CaseIterable, Hashable {
-    case none, sharp, blur
-
-    init(_ lensFocus: Double) { self = lensFocus > 0 ? .sharp : lensFocus < 0 ? .blur : .none }
-
-    var title: String {
-        switch self {
-        case .none: return "Not Used"
-        case .sharp: return "Keep Sharp"
-        case .blur: return "Blur"
-        }
-    }
-
-    /// The Lens Focus a mask gets when picked: full strength (the slider in Masking lowers it).
-    var lensFocus: Double {
-        switch self {
-        case .none: return 0
-        case .sharp: return 100
-        case .blur: return -100
-        }
-    }
-}
-
 struct LensBlurPanel: View {
     @ObservedObject var develop: DevelopController
 
@@ -113,42 +89,30 @@ struct LensBlurPanel: View {
         }
     }
 
-    /// Refine, like Lightroom's Focus and Blur brushes but with the masks built in Masking: each
-    /// named mask on the photo can keep its area sharp or blur it, whatever the depth. The mask
-    /// is made and refined in Masking (Select People > Entire Person, Fine Edges, Brush...), keeps
-    /// any other sliders it has, and the same mask can serve here and there.
+    /// Refine, Lightroom's Focus and Blur brushes with every mask tool: Refine… opens Lens
+    /// Blur's own Focus and Blur areas on the photo (Brush, Select People, Select Subject...,
+    /// with Feather, Refine Edge, Grow and Fine Edges). The areas belong to Lens Blur only.
     private var refine: some View {
         VStack(alignment: .leading, spacing: 7) {
             GroupHeading(title: "Refine")
-            let masks = develop.settings.masks
-            ForEach(masks) { mask in
-                HStack(spacing: 8) {
-                    Text(mask.name)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .frame(width: 110, alignment: .leading)
-                        .help(mask.isHidden ? "\(mask.name) is hidden in Masking: it doesn't change the look, but Lens Blur can still use it" : mask.name)
-                    Picker(mask.name, selection: Binding(get: { LensBlurRole(mask[.lensFocus]) },
-                                                         set: { develop.setLensBlurRole($0, of: mask.id) })) {
-                        ForEach(LensBlurRole.allCases, id: \.self) { Text($0.title).tag($0) }
-                    }
-                    .labelsHidden()
-                    .controlSize(.small)
-                    .help("Keep Sharp: the mask's area stays in focus. Blur: it blurs fully. Its Lens Focus slider in Masking sets how strongly.")
-                }
-                .font(.callout)
-            }
             HStack(spacing: 8) {
-                Button(masks.isEmpty ? "Make a Mask…" : "Edit Masks…") { develop.isMasking = true }
+                Button("Refine…") { develop.startLensBlurRefine() }
                     .controlSize(.small)
-                    .help("Open Masking to build or refine a mask, then pick it here")
+                    .help("Paint or select where Lens Blur keeps the photo sharp or blurs it, whatever the depth")
+                Text(areaSummary).font(.caption).foregroundStyle(.secondary)
                 Spacer(minLength: 0)
             }
-            Text(masks.isEmpty
-                 ? "Build a mask in Masking (for a person: Select People > Entire Person, with Fine Edges for hair), then choose here whether it keeps sharp or blurs."
-                 : "A mask keeps its other sliders, so one mask can brighten a face and keep it sharp.")
-                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    /// "Focus: 2 parts · Blur: 1 part", or that there are none yet.
+    private var areaSummary: String {
+        let parts = DevelopSettings.LensBlurRole.allCases.compactMap { role -> String? in
+            guard let area = develop.lensBlurArea(role), !area.components.isEmpty else { return nil }
+            let count = area.components.count
+            return "\(role.title): \(count) part\(count == 1 ? "" : "s")\(area.isHidden ? " (hidden)" : "")"
+        }
+        return parts.isEmpty ? "No Focus or Blur areas" : parts.joined(separator: " · ")
     }
 
     private static func symbol(_ shape: LensBlur.Bokeh) -> String {

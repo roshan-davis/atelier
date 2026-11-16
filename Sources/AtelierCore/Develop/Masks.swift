@@ -37,18 +37,13 @@ extension DevelopSettings {
 
         public var hasAdjustments: Bool { !values.isEmpty || !grade.isEmpty }
 
-        /// Whether the mask changes the photo's look (tone, color, detail): every slider but Lens
-        /// Focus, which only tells Lens Blur where to stay sharp or blur (a Focus or Blur area).
-        public var hasLookAdjustments: Bool {
-            !grade.isEmpty || values.keys.contains { $0 != LocalParameter.lensFocus.rawValue }
-        }
+        /// For a Lens Blur area (`DevelopSettings.lensBlurAreas`): whether it keeps its area sharp
+        /// or blurs it. Nil for an ordinary mask.
+        public var lensBlurRole: LensBlurRole?
 
-        /// How strongly the mask keeps its area sharp (`focus`) or blurs it (`blur`) for Lens
-        /// Blur, 0...1 each, with Amount applied.
-        public var lensFocusStrength: (focus: Double, blur: Double) {
-            let value = min(max(effective(.lensFocus) / 100, -1), 1)
-            return (max(value, 0), max(-value, 0))
-        }
+        /// How strongly a Lens Blur area works, 0...1: its Amount (100% is full), as the Focus
+        /// and Blur brushes' strength.
+        public var lensBlurStrength: Double { min(max(amount / 100, 0), 1) }
 
         public mutating func resetAdjustments() {
             values = [:]
@@ -88,7 +83,7 @@ extension DevelopSettings {
         }
 
         private enum CodingKeys: String, CodingKey {
-            case id, name, components, isHidden, inverted, amount, values, grade
+            case id, name, components, isHidden, inverted, amount, values, grade, lensBlurRole
         }
 
         /// Missing keys take their defaults, so masks keep loading as fields are added.
@@ -100,6 +95,7 @@ extension DevelopSettings {
             isHidden = try c.decodeIfPresent(Bool.self, forKey: .isHidden) ?? false
             inverted = try c.decodeIfPresent(Bool.self, forKey: .inverted) ?? false
             amount = try c.decodeIfPresent(Double.self, forKey: .amount) ?? 100
+            lensBlurRole = try? c.decodeIfPresent(LensBlurRole.self, forKey: .lensBlurRole)
             let stored = try c.decodeIfPresent([String: Double].self, forKey: .values) ?? [:]
             for (key, value) in stored {
                 if let parameter = LocalParameter(rawValue: key) { self[parameter] = value }
@@ -120,7 +116,16 @@ extension DevelopSettings {
             if amount != 100 { try c.encode(amount, forKey: .amount) }
             if !values.isEmpty { try c.encode(values, forKey: .values) }
             if !grade.isEmpty { try c.encode(grade, forKey: .grade) }
+            try c.encodeIfPresent(lensBlurRole, forKey: .lensBlurRole)
         }
+    }
+
+    /// What a Lens Blur area does: keeps its area in focus (Lightroom's Focus brush) or blurs it
+    /// fully (the Blur brush).
+    public enum LensBlurRole: String, Codable, CaseIterable, Sendable {
+        case focus, blur
+
+        public var title: String { self == .focus ? "Focus" : "Blur" }
     }
 
     /// The sliders a mask has, in Lightroom's order.
@@ -130,15 +135,11 @@ extension DevelopSettings {
         case texture, clarity, dehaze
         case hue, saturation
         case sharpness, noise, moire, defringe
-        /// Lens Blur's refine (AT-072): + keeps the area sharp (Focus), - blurs it fully (Blur).
-        /// Only Lens Blur reads it, so a mask with only this changes nothing else.
-        case lensFocus
 
         public var label: String {
             switch self {
             case .temperature: return "Temp"
             case .moire: return "Moiré"
-            case .lensFocus: return "Lens Focus"
             default: return rawValue.prefix(1).uppercased() + rawValue.dropFirst()
             }
         }
@@ -162,7 +163,6 @@ extension DevelopSettings {
             case .texture, .clarity, .dehaze: return 2
             case .hue, .saturation: return 3
             case .sharpness, .noise, .moire, .defringe: return 4
-            case .lensFocus: return 5
             }
         }
     }
@@ -636,13 +636,12 @@ extension DevelopSettings {
     }
 
     /// The next free "Mask n" name.
-    public func nextMaskName(_ base: String = "Mask") -> String {
-        let prefix = base + " "
+    public func nextMaskName() -> String {
         let used = masks.compactMap { mask -> Int? in
-            guard mask.name.hasPrefix(prefix) else { return nil }
-            return Int(mask.name.dropFirst(prefix.count))
+            guard mask.name.hasPrefix("Mask ") else { return nil }
+            return Int(mask.name.dropFirst(5))
         }
-        return "\(base) \((used.max() ?? 0) + 1)"
+        return "Mask \((used.max() ?? 0) + 1)"
     }
 }
 

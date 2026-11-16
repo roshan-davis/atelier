@@ -442,7 +442,8 @@ struct DevelopPanel: View {
                         }
                     }
                     if develop.isMasking {
-                        PanelSection(title: "Masking", isExpanded: .constant(true), soloMode: $soloMode,
+                        PanelSection(title: develop.maskScope == .lensBlur ? "Lens Blur Refine" : "Masking",
+                                     isExpanded: .constant(true), soloMode: $soloMode,
                                      isModified: !develop.masks.isEmpty, reset: { develop.deleteAllMasks() },
                                      expandAll: expandAll, collapseAll: collapseAll) {
                             MasksPanel(develop: develop)

@@ -31,6 +31,11 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
     /// Local adjustments, applied in order after the global ones (see Masks.swift).
     public var masks: [Mask] = []
 
+    /// Lens Blur's own Focus and Blur areas (AT-072 Refine): masks drawn and refined with the
+    /// mask tools in Lens Blur's refine mode, kept apart from `masks` (they change only the blur,
+    /// never the look, and never show in Masking). See `Mask.lensBlurRole`.
+    public var lensBlurAreas: [Mask] = []
+
     /// The Remove tool's Heal and Clone spots, applied in order to the corrected photo before
     /// every tone and color step (see Spots.swift and `SpotRenderer`).
     public var spots: [Spot] = []
@@ -224,6 +229,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         crop = try c.decodeIfPresent(Crop.self, forKey: Key("crop"))
         // A mask this version can't read never costs the photo its other settings.
         masks = (try? c.decodeIfPresent([Mask].self, forKey: Key("masks"))) ?? []
+        lensBlurAreas = (try? c.decodeIfPresent([Mask].self, forKey: Key("lensBlurAreas"))) ?? []
         spots = (try? c.decodeIfPresent([Spot].self, forKey: Key("spots"))) ?? []
         profile = (try? c.decodeIfPresent(Profile.self, forKey: Key("profile"))) ?? .cameraMatching
         lensProfileCorrections = try c.decodeIfPresent(Bool.self, forKey: Key("lensProfileCorrections")) ?? true
@@ -249,6 +255,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
         if !pointCurves.isEmpty { try c.encode(pointCurves, forKey: Key("pointCurves")) }
         try c.encodeIfPresent(storedCrop, forKey: Key("crop"))
         if !masks.isEmpty { try c.encode(masks, forKey: Key("masks")) }
+        if !lensBlurAreas.isEmpty { try c.encode(lensBlurAreas, forKey: Key("lensBlurAreas")) }
         if !spots.isEmpty { try c.encode(spots, forKey: Key("spots")) }
         if profile != .cameraMatching { try c.encode(profile, forKey: Key("profile")) }
         if !lensProfileCorrections { try c.encode(false, forKey: Key("lensProfileCorrections")) }
@@ -262,7 +269,7 @@ public struct DevelopSettings: Codable, Hashable, Sendable {
     public static let neutral = DevelopSettings()
 
     public var isNeutral: Bool {
-        temperature == nil && values.isEmpty && pointCurves.isEmpty && storedCrop == nil && masks.isEmpty && spots.isEmpty
+        temperature == nil && values.isEmpty && pointCurves.isEmpty && storedCrop == nil && masks.isEmpty && lensBlurAreas.isEmpty && spots.isEmpty
             && profile == .cameraMatching && lensProfileCorrections && !removeChromaticAberration && upright == nil
             && !constrainCrop && !monochrome && disabledPanels.isEmpty
     }

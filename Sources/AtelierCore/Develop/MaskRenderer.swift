@@ -16,7 +16,7 @@ extension DevelopRenderer {
     static func applyMasks(_ settings: DevelopSettings, to input: CIImage, scale: Double,
                            masks provider: MaskProvider?) -> CIImage {
         var image = input
-        for mask in settings.masks where !mask.isHidden && mask.hasLookAdjustments {
+        for mask in settings.masks where !mask.isHidden && mask.hasAdjustments {
             guard let alpha = maskImage(mask, base: input, provider: provider) else { continue }
             let adjusted = applyLocal(mask, to: image, scale: scale)
             let blend = CIFilter.blendWithMask()

@@ -96,6 +96,7 @@ public struct DevelopPreset: Codable, Hashable, Sendable, Identifiable {
             case .transform: return settings.upright != nil || settings.constrainCrop || parametersChanged
             case .crop: return settings.crop != nil
             case .masks: return !settings.masks.isEmpty
+            case .lensBlur: return !settings.lensBlurAreas.isEmpty || parametersChanged
             default: return parametersChanged
             }
         }
@@ -175,6 +176,8 @@ public struct DevelopPreset: Codable, Hashable, Sendable, Identifiable {
                 result.crop = settings.crop
             case .masks:
                 result.masks = settings.masks
+            case .lensBlur:
+                result.lensBlurAreas = settings.lensBlurAreas
             case .profile:
                 result.profile = settings.profile
             case .treatment:

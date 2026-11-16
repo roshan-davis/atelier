@@ -83,45 +83,43 @@ final class LensBlurTests: XCTestCase {
         XCTAssertEqual(after[edge], before[edge], accuracy: 0.02, "the far blur doesn't spill onto the sharp edge")
     }
 
-    /// Focus and Blur areas are masks with Lens Focus: they don't change the look themselves,
-    /// they hold their strength with Amount, and they reach Lens Blur as red (focus) and green (blur).
-    func testFocusAndBlurAreasAreMasksWithLensFocus() throws {
-        var focus = DevelopSettings.Mask(name: "Focus Area 1",
+    /// Focus and Blur areas are Lens Blur's own masks: kept apart from Masking's, carried by
+    /// the Lens Blur preset part, and drawn as red (focus) and green (blur) at their strength.
+    func testFocusAndBlurAreasBelongToLensBlur() throws {
+        var focus = DevelopSettings.Mask(name: "Focus",
                                          components: [.init(.radial(.init(center: .init(x: 0.75, y: 0.5),
                                                                            radiusX: 0.2, radiusY: 0.4)))])
-        focus[.lensFocus] = 100
-        XCTAssertTrue(focus.hasAdjustments)
-        XCTAssertFalse(focus.hasLookAdjustments, "a Focus Area changes nothing but the blur")
-        XCTAssertEqual(focus.lensFocusStrength.focus, 1)
-        XCTAssertEqual(focus.lensFocusStrength.blur, 0)
-        focus.amount = 50
-        XCTAssertEqual(focus.lensFocusStrength.focus, 0.5, accuracy: 1e-9)
-        focus.amount = 100
-        var blur = DevelopSettings.Mask(name: "Blur Area 1")
-        blur[.lensFocus] = -60
-        XCTAssertEqual(blur.lensFocusStrength.blur, 0.6, accuracy: 1e-9)
-        blur[.exposure] = 0.5
-        XCTAssertTrue(blur.hasLookAdjustments)
-
+        focus.lensBlurRole = .focus
+        XCTAssertFalse(focus.hasAdjustments, "an area changes nothing but the blur")
+        XCTAssertEqual(focus.lensBlurStrength, 1)
         var settings = DevelopSettings()
-        XCTAssertEqual(settings.nextMaskName("Focus Area"), "Focus Area 1")
-        settings.masks = [focus]
-        XCTAssertEqual(settings.nextMaskName("Focus Area"), "Focus Area 2")
-        XCTAssertEqual(settings.nextMaskName(), "Mask 1")
+        settings.lensBlurAreas = [focus]
+        XCTAssertTrue(settings.masks.isEmpty, "areas never show in Masking")
+        XCTAssertFalse(settings.isNeutral)
         XCTAssertEqual(try DevelopSettings.decoded(from: settings.encoded()), settings)
+        let old = try DevelopSettings.decoded(from: #"{"masks":[{"name":"Mask 1","values":{"exposure":0.5}}]}"#)
+        XCTAssertNil(old.masks.first?.lensBlurRole, "old masks stay ordinary masks")
+        XCTAssertTrue(old.lensBlurAreas.isEmpty)
+
+        let preset = DevelopPreset(name: "Blur", parts: [.lensBlur], settings: settings)
+        XCTAssertEqual(preset.applied(to: DevelopSettings()).lensBlurAreas, [focus], "the Lens Blur part carries them")
+        let masksOnly = DevelopPreset(name: "Masks", parts: [.masks], settings: settings)
+        XCTAssertTrue(masksOnly.applied(to: DevelopSettings()).lensBlurAreas.isEmpty)
 
         let base = CIImage(color: .gray).cropped(to: CGRect(x: 0, y: 0, width: 64, height: 32))
         XCTAssertNil(LensBlur.areas(DevelopSettings(), on: base, provider: nil), "no areas, nothing to pay")
+        settings.lensBlurAreas[0].amount = 50
         let areas = try XCTUnwrap(LensBlur.areas(settings, on: base, provider: nil))
         let pixels = try render(areas, width: 64, height: 32)
         let inside = (16 * 64 + 48) * 4, outside = (16 * 64 + 4) * 4
-        XCTAssertEqual(pixels[inside], 1, accuracy: 0.05, "focus strength in red")
+        XCTAssertEqual(pixels[inside], 0.5, accuracy: 0.05, "focus strength (Amount) in red")
         XCTAssertEqual(pixels[inside + 1], 0, accuracy: 0.01)
         XCTAssertEqual(pixels[outside], 0, accuracy: 0.01)
-        settings.masks[0].isHidden = true
-        XCTAssertNotNil(LensBlur.areas(settings, on: base, provider: nil), "hidden in Masking, still used by Lens Blur")
-        settings.masks[0][.lensFocus] = 0
-        XCTAssertNil(LensBlur.areas(settings, on: base, provider: nil), "Not Used takes it out")
+        settings.lensBlurAreas[0].lensBlurRole = .blur
+        let blurred = try render(try XCTUnwrap(LensBlur.areas(settings, on: base, provider: nil)), width: 64, height: 32)
+        XCTAssertEqual(blurred[inside + 1], 0.5, accuracy: 0.05, "blur strength in green")
+        settings.lensBlurAreas[0].isHidden = true
+        XCTAssertNil(LensBlur.areas(settings, on: base, provider: nil), "a hidden area does nothing")
     }
 
     /// The far half of the checker, under a Focus area, stays sharp; the near half, under a Blur

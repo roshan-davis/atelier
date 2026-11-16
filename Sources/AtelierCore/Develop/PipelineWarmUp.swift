@@ -58,6 +58,7 @@ extension DevelopRenderer {
     static func warmUpVariants(_ settings: DevelopSettings) -> [DevelopSettings] {
         var base = settings
         base.masks = []
+        base.lensBlurAreas = []
         var variants = [base]
         func probe(_ change: (inout DevelopSettings) -> Void) {
             var variant = base
