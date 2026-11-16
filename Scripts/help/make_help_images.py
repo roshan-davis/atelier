@@ -437,16 +437,22 @@ def calibration(image, red_hue=0, red_sat=0, green_hue=0, green_sat=0, blue_hue=
     return np.power(np.clip(out, 0, 1), 1 / 2.2)
 
 
-def _lens_gather(color, c, R, shape, cat_eye, count, skip):
+def _lens_gather(color, c, R, shape, cat_eye, count, skip, holes=None):
     """One level of Lens Blur's gather (atelierLensBlurGather): `c` is the signed blur, capped to
     this level's radius `R` (in its pixels) and divided by it; `skip` marks the pixels whose own
-    blur belongs to coarser levels (left at 0). Returns the blur and the spill."""
+    blur belongs to coarser levels (left at 0); `holes` the pixels sharp at this level (no
+    weight in atelierLensBlurWeigh), which take no light of their own and are never gathered.
+    Returns the blur and the spill."""
     from scipy.ndimage import map_coordinates
     h, w = c.shape
+    if holes is None:
+        holes = np.zeros((h, w), bool)
     yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
     half = 0.5 * np.hypot(w, h)
     vx, vy = (xx - w / 2) / half, (yy - h / 2) / half
-    weight = 1 / np.maximum((np.abs(c) * R) ** 2, 1)
+    hf = holes.astype(np.float32)
+    c_reach = np.where(holes, 1.0, c)
+    weight = np.where(holes, 0.0, 1 / np.maximum((np.abs(c) * R) ** 2, 1))
     total, acc, spill = weight.copy(), color * weight[..., None], np.zeros_like(weight)
     for i in range(count):
         r = R * np.sqrt((i + 0.5) / count)
@@ -454,7 +460,8 @@ def _lens_gather(color, c, R, shape, cat_eye, count, skip):
         ox, oy = r * np.cos(a), r * np.sin(a)
         cq = map_coordinates(c, [yy + oy, xx + ox], order=1, mode="nearest")
         cols = np.dstack([map_coordinates(color[..., k], [yy + oy, xx + ox], order=1, mode="nearest") for k in range(3)])
-        reach = np.where(cq > c, np.minimum(np.abs(cq), np.abs(c)), np.abs(cq)) * R
+        hq = map_coordinates(hf, [yy + oy, xx + ox], order=1, mode="nearest")
+        reach = np.where(cq > c_reach, np.minimum(np.abs(cq), np.abs(c_reach)), np.abs(cq)) * R
         dx, dy = -ox, -oy
         limit = 1.0
         if shape == 2:
@@ -462,7 +469,7 @@ def _lens_gather(color, c, R, shape, cat_eye, count, skip):
             limit = 0.80901699 / np.cos(t)
         elif shape == 4:
             limit = 1 / np.sqrt((dx / max(r, 1e-4) / 0.55) ** 2 + (dy / max(r, 1e-4)) ** 2)
-        cover = np.clip(reach * limit - r + 0.5, 0, 1)
+        cover = np.clip(reach * limit - r + 0.5, 0, 1) * (hq < 0.5)
         if cat_eye > 0:
             cover *= np.clip(reach - np.hypot(dx + cat_eye * 0.7 * vx * reach, dy + cat_eye * 0.7 * vy * reach) + 0.5, 0, 1)
         u = np.clip(r / np.maximum(reach * limit, 1e-3), 0, 1)
@@ -471,8 +478,9 @@ def _lens_gather(color, c, R, shape, cat_eye, count, skip):
         acc += cols * wq[..., None]
         total += wq
         spill += np.where((cq < c - 0.02) & (np.abs(cq) > np.abs(c)), wq, 0)
-    out = np.dstack([acc / total[..., None], spill / total])
-    return np.where(skip[..., None], 0.0, out)
+    alpha = np.where(holes, spill / (1 + spill), spill / np.maximum(total, 1e-6))
+    out = np.dstack([acc / np.maximum(total, 1e-6)[..., None], alpha])
+    return np.where((skip & ~holes)[..., None], 0.0, out)
 
 
 def lens_blur(image, depth, amount=0.5, near=0.7, far=0.8, shape=0, cat_eye=0.0, boost=0.5, areas=None):
@@ -498,19 +506,27 @@ def lens_blur(image, depth, amount=0.5, near=0.7, far=0.8, shape=0, cat_eye=0.0,
     while True:
         factor = 3.0 ** -k
         w, h = max(1, int(W * factor)), max(1, int(H * factor))
+        holes = None
         if k == 0:
             color, c = boosted, coc
         else:
-            small = cv2.resize(np.dstack([boosted, coc]), (w, h), interpolation=cv2.INTER_LANCZOS4)
-            color, c = small[..., :3], small[..., 3]
+            # Only pixels that blur by about a level pixel or more feed a coarse level, so a sharp
+            # edge doesn't spread a halo into the background's blur (atelierLensBlurWeigh).
+            wt = smoothstep(0.5, 1.5, np.abs(coc) * max_r * factor).astype(np.float32)
+            small_color = cv2.resize(boosted * wt[..., None], (w, h), interpolation=cv2.INTER_AREA)
+            small = cv2.resize(np.dstack([coc * wt, wt]), (w, h), interpolation=cv2.INTER_AREA)
+            sw = small[..., 1]
+            holes = sw < 0.02
+            color = np.where(holes[..., None], 0, small_color / np.maximum(sw, 1e-6)[..., None])
+            c = np.where(holes, 0, small[..., 0] / np.maximum(sw, 1e-6))
         R = min(12.0, max_r * factor)
         last = 12 * 3 ** k >= max_r or k >= 5
         cutoff = 1e9 if last else 4 * 3 ** (k + 1) * factor
-        skip = np.abs(c) * max_r * factor >= cutoff
+        skip = (np.abs(c) * max_r * factor >= cutoff) & (True if holes is None else ~holes)
         c = np.sign(c) * np.minimum(np.abs(c) * max_r * factor, R) / R
         count = min(112, max(12, round(np.pi * R * R / 3.5)))
         # Softened by under a pixel first, so fine texture doesn't come out mottled (LensBlur.prefilter).
-        out = _lens_gather(cv2.GaussianBlur(color, (0, 0), 0.8), c, R, shape, cat_eye, count, skip)
+        out = _lens_gather(cv2.GaussianBlur(color, (0, 0), 0.8), c, R, shape, cat_eye, count, skip, holes)
         levels.append(out if k == 0 else cv2.resize(out, (W, H), interpolation=cv2.INTER_LINEAR))
         if last:
             break

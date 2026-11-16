@@ -110,7 +110,8 @@ public enum LensBlur {
         guard isOn(settings), let kernels, let cocKernel = kernels["atelierLensBlurCoC"],
               let boostKernel = kernels["atelierLensBlurBoost"], let gather = kernels["atelierLensBlurGather"],
               let levelKernel = kernels["atelierLensBlurLevel"], let composite = kernels["atelierLensBlurComposite"],
-              let spillKernel = kernels["atelierLensBlurSpill"] else { return image }
+              let spillKernel = kernels["atelierLensBlurSpill"],
+              let weighKernel = kernels["atelierLensBlurWeigh"] else { return image }
         let extent = image.extent
         let longEdge = Double(max(extent.width, extent.height))
         let maxRadius = settings[.lensBlurAmount] / 100 * maxRadiusShare * longEdge
@@ -140,6 +141,16 @@ public enum LensBlur {
             let factor = pow(levelStep, -Double(level))
             let frame = CGRect(x: 0, y: 0, width: max(1, (extent.width * factor).rounded(.down)),
                                height: max(1, (extent.height * factor).rounded(.down)))
+            // What a level sees: only pixels that blur by about one of its pixels or more. A sharp
+            // pixel (the subject in focus) shrunk into a coarse level spread its color into the
+            // background's blur around it, a halo outside a sharp edge (Rosh's hat, Nov 16, 2026).
+            // Weighted (color and blur times the weight, the weight in alpha) and divided back
+            // out in the gather; level 0 keeps every pixel.
+            let minimum = level == 0 ? -1.0 : maxRadius * factor
+            func weighed(_ picture: CIImage, blurSizes: Bool) -> CIImage? {
+                weighKernel.apply(extent: extent, roiCallback: same,
+                                  arguments: [picture, coc, CIVector(x: minimum, y: blurSizes ? 1 : 0)])
+            }
             func shrink(_ picture: CIImage) -> CIImage {
                 let moved = picture.transformed(by: toOrigin)
                 guard level > 0 else { return moved }
@@ -160,9 +171,10 @@ public enum LensBlur {
             // bark) under it came out mottled, and a coarse level's upsizing made the mottle
             // large at 100%. Softening the colors by under a pixel first keeps the blur smooth
             // (checked on the redwoods photo at 100%, Nov 16, 2026).
-            guard let blurred = gather.apply(extent: frame, roiCallback: around,
-                                             arguments: [shrink(boosted).clampedToExtent().applyingGaussianBlur(sigma: prefilter),
-                                                         shrink(coc).clampedToExtent(),
+            guard let levelColor = weighed(boosted, blurSizes: false), let levelCoC = weighed(coc, blurSizes: true),
+                  let blurred = gather.apply(extent: frame, roiCallback: around,
+                                             arguments: [shrink(levelColor).clampedToExtent().applyingGaussianBlur(sigma: prefilter),
+                                                         shrink(levelCoC).clampedToExtent(),
                                                          CIVector(x: radius, y: shape, z: catEye, w: Double(samples)),
                                                          center, CIVector(x: maxRadius * factor, y: cutoff)])
             else { return image }
@@ -272,6 +284,19 @@ public enum LensBlur {
             return float4(c, c, c, 1.0);
         }
 
+        // A level's input, weighted by whether the pixel blurs by about a level pixel or more
+        // (params.x: the largest blur in this level's pixels; negative keeps every pixel).
+        // params.y 0: the color times the weight, the weight in alpha; 1: the signed blur times
+        // the weight in red, the weight in green. The gather divides the weight back out.
+        [[stitchable]] float4 atelierLensBlurWeigh(coreimage::sampler image, coreimage::sampler coc, float2 params,
+                                                   coreimage::destination dest) {
+            float c = coc.sample(coc.transform(dest.coord())).r;
+            float w = params.x < 0.0 ? 1.0 : smoothstep(0.5, 1.5, abs(c) * params.x);
+            if (params.y > 0.5) { return float4(c * w, w, 0.0, 1.0); }
+            float4 color = image.sample(image.transform(dest.coord()));
+            return float4(color.rgb * w, w);
+        }
+
         // Boost: the brightest highlights (near clipping) brighter, so they spread as bright
         // bokeh. Only those: boosting every light tone turned sunlit wood into flat white blobs
         // (checked on the redwoods splash photo, Nov 15, 2026).
@@ -294,13 +319,21 @@ public enum LensBlur {
             float catEye = params.z;
             int count = int(params.w + 0.5);
             float2 p = dest.coord();
-            float cp = coc.sample(coc.transform(p)).r;
-            if (abs(cp) * scale.x >= scale.y) { return float4(0.0); }
+            // color and coc are weighted (atelierLensBlurWeigh): a pixel with almost no weight is
+            // a hole, sharp at this level. It takes no light of its own and gathers what blurs
+            // onto it from around (so the level stays filled up to a sharp edge), and counts as
+            // sharp for what spills over it from in front.
+            float2 own = coc.sample(coc.transform(p)).rg;
+            bool hole = own.y < 0.02;
+            float cp = hole ? 0.0 : own.x / own.y;
+            if (!hole && abs(cp) * scale.x >= scale.y) { return float4(0.0); }
             // Radii in this level's pixels: a blur past the gather's reach is cut to it.
             cp = sign(cp) * min(abs(cp) * scale.x, R) / R;
+            float cpReach = hole ? 1.0 : cp;
             float rp = abs(cp) * R;
-            float selfWeight = 1.0 / max(rp * rp, 1.0);
-            float3 sum = color.sample(color.transform(p)).rgb * selfWeight;
+            float selfWeight = hole ? 0.0 : 1.0 / max(rp * rp, 1.0);
+            float4 ownColor = color.sample(color.transform(p));
+            float3 sum = hole ? float3(0.0) : ownColor.rgb / max(ownColor.a, 0.0001) * selfWeight;
             float total = selfWeight;
             float spill = 0.0;
             float2 toEdge = (p - frame.xy) / frame.z;
@@ -309,10 +342,12 @@ public enum LensBlur {
                 float angle = float(i) * 2.39996323;
                 float2 o = r * float2(cos(angle), sin(angle));
                 float2 q = p + o;
-                float cq = coc.sample(coc.transform(q)).r;
+                float2 there = coc.sample(coc.transform(q)).rg;
+                if (there.y < 0.02) { continue; }
+                float cq = there.x / there.y;
                 cq = sign(cq) * min(abs(cq) * scale.x, R) / R;
                 // Something farther than this pixel blurs onto it no more than this pixel blurs.
-                float reach = (cq > cp ? min(abs(cq), abs(cp)) : abs(cq)) * R;
+                float reach = (cq > cpReach ? min(abs(cq), abs(cpReach)) : abs(cq)) * R;
                 float2 d = -o;
                 float limit = 1.0;
                 if (shape == 2) {
@@ -334,11 +369,14 @@ public enum LensBlur {
                 if (shape == 1) { light = 0.55 + 0.9 * u * u * u * u; }
                 else if (shape == 3) { light = 0.12 + smoothstep(0.55, 0.85, u); }
                 float w = cover * light / max(reach * reach, 1.0);
-                sum += color.sample(color.transform(q)).rgb * w;
+                float4 seen = color.sample(color.transform(q));
+                sum += seen.rgb / max(seen.a, 0.0001) * w;
                 total += w;
                 if (cq < cp - 0.02 && abs(cq) > abs(cp)) { spill += w; }
             }
-            return float4(sum / total, spill / total);
+            // A hole's spill is measured against a sharp pixel's own weight (1), as at full size.
+            float alpha = hole ? spill / (1.0 + spill) : spill / max(total, 0.0001);
+            return float4(total > 0.0 ? sum / total : float3(0.0), alpha);
         }
 
         // Mixes in level `params.y` over the levels before it. params: largest blur (full-size
