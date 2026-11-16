@@ -2839,8 +2839,6 @@ struct MaskTool: Equatable {
     var kind: DevelopSettings.MaskComponent.Kind
     var mode: DevelopSettings.MaskComponent.Mode = .add
     var newMask = true
-    /// Lens Blur's Focus Area (+100) or Blur Area (-100): the new mask gets this Lens Focus.
-    var lensFocus: Double?
 
     var hint: String {
         switch kind {
@@ -2887,23 +2885,13 @@ extension DevelopController {
     }
 
     /// Create New Mask: drawn kinds wait for a drag on the photo; the others are made now.
-    func createMask(_ kind: MaskComponent.Kind, lensFocus: Double? = nil) {
+    func createMask(_ kind: MaskComponent.Kind) {
         guard assetID != nil else { return }
-        let tool = MaskTool(kind: kind, lensFocus: lensFocus)
         if kind.isDrawn {
-            maskTool = tool
+            maskTool = MaskTool(kind: kind)
         } else {
-            insert(MaskComponent(Self.defaultShape(kind)), tool: tool)
+            insert(MaskComponent(Self.defaultShape(kind)), tool: MaskTool(kind: kind))
         }
-    }
-
-    /// Lens Blur's Focus Area or Blur Area: a new mask made with any mask tool, with Lens Focus
-    /// at +100 (kept sharp) or -100 (blurred fully). Opens Masking, where it is drawn and refined
-    /// like any mask (Brush, Fine Edges, Subtract...), and turns Lens Blur on.
-    func createLensFocusArea(_ kind: MaskComponent.Kind, focus: Bool) {
-        guard assetID != nil else { return }
-        if !isMasking { isMasking = true }
-        createMask(kind, lensFocus: focus ? 100 : -100)
     }
 
     /// Add, Subtract or Intersect a part into the selected mask.
@@ -2948,20 +2936,11 @@ extension DevelopController {
         if case .sky = component.shape { checkSky() }
         if tool.newMask || selectedMask == nil {
             component.mode = .add
-            var mask = Mask(name: settings.nextMaskName(), components: [component])
-            var step = "New Mask: \(component.kind.title)"
-            if let lensFocus = tool.lensFocus {
-                // A Focus or Blur Area: named for what it does, and Lens Blur on with it.
-                let area = lensFocus > 0 ? "Focus Area" : "Blur Area"
-                mask.name = settings.nextMaskName(area)
-                mask[.lensFocus] = lensFocus
-                settings[.lensBlurApply] = 1
-                step = "Lens Blur: \(area)"
-            }
+            let mask = Mask(name: settings.nextMaskName(), components: [component])
             settings.masks.append(mask)
             selectedMaskID = mask.id
             selectedComponentID = component.id
-            changed(step: step)
+            changed(step: "New Mask: \(component.kind.title)")
         } else if let index = maskIndex(selectedMaskID) {
             settings.masks[index].components.append(component)
             selectedComponentID = component.id
@@ -3063,6 +3042,17 @@ extension DevelopController {
             && settings[.lensBlurFocusFar] == DevelopSettings.Parameter.lensBlurFocusFar.defaultValue
         setValues([.lensBlurApply: on ? 1 : 0], step: on ? "Lens Blur: Apply" : "Lens Blur: Off")
         if on, atDefault { focusLensBlurOnSubject() }
+    }
+
+    /// Lens Blur's Refine: a named mask keeps its area sharp, blurs it, or isn't used, through its
+    /// Lens Focus slider (full strength; Masking's slider fine-tunes it). Picking a use turns
+    /// Lens Blur on, in the same history step.
+    func setLensBlurRole(_ role: LensBlurRole, of id: UUID) {
+        guard let index = maskIndex(id), settings.masks[index][.lensFocus] != role.lensFocus
+                || (role != .none && settings[.lensBlurApply] < 0.5) else { return }
+        settings.masks[index][.lensFocus] = role.lensFocus
+        if role != .none { settings[.lensBlurApply] = 1 }
+        changed(step: "Lens Blur: \(settings.masks[index].name) \(role.title)")
     }
 
     /// Lens Blur's Subject focus: the Focal Range from the depths under the subject Select Subject
