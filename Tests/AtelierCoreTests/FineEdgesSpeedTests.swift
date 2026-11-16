@@ -7,9 +7,11 @@ import XCTest
 /// How fast Fine Edges runs with different ONNX Runtime settings, and whether each gives the same
 /// matte as the CPU. Opt-in, one setting per run (a Core ML attempt can crash the process):
 /// `ATELIER_FINE_EDGES_BENCH=<variant> ATELIER_FINE_EDGES_PHOTO=/path/photo swift test --filter
-/// FineEdgesSpeedTests`. Variants: cpu, cpu-threads-<n>, coreml-mlprogram-all,
-/// coreml-neuralnetwork-all, coreml-mlprogram-cpugpu, coreml-neuralnetwork-cpugpu. The CPU's
-/// matte is kept in the temporary folder for the others to compare with.
+/// FineEdgesSpeedTests`. Variants: cpu, cpu-threads-<n>, cpu-noprepack, cpu-basic, cpu-extended,
+/// coreml-mlprogram-all, coreml-neuralnetwork-all, coreml-mlprogram-cpugpu,
+/// coreml-neuralnetwork-cpugpu. The CPU's matte is kept in the temporary folder for the others to
+/// compare with. Each run also prints the memory the process peaked at (AT-077: on a Z f photo
+/// the Fast run took Atelier from about 6 to 14 GB), so run each variant in its own process.
 final class FineEdgesSpeedTests: XCTestCase {
     func testOneSetting() throws {
         let environment = ProcessInfo.processInfo.environment
@@ -27,9 +29,15 @@ final class FineEdgesSpeedTests: XCTestCase {
             try? FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
             FineEdges.coreMLOptionsOverride = ["ModelFormat": format, "MLComputeUnits": units, "ModelCacheDirectory": cache.path]
         }
+        if variant == "cpu-noprepack" { FineEdges.extraSessionConfig = ["session.disable_prepacking": "1"] }
+        if variant == "cpu-basic" { FineEdges.optimizationLevel = .basic }
+        if variant == "cpu-extended" { FineEdges.optimizationLevel = .extended }
         FineEdges.forgetSession()
+        let before = RenderMemory.footprint() ?? 0
         defer {
             FineEdges.prefersCoreML = false
+            FineEdges.extraSessionConfig = [:]
+            FineEdges.optimizationLevel = nil
             FineEdges.intraOpThreads = nil
             FineEdges.coreMLOptionsOverride = nil
             FineEdges.forgetSession()
@@ -50,6 +58,10 @@ final class FineEdgesSpeedTests: XCTestCase {
             let cpu = data.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
             difference = String(format: "%.5f (1/255 = 0.00392)", zip(values, cpu).map { abs($0 - $1) }.max() ?? 0)
         }
+        let peak = RenderMemory.peakFootprint() ?? 0, after = RenderMemory.footprint() ?? 0
+        let mb: (UInt64) -> String = { "\($0 / 1_048_576) MB" }
+        print("FINEBENCH-MEM: \(variant) (\(model.name)): before \(mb(before)), peak \(mb(peak)), "
+            + "after the runs \(mb(after)), peak added \(mb(peak > before ? peak - before : 0))")
         print("FINEBENCH: \(variant) (\(model.name)): first \(String(format: "%.1f", times[0])) s, second "
             + "\(String(format: "%.1f", times[1])) s; \(FineEdges.lastRun ?? ""); max difference from the CPU \(difference)")
     }

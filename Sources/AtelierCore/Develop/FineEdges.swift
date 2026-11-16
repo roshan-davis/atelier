@@ -225,6 +225,10 @@ public enum FineEdges {
     /// the CPU's thread count (nil: ONNX Runtime's own choice).
     nonisolated(unsafe) static var coreMLOptionsOverride: [String: String]?
     nonisolated(unsafe) static var intraOpThreads: Int?
+    /// For FineEdgesSpeedTests: extra session config entries and the graph optimization level
+    /// (nil: `.all`), to find the setting whose run needs the least memory.
+    nonisolated(unsafe) static var extraSessionConfig: [String: String] = [:]
+    nonisolated(unsafe) static var optimizationLevel: ORTGraphOptimizationLevel?
 
     /// `model`, loaded; Core ML runs what it can (ML Program, Neural Engine and GPU), ONNX
     /// Runtime's CPU code the rest. Call with the lock held.
@@ -237,7 +241,8 @@ public enum FineEdges {
         func options(coreML: Bool) throws -> ORTSessionOptions {
             let options = try ORTSessionOptions()
             try OnnxHost.tune(options)
-            try options.setGraphOptimizationLevel(.all)
+            for (key, value) in extraSessionConfig { try options.addConfigEntry(withKey: key, value: value) }
+            try options.setGraphOptimizationLevel(optimizationLevel ?? .all)
             if let intraOpThreads { try options.setIntraOpNumThreads(Int32(intraOpThreads)) }
             // Core ML compiles the model once and keeps it here; without a cache it compiles it
             // again every launch, which takes most of the first run's time.

@@ -218,7 +218,8 @@ final class LensBlurRealPhotoTests: XCTestCase {
         func log(_ step: String) {
             let mb = (RenderMemory.footprint() ?? 0) / 1_048_576
             let status = RenderMemory.shared.status
-            print("LENSBLUR-MEM: \(step): \(mb) MB (cache clears \(status.clears), Fine Edges runs \(FineEdges.runs), "
+            let peak = (RenderMemory.peakFootprint() ?? 0) / 1_048_576
+            print("LENSBLUR-MEM: \(step): \(mb) MB, peak so far \(peak) MB (cache clears \(status.clears), Fine Edges runs \(FineEdges.runs), "
                 + "depth runs \(DepthMap.runs))")
         }
         log("photo open, proxy")
@@ -233,14 +234,14 @@ final class LensBlurRealPhotoTests: XCTestCase {
         for value in stride(from: 40.0, through: 100.0, by: 3) {
             let previous = controller.fullImage
             controller.set(.lensBlurAmount, to: value)
-            try await fullFrame(nil, timeout: 120, after: previous)
+            try await fullFrame("memory: Amount \(Int(value))", timeout: 120, after: previous)
         }
         log("21 Amount edits at full size")
         controller.startLensBlurRefine()
         var previous = controller.fullImage
         controller.addLensBlurPart(.subject, to: .focus, mode: .add)
         try await idle()
-        try await fullFrame(nil, timeout: 300, after: previous)
+        try await fullFrame("memory: Select Subject Focus area", timeout: 300, after: previous)
         try await idle()
         log("Select Subject Focus area (Fine Edges \(FineEdges.active?.name ?? "not downloaded"))")
         for index in 0..<6 {
@@ -248,14 +249,14 @@ final class LensBlurRealPhotoTests: XCTestCase {
             controller.addLensBlurPart(.radial, to: .blur, mode: .add)
             controller.finishDrawing(.radial(.init(center: .init(x: 0.1 + 0.12 * Double(index), y: 0.15),
                                                    radiusX: 0.06, radiusY: 0.06)))
-            try await fullFrame(nil, timeout: 120, after: previous)
+            try await fullFrame("memory: Blur area \(index + 1)", timeout: 120, after: previous)
         }
         try await idle()
         log("6 Blur areas drawn")
         for value in stride(from: 100.0, through: 40.0, by: -6) {
             previous = controller.fullImage
             controller.set(.lensBlurAmount, to: value)
-            try await fullFrame(nil, timeout: 120, after: previous)
+            try await fullFrame("memory: Amount \(Int(value)) with the areas", timeout: 120, after: previous)
         }
         log("11 more Amount edits with the areas")
         Self.vmmap("peak")
