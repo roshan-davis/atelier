@@ -76,6 +76,12 @@ public enum LensBlur {
     /// The softening before each level's gather, in its pixels (see `apply`).
     static let prefilter = 0.8
 
+    /// Every slider Lens Blur reads (the render's Lens Blur cache keys on them).
+    static let parameters: [DevelopSettings.Parameter] = [
+        .lensBlurApply, .lensBlurAmount, .lensBlurBokeh, .lensBlurCatEye, .lensBlurBoost,
+        .lensBlurFocusNear, .lensBlurFocusFar,
+    ]
+
     /// Whether Lens Blur changes the photo: Apply on, some Blur Amount, and something outside
     /// the focal range.
     public static func isOn(_ settings: DevelopSettings) -> Bool {

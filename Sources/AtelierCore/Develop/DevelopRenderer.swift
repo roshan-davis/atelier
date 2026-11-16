@@ -633,9 +633,7 @@ public final class DevelopSession: @unchecked Sendable {
                                               guide: source, brushCache: brushCache)
         }
         if LensBlur.isOn(settings), let depth = depthMap(of: source, key: key) {
-            // Focus and Blur areas: masks with Lens Focus, on the same uncropped frame.
-            let areas = LensBlur.areas(settings, on: source, provider: sourceProvider)
-            image = LensBlur.apply(source, depth: depth, settings: settings, areas: areas)
+            image = lensBlurred(source, depth: depth, settings: settings, provider: sourceProvider)
         }
         if let crop {
             image = DevelopRenderer.applyGeometry(crop, to: image, cropping: cropping)
@@ -722,6 +720,53 @@ public final class DevelopSession: @unchecked Sendable {
         correctedCache.append((key, kept))
         if correctedCache.count > 2 { correctedCache.removeFirst() }
         return kept
+    }
+
+    /// Lens Blur's result for the settings it was made from (see `LensBlurKey`), the same
+    /// object each time, so Core Image finds it in its cache and a slider after Lens Blur (Basic,
+    /// Tone Curve...) doesn't blur the photo again. Built anew per render, the graph (its areas'
+    /// masks) never matched the cached one, so every Contrast tick re-ran the whole blur, seconds
+    /// on a full-size photo (Rosh, Nov 16, 2026). Two kept, most recent last.
+    private var lensBlurCache: [(key: LensBlurKey, image: CIImage)] = []
+
+    /// Lens Blur on `source`, from the cache when nothing it reads changed. Call with the lock held.
+    private func lensBlurred(_ source: CIImage, depth: CIImage, settings: DevelopSettings,
+                             provider: @escaping MaskProvider) -> CIImage {
+        let make = { () -> CIImage in
+            // Focus and Blur areas: masks with Lens Focus, on the same uncropped frame.
+            let areas = LensBlur.areas(settings, on: source, provider: provider)
+            return LensBlur.apply(source, depth: depth, settings: settings, areas: areas)
+        }
+        guard interactive else { return make() }
+        let found = [subjectMasks.count, peopleFound == nil ? 0 : 1, fineMattes.count, finePending.count,
+                     skyFound == nil ? 0 : 1]
+        let key = LensBlurKey(corrected: CorrectedKey(settings, view: .photo, denoised: isDenoised(settings)),
+                              spots: settings.spots,
+                              parameters: LensBlur.parameters.map { settings[$0] },
+                              areas: settings.lensBlurAreas,
+                              depth: ObjectIdentifier(depth),
+                              found: found)
+        if let index = lensBlurCache.firstIndex(where: { $0.key == key }) {
+            let cached = lensBlurCache.remove(at: index)
+            lensBlurCache.append(cached)
+            return cached.image
+        }
+        let image = make()
+        lensBlurCache.append((key, image))
+        if lensBlurCache.count > 2 { lensBlurCache.removeFirst() }
+        return image
+    }
+
+    /// Everything Lens Blur reads: step 1, the spots, its own sliders and areas, the depth map,
+    /// and how far the areas' masks have been found (Select People, Fine Edges... arrive in the
+    /// background, and the photo renders again then).
+    struct LensBlurKey: Equatable {
+        let corrected: CorrectedKey
+        let spots: [DevelopSettings.Spot]
+        let parameters: [Double]
+        let areas: [DevelopSettings.Mask]
+        let depth: ObjectIdentifier
+        let found: [Int]
     }
 
     /// Everything step 1 (`decodeAndCorrect`) reads, after the panel switches. Add a setting
