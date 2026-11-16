@@ -27,7 +27,10 @@ struct LensBlurPanel: View {
                 }
             }
         }
-        .onDisappear { develop.visualizesDepth = false }
+        .onDisappear {
+            develop.visualizesDepth = false
+            develop.finishLensBlurRefine()
+        }
     }
 
     private var blur: some View {
@@ -95,12 +98,21 @@ struct LensBlurPanel: View {
     private var refine: some View {
         VStack(alignment: .leading, spacing: 7) {
             GroupHeading(title: "Refine")
-            HStack(spacing: 8) {
-                Button("Refine…") { develop.startLensBlurRefine() }
-                    .controlSize(.small)
-                    .help("Paint or select where Lens Blur keeps the photo sharp or blurs it, whatever the depth")
-                Text(areaSummary).font(.caption).foregroundStyle(.secondary)
-                Spacer(minLength: 0)
+            if develop.isMasking, develop.maskScope == .lensBlur {
+                // The refine tools open right here, under the button that opened them: the
+                // Masking panel's tools on Lens Blur's own areas, with Done.
+                MasksPanel(develop: develop)
+                    .padding(8)
+                    .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.accentColor.opacity(0.5)))
+            } else {
+                HStack(spacing: 8) {
+                    Button("Refine…") { develop.startLensBlurRefine() }
+                        .controlSize(.small)
+                        .help("Paint or select where Lens Blur keeps the photo sharp or blurs it, whatever the depth")
+                    Text(areaSummary).font(.caption).foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                }
             }
         }
     }

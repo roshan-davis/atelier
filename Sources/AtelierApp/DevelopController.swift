@@ -1356,6 +1356,9 @@ final class DevelopController: ObservableObject {
             settings.upright = nil
             settings.constrainCrop = false
             isGuiding = false
+        case .lensBlur:
+            settings.lensBlurAreas = []
+            finishLensBlurRefine()
         default:
             break
         }
@@ -1399,6 +1402,7 @@ final class DevelopController: ObservableObject {
         case .toneCurve where settings.hasPointCurve: return true
         case .lensCorrections where !settings.lensProfileCorrections || settings.removeChromaticAberration: return true
         case .transform where settings.upright != nil || settings.constrainCrop: return true
+        case .lensBlur where !settings.lensBlurAreas.isEmpty: return true
         default: break
         }
         return panel.parameters.contains { parameter in

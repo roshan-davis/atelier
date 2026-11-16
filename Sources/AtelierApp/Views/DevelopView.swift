@@ -441,9 +441,9 @@ struct DevelopPanel: View {
                             RemovePanel(develop: develop)
                         }
                     }
-                    if develop.isMasking {
-                        PanelSection(title: develop.maskScope == .lensBlur ? "Lens Blur Refine" : "Masking",
-                                     isExpanded: .constant(true), soloMode: $soloMode,
+                    // Lens Blur's Refine shows inside the Lens Blur panel, where its button is.
+                    if develop.isMasking, develop.maskScope == .look {
+                        PanelSection(title: "Masking", isExpanded: .constant(true), soloMode: $soloMode,
                                      isModified: !develop.masks.isEmpty, reset: { develop.deleteAllMasks() },
                                      expandAll: expandAll, collapseAll: collapseAll) {
                             MasksPanel(develop: develop)
