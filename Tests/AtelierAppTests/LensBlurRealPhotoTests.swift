@@ -208,6 +208,100 @@ final class LensBlurRealPhotoTests: XCTestCase {
         XCTAssertLessThan(slowest, 5000, "zoomed in, Show Overlay off took over 5 s to show the full-size photo")
     }
 
+    // MARK: Memory (AT-077)
+
+    /// A whole Lens Blur session on a real RAW, zoomed in, with the memory the process holds
+    /// (Activity Monitor's number) after each step, and where it sits (vmmap's summary) at the
+    /// end and after letting go of each part. Rosh, Nov 16, 2026: 16 GB after Lens Blur work.
+    /// Prints `LENSBLUR-MEM:` lines; fails only if the session can't run.
+    func testMemoryAcrossALensBlurSession() async throws {
+        func log(_ step: String) {
+            let mb = (RenderMemory.footprint() ?? 0) / 1_048_576
+            let status = RenderMemory.shared.status
+            print("LENSBLUR-MEM: \(step): \(mb) MB (cache clears \(status.clears), Fine Edges runs \(FineEdges.runs), "
+                + "depth runs \(DepthMap.runs))")
+        }
+        log("photo open, proxy")
+        controller.isLensBlurring = true
+        _ = try await frame("enter", after: shown()) { self.blurred($0) }
+        try await idle()
+        log("Lens Blur open (depth found)")
+        controller.wantsFullResolution = true
+        try await fullFrame("zoomed", timeout: 120)
+        try await idle()
+        log("zoomed in, full-size frame")
+        for value in stride(from: 40.0, through: 100.0, by: 3) {
+            let previous = controller.fullImage
+            controller.set(.lensBlurAmount, to: value)
+            try await fullFrame(nil, timeout: 120, after: previous)
+        }
+        log("21 Amount edits at full size")
+        controller.startLensBlurRefine()
+        var previous = controller.fullImage
+        controller.addLensBlurPart(.subject, to: .focus, mode: .add)
+        try await idle()
+        try await fullFrame(nil, timeout: 300, after: previous)
+        try await idle()
+        log("Select Subject Focus area (Fine Edges \(FineEdges.active?.name ?? "not downloaded"))")
+        for index in 0..<6 {
+            previous = controller.fullImage
+            controller.addLensBlurPart(.radial, to: .blur, mode: .add)
+            controller.finishDrawing(.radial(.init(center: .init(x: 0.1 + 0.12 * Double(index), y: 0.15),
+                                                   radiusX: 0.06, radiusY: 0.06)))
+            try await fullFrame(nil, timeout: 120, after: previous)
+        }
+        try await idle()
+        log("6 Blur areas drawn")
+        for value in stride(from: 100.0, through: 40.0, by: -6) {
+            previous = controller.fullImage
+            controller.set(.lensBlurAmount, to: value)
+            try await fullFrame(nil, timeout: 120, after: previous)
+        }
+        log("11 more Amount edits with the areas")
+        Self.vmmap("peak")
+        controller.finishLensBlurRefine()
+        controller.flushSave()
+        _ = try LensBlurPhoto.save(try XCTUnwrap(assetID), catalog: catalog, importer: Importer(catalog: catalog, previews: nil))
+        log("after Save")
+        controller.isLensBlurring = false
+        try await Task.sleep(for: .seconds(5))
+        log("Lens Blur closed (Cancel), 5 s later")
+        controller.wantsFullResolution = false
+        try await Task.sleep(for: .seconds(5))
+        log("back to Fit, 5 s later")
+        Self.vmmap("closed, at Fit")
+        FineEdges.forgetSession()
+        try await Task.sleep(for: .seconds(2))
+        log("Fine Edges model unloaded")
+        RenderMemory.shared.clear(because: "test")
+        try await Task.sleep(for: .seconds(2))
+        log("Core Image cache cleared")
+        controller.open(nil)
+        try await Task.sleep(for: .seconds(3))
+        log("photo closed")
+        Self.vmmap("photo closed")
+    }
+
+    /// This process's memory by kind (vmmap's summary: IOSurface, IOAccelerator, MALLOC...),
+    /// the biggest lines, as `LENSBLUR-VMMAP:` lines.
+    private static func vmmap(_ when: String) {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/vmmap")
+        process.arguments = ["-summary", "\(ProcessInfo.processInfo.processIdentifier)"]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+        guard (try? process.run()) != nil else { print("LENSBLUR-VMMAP: \(when): vmmap didn't run"); return }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        let lines = String(decoding: data, as: UTF8.self).split(separator: "\n").map(String.init)
+        let interesting = ["Physical footprint", "IOSurface", "IOAccelerator", "MALLOC_LARGE", "MALLOC_MEDIUM",
+                           "MALLOC_SMALL", "MALLOC_TINY", "CoreImage", "Metal", "VM_ALLOCATE", "TOTAL"]
+        for line in lines where interesting.contains(where: { line.contains($0) }) {
+            print("LENSBLUR-VMMAP: \(when): \(line.trimmingCharacters(in: .whitespaces))")
+        }
+    }
+
     /// Waits until nothing works in the background (Fine Edges, Lens Blur's own work) for 1 s.
     private func idle() async throws {
         let started = Date()
