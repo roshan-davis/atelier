@@ -30,7 +30,13 @@ public enum DepthMap {
         return caches.appendingPathComponent("Atelier/Models/DepthAnything-CoreML-\(sha256.prefix(12))", isDirectory: true)
     }
 
-    public static var isInstalled: Bool { FileManager.default.fileExists(atPath: modelURL.path) }
+    public static var isInstalled: Bool {
+        standIn != nil || FileManager.default.fileExists(atPath: modelURL.path)
+    }
+
+    /// Tests only: answers `estimate` in place of the model, so Lens Blur and Depth Range can be
+    /// checked end to end on a machine without the download.
+    nonisolated(unsafe) static var standIn: ((CGImage) -> Field?)?
 
     /// Posted on the main queue when a depth map found in the background is ready, or the model
     /// was downloaded or removed, so the editor renders again.
@@ -200,6 +206,7 @@ public enum DepthMap {
     /// downloaded or fails (`failure` says why). Takes under a second; call it off the main
     /// thread.
     public static func estimate(_ image: CGImage) -> Field? {
+        if let standIn { return standIn(image) }
         let size = inputSize(width: image.width, height: image.height)
         guard let pixels = rgba(image, width: size.width, height: size.height) else { return nil }
         let input = inputTensor(pixels, width: size.width, height: size.height)

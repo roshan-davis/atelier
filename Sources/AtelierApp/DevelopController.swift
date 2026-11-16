@@ -534,6 +534,8 @@ final class DevelopController: ObservableObject {
     @Published var showMaskOverlay = UserDefaults.standard.bool(forKey: "masks.showOverlay") {
         didSet {
             UserDefaults.standard.set(showMaskOverlay, forKey: "masks.showOverlay")
+            DevelopTimingLog.shared.log(assetID, "Show Overlay \(showMaskOverlay ? "on" : "off") "
+                + "(full-size render \(fullRendering ? "running" : "idle"), render \(rendering ? "running" : "idle"))")
             scheduleRender()
         }
     }
@@ -576,6 +578,9 @@ final class DevelopController: ObservableObject {
     }
     @Published private(set) var fullImage: NSImage?
     private var fullImageSettings: DevelopSettings?
+    /// Something the full-size image was made without has arrived in the background
+    /// (`backgroundWorkArrived`): render it again, though the settings are the same.
+    private var fullImageIsStale = false
     private var fullSession: DevelopSession?
     private var sourceURL: URL?
     private var fullRendering = false
@@ -770,12 +775,12 @@ final class DevelopController: ObservableObject {
         // Fine Edges finds its matte in the background; render again once it is in.
         fineEdgesObserver = NotificationCenter.default.addObserver(forName: FineEdges.matteReady, object: nil,
                                                                    queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.scheduleRender() }
+            MainActor.assumeIsolated { self?.backgroundWorkArrived() }
         }
         // So does Depth Range's depth map (until then the mask is empty).
         depthObserver = NotificationCenter.default.addObserver(forName: DepthMap.ready, object: nil,
                                                                queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.scheduleRender() }
+            MainActor.assumeIsolated { self?.backgroundWorkArrived() }
         }
         // So does Content-Aware Remove's fill (until then the spot shows Heal).
         spotFillObserver = NotificationCenter.default.addObserver(forName: ContentAwareFill.fillReady, object: nil,
@@ -868,6 +873,7 @@ final class DevelopController: ObservableObject {
         measures.colorScope = nil
         fullImage = nil
         fullImageSettings = nil
+        fullImageIsStale = false
         fullBeforeImage = nil
         fullBeforeSettings = nil
         fullSession = nil
@@ -2596,12 +2602,14 @@ final class DevelopController: ObservableObject {
     /// seconds for it (Rosh, Nov 16, 2026). Turning the overlay off renders, which lands here.
     private func scheduleFullRender() {
         guard canRenderFullResolution, sliderPreview == nil, !showingBefore, !isCropping, !isGuiding,
-              !(isMasking && showMaskOverlay), let url = sourceURL, fullImageSettings != settings else { return }
+              !(isMasking && showMaskOverlay), let url = sourceURL,
+              fullImageSettings != settings || fullImageIsStale else { return }
         if fullRendering {
             fullNeedsRender = true
             return
         }
         fullRendering = true
+        fullImageIsStale = false
         let settings = self.settings
         let assetID = self.assetID
         let existing = fullSession
@@ -2615,8 +2623,8 @@ final class DevelopController: ObservableObject {
                 session?.renderForDisplay(settings, shadowClipping: clipping.shadows,
                                           highlightClipping: clipping.highlights)?.image
             }
-            DevelopTimingLog.shared.log(assetID, "full-size render (zoomed in)\(existing == nil ? " with full decode" : ""): "
-                + "\(DevelopTimingLog.ms(since: began)) ms")
+            DevelopTimingLog.shared.log(assetID, "full-size render (zoomed in)\(existing == nil ? " with full decode" : "")"
+                + "\(blurs ? " with Lens Blur" : ""): \(DevelopTimingLog.ms(since: began)) ms")
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     self.fullRendering = false
@@ -2978,11 +2986,24 @@ extension DevelopController {
         }
     }
 
+    /// A mask, matte or depth map found in the background (by the proxy's session or the
+    /// full-size one) is in: render again, the full-size image too. Its settings haven't
+    /// changed, so without forgetting them the zoomed photo kept the render made before it
+    /// arrived: in the Lens Blur mode, the photo unblurred until the depth was found, or a Focus
+    /// area without its Fine Edges.
+    private func backgroundWorkArrived() {
+        // The full-size image stays on screen until the new one is in, rather than the proxy.
+        fullImageIsStale = true
+        scheduleRender()
+    }
+
     // MARK: Lens Blur mode
 
     /// Opening or closing the Lens Blur mode: the other tools close, the live sessions start or
     /// stop rendering Lens Blur, and the photo renders again (the full-size render too).
     private func lensBlurModeChanged() {
+        DevelopTimingLog.shared.log(assetID, (isLensBlurring ? "Lens Blur mode opened" : "Lens Blur mode closed")
+            + " (full-size render \(fullRendering ? "running" : "idle"), render \(rendering ? "running" : "idle"))")
         if isLensBlurring {
             isCropping = false
             isAIOpen = false
