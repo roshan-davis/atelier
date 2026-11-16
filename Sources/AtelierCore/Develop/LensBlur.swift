@@ -118,12 +118,17 @@ public enum LensBlur {
         let focus = focalRange(settings)
         let same: CIKernelROICallback = { _, rect in rect }
         let noAreas = CIImage(color: CIColor(red: 0, green: 0, blue: 0)).cropped(to: extent)
-        guard let coc = cocKernel.apply(extent: extent, roiCallback: same,
-                                        arguments: [depth, (areas ?? noAreas).clampedToExtent(),
-                                                    CIVector(x: focus.near, y: focus.far, z: reach)]),
-              let boosted = boostKernel.apply(extent: extent, roiCallback: same,
-                                              arguments: [image, settings[.lensBlurBoost] / 100])
+        guard let cocFound = cocKernel.apply(extent: extent, roiCallback: same,
+                                             arguments: [depth, (areas ?? noAreas).clampedToExtent(),
+                                                         CIVector(x: focus.near, y: focus.far, z: reach)]),
+              let boostFound = boostKernel.apply(extent: extent, roiCallback: same,
+                                                 arguments: [image, settings[.lensBlurBoost] / 100])
         else { return image }
+        // Every level, the level mix, the composite and each spill read the blur sizes, and every
+        // level reads the boosted photo: render each once per frame instead of once per reader
+        // (the areas' masks, Fine Edges included, sit under the blur sizes).
+        let coc = cocFound.insertingIntermediate(cache: false)
+        let boosted = boostFound.insertingIntermediate(cache: false)
 
         // The levels: the full-size photo, then copies a third, a ninth... the size, until the
         // largest blur fits the gather's radius on the smallest.
