@@ -21,7 +21,7 @@ struct ContentView: View {
     private var dockLayout: DockLayout {
         guard let dockWidth else { return .full }
         // A sidebar the person hid themselves takes no room.
-        let sidebar = (columns == .detailOnly && !sidebarHiddenByDock) || model.isInlineApp ? 0 : sidebarWidth
+        let sidebar = columns == .detailOnly && !sidebarHiddenByDock ? 0 : sidebarWidth
         return .fitting(width: dockWidth, sidebar: sidebar, inspector: showInspector ? panelWidth + 1 : 0)
     }
 
@@ -29,79 +29,80 @@ struct ContentView: View {
         // Like Lightroom Classic, the Filmstrip runs the full width of the window, under
         // both side panels.
         VStack(spacing: 0) {
-            // An inline app (HDR, Lens Blur) has no left column: the photo and its own controls
-            // only (Rosh, Nov 16, 2026). The person's own choice comes back when it closes.
-            NavigationSplitView(columnVisibility: Binding(get: { model.isInlineApp ? .detailOnly : columns },
-                                                          set: { if !model.isInlineApp { columns = $0 } })) {
-                Group {
-                    if model.isInlineApp {
-                        Color.clear
-                    } else if model.mode == .develop {
-                        DevelopSidebar(develop: model.develop)
-                            .areaFocusFlash(.leftPanel)
-                    } else {
-                        SidebarView()
+            // The Lens Blur mode is a screen of its own: the photo and Lens Blur's panel only.
+            // The library layout below isn't touched while it is open (its columns, Filmstrip and
+            // panels come back exactly as they were), and nothing in it runs (Rosh, Nov 16, 2026).
+            if model.mode == .develop && model.isLensBlurOpen {
+                LensBlurScreen(panelWidth: $panelWidth)
+            } else {
+                NavigationSplitView(columnVisibility: $columns) {
+                    Group {
+                        if model.mode == .develop {
+                            DevelopSidebar(develop: model.develop)
+                                .areaFocusFlash(.leftPanel)
+                        } else if model.mode == .hdr {
+                            HDRSidebar(hdr: model.hdr)
+                                .areaFocusFlash(.leftPanel)
+                        } else {
+                            SidebarView()
+                        }
                     }
-                }
-                .navigationSplitViewColumnWidth(min: 200, ideal: 240)
-                .background(GeometryReader { geometry in
-                    Color.clear.onChange(of: geometry.size.width, initial: true) { _, width in
-                        if width > 100 { sidebarWidth = width }
-                    }
-                })
-            } detail: {
-                // The right panel sits beside the content, below the toolbar, like Lightroom's,
-                // rather than as a full-height inspector the toolbar floats over.
-                HStack(spacing: 0) {
-                    VStack(spacing: 0) {
-                        if !model.isInlineApp {
+                    .navigationSplitViewColumnWidth(min: 200, ideal: 240)
+                    .background(GeometryReader { geometry in
+                        Color.clear.onChange(of: geometry.size.width, initial: true) { _, width in
+                            if width > 100 { sidebarWidth = width }
+                        }
+                    })
+                } detail: {
+                    // The right panel sits beside the content, below the toolbar, like Lightroom's,
+                    // rather than as a full-height inspector the toolbar floats over.
+                    HStack(spacing: 0) {
+                        VStack(spacing: 0) {
                             FilterBar()
                             Divider()
-                        }
-                        ZStack {
-                            switch model.mode {
-                            case .grid:
-                                GridView(model: model, background: theme.gridBackground)
-                            case .loupe:
-                                LoupeView(zoom: model.zoomState)
-                            case .develop:
-                                DevelopImageView(develop: model.develop)
-                            case .hdr:
-                                HDRImageView(hdr: model.hdr)
+                            ZStack {
+                                switch model.mode {
+                                case .grid:
+                                    GridView(model: model, background: theme.gridBackground)
+                                case .loupe:
+                                    LoupeView(zoom: model.zoomState)
+                                case .develop:
+                                    DevelopImageView(develop: model.develop)
+                                case .hdr:
+                                    HDRImageView(hdr: model.hdr)
+                                }
+                                if model.rows.isEmpty {
+                                    EmptyLibraryView()
+                                }
                             }
-                            if model.rows.isEmpty, !model.isInlineApp {
-                                EmptyLibraryView()
+                            // The focused photo's sticky notes (View > Show Notes, AT-058). An overlay,
+                            // so it never changes the photo's zoom and pan or the grid's scroll.
+                            .overlay {
+                                NotesOverlay(catalog: model.catalog,
+                                             assetID: model.mode == .hdr || model.rows.isEmpty ? nil : model.focusedID,
+                                             subtitle: model.notesSubtitle, addTargets: { model.noteTargets },
+                                             request: $model.noteRequest)
                             }
+                            // A chat app's change, with Undo (Settings > Agents, AT-050c).
+                            .overlay(alignment: .bottom) { AgentNoticeView(agents: model.agents) }
+                            Divider()
+                            StatusBar()
                         }
-                        // The focused photo's sticky notes (View > Show Notes, AT-058). An overlay,
-                        // so it never changes the photo's zoom and pan or the grid's scroll.
-                        .overlay {
-                            NotesOverlay(catalog: model.catalog,
-                                         assetID: model.isInlineApp || model.rows.isEmpty ? nil : model.focusedID,
-                                         subtitle: model.notesSubtitle, addTargets: { model.noteTargets },
-                                         request: $model.noteRequest)
+                        // Let the photo column shrink to whatever is left and never draw past it.
+                        .frame(minWidth: 0, maxWidth: .infinity)
+                        .background(Color(nsColor: theme.chrome))
+                        .clipped()
+                        if showInspector && dockLayout.showsInspector {
+                            PanelResizeHandle(width: $panelWidth, range: 280...560, panel: .trailing)
+                            InspectorView()
+                                .frame(width: panelWidth)
+                                .clipped()
+                                .areaFocusFlash(.rightPanel)
+                                .layoutPriority(1)
+                                .background(Color(nsColor: theme.panel))
                         }
-                        // A chat app's change, with Undo (Settings > Agents, AT-050c).
-                        .overlay(alignment: .bottom) { AgentNoticeView(agents: model.agents) }
-                        Divider()
-                        StatusBar()
-                    }
-                    // Let the photo column shrink to whatever is left and never draw past it.
-                    .frame(minWidth: 0, maxWidth: .infinity)
-                    .background(Color(nsColor: theme.chrome))
-                    .clipped()
-                    if showInspector && dockLayout.showsInspector {
-                        PanelResizeHandle(width: $panelWidth, range: 280...560, panel: .trailing)
-                        InspectorView()
-                            .frame(width: panelWidth)
-                            .clipped()
-                            .areaFocusFlash(.rightPanel)
-                            .layoutPriority(1)
-                            .background(Color(nsColor: theme.panel))
                     }
                 }
-            }
-            if !model.isInlineApp {
                 FilmstripView()
                     .areaFocusFlash(.photo, enabled: model.usesPanelKeys && filmstripVisible)
             }
@@ -216,6 +217,35 @@ private struct EmptyLibraryView: View {
                 Button("Import Photos…") { model.beginImport() }
                     .controlSize(.large)
             }
+        }
+    }
+}
+
+/// The Lens Blur mode's screen (AT-074): the photo (Develop's photo view, so zoom and pan carry
+/// over) with Lens Blur's panel beside it, and the status line. No Filmstrip, left column, filter
+/// bar, histogram or tool strip.
+private struct LensBlurScreen: View {
+    @EnvironmentObject private var model: LibraryModel
+    @AppStorage(Theme.defaultsKey) private var theme: Theme = .system
+    @Binding var panelWidth: Double
+
+    var body: some View {
+        HStack(spacing: 0) {
+            VStack(spacing: 0) {
+                DevelopImageView(develop: model.develop)
+                    .overlay(alignment: .bottom) { AgentNoticeView(agents: model.agents) }
+                Divider()
+                StatusBar()
+            }
+            .frame(minWidth: 0, maxWidth: .infinity)
+            .background(Color(nsColor: theme.chrome))
+            .clipped()
+            PanelResizeHandle(width: $panelWidth, range: 280...560, panel: .trailing)
+            DevelopPanel(develop: model.develop)
+                .frame(width: panelWidth)
+                .clipped()
+                .layoutPriority(1)
+                .background(Color(nsColor: theme.panel))
         }
     }
 }

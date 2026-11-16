@@ -122,12 +122,9 @@ final class LibraryModel: ObservableObject {
     }
     @Published var detail: AssetDetail?
     /// The Lens Blur mode is open in Develop (mirrored from `develop.isLensBlurring`, so the
-    /// window's layout doesn't watch the whole Develop controller).
+    /// window, which shows the mode as a screen of its own, doesn't watch the whole Develop
+    /// controller).
     @Published private(set) var isLensBlurOpen = false
-    /// An inline app (HDR, Lens Blur, and any later one) has the window: the photo and its own
-    /// controls only, without the Filmstrip, the left column, the filter bar or Develop's
-    /// histogram (Rosh, Nov 16, 2026: "just make that working without much distraction").
-    var isInlineApp: Bool { mode == .hdr || (mode == .develop && isLensBlurOpen) }
     @Published private var storedMode: ViewMode = .grid {
         didSet {
             if mode == .develop {

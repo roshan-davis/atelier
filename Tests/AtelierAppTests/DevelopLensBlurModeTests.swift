@@ -11,6 +11,7 @@ import XCTest
 @MainActor
 final class DevelopLensBlurModeTests: XCTestCase {
     private var folder: URL!
+    private let showsOverlay = UserDefaults.standard.bool(forKey: "masks.showOverlay")
 
     override func setUp() async throws {
         folder = FileManager.default.temporaryDirectory.appendingPathComponent("LensBlurMode-\(UUID().uuidString)")
@@ -23,6 +24,7 @@ final class DevelopLensBlurModeTests: XCTestCase {
 
     override func tearDown() async throws {
         DepthMap.standIn = nil
+        UserDefaults.standard.set(showsOverlay, forKey: "masks.showOverlay")
         try? FileManager.default.removeItem(at: folder)
     }
 
@@ -133,6 +135,26 @@ final class DevelopLensBlurModeTests: XCTestCase {
         XCTAssertEqual(controller.settings[.lensBlurAmount], 40)
     }
 
+    /// Show Overlay in Refine shows the Focus area even with nothing selected, and the photo under it
+    /// without the blur, so it comes up without waiting for a blur render (Rosh, Nov 16, 2026:
+    /// the overlay often didn't show, or showed late).
+    func testOverlayInRefineSkipsTheBlur() async throws {
+        var focus = DevelopSettings.Mask(name: "Focus",
+                                         components: [.init(.radial(.init(center: .init(x: 0.1, y: 0.1),
+                                                                           radiusX: 0.05, radiusY: 0.05)))])
+        focus.lensBlurRole = .focus
+        let (controller, _, _) = try await openBlurredCheckerboardParts(areas: [focus])
+        controller.showMaskOverlay = false
+        controller.isLensBlurring = true
+        try await waitFor(controller, "blurred in the mode") { $0 < 0.05 }
+        controller.startLensBlurRefine()
+        controller.selectedMaskID = nil
+        controller.showMaskOverlay = true
+        try await waitFor(controller, "the overlay's photo without the blur") { $0 > 0.15 }
+        controller.showMaskOverlay = false
+        try await waitFor(controller, "blurred again once the overlay is off") { $0 < 0.05 }
+    }
+
     func testOtherToolsCloseTheModeButRefineKeepsIt() async throws {
         let (controller, _) = try await openBlurredCheckerboard()
         controller.isLensBlurring = true
@@ -168,7 +190,8 @@ final class DevelopLensBlurModeTests: XCTestCase {
         return (controller, previews)
     }
 
-    private func openBlurredCheckerboardParts() async throws -> (DevelopController, PreviewCache, Catalog) {
+    private func openBlurredCheckerboardParts(areas: [DevelopSettings.Mask] = []) async throws
+        -> (DevelopController, PreviewCache, Catalog) {
         let url = folder.appendingPathComponent("Checks.png")
         let squares = CIFilter(name: "CICheckerboardGenerator", parameters: [
             "inputColor0": CIColor.white, "inputColor1": CIColor.black, "inputWidth": 4, "inputSharpness": 1,
@@ -181,6 +204,7 @@ final class DevelopLensBlurModeTests: XCTestCase {
         var settings = DevelopSettings.neutral
         settings[.lensBlurApply] = 1
         settings[.lensBlurAmount] = 100
+        settings.lensBlurAreas = areas
         try catalog.saveDevelopSettings(settings, for: assetID)
         let previews = PreviewCache(rootURL: folder.appendingPathComponent("Previews"))
         let controller = DevelopController(catalog: catalog, previews: previews)

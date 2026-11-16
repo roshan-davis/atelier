@@ -142,9 +142,6 @@ struct HDRPanel: View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(spacing: 0) {
-                    // HDR is an inline app with no left column (Rosh, Nov 16, 2026): its presets,
-                    // source and result sit above Tone Mapping.
-                    HDRSideSections(hdr: hdr)
                     PanelSection(title: "Tone Mapping", isExpanded: isExpanded("tone"), soloMode: $soloMode,
                                  isModified: hdr.isModified(HDRController.toneKeys, method: true),
                                  reset: { hdr.reset(HDRController.toneKeys, method: true) },
@@ -230,9 +227,8 @@ struct HDRPanel: View {
     }
 }
 
-/// HDR's presets, what is being tone-mapped and where its result goes, at the top of its panel
-/// (it had the left column until Nov 16, 2026).
-struct HDRSideSections: View {
+/// The left column in HDR mode: the presets, what is being tone-mapped and where its result goes.
+struct HDRSidebar: View {
     @ObservedObject var hdr: HDRController
     @AppStorage("hdr.sidebarCollapsed") private var collapsedList = ""
 
@@ -245,7 +241,7 @@ struct HDRSideSections: View {
     }
 
     var body: some View {
-        Group {
+        ScrollView(.vertical) {
             VStack(spacing: 0) {
                 HDRPresetsSection(hdr: hdr, isExpanded: isExpanded("presets"))
                 SidebarSection(title: "Source", isExpanded: isExpanded("source")) {

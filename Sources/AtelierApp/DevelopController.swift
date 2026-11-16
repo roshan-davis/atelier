@@ -2244,7 +2244,15 @@ final class DevelopController: ObservableObject {
             crop.angle = 0
             settings.crop = crop
         }
-        let overlay = isMasking && showMaskOverlay ? selectedMaskID : nil
+        // In Lens Blur's Refine the overlay shows the Focus area when no area is selected, so
+        // Show Overlay always shows something (Rosh, Nov 16, 2026: it often showed nothing).
+        let overlay = isMasking && showMaskOverlay
+            ? (selectedMaskID ?? (maskScope == .lensBlur ? (lensBlurArea(.focus) ?? lensBlurArea(.blur))?.id : nil))
+            : nil
+        // With the red overlay on, the photo under it is shown without the blur: the overlay is
+        // for seeing the mask, and leaving out the blur's render makes it come up at once instead
+        // of after the blur (the blur is back as soon as the overlay is off).
+        if overlay != nil, isLensBlurring { settings[.lensBlurApply] = 0 }
         let clipping = overlay == nil && preview == nil ? clippingOverlay : (shadows: false, highlights: false)
         renderCount += 1
         frameHUD.scheduled(renderCount)

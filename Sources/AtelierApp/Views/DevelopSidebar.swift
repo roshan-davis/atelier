@@ -50,11 +50,7 @@ struct DevelopSidebar: View {
             ScrollViewReader { scroll in
                 ScrollView(.vertical) {
                     VStack(spacing: 0) {
-                        // Presets change Develop's look, which the Lens Blur mode doesn't edit:
-                        // hidden there (Rosh, Nov 16, 2026). History and Snapshots stay.
-                        if !develop.isLensBlurring {
-                            PresetsSection(develop: develop, isExpanded: isExpanded("presets"))
-                        }
+                        PresetsSection(develop: develop, isExpanded: isExpanded("presets"))
 
                         SidebarSection(title: "Snapshots", isExpanded: isExpanded("snapshots")) {
                             Button {

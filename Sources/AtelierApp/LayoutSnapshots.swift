@@ -15,6 +15,12 @@ enum LayoutSnapshots {
         ProcessInfo.processInfo.environment["ATELIER_SNAPSHOTS"].map { URL(fileURLWithPath: $0, isDirectory: true) }
     }
 
+    /// ATELIER_SNAPSHOTS_ONLY: comma-separated snapshot groups to render instead of the whole pass.
+    static var only: Set<String> {
+        Set((ProcessInfo.processInfo.environment["ATELIER_SNAPSHOTS_ONLY"] ?? "")
+            .split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty })
+    }
+
     static func run(model: LibraryModel, into folder: URL) async {
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         // This picker is independent of the snapshot catalog and fits in a standalone window.
@@ -39,6 +45,12 @@ enum LayoutSnapshots {
             model.develop.set(parameter, to: value)
         }
         try? await Task.sleep(for: .seconds(3))
+        // ATELIER_SNAPSHOTS_ONLY=lens-blur renders just that group (a Mac check of one PR, in seconds).
+        if only.contains("lens-blur") {
+            await snapshotLensBlurMode(model: model, into: folder)
+            fflush(stdout)
+            exit(0)
+        }
         var shots: [(String, CGSize, AnyView)] = sizes.map { size in
             ("develop-\(Int(size.width))x\(Int(size.height))", size, AnyView(ContentView().environmentObject(model)))
         }
@@ -647,18 +659,47 @@ enum LayoutSnapshots {
         develop.flushSave()
     }
 
-    /// The Lens Blur mode (AT-074): its panel in place of Develop's, and the bar with Save.
-    /// Without the depth model (CI) the panel shows its download offer.
+    /// The Lens Blur mode (AT-074): its own screen (no filmstrip, no left column, no histogram),
+    /// Refine with Show Overlay on a Focus area, then Cancel, which must bring Develop back
+    /// whole (left column, presets) with the mode's changes undone. Without the depth model
+    /// (CI) the panel shows its download offer.
     private static func snapshotLensBlurMode(model: LibraryModel, into folder: URL) async {
         let develop = model.develop
+        let areasBefore = develop.settings.lensBlurAreas.count
+        let amountBefore = develop.settings[.lensBlurAmount]
+        let started = Date()
         develop.isLensBlurring = true
         try? await Task.sleep(for: .seconds(1))
-        print("SNAPSHOT: lens blur mode \(develop.isLensBlurring) state \(develop.lensBlurPhotoState)")
+        print("SNAPSHOT: lens blur mode \(develop.isLensBlurring) open \(model.isLensBlurOpen) state \(develop.lensBlurPhotoState)")
         await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
                       to: folder.appendingPathComponent("develop-lens-blur-1280x800.png"))
+        await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1000, height: 584),
+                      to: folder.appendingPathComponent("develop-lens-blur-1000x584.png"))
         await capture(AnyView(DevelopPanel(develop: develop).environmentObject(model)), size: CGSize(width: 320, height: 900),
                       to: folder.appendingPathComponent("panel-lens-blur-320x900.png"))
-        develop.isLensBlurring = false
+        // An edit made in the mode, and a Focus area shown with the overlay in Refine.
+        develop.set(.lensBlurAmount, to: 80)
+        develop.startLensBlurRefine()
+        var focus = DevelopSettings.Mask(name: "Focus",
+                                         components: [.init(.radial(.init(center: .init(x: 0.5, y: 0.5),
+                                                                           radiusX: 0.2, radiusY: 0.25)))])
+        focus.lensBlurRole = .focus
+        develop.editedMasks = [focus]
+        develop.selectedMaskID = nil
+        let overlay = develop.showMaskOverlay
+        develop.showMaskOverlay = true
+        try? await Task.sleep(for: .seconds(1))
+        await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
+                      to: folder.appendingPathComponent("develop-lens-blur-refine-overlay-1280x800.png"))
+        develop.showMaskOverlay = overlay
+        develop.finishLensBlurRefine()
+        print("SNAPSHOT: lens blur work line \(develop.lensBlurWork ?? "none") after \(String(format: "%.1f", Date().timeIntervalSince(started))) s")
+        // Cancel: Develop with its left column and filmstrip, the edits undone.
+        model.closeLensBlur()
+        try? await Task.sleep(for: .seconds(1))
+        print("SNAPSHOT: after Cancel mode \(develop.isLensBlurring) open \(model.isLensBlurOpen) areas \(develop.settings.lensBlurAreas.count) (was \(areasBefore)) amount \(develop.settings[.lensBlurAmount]) (was \(amountBefore))")
+        await capture(AnyView(ContentView().environmentObject(model)), size: CGSize(width: 1280, height: 800),
+                      to: folder.appendingPathComponent("develop-after-lens-blur-cancel-1280x800.png"))
         develop.flushSave()
     }
 
