@@ -1387,13 +1387,15 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 
 **Validation:** Swift unbuilt (cloud). Needs a Mac build, a look at the menu with one and with both models, and Rosh's acceptance.
 
-## AT-076 — Architecture review follow-ups (memory, saves, model hosting, tool state)
+## AT-076 — Architecture review follow-ups (model locks, silent saves, memory, history, batch writes, tool state)
 
-**Status:** Proposed / discuss. **Owner:** unassigned (review by Claude, project thread "Review Atelier architecture for improvements"). **Dependencies:** AT-008 (Processor contract), AT-011 (measurements).
+**Status:** Proposed / discuss. **Owner:** unassigned (review by Claude, project thread "Review Atelier architecture for improvements", PR #155). **Related:** AT-008 for the Processor gap (D3), not a prerequisite for the correctness fixes; AT-011 for measurements.
 
-**Evidence:** [Docs/Reviews/Architecture-Review-2026-11-16.md](Docs/Reviews/Architecture-Review-2026-11-16.md), source review of `main` `c146785`, not built or timed. Top items: M1 full-size images, sessions and Core Image caches kept until the next photo opens and no memory-pressure handling; P1 history stores up to 500 full settings copies, encoded on the main thread each save; C1 Fine Edges/Depth hold their lock for a whole model run that Settings' Remove also takes (main-thread hang), and status strings race; P2 batch edits commit and refetch the Grid once per photo, read-then-write not atomic; D1 six Develop tool flags that switch each other off by hand; E1 silent `try?` catalog writes; R1 three copies of the ONNX host; M2 eleven Core Image contexts (one per HDR decode); D2 DevelopController split and `@Observable`; C2 Swift 6 mode per module.
+**Evidence:** [Docs/Reviews/Architecture-Review-2026-11-16.md](Docs/Reviews/Architecture-Review-2026-11-16.md), source review of `main` `c146785`, revised after Rosh's source check on PR #155 (head `90abdd8`). Source only: no timing or memory measurement; sizes are pixel payloads and counts are source counts.
 
-**Scope to agree:** pick items one at a time; each is its own PR with Mac timings (Frame Diagnostics, `DevelopTimingLog`, Instruments for memory) before and after where marked "measure first". No broad rewrite is approved by this entry.
+**Order agreed in review:** (1) C1: Fine Edges/Depth hold their lock through inference and main-actor Remove waits on it; `failure`/`lastRun`/`isWorking` read on main without the lock (High, S narrow). Then E1: silent `try?` catalog writes in Generative Fill, Match Look and notes (Medium, S per path). (2) Measure in parallel on the same heavy edits: M1 full-size images/session kept until the next open, no memory-pressure handling (High on large RAWs, plausible); P1 history of up to 500 full settings copies encoded and written on main (High if timings confirm; background save M, format change M–L). (3) P2: one transaction per photo in Sync/presets/Match Look, partial completion, non-atomic read-write (Medium, S–M); measure observation cost. (4) D1: one tool state with Lens Blur Refine nested (Medium, M). Others (R1, M2, D2, C2, P3, P4, D4, E2-E4, B1-B3) as listed in the review.
+
+**Scope to agree:** one item per PR, with measurements before and after where marked "measure first". No broad rewrite is approved by this entry.
 
 ## AT-071 — Cull: compare the suggested keeper and runner-up with linked zoom
 
