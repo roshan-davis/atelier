@@ -141,6 +141,7 @@ public enum FineEdges {
     /// Tells the panels and the editor that which model runs may have changed, so they show it
     /// and render again.
     private static func modelsChanged() {
+        FineMatteCache.shared.removeAll()
         announce()
         DispatchQueue.main.async { NotificationCenter.default.post(name: matteReady, object: nil) }
     }
@@ -192,7 +193,7 @@ public enum FineEdges {
         DispatchQueue.main.async { NotificationCenter.default.post(name: statusChanged, object: nil) }
     }
 
-    private static func forgetSession() {
+    static func forgetSession() {
         lock.lock()
         session = nil
         failure = nil
@@ -201,12 +202,19 @@ public enum FineEdges {
         announce()
     }
 
+    /// How many times the model has run in this process (for tests).
+    nonisolated(unsafe) static var runs = 0
+
     /// Whether Fine Edges tries ONNX Runtime's Core ML provider. Off: with the provider really
     /// loading (ALL, not All), Core ML can't compile BiRefNet HR-matting ("Unable to parse ML
     /// Program … Div_1"), and the CPU session made after that failure crashed the app (SIGSEGV in
     /// ONNX Runtime's planner, Mac check of PR #153, Nov 16, 2026). Until then it ran on the
     /// CPU anyway ("All" was refused). LensBlurRealPhotoTests times both.
     nonisolated(unsafe) static var prefersCoreML = false
+    /// For FineEdgesSpeedTests: Core ML provider options to try instead of the usual ones, and
+    /// the CPU's thread count (nil: ONNX Runtime's own choice).
+    nonisolated(unsafe) static var coreMLOptionsOverride: [String: String]?
+    nonisolated(unsafe) static var intraOpThreads: Int?
 
     /// `model`, loaded; Core ML runs what it can (ML Program, Neural Engine and GPU), ONNX
     /// Runtime's CPU code the rest. Call with the lock held.
@@ -220,11 +228,12 @@ public enum FineEdges {
         func options(coreML: Bool) throws -> ORTSessionOptions {
             let options = try ORTSessionOptions()
             try options.setGraphOptimizationLevel(.all)
+            if let intraOpThreads { try options.setIntraOpNumThreads(Int32(intraOpThreads)) }
             // Core ML compiles the model once and keeps it here; without a cache it compiles it
             // again every launch, which takes most of the first run's time.
             let cache = model.coreMLCacheURL
             try? FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
-            if coreML, (try? options.appendCoreMLExecutionProvider(withOptionsV2: CoreMLProviderOptions.options(cache: cache))) == nil {
+            if coreML, (try? options.appendCoreMLExecutionProvider(withOptionsV2: coreMLOptionsOverride ?? CoreMLProviderOptions.options(cache: cache))) == nil {
                 NSLog("Atelier: Fine Edges runs without Core ML")
                 usesCoreML = false
             }
@@ -253,6 +262,7 @@ public enum FineEdges {
         lock.lock()
         isWorking = true
         defer { isWorking = false; lock.unlock(); announce() }
+        runs += 1
         lastRun = "Fine Edges (\(model.name)) is working… (the first time after a download takes longest)"
         failure = nil
         announce()

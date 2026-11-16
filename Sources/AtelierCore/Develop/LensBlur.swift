@@ -249,6 +249,22 @@ public enum LensBlur {
         return result?.cropped(to: extent)
     }
 
+    /// `areas` (Focus in red, Blur in green) drawn into memory once, as a half-float red-green
+    /// image on the same extent, so the blur's passes read pixels instead of redrawing the masks.
+    static func drawnOnce(_ areas: CIImage, context: CIContext) -> CIImage {
+        let extent = areas.extent.integral
+        let width = Int(extent.width), height = Int(extent.height)
+        guard width > 0, height > 0 else { return areas }
+        let rowBytes = width * 4
+        guard let data = NSMutableData(length: rowBytes * height) else { return areas }
+        context.render(areas.transformed(by: CGAffineTransform(translationX: -extent.minX, y: -extent.minY)),
+                       toBitmap: data.mutableBytes, rowBytes: rowBytes,
+                       bounds: CGRect(x: 0, y: 0, width: width, height: height), format: .RGh, colorSpace: nil)
+        return CIImage(bitmapData: data as Data, bytesPerRow: rowBytes, size: CGSize(width: width, height: height),
+                       format: .RGh, colorSpace: nil)
+            .transformed(by: CGAffineTransform(translationX: extent.minX, y: extent.minY))
+    }
+
     /// The blur sizes with the Focus and Blur areas (`areas`: Focus in red, Blur in green), and
     /// each pixel's Focus strength in green for the gather and the composite.
     ///

@@ -517,8 +517,6 @@ public final class DevelopSession: @unchecked Sendable {
     /// Fine Edges' foreground mattes on the corrected photo, by the square each was found in,
     /// for one lens geometry and one Fine Edges model (nil inside when it failed).
     private var fineMattes: [FineRegion: CIImage?] = [:]
-    /// Squares whose matte is being found in the background (interactive sessions).
-    private var finePending: Set<FineRegion> = []
     private var fineKey: DevelopSettings?
     private var fineModel: FineEdges.Model?
     /// Depth Range's depth of the corrected photo, found once per lens geometry (nil inside when
@@ -742,13 +740,18 @@ public final class DevelopSession: @unchecked Sendable {
     /// Lens Blur on `source`, from the cache when nothing it reads changed. Call with the lock held.
     private func lensBlurred(_ source: CIImage, depth: CIImage, settings: DevelopSettings,
                              provider: @escaping MaskProvider) -> CIImage {
-        let make = { () -> CIImage in
+        let make = { [interactive, renderer] () -> CIImage in
             // Focus and Blur areas: masks with Lens Focus, on the same uncropped frame.
-            let areas = LensBlur.areas(settings, on: source, provider: provider)
+            var areas = LensBlur.areas(settings, on: source, provider: provider)
+            // A full-size render (Save, export) draws them once into a bitmap: left as a graph
+            // (Vision's mask, Fine Edges' matte, feathers), Core Image redrew them for every tile
+            // of every blur pass: Save with a Select Subject area went from 43 s to 15 s (Mac
+            // check of PR #153, Nov 16, 2026).
+            if !interactive, let graph = areas { areas = LensBlur.drawnOnce(graph, context: renderer.context) }
             return LensBlur.apply(source, depth: depth, settings: settings, areas: areas)
         }
         guard interactive else { return make() }
-        let found = [subjectMasks.count, peopleFound == nil ? 0 : 1, fineMattes.count, finePending.count,
+        let found = [subjectMasks.count, peopleFound == nil ? 0 : 1, fineMattes.count,
                      skyFound == nil ? 0 : 1]
         let key = LensBlurKey(corrected: CorrectedKey(settings, view: .photo, denoised: isDenoised(settings)),
                               spots: settings.spots,
@@ -943,14 +946,26 @@ public final class DevelopSession: @unchecked Sendable {
         }
         var found: CIImage?
         if region.width >= 8, region.height >= 8 {
-            // Vision works on about 1024 pixels; small boxes are enlarged up to 4×.
-            let factor = min(4, 1024 / max(region.width, region.height))
-            let piece = source.cropped(to: region)
-                .transformed(by: CGAffineTransform(translationX: -region.minX, y: -region.minY))
-                .transformed(by: CGAffineTransform(scaleX: factor, y: factor))
-            if let cgImage = renderer.context.createCGImage(piece, from: piece.extent.integral, format: .RGBA8,
-                                                            colorSpace: DevelopRenderer.sRGB),
-               let mask = try? AIImaging.subjectMask(for: cgImage) {
+            // Shared with every session of this photo (SubjectMaskCache): Save and the full-size
+            // render use the subject the editor found, so they match it, and Fine Edges' square
+            // (from this outline) is the same, so its matte is found once (FineMatteCache).
+            let shared = SubjectMaskCache.Key(file: url.standardizedFileURL.path, geometry: key, box: box)
+            var mask: CGImage?
+            if let known = SubjectMaskCache.shared.lookup(shared) {
+                mask = known
+            } else {
+                // Vision works on about 1024 pixels; small boxes are enlarged up to 4×.
+                let factor = min(4, 1024 / max(region.width, region.height))
+                let piece = source.cropped(to: region)
+                    .transformed(by: CGAffineTransform(translationX: -region.minX, y: -region.minY))
+                    .transformed(by: CGAffineTransform(scaleX: factor, y: factor))
+                if let cgImage = renderer.context.createCGImage(piece, from: piece.extent.integral, format: .RGBA8,
+                                                                colorSpace: DevelopRenderer.sRGB) {
+                    mask = try? AIImaging.subjectMask(for: cgImage)
+                    SubjectMaskCache.shared.store(shared, mask)
+                }
+            }
+            if let mask {
                 let image = DevelopRenderer.rawMask(mask)
                 var placed = image
                     .transformed(by: CGAffineTransform(scaleX: region.width / image.extent.width,
@@ -991,44 +1006,47 @@ public final class DevelopSession: @unchecked Sendable {
         let model = FineEdges.active
         if fineKey != key || fineModel != model {
             fineMattes = [:]
-            finePending = []
             fineKey = key
             fineModel = model
         }
-        guard let model, let region = fineRegion(of: outline, extent: source.extent) else { return nil }
-        let regionKey = FineRegion(region)
-        if let cached = fineMattes[regionKey] { return cached }
-        // Already being found in the background: render without it for now.
-        if finePending.contains(regionKey) { return nil }
-        let side = CGFloat(model.size)
-        let square = source.cropped(to: region)
-            .transformed(by: CGAffineTransform(translationX: -region.minX, y: -region.minY))
-            .transformed(by: CGAffineTransform(scaleX: side / region.width, y: side / region.height))
-        guard let cgImage = renderer.context.createCGImage(square, from: CGRect(x: 0, y: 0, width: side, height: side),
-                                                           format: .RGBA8, colorSpace: DevelopRenderer.sRGB)
-        else { return nil }
-        guard interactive else {
-            // Export and other one-off renders wait for it.
-            let matte = Self.placedMatte(FineEdges.matte(of: cgImage, model: model), size: model.size, in: region)
-            fineMattes[regionKey] = matte
+        guard let model, let (region, grid) = fineRegion(of: outline, extent: source.extent) else { return nil }
+        if let cached = fineMattes[grid] { return cached }
+        // Shared with every session of this photo (FineMatteCache): the editor's proxy, its
+        // full-size render and Save find one matte once.
+        let shared = FineMatteCache.Key(file: url.standardizedFileURL.path, geometry: key, model: model,
+                                        x: grid.x, y: grid.y, width: grid.width, height: grid.height,
+                                        gridWidth: grid.gridWidth, gridHeight: grid.gridHeight)
+        let find: @Sendable () -> [Float]? = { [renderer] in
+            let side = CGFloat(model.size)
+            let square = source.cropped(to: region)
+                .transformed(by: CGAffineTransform(translationX: -region.minX, y: -region.minY))
+                .transformed(by: CGAffineTransform(scaleX: side / region.width, y: side / region.height))
+            guard let cgImage = renderer.context.createCGImage(square, from: CGRect(x: 0, y: 0, width: side, height: side),
+                                                               format: .RGBA8, colorSpace: DevelopRenderer.sRGB)
+            else { return nil }
+            return FineEdges.matte(of: cgImage, model: model)
+        }
+        switch FineMatteCache.shared.lookup(shared) {
+        case .found(let values):
+            let matte = Self.placedMatte(values, size: model.size, in: region)
+            fineMattes[grid] = matte
+            return matte
+        case .pending where interactive:
+            return nil
+        case .missing where interactive:
+            // The model takes seconds, so the editor doesn't wait: the mask shows without Fine
+            // Edges, and once the matte is in, `FineEdges.matteReady` asks for a new render,
+            // which picks it up from the cache.
+            FineMatteCache.shared.startIfIdle(shared, find: find) {
+                DispatchQueue.main.async { NotificationCenter.default.post(name: FineEdges.matteReady, object: nil) }
+            }
+            return nil
+        default:
+            // Export and Save wait: for the run already going (the editor's), or for their own.
+            let matte = Self.placedMatte(FineMatteCache.shared.matte(for: shared, find: find), size: model.size, in: region)
+            fineMattes[grid] = matte
             return matte
         }
-        // The model takes seconds (much longer the first time, while Core ML compiles it), so
-        // the editor doesn't wait: the mask shows without Fine Edges, and once the matte is in,
-        // `FineEdges.matteReady` asks for a new render, which picks it up from the cache.
-        finePending.insert(regionKey)
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let matte = Self.placedMatte(FineEdges.matte(of: cgImage, model: model), size: model.size, in: region)
-            guard let self else { return }
-            self.lock.lock()
-            if self.fineKey == key, self.fineModel == model, self.finePending.remove(regionKey) != nil {
-                if self.fineMattes.count >= 4 { self.fineMattes.removeAll() }
-                self.fineMattes[regionKey] = matte
-            }
-            self.lock.unlock()
-            DispatchQueue.main.async { NotificationCenter.default.post(name: FineEdges.matteReady, object: nil) }
-        }
-        return nil
     }
 
     /// Depth Range's depth map of the corrected photo on its frame (0 nearest to 1 farthest),
@@ -1215,7 +1233,7 @@ public final class DevelopSession: @unchecked Sendable {
     /// a copy 256 pixels long) with 20% more on every side, widened to a square and kept inside
     /// the photo. Rounded to whole 1/256ths of the photo so it stays the same from render to
     /// render. Nil when the outline is empty.
-    private func fineRegion(of outline: CIImage, extent: CGRect) -> CGRect? {
+    private func fineRegion(of outline: CIImage, extent: CGRect) -> (rect: CGRect, grid: FineRegion)? {
         let factor = min(1, 256 / max(extent.width, extent.height))
         let w = max(1, Int((extent.width * factor).rounded())), h = max(1, Int((extent.height * factor).rounded()))
         let small = outline.cropped(to: extent)
@@ -1242,7 +1260,8 @@ public final class DevelopSession: @unchecked Sendable {
         let region = CGRect(x: extent.minX + box.minX / factor, y: extent.minY + box.minY / factor,
                             width: box.width / factor, height: box.height / factor)
             .intersection(extent).integral
-        return region.width >= 16 && region.height >= 16 ? region : nil
+        guard region.width >= 16, region.height >= 16 else { return nil }
+        return (region, FineRegion(box, gridWidth: w, gridHeight: h))
     }
 
     /// Select People's mask on the corrected photo's frame.
@@ -1412,10 +1431,14 @@ public final class DevelopSession: @unchecked Sendable {
 }
 
 /// A Fine Edges square in whole pixels, as a cache key.
+/// Fine Edges' square on the photo's 1/256 grid (`fineRegion`), the same for a proxy and a
+/// full-size session of one photo.
 struct FineRegion: Hashable {
-    let x, y, width, height: Int
+    let x, y, width, height, gridWidth, gridHeight: Int
 
-    init(_ rect: CGRect) {
-        x = Int(rect.minX); y = Int(rect.minY); width = Int(rect.width); height = Int(rect.height)
+    init(_ box: CGRect, gridWidth: Int, gridHeight: Int) {
+        x = Int(box.minX); y = Int(box.minY); width = Int(box.width); height = Int(box.height)
+        self.gridWidth = gridWidth
+        self.gridHeight = gridHeight
     }
 }

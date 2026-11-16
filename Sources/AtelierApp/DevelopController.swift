@@ -3068,6 +3068,10 @@ extension DevelopController {
             // The mode is where Lens Blur is edited: a switched-off panel would show nothing.
             if !settings.isOn(.lensBlur) { setPanelOn(.lensBlur, true) }
             loadLensBlurPhoto()
+            // A photo that never had Lens Blur blurs as soon as the mode opens (Apply, which also
+            // focuses on the subject), rather than looking as if nothing works. After the entry
+            // above, so Cancel takes it back.
+            if lensBlurNeverUsed { setLensBlurApplied(true) }
         } else {
             visualizesDepth = false
             finishLensBlurRefine()
@@ -3092,6 +3096,14 @@ extension DevelopController {
         beforeImage = nil
         scheduleRender()
         onLensBlurModeChanged?(isLensBlurring)
+    }
+
+    /// Lens Blur off and at its defaults (Amount, Focal Range, no Focus or Blur areas): the photo
+    /// never had it.
+    private var lensBlurNeverUsed: Bool {
+        settings[.lensBlurApply] < 0.5 && settings.lensBlurAreas.isEmpty
+            && [DevelopSettings.Parameter.lensBlurAmount, .lensBlurFocusNear, .lensBlurFocusFar]
+                .allSatisfy { settings[$0] == $0.defaultValue }
     }
 
     /// After a Save: what the mode changed is kept, so closing it no longer cancels anything.
@@ -3428,11 +3440,13 @@ extension DevelopController {
         }
         lensBlurMessage = nil
         let settings = self.settings
+        // Asked in the mode: its answer is dropped if the mode was closed (Cancel) meanwhile.
+        let inMode = isLensBlurring
         queue.async {
             let depths = session.subjectDepths(settings: settings)
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
-                    guard self.assetID == assetID else { return }
+                    guard self.assetID == assetID, !inMode || self.isLensBlurring else { return }
                     guard let depths, let range = LensBlur.focalRange(for: depths) else {
                         self.lensBlurMessage = DepthMap.failure
                             ?? "No subject found. Click the focus picker, then the part of the photo to keep sharp."

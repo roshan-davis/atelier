@@ -177,6 +177,32 @@ final class DevelopLensBlurModeTests: XCTestCase {
         XCTAssertFalse(controller.isLensBlurring, "Remove closes the mode")
     }
 
+    /// A photo that never had Lens Blur blurs as soon as the mode opens (Apply turned on), and
+    /// Cancel takes that back; a photo whose Lens Blur was turned off keeps it off.
+    func testTheModeAppliesLensBlurToAPhotoThatNeverHadIt() async throws {
+        var never = DevelopSettings.neutral
+        never[.lensBlurApply] = 0
+        let (controller, _, catalog) = try await openBlurredCheckerboardParts(settings: never)
+        let assetID = try XCTUnwrap(controller.assetID)
+        try await waitFor(controller, "the photo") { $0 > 0.15 }
+        XCTAssertEqual(controller.settings[.lensBlurApply], 0)
+        controller.isLensBlurring = true
+        XCTAssertEqual(controller.settings[.lensBlurApply], 1, "Apply is turned on")
+        controller.set(.lensBlurAmount, to: 100)
+        try await waitFor(controller, "blurred as the mode opens") { $0 < 0.05 }
+        controller.isLensBlurring = false
+        XCTAssertEqual(controller.settings[.lensBlurApply], 0, "Cancel turns it off again")
+        XCTAssertEqual(try catalog.developSettings(for: assetID)[.lensBlurApply], 0)
+
+        // Turned off by hand after using it (another Amount): it stays off.
+        var used = never
+        used[.lensBlurAmount] = 30
+        let (other, _, _) = try await openBlurredCheckerboardParts(settings: used)
+        other.isLensBlurring = true
+        XCTAssertEqual(other.settings[.lensBlurApply], 0, "a photo that had Lens Blur keeps Apply off")
+        other.isLensBlurring = false
+    }
+
     // MARK: Helpers
 
     private func openBlurredCheckerboardWithCatalog() async throws -> (DevelopController, Catalog) {
@@ -190,7 +216,7 @@ final class DevelopLensBlurModeTests: XCTestCase {
         return (controller, previews)
     }
 
-    private func openBlurredCheckerboardParts(areas: [DevelopSettings.Mask] = []) async throws
+    private func openBlurredCheckerboardParts(areas: [DevelopSettings.Mask] = [], settings start: DevelopSettings? = nil) async throws
         -> (DevelopController, PreviewCache, Catalog) {
         let url = folder.appendingPathComponent("Checks.png")
         let squares = CIFilter(name: "CICheckerboardGenerator", parameters: [
@@ -205,6 +231,7 @@ final class DevelopLensBlurModeTests: XCTestCase {
         settings[.lensBlurApply] = 1
         settings[.lensBlurAmount] = 100
         settings.lensBlurAreas = areas
+        if let start { settings = start }
         try catalog.saveDevelopSettings(settings, for: assetID)
         let previews = PreviewCache(rootURL: folder.appendingPathComponent("Previews"))
         let controller = DevelopController(catalog: catalog, previews: previews)

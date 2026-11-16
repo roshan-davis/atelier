@@ -188,11 +188,17 @@ final class LensBlurRealPhotoTests: XCTestCase {
         controller.finishLensBlurRefine()
 
         // Save: the TIFF in the catalog, next to the copied RAW.
+        // The editor's Fine Edges matte in first (Save then reuses it).
+        let matteWait = Date()
+        while FineEdges.isWorking, Date().timeIntervalSince(matteWait) < 90 { try await Task.sleep(for: .milliseconds(50)) }
         try await settle()
         controller.flushSave()
+        let runsBefore = FineEdges.runs
         started = Date()
         let saved = try LensBlurPhoto.save(try XCTUnwrap(assetID), catalog: catalog, importer: Importer(catalog: catalog, previews: nil))
-        print("LENSBLUR: Save with Refine areas: \(Int(Date().timeIntervalSince(started) * 1000)) ms, \(saved.url.lastPathComponent), new \(saved.isNew)")
+        print("LENSBLUR: Save with Refine areas: \(Int(Date().timeIntervalSince(started) * 1000)) ms, \(saved.url.lastPathComponent), new \(saved.isNew), "
+            + "Fine Edges runs during it: \(FineEdges.runs - runsBefore)")
+        XCTAssertEqual(FineEdges.runs - runsBefore, 0, "Save reuses the editor's Fine Edges matte")
         XCTAssertTrue(FileManager.default.fileExists(atPath: saved.url.path), "Save wrote no TIFF")
         XCTAssertEqual(saved.url.pathExtension.lowercased(), "tif")
 
