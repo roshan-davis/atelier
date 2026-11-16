@@ -121,7 +121,9 @@ public enum LensBlur {
     /// `image` (the corrected photo, linear) with the lens blur `settings` ask for, from `depth`
     /// (0 nearest to 1 farthest in red, on the same frame). The result is kept as a cached
     /// intermediate, so tone and color drags after it don't redo the blur.
-    static func apply(_ image: CIImage, depth: CIImage, settings: DevelopSettings, areas: CIImage? = nil) -> CIImage {
+    /// `context`, when given, draws the stages many passes read into memory once (see `withAreas`).
+    static func apply(_ image: CIImage, depth: CIImage, settings: DevelopSettings, areas: CIImage? = nil,
+                      context: CIContext? = nil) -> CIImage {
         guard isOn(settings), let kernels, let cocKernel = kernels["atelierLensBlurCoC"],
               let boostKernel = kernels["atelierLensBlurBoost"], let gather = kernels["atelierLensBlurGather"],
               let levelKernel = kernels["atelierLensBlurLevel"], let composite = kernels["atelierLensBlurComposite"],
@@ -143,7 +145,7 @@ public enum LensBlur {
         // Every level, the level mix, the composite and each spill read the blur sizes, and every
         // level reads the boosted photo: render each once per frame instead of once per reader
         // (the areas' masks, Fine Edges included, sit under the blur sizes).
-        let cocFound = areas.flatMap { withAreas(depthCoC, areas: $0, extent: extent) } ?? depthCoC
+        let cocFound = areas.flatMap { withAreas(depthCoC, areas: $0, extent: extent, context: context) } ?? depthCoC
         let coc = cocFound.insertingIntermediate(cache: false)
         let boosted = boostFound.insertingIntermediate(cache: false)
 
@@ -251,17 +253,18 @@ public enum LensBlur {
 
     /// `areas` (Focus in red, Blur in green) drawn into memory once, as a half-float red-green
     /// image on the same extent, so the blur's passes read pixels instead of redrawing the masks.
-    static func drawnOnce(_ areas: CIImage, context: CIContext) -> CIImage {
+    /// Also any other stage, in `format` (half floats red-green or RGBA, or full floats RGBA).
+    static func drawnOnce(_ areas: CIImage, context: CIContext, format: CIFormat = .RGh) -> CIImage {
         let extent = areas.extent.integral
         let width = Int(extent.width), height = Int(extent.height)
         guard width > 0, height > 0 else { return areas }
-        let rowBytes = width * 4
+        let rowBytes = width * (format == .RGBAf ? 16 : format == .RGBAh ? 8 : 4)
         guard let data = NSMutableData(length: rowBytes * height) else { return areas }
         context.render(areas.transformed(by: CGAffineTransform(translationX: -extent.minX, y: -extent.minY)),
                        toBitmap: data.mutableBytes, rowBytes: rowBytes,
-                       bounds: CGRect(x: 0, y: 0, width: width, height: height), format: .RGh, colorSpace: nil)
+                       bounds: CGRect(x: 0, y: 0, width: width, height: height), format: format, colorSpace: nil)
         return CIImage(bitmapData: data as Data, bytesPerRow: rowBytes, size: CGSize(width: width, height: height),
-                       format: .RGh, colorSpace: nil)
+                       format: format, colorSpace: nil)
             .transformed(by: CGAffineTransform(translationX: extent.minX, y: extent.minY))
     }
 
@@ -277,7 +280,7 @@ public enum LensBlur {
     /// beyond. Blur areas take the blur of what is around them, or the most blur where that is
     /// sharp. Rosh, Nov 16, 2026: the gaps in hair stayed sharp, and a Blur area didn't match
     /// the background next to it.
-    private static func withAreas(_ coc: CIImage, areas: CIImage, extent: CGRect) -> CIImage? {
+    private static func withAreas(_ coc: CIImage, areas: CIImage, extent: CGRect, context: CIContext?) -> CIImage? {
         guard let kernels, let nearKernel = kernels["atelierLensBlurNearArea"],
               let detailKernel = kernels["atelierLensBlurDetail"], let edgesKernel = kernels["atelierLensBlurEdges"],
               let fillWeigh = kernels["atelierLensBlurFillWeigh"], let fillUp = kernels["atelierLensBlurFillUp"],
@@ -332,7 +335,12 @@ public enum LensBlur {
               var filled = fillUp.apply(extent: coarsest.extent, roiCallback: same,
                                         arguments: [coarsest, CIImage(color: .black).cropped(to: coarsest.extent)])
         else { return nil }
-        for finer in pyramid.dropLast().reversed() {
+        for (index, finer) in pyramid.dropLast().enumerated().reversed() {
+            // The step up to the photo's own size reads the coarser levels drawn once into memory:
+            // left as a graph (an intermediate is drawn per region asked for), every tile of it
+            // redrew the whole coarser chain, 10.7 of the 12 s the areas took at full size, and
+            // left seams along the tile edges (up to 10/255 in the photo). Nov 16, 2026.
+            if index == 0, let context { filled = drawnOnce(filled, context: context, format: .RGBAf) }
             let up = filled.clampedToExtent()
                 .transformed(by: CGAffineTransform(scaleX: finer.extent.width / filled.extent.width,
                                                    y: finer.extent.height / filled.extent.height))

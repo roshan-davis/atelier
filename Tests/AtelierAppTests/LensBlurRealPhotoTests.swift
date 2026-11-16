@@ -152,19 +152,25 @@ final class LensBlurRealPhotoTests: XCTestCase {
         for refine in refines {
             try await settle()
             controller.selectedMaskID = nil
+            // The blurred photo already reads a little redder than the sharp one; the overlay much more.
+            let blurredRed = redFraction(try XCTUnwrap(Self.cg(controller.displayImage)))
             controller.showMaskOverlay = true
-            _ = try? await frame("overlay on", after: nil, timeout: 300, quiet: true) { self.redFraction($0) > 0.01 }
-            var masks = controller.editedMasks
-            let index = try XCTUnwrap(masks.firstIndex(where: { $0.lensBlurRole == .focus }))
-            for part in masks[index].components.indices {
-                if case .subject(var selection) = masks[index].components[part].shape {
-                    selection.refine = refine
-                    masks[index].components[part].shape = .subject(selection)
-                }
+            let overlayFrame = try await frame("overlay on", after: controller.displayImage, timeout: 300) {
+                self.redFraction($0) > blurredRed + 0.05
             }
+            let overlayRed = redFraction(overlayFrame)
+            let focusID = try XCTUnwrap(controller.lensBlurArea(.focus)?.id)
             let edited = Date()
             let unchanged = controller.settings
-            controller.editedMasks = masks
+            // As the Refine Edge slider does: one history step on the area.
+            controller.updateMask(focusID, step: "Refine Edge") { mask in
+                for part in mask.components.indices {
+                    if case .subject(var selection) = mask.components[part].shape {
+                        selection.refine = refine
+                        mask.components[part].shape = .subject(selection)
+                    }
+                }
+            }
             // Refine Edge 0 on a new area changes nothing: the kept full-size frame is right then.
             let changed = controller.settings != unchanged
             try await settle()
@@ -173,9 +179,21 @@ final class LensBlurRealPhotoTests: XCTestCase {
             previous = changed ? controller.fullImage : nil
             let off = Date()
             controller.showMaskOverlay = false
+            // Until the full-size render is in, the current proxy frame (no red) shows, never an
+            // older full-size frame.
+            var proxyMS: Int?
+            while proxyMS == nil, Date().timeIntervalSince(off) < 5 {
+                if let shown = controller.displayImage, let full = controller.fullImage, shown === full, full !== previous { break }
+                if let shown = controller.displayImage, previous == nil || shown !== previous, let image = Self.cg(shown),
+                   redFraction(image) < (blurredRed + overlayRed) / 2 { proxyMS = Int(Date().timeIntervalSince(off) * 1000) }
+                try await Task.sleep(for: .milliseconds(5))
+            }
+            if let previous { XCTAssertFalse(controller.displayImage === previous, "an older full-size frame showed") }
             let fullMS = try await fullFrame(nil, timeout: 300, since: off, after: previous)
-            print("LENSBLUR: zoomed Refine Edge \(Int(refine)): overlay frame settled in \(redMS) ms; "
-                + "Show Overlay off to the full-size frame \(fullMS) ms (Fine Edges runs \(FineEdges.runs - runs))")
+            if changed { XCTAssertLessThan(try XCTUnwrap(proxyMS, "no proxy frame before the full-size one"), 1000,
+                                           "the proxy frame took over 1 s after Show Overlay off") }
+            print("LENSBLUR: zoomed Refine Edge \(Int(refine)): overlay frame settled in \(redMS) ms; Show Overlay off: "
+                + "\(proxyMS.map { "proxy frame in \($0) ms, " } ?? "")full-size frame \(fullMS) ms (Fine Edges runs \(FineEdges.runs - runs))")
             slowest = max(slowest, fullMS)
             // A second toggle with nothing changed shows the kept full-size frame at once.
             controller.showMaskOverlay = true
@@ -187,7 +205,7 @@ final class LensBlurRealPhotoTests: XCTestCase {
             slowest = max(slowest, againMS)
         }
         print("LENSBLUR: zoomed overlay slowest: \(slowest) ms")
-        XCTAssertLessThan(slowest, 15000, "zoomed in, Show Overlay off took over 15 s to show the photo")
+        XCTAssertLessThan(slowest, 5000, "zoomed in, Show Overlay off took over 5 s to show the full-size photo")
     }
 
     /// Waits until nothing works in the background (Fine Edges, Lens Blur's own work) for 1 s.
@@ -214,6 +232,47 @@ final class LensBlurRealPhotoTests: XCTestCase {
         }
         XCTFail("\(what ?? "overlay off"): no full-size frame in \(Int(timeout)) s")
         return Int(timeout * 1000)
+    }
+
+    // MARK: Drawn parts while Fine Edges works
+
+    /// A drawn part (a radial Blur area in a corner, away from the subject) added while Fine
+    /// Edges is still finding the Focus area's matte draws at once, with Vision's edge, and the
+    /// matte replaces that edge when it is in. Fine Edges starts cold (the shared cache emptied).
+    func testDrawnPartDrawsWhileFineEdgesWorks() async throws {
+        try XCTSkipUnless(FineEdges.isInstalled, "Fine Edges isn't downloaded")
+        FineMatteCache.shared.removeAll()
+        controller.isLensBlurring = true
+        try await timed("enter the mode") { self.blurred($0) }
+        controller.startLensBlurRefine()
+        controller.addLensBlurPart(.subject, to: .focus, mode: .add)
+        let subjectStarted = Date()
+        while !FineEdges.isWorking, Date().timeIntervalSince(subjectStarted) < 10 { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertTrue(FineEdges.isWorking, "Fine Edges didn't start")
+        try await Task.sleep(for: .milliseconds(500))
+        let before = Self.rgba(try XCTUnwrap(Self.cg(controller.displayImage)))
+        var shown = controller.displayImage
+        // As the Blur area's Radial tool does: the tool, then the drawn ellipse.
+        controller.addLensBlurPart(.radial, to: .blur, mode: .add)
+        let started = Date()
+        controller.finishDrawing(.radial(.init(center: .init(x: 0.12, y: 0.15), radiusX: 0.1, radiusY: 0.1)))
+        var firstChange: Int?
+        var workingAtFirstChange = false
+        while Date().timeIntervalSince(started) < 60 {
+            if let now = controller.displayImage, now !== shown, let image = Self.cg(now) {
+                shown = now
+                let ms = Int(Date().timeIntervalSince(started) * 1000)
+                let change = diff(image, before)
+                print("LENSBLUR: drawn part: frame at \(ms) ms, change \(String(format: "%.4f", change)), Fine Edges \(FineEdges.isWorking ? "working" : "done")")
+                if firstChange == nil, change > 0.0001 { firstChange = ms; workingAtFirstChange = FineEdges.isWorking }
+            }
+            if firstChange != nil, !FineEdges.isWorking, controller.lensBlurWork == nil { break }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        print("LENSBLUR: drawn part added while Fine Edges works: \(firstChange.map { "\($0) ms" } ?? "NO CHANGE in 60 s")"
+            + "\(workingAtFirstChange ? " (before the matte)" : " (after the matte)")")
+        let ms = try XCTUnwrap(firstChange, "the drawn part never showed")
+        XCTAssertLessThan(ms, 2000, "the drawn part waited for Fine Edges")
     }
 
     // MARK: Every option
@@ -267,11 +326,11 @@ final class LensBlurRealPhotoTests: XCTestCase {
             self.controller.addLensBlurPart(.subject, to: .focus, mode: .add)
         }
         try await settle()
-        try await change("Refine: radial part added to Blur", minimum: 0.0003) {
-            var blur = DevelopSettings.Mask(name: "Blur", components: [.init(.radial(.init(center: .init(x: 0.5, y: 0.5),
-                                                                                           radiusX: 0.15, radiusY: 0.15)))])
-            blur.lensBlurRole = .blur
-            self.controller.editedMasks.append(blur)
+        // Through the Radial tool, as the panel does (setting `editedMasks` alone asks for no
+        // render: the frame that came 23 s later was Fine Edges' matte arriving).
+        try await change("Refine: radial part added to Blur", minimum: 0.0001) {
+            self.controller.addLensBlurPart(.radial, to: .blur, mode: .add)
+            self.controller.finishDrawing(.radial(.init(center: .init(x: 0.12, y: 0.15), radiusX: 0.1, radiusY: 0.1)))
         }
         controller.finishLensBlurRefine()
 
