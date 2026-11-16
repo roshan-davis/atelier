@@ -136,6 +136,7 @@ final class LibraryModel: ObservableObject {
                 // And lets go of the full-size images (AT-077); coming back zoomed in renders them again.
                 develop.wantsFullResolution = false
                 develop.releaseFullResolution(because: "left Develop")
+                RenderMemory.shared.releaseAllSoon(because: "left Develop")
             }
             if mode == .hdr {
                 if oldValue != .hdr { hdrReturnMode = oldValue }

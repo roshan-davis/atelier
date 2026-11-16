@@ -15,7 +15,8 @@ import Foundation
 /// Every stage kept for later goes through `kept(_:)`, which counts its pixels. When the stages
 /// kept since the last clear pass the budget, the cache is cleared first, so it never holds more
 /// than about the budget. It is also cleared when a photo or the Lens Blur mode closes, when the
-/// view goes back to Fit (`DevelopController`), and when macOS says memory is getting low.
+/// view goes back to Fit (`DevelopController`), and when macOS says memory is getting low; the
+/// AI models (`OnnxHost`) are unloaded then too, and after 30 s without a run.
 /// Clearing costs one slower frame (step 1 is decoded again), never a wrong one.
 public final class RenderMemory: @unchecked Sendable {
     public static let shared = RenderMemory(context: DevelopRenderer.shared.context,
@@ -25,11 +26,14 @@ public final class RenderMemory: @unchecked Sendable {
     /// cleared, so the app can drop what it keeps itself (full-size images, decoded previews).
     public static let pressure = Notification.Name("AtelierRenderMemoryPressure")
 
-    /// Bytes of kept stages allowed before the cache is cleared: a tenth of the Mac's memory,
-    /// at least 512 MB and at most 4 GB (8 GB Mac: about 820 MB; 48 GB Mac: 4 GB).
+    /// Bytes of kept stages allowed before the cache is cleared: a sixteenth of the Mac's memory,
+    /// at least 768 MB and at most 2 GB (8 GB Mac: 768 MB; 16 GB: 1 GB; 48 GB: 2 GB). A full-size
+    /// stage of a 24 MP photo is about 190 MB, so 768 MB still holds step 1, the depth map and
+    /// the last Lens Blur results. It was a tenth, up to 4 GB, until the Mac check of PR #157
+    /// (Nov 16, 2026): 21 Lens Blur Amount edits at full size took Atelier from 2.5 to 6.3 GB.
     public static func budget(physicalMemory: UInt64) -> Int {
-        let tenth = Double(physicalMemory) / 10
-        return Int(min(4 * 1_073_741_824, max(512 * 1_048_576, tenth)))
+        let sixteenth = Double(physicalMemory) / 16
+        return Int(min(2 * 1_073_741_824, max(768 * 1_048_576, sixteenth)))
     }
 
     /// A stage's estimated size in the cache: its pixels in the working format (half-float
@@ -73,6 +77,19 @@ public final class RenderMemory: @unchecked Sendable {
         clearCaches(because: reason)
     }
 
+    /// `clear(because:)`, and unloads the AI models too (`OnnxHost.unloadAll`): for a memory
+    /// warning, and when a photo or Lens Blur closes. Waits for a model run in progress, so call
+    /// it off the main thread.
+    public func releaseAll(because reason: String) {
+        clear(because: reason)
+        OnnxHost.unloadAll()
+    }
+
+    /// `releaseAll(because:)` on a background queue, for the main thread.
+    public func releaseAllSoon(because reason: String) {
+        DispatchQueue.global(qos: .utility).async { self.releaseAll(because: reason) }
+    }
+
     private func clearCaches(because reason: String) {
         context.clearCaches()
         lock.withLock {
@@ -87,15 +104,15 @@ public final class RenderMemory: @unchecked Sendable {
         lock.withLock { (keptBytes, clearCount, lastReason) }
     }
 
-    /// Starts listening for macOS's memory warnings: on each one the cache is cleared and
-    /// `pressure` is posted. Call once at launch.
+    /// Starts listening for macOS's memory warnings: on each one the cache is cleared, the AI
+    /// models are unloaded and `pressure` is posted. Call once at launch.
     public func watchMemoryPressure() {
         lock.withLock {
             guard pressureSource == nil else { return }
             let source = DispatchSource.makeMemoryPressureSource(eventMask: [.warning, .critical],
                                                                  queue: .global(qos: .utility))
             source.setEventHandler { [weak self] in
-                self?.clear(because: "memory pressure")
+                self?.releaseAll(because: "memory pressure")
                 DispatchQueue.main.async { NotificationCenter.default.post(name: Self.pressure, object: nil) }
             }
             source.resume()

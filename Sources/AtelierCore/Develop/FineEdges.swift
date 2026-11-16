@@ -172,8 +172,8 @@ public enum FineEdges {
     // MARK: Running
 
     private static let lock = NSLock()
-    nonisolated(unsafe) private static var environment: ORTEnv?
-    /// The loaded model (one at a time: Hair Detail alone takes about 1 GB in memory).
+    /// The loaded model (one at a time: Hair Detail alone takes about 1 GB in memory), unloaded
+    /// after `OnnxHost.idleSeconds` without a run (`idle`).
     nonisolated(unsafe) private static var session: (model: Model, session: ORTSession)?
     /// Why the model last failed to load or run, for the mask panel; nil when it worked.
     nonisolated(unsafe) public private(set) static var failure: String?
@@ -193,7 +193,17 @@ public enum FineEdges {
         DispatchQueue.main.async { NotificationCenter.default.post(name: statusChanged, object: nil) }
     }
 
+    private static let idle = OnnxHost.IdleUnload("Fine Edges") { unloadSession() }
+
+    /// Unloads the model and gives back the memory its runs used (AT-077); its status line
+    /// stays. Waits for a run in progress. The next run loads it again.
+    public static func unloadSession() {
+        idle.cancel()
+        lock.withLock { session = nil }
+    }
+
     static func forgetSession() {
+        idle.cancel()
         lock.lock()
         session = nil
         failure = nil
@@ -223,10 +233,10 @@ public enum FineEdges {
         session = nil
         guard model.isInstalled else { throw Failure.noModel }
         let modelURL = model.modelURL
-        let env = try environment ?? ORTEnv(loggingLevel: .warning)
-        environment = env
+        let env = try OnnxHost.environment()
         func options(coreML: Bool) throws -> ORTSessionOptions {
             let options = try ORTSessionOptions()
+            try OnnxHost.tune(options)
             try options.setGraphOptimizationLevel(.all)
             if let intraOpThreads { try options.setIntraOpNumThreads(Int32(intraOpThreads)) }
             // Core ML compiles the model once and keeps it here; without a cache it compiles it
@@ -261,7 +271,7 @@ public enum FineEdges {
         guard let pixels = rgba(image, size: size) else { return nil }
         lock.lock()
         isWorking = true
-        defer { isWorking = false; lock.unlock(); announce() }
+        defer { isWorking = false; lock.unlock(); idle.touch(); announce() }
         runs += 1
         lastRun = "Fine Edges (\(model.name)) is working… (the first time after a download takes longest)"
         failure = nil
@@ -274,7 +284,8 @@ public enum FineEdges {
                                      shape: [1, 3, NSNumber(value: size), NSNumber(value: size)])
             guard let inputName = try session.inputNames().first,
                   let outputName = try session.outputNames().first else { throw Failure.run("no inputs or outputs") }
-            let outputs = try session.run(withInputs: [inputName: value], outputNames: [outputName], runOptions: nil)
+            let outputs = try session.run(withInputs: [inputName: value], outputNames: [outputName],
+                                          runOptions: OnnxHost.runOptions())
             guard let output = outputs[outputName] else { throw Failure.run("no output") }
             let data = try output.tensorData() as Data
             let raw: [Float]

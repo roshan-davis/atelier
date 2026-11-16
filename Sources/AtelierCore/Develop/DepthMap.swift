@@ -154,10 +154,19 @@ public enum DepthMap {
     }
 
     private static let lock = NSLock()
-    nonisolated(unsafe) private static var environment: ORTEnv?
+    /// The loaded model, unloaded after `OnnxHost.idleSeconds` without a run (`idle`).
     nonisolated(unsafe) private static var session: ORTSession?
+    private static let idle = OnnxHost.IdleUnload("Depth") { unloadSession() }
+
+    /// Unloads the model and gives back the memory its runs used (AT-077). Waits for a run in
+    /// progress. The next run loads it again.
+    public static func unloadSession() {
+        idle.cancel()
+        lock.withLock { session = nil }
+    }
 
     private static func forgetSession() {
+        idle.cancel()
         lock.lock()
         session = nil
         failure = nil
@@ -176,10 +185,10 @@ public enum DepthMap {
     private static func loadedSession() throws -> ORTSession {
         if let session { return session }
         guard isInstalled else { throw Failure("the depth model isn't downloaded.") }
-        let env = try environment ?? ORTEnv(loggingLevel: .warning)
-        environment = env
+        let env = try OnnxHost.environment()
         func options(coreML: Bool, level: ORTGraphOptimizationLevel = .basic) throws -> ORTSessionOptions {
             let options = try ORTSessionOptions()
+            try OnnxHost.tune(options)
             // Basic at most: the extended fusions (SimplifiedLayerNormFusion) break on this
             // half-precision export ("Attempting to get index by a name which does not exist:
             // InsertedPrecisionFreeCast_…", Rosh's Mac, Nov 15, 2026).
@@ -228,6 +237,7 @@ public enum DepthMap {
         defer {
             isWorking = false
             lock.unlock()
+            idle.touch()
             DispatchQueue.main.async { NotificationCenter.default.post(name: workingChanged, object: nil) }
         }
         do {
@@ -238,7 +248,8 @@ public enum DepthMap {
             // onnx-community's half-precision exports keep float input and output, as Fine Edges' does.
             let data = NSMutableData(data: input.withUnsafeBufferPointer { Data(buffer: $0) })
             let value = try ORTValue(tensorData: data, elementType: .float, shape: shape)
-            let outputs = try session.run(withInputs: [inputName: value], outputNames: [outputName], runOptions: nil)
+            let outputs = try session.run(withInputs: [inputName: value], outputNames: [outputName],
+                                          runOptions: OnnxHost.runOptions())
             guard let output = outputs[outputName] else { throw Failure("no output") }
             let result = try output.tensorData() as Data
             let count = size.width * size.height

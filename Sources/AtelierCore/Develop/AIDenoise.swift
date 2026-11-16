@@ -464,6 +464,7 @@ public enum AIDenoise {
                 }
             }
         }
+        idle.touch()
         return (out, coreML)
     }
 
@@ -479,6 +480,8 @@ public enum AIDenoise {
         let data = NSMutableData(data: input.withUnsafeBufferPointer { Data(buffer: $0) })
         let value = try ORTValue(tensorData: data, elementType: .float,
                                  shape: [1, 4, NSNumber(value: tile), NSNumber(value: tile)])
+        // No arena shrinkage per tile (it would allocate again for every tile): a tile's working
+        // memory is small, and the whole model is unloaded once idle (`idle`).
         let outputs = try session.run(withInputs: ["input": value], outputNames: ["output"], runOptions: nil)
         guard let output = outputs["output"] else { throw Failure("the model gave no output.") }
         let bytes = try output.tensorData() as Data
@@ -495,8 +498,16 @@ public enum AIDenoise {
     }
 
     private static let sessionLock = NSLock()
-    nonisolated(unsafe) private static var environment: ORTEnv?
+    /// The loaded model, unloaded after `OnnxHost.idleSeconds` without a run (`idle`).
     nonisolated(unsafe) private static var session: (session: ORTSession, coreML: Bool)?
+    private static let idle = OnnxHost.IdleUnload("AI Denoise") { unloadSession() }
+
+    /// Unloads the model and gives back the memory its runs used (AT-077). A denoise in
+    /// progress keeps its own reference and finishes; the next one loads the model again.
+    public static func unloadSession() {
+        idle.cancel()
+        sessionLock.withLock { session = nil }
+    }
     /// The built-in model's version (first 12 hex digits of PMRID.onnx's SHA-256), so a new
     /// model compiles into a new Core ML cache folder.
     static let modelVersion = "2c76727c7b20"
@@ -511,16 +522,17 @@ public enum AIDenoise {
     private static func loadedSession() throws -> (ORTSession, coreML: Bool) {
         sessionLock.lock()
         defer { sessionLock.unlock() }
+        idle.touch()
         if let session { return (session.session, coreML: session.coreML) }
         guard let url = modelURL else { throw Failure("PMRID.onnx isn't in the app's resources.") }
-        let env = try environment ?? ORTEnv(loggingLevel: .warning)
-        environment = env
+        let env = try OnnxHost.environment()
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
         let cache = caches.appendingPathComponent("Atelier/Models/PMRID-CoreML-\(modelVersion)", isDirectory: true)
         try? FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
         func options(coreML: Bool) throws -> ORTSessionOptions {
             let options = try ORTSessionOptions()
+            try OnnxHost.tune(options)
             try options.setGraphOptimizationLevel(.all)
             if coreML {
                 try options.appendCoreMLExecutionProvider(withOptionsV2: CoreMLProviderOptions.options(cache: cache))

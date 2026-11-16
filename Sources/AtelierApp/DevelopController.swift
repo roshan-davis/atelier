@@ -925,7 +925,7 @@ final class DevelopController: ObservableObject {
         // The last photo's full-size stages in Core Image's cache (step 1, Lens Blur, depth) are
         // of no use now (AT-077). Only after a full-size session: stepping through photos at Fit
         // keeps the neighbours' cached step 1, and the budget bounds those anyway.
-        if heldFullSize { RenderMemory.shared.clear(because: "another photo opened") }
+        if heldFullSize { RenderMemory.shared.releaseAllSoon(because: "another photo opened") }
         sourceURL = nil
         errorMessage = nil
         showingBefore = false
@@ -3151,7 +3151,9 @@ extension DevelopController {
         // Closing lets go of every Lens Blur result Core Image kept (AT-077: they used to pile up
         // until the Mac ran out of memory). The photo on screen was put back above; the next
         // render decodes step 1 again in the background.
-        if !isLensBlurring { RenderMemory.shared.clear(because: "Lens Blur closed") }
+        // The depth and Fine Edges models are unloaded too: their runs' working memory is several
+        // GB (Mac check of PR #157).
+        if !isLensBlurring { RenderMemory.shared.releaseAllSoon(because: "Lens Blur closed") }
         scheduleRender()
         onLensBlurModeChanged?(isLensBlurring)
     }

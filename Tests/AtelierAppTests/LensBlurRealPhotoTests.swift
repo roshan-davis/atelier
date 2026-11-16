@@ -259,6 +259,8 @@ final class LensBlurRealPhotoTests: XCTestCase {
         }
         log("11 more Amount edits with the areas")
         Self.vmmap("peak")
+        try await Task.sleep(for: .seconds(OnnxHost.idleSeconds + 5))
+        log("\(Int(OnnxHost.idleSeconds + 5)) s without a model run (models unloaded when idle)")
         controller.finishLensBlurRefine()
         controller.flushSave()
         _ = try LensBlurPhoto.save(try XCTUnwrap(assetID), catalog: catalog, importer: Importer(catalog: catalog, previews: nil))
@@ -270,9 +272,9 @@ final class LensBlurRealPhotoTests: XCTestCase {
         try await Task.sleep(for: .seconds(5))
         log("back to Fit, 5 s later")
         Self.vmmap("closed, at Fit")
-        FineEdges.forgetSession()
+        OnnxHost.unloadAll()
         try await Task.sleep(for: .seconds(2))
-        log("Fine Edges model unloaded")
+        log("every model unloaded")
         RenderMemory.shared.clear(because: "test")
         try await Task.sleep(for: .seconds(2))
         log("Core Image cache cleared")
@@ -324,7 +326,7 @@ final class LensBlurRealPhotoTests: XCTestCase {
             }
             try await Task.sleep(for: .milliseconds(10))
         }
-        XCTFail("\(what ?? "overlay off"): no full-size frame in \(Int(timeout)) s")
+        XCTFail("\(what ?? "overlay off"): no full-size frame in \(Int(timeout)) s (full image \(controller.fullImage == nil ? "none" : controller.fullImage === previous ? "unchanged" : "new, not shown"))")
         return Int(timeout * 1000)
     }
 

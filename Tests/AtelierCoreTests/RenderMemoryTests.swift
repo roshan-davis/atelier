@@ -7,15 +7,29 @@ import XCTest
 final class RenderMemoryTests: XCTestCase {
     func testBudgetScalesWithTheMac() {
         let gigabyte: UInt64 = 1_073_741_824
-        XCTAssertEqual(RenderMemory.budget(physicalMemory: 4 * gigabyte), 512 * 1_048_576, "never below 512 MB")
-        XCTAssertEqual(RenderMemory.budget(physicalMemory: 8 * gigabyte), Int(8 * gigabyte / 10), "8 GB Mac: a tenth")
-        XCTAssertEqual(RenderMemory.budget(physicalMemory: 48 * gigabyte), 4 * Int(gigabyte), "never above 4 GB")
+        XCTAssertEqual(RenderMemory.budget(physicalMemory: 8 * gigabyte), 768 * 1_048_576, "never below 768 MB")
+        XCTAssertEqual(RenderMemory.budget(physicalMemory: 24 * gigabyte), Int(24 * gigabyte / 16), "24 GB Mac: a sixteenth")
+        XCTAssertEqual(RenderMemory.budget(physicalMemory: 48 * gigabyte), 2 * Int(gigabyte), "never above 2 GB")
     }
 
     func testStageSizeIsItsPixelsInHalfFloats() {
         let stage = CIImage(color: .red).cropped(to: CGRect(x: 0, y: 0, width: 100, height: 50))
         XCTAssertEqual(RenderMemory.estimatedBytes(of: stage), 100 * 50 * 8)
         XCTAssertEqual(RenderMemory.estimatedBytes(of: CIImage(color: .red)), 0, "infinite extents count as nothing")
+    }
+
+    func testIdleUnloadRunsOnceAfterTheLastTouch() {
+        let unloaded = expectation(description: "unloaded once")
+        let idle = OnnxHost.IdleUnload("test") { unloaded.fulfill() }
+        idle.touch(delay: 0.2)
+        idle.touch(delay: 0.3) // a second run: the first timer is cancelled
+        wait(for: [unloaded], timeout: 2)
+        let never = expectation(description: "cancelled")
+        never.isInverted = true
+        let cancelled = OnnxHost.IdleUnload("test") { never.fulfill() }
+        cancelled.touch(delay: 0.1)
+        cancelled.cancel()
+        wait(for: [never], timeout: 0.5)
     }
 
     func testKeptStagesClearTheCachePastTheBudget() {
