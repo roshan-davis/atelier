@@ -44,6 +44,10 @@ public enum DepthMap {
 
     /// Why the model last failed, for the mask panel; nil when it worked.
     nonisolated(unsafe) public private(set) static var failure: String?
+    /// The model is running now (Lens Blur's progress line). `workingChanged` is posted on the
+    /// main queue when it starts or stops.
+    nonisolated(unsafe) public private(set) static var isWorking = false
+    public static let workingChanged = Notification.Name("AtelierDepthMapWorkingChanged")
 
     // MARK: Download
 
@@ -209,7 +213,13 @@ public enum DepthMap {
         guard let pixels = rgba(image, width: size.width, height: size.height) else { return nil }
         let input = inputTensor(pixels, width: size.width, height: size.height)
         lock.lock()
-        defer { lock.unlock() }
+        isWorking = true
+        DispatchQueue.main.async { NotificationCenter.default.post(name: workingChanged, object: nil) }
+        defer {
+            isWorking = false
+            lock.unlock()
+            DispatchQueue.main.async { NotificationCenter.default.post(name: workingChanged, object: nil) }
+        }
         do {
             let session = try loadedSession()
             guard let inputName = try session.inputNames().first,

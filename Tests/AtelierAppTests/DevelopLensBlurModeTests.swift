@@ -37,6 +37,27 @@ final class DevelopLensBlurModeTests: XCTestCase {
         try await waitFor(controller, "sharp after Close") { $0 > 0.15 }
     }
 
+    /// Close shows the unblurred photo at once, not after the blurred renders still running
+    /// (Rosh, Nov 16, 2026: "close still taking time to get to remove the blur"), and no blurred
+    /// render lands on it afterwards.
+    func testCloseTakesTheBlurAwayAtOnce() async throws {
+        let (controller, _) = try await openBlurredCheckerboard()
+        try await waitFor(controller, "sharp before the mode") { $0 > 0.15 }
+        controller.isLensBlurring = true
+        try await waitFor(controller, "blurred in the mode") { $0 < 0.05 }
+        // A change in the mode, so a blurred render is on its way when Close comes.
+        controller.set(.lensBlurAmount, to: 90)
+        controller.isLensBlurring = false
+        let shown = try XCTUnwrap(controller.displayImage?.cgImage(forProposedRect: nil, context: nil, hints: nil))
+        XCTAssertGreaterThan(Self.contrast(of: shown), 0.15, "sharp the moment Close is clicked")
+        XCTAssertNil(controller.lensBlurWork, "no progress line outside the mode")
+        for _ in 0..<40 {
+            try await Task.sleep(for: .milliseconds(25))
+            let later = try XCTUnwrap(controller.displayImage?.cgImage(forProposedRect: nil, context: nil, hints: nil))
+            XCTAssertGreaterThan(Self.contrast(of: later), 0.15, "a blurred render landed after Close")
+        }
+    }
+
     func testFullSizeRenderFollowsTheMode() async throws {
         let (controller, _) = try await openBlurredCheckerboard()
         controller.wantsFullResolution = true
@@ -46,6 +67,7 @@ final class DevelopLensBlurModeTests: XCTestCase {
         try await waitFor(controller, "blurred full size in the mode", fullSize: true) { $0 < 0.05 }
 
         controller.isLensBlurring = false
+        XCTAssertTrue(controller.displayImage === controller.fullImage, "the full-size photo is put back at once")
         try await waitFor(controller, "sharp full size after Close", fullSize: true) { $0 > 0.15 }
     }
 

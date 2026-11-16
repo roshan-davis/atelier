@@ -151,7 +151,17 @@ struct LensBlurModeBar: View {
                 Toggle("Before", isOn: $develop.showingBefore)
                     .toggleStyle(.button)
                     .help("Show the photo without the Lens Blur (\\)")
-                Spacer()
+                // What is still working, in the row so nothing moves when it comes and goes.
+                if let work = develop.lensBlurWork, !develop.lensBlurSaving {
+                    ProgressView().controlSize(.mini)
+                    Text(work)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .help(work)
+                }
+                Spacer(minLength: 4)
                 if develop.lensBlurSaving {
                     ProgressView().controlSize(.small)
                 }

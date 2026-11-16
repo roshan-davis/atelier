@@ -179,6 +179,8 @@ public enum FineEdges {
     /// What the last run found, for the mask panel: its time and how much of the photo it saw as
     /// foreground, or nil before a run.
     nonisolated(unsafe) public private(set) static var lastRun: String?
+    /// A matte is being found now (Lens Blur's progress line); `statusChanged` follows each change.
+    nonisolated(unsafe) public private(set) static var isWorking = false
     nonisolated(unsafe) private static var usesCoreML = true
     /// Posted on the main queue whenever `failure` or `lastRun` changes.
     public static let statusChanged = Notification.Name("AtelierFineEdgesStatusChanged")
@@ -242,7 +244,8 @@ public enum FineEdges {
         let size = model.size
         guard let pixels = rgba(image, size: size) else { return nil }
         lock.lock()
-        defer { lock.unlock(); announce() }
+        isWorking = true
+        defer { isWorking = false; lock.unlock(); announce() }
         lastRun = "Fine Edges (\(model.name)) is working… (the first time after a download takes longest)"
         failure = nil
         announce()

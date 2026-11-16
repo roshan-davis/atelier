@@ -86,6 +86,9 @@ private struct ProxyRenderRequest {
     let histogramSink: HistogramSink
     let openGeneration: LockedValue<Int>
     let renderBeganAt: LockedValue<CFAbsoluteTime>
+    /// Asked for with Lens Blur on (the mode open): its image must not be shown once the mode
+    /// has closed, nor the other way round.
+    var lensBlur = false
 }
 
 /// State for the Develop view: the open photo's settings, its live proxy render, and saving.
@@ -185,6 +188,14 @@ final class DevelopController: ObservableObject {
     /// The open photo's Lens Blur photo, if one was saved, and the settings it was saved from
     /// (nil when unknown), to tell whether it is out of date.
     @Published var lensBlurPhoto: (id: Int64, madeFrom: DevelopSettings?)?
+    /// What is still working in the Lens Blur mode, for the line under its bar: the blur's
+    /// render, the full-size render, the depth model or Fine Edges (Rosh, Nov 16, 2026: "at least
+    /// I know it is slow due that"). Nil when nothing is, and always outside the mode.
+    @Published private(set) var lensBlurWork: String?
+    private var lensBlurWorkCheck: DispatchWorkItem?
+    /// The photo as it was shown when Lens Blur opened, unblurred, put back at once when it
+    /// closes if nothing but Lens Blur changed (`lensBlurModeChanged`).
+    private var lensBlurReturn: LensBlurReturn?
 
     /// The HSL channel the Targeted Adjustment Tool changes (HSL / Color's view, or the one
     /// chosen from its menu in the All view).
@@ -782,6 +793,12 @@ final class DevelopController: ObservableObject {
                                                                queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.backgroundWorkArrived() }
         }
+        // Lens Blur's progress line follows the models starting and stopping.
+        workObservers = [DepthMap.workingChanged, FineEdges.statusChanged].map { name in
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.noteLensBlurWork() }
+            }
+        }
         // So does Content-Aware Remove's fill (until then the spot shows Heal).
         spotFillObserver = NotificationCenter.default.addObserver(forName: ContentAwareFill.fillReady, object: nil,
                                                                   queue: .main) { [weak self] _ in
@@ -800,6 +817,7 @@ final class DevelopController: ObservableObject {
     }
 
     private var fineEdgesObserver: NSObjectProtocol?
+    private var workObservers: [NSObjectProtocol] = []
     private var depthObserver: NSObjectProtocol?
     private var spotFillObserver: NSObjectProtocol?
     private var aiDenoiseObservers: [NSObjectProtocol] = []
@@ -2205,6 +2223,7 @@ final class DevelopController: ObservableObject {
             }
         }
         rendering = true
+        noteLensBlurWork()
         let preview = sliderPreview
         let renderBefore = showingBefore && preview == nil
         var settings = renderBefore ? beforeSettings : self.settings
@@ -2237,7 +2256,7 @@ final class DevelopController: ObservableObject {
             fallback: liveFramesOff && photoFeed.isAttached && firstRenderDone && cropping ? .liveFramesOff : nil,
             sink: direct ? photoFeed.sink : nil, liveEpoch: photoFeed.sink.currentEpoch,
             measureJob: measureJob, measureQueue: measureQueue, histogramSink: histogramSink,
-            openGeneration: openGeneration, renderBeganAt: renderBeganAt))
+            openGeneration: openGeneration, renderBeganAt: renderBeganAt, lensBlur: isLensBlurring))
     }
 
     /// Hands `request` to the render queue, latest-wins: a request still waiting is replaced, and
@@ -2337,6 +2356,7 @@ final class DevelopController: ObservableObject {
         let current = assetID == request.assetID && openGeneration.value == request.generation
         let fits = current && request.cropping != isCropping && request.preview == sliderPreview
             && request.renderBefore == (showingBefore && sliderPreview == nil)
+            && request.lensBlur == isLensBlurring
         var shownLive = false
         switch live {
         case .shown:
@@ -2609,6 +2629,7 @@ final class DevelopController: ObservableObject {
             return
         }
         fullRendering = true
+        noteLensBlurWork()
         fullImageIsStale = false
         let settings = self.settings
         let assetID = self.assetID
@@ -3004,7 +3025,10 @@ extension DevelopController {
     private func lensBlurModeChanged() {
         DevelopTimingLog.shared.log(assetID, (isLensBlurring ? "Lens Blur mode opened" : "Lens Blur mode closed")
             + " (full-size render \(fullRendering ? "running" : "idle"), render \(rendering ? "running" : "idle"))")
+        let restored: Bool
         if isLensBlurring {
+            lensBlurReturn = shownUnblurred()
+            restored = false
             isCropping = false
             isAIOpen = false
             isGuiding = false
@@ -3021,13 +3045,103 @@ extension DevelopController {
             finishLensBlurRefine()
             if picker == .lensFocus { picker = nil }
             lensBlurSaveError = nil
+            restored = restoreUnblurred()
         }
         session?.rendersLensBlur = isLensBlurring
         fullSession?.rendersLensBlur = isLensBlurring
         navigatorSession?.rendersLensBlur = isLensBlurring
-        fullImageSettings = nil
+        // Blurred frames still on their way must not land after Close (nor unblurred ones after
+        // opening the mode).
+        photoFeed.sink.invalidate()
+        if !restored { fullImageSettings = nil }
+        if !isLensBlurring {
+            lensBlurWorkCheck?.cancel()
+            lensBlurWorkCheck = nil
+            lensBlurWork = nil
+        }
         beforeImage = nil
         scheduleRender()
+    }
+
+    /// Something may have started or stopped: the progress line is checked a moment later and
+    /// then every 0.4 s while anything works, so a quick render shows nothing, a drag doesn't
+    /// make it flicker, and SwiftUI hears of it at most a few times a second.
+    func noteLensBlurWork() {
+        guard isLensBlurring || lensBlurWork != nil else { return }
+        guard lensBlurWorkCheck == nil else { return }
+        let item = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.lensBlurWorkCheck = nil
+                let now = self.lensBlurWorkNow()
+                if self.lensBlurWork != now { self.lensBlurWork = now }
+                if now != nil { self.noteLensBlurWork() }
+            }
+        }
+        lensBlurWorkCheck = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: item)
+    }
+
+    private func lensBlurWorkNow() -> String? {
+        guard isLensBlurring else { return nil }
+        if FineEdges.isWorking { return "Fine Edges is finding the hair…" }
+        if DepthMap.isWorking { return "Finding the depth…" }
+        if fullRendering { return "Rendering the blur at full size…" }
+        if rendering { return "Rendering the blur…" }
+        return nil
+    }
+
+    struct LensBlurReturn {
+        let assetID: Int64
+        let generation: Int
+        /// The settings without Lens Blur: the same means the same unblurred photo.
+        let unblurred: DevelopSettings
+        let image: NSImage
+        let fullImage: NSImage?
+    }
+
+    /// What is on screen now, unblurred, to put back when the mode closes. Nil while a stand-in
+    /// or nothing is shown.
+    private func shownUnblurred() -> LensBlurReturn? {
+        // Only the edited photo as it rests: not Before, a crop, an Option view, a guide or the
+        // mask overlay, which `image` may be showing instead.
+        guard let assetID, let image, firstRenderDone, !showsStandIn, !showsPreviousPhoto, !imageIsWhole,
+              !showingBefore, sliderPreview == nil, !isCropping, !isGuiding, !(isMasking && showMaskOverlay)
+        else { return nil }
+        let full = fullImageSettings == settings && !fullImageIsStale ? fullImage : nil
+        return LensBlurReturn(assetID: assetID, generation: openGeneration.value,
+                              unblurred: Self.withoutLensBlur(settings), image: image, fullImage: full)
+    }
+
+    /// On Close: the photo as it was before the mode, at once, when only Lens Blur changed since
+    /// (Rosh, Nov 16, 2026: Close took seconds to take the blur away, waiting behind the blurred
+    /// renders still running). The render that follows draws the same picture.
+    private func restoreUnblurred() -> Bool {
+        defer { lensBlurReturn = nil }
+        guard let saved = lensBlurReturn, saved.assetID == assetID, saved.generation == openGeneration.value,
+              saved.unblurred == Self.withoutLensBlur(settings) else { return false }
+        image = saved.image
+        // As new as every blurred frame, so the view takes it over the frame layer; the render
+        // asked for next (one count on) can still replace it.
+        photoFeed.published(saved.image, count: renderCount)
+        if let full = saved.fullImage {
+            fullImage = full
+            fullImageSettings = settings
+        } else {
+            fullImageSettings = nil
+        }
+        DevelopTimingLog.shared.log(assetID, "Lens Blur closed: the unblurred photo put back at once"
+            + (saved.fullImage == nil ? "" : " (full size too)"))
+        return true
+    }
+
+    /// `settings` with Lens Blur's own settings back at their neutral values.
+    static func withoutLensBlur(_ settings: DevelopSettings) -> DevelopSettings {
+        var plain = settings
+        for parameter in DevelopSettings.Panel.lensBlur.parameters { plain[parameter] = DevelopSettings.neutral[parameter] }
+        plain.lensBlurAreas = []
+        plain.setPanel(.lensBlur, on: true)
+        return plain
     }
 
     // MARK: Lens Blur Refine
