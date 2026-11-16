@@ -242,7 +242,7 @@ public enum AIDenoise {
 
         // The mosaic, from the full-size linear decode, kept by Core Image while it is read in
         // strips so the RAW file is decoded once.
-        let full = try decode(boosted: false, longEdge: nil).insertingIntermediate(cache: true)
+        let full = try RenderMemory.shared.kept(decode(boosted: false, longEdge: nil))
         let width = Int(full.extent.width), height = Int(full.extent.height)
         guard width >= 32, height >= 32 else { throw Failure("the photo is too small.") }
         guard var mosaic = Mosaic(full, width: width, height: height, context: context) else {

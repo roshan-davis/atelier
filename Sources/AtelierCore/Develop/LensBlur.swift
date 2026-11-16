@@ -227,7 +227,9 @@ public enum LensBlur {
                                                   arguments: [result, blurred, coc, maxRadius]) else { return image }
             result = spilled
         }
-        return result.cropped(to: extent).insertingIntermediate(cache: true)
+        // Counted against the memory budget: one full-size result per slider tick or stroke
+        // otherwise piled up in Core Image's cache (AT-077).
+        return RenderMemory.shared.kept(result.cropped(to: extent))
     }
 
     /// The Focus and Blur areas (AT-072's Refine, `DevelopSettings.lensBlurAreas`) drawn on

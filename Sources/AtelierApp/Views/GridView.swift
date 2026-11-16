@@ -385,6 +385,8 @@ final class ThumbnailLoader: @unchecked Sendable {
 
     init() {
         cache.countLimit = 4000
+        // And by bytes (AT-077): a 32nd of the Mac's memory, at most 512 MB (8 GB Mac: 256 MB).
+        cache.totalCostLimit = Int(min(512 * 1_048_576, ProcessInfo.processInfo.physicalMemory / 32))
     }
 
     func invalidate(_ id: Int64) {
@@ -403,10 +405,16 @@ final class ThumbnailLoader: @unchecked Sendable {
         return NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))
     }
 
+    /// A decoded thumbnail's bytes (4 per pixel).
+    static func cost(of image: NSImage) -> Int {
+        guard let rep = image.representations.first else { return 0 }
+        return rep.pixelsWide * rep.pixelsHigh * 4
+    }
+
     func load(_ id: Int64, from url: URL, completion: @escaping @MainActor (NSImage?) -> Void) {
         queue.async {
             let image = Self.decode(url)
-            if let image { self.cache.setObject(image, forKey: NSNumber(value: id)) }
+            if let image { self.cache.setObject(image, forKey: NSNumber(value: id), cost: Self.cost(of: image)) }
             DispatchQueue.main.async {
                 MainActor.assumeIsolated { completion(image) }
             }

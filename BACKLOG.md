@@ -1397,6 +1397,20 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 
 **Scope to agree:** one item per PR, with measurements before and after where marked "measure first". No broad rewrite is approved by this entry.
 
+## AT-077 — Lens Blur and Develop let go of memory (no more 16 GB)
+
+**Status:** Built, awaiting Mac check and Rosh's acceptance. **Owner:** Claude (project thread "Stop Lens Blur hogging memory"). **Branch:** `claude/project-thread-fiqvpk`. **Dependencies:** AT-076 M1 (this is its first part).
+
+**Why (Rosh, Nov 16, 2026):** after some Lens Blur work Atelier used 16 GB and the 48 GB Mac froze and had to restart. "Holding back too long and not releasing is a memory leak." "Our app has to perform on any M processor with nice performance without hogging memory."
+
+**Cause (source, to be confirmed by the memory test):** each Lens Blur result (one per slider tick or stroke, about 190 MB at full size on a Zf file) and each new step 1 was kept in Core Image's cache with `insertingIntermediate(cache: true)`. Atelier kept only the last two references, but nothing ever told Core Image to let the older ones go: not on closing Lens Blur, not at Fit, not on leaving Develop, not under memory pressure. The full-size images and session also stayed until another photo opened.
+
+**Scope:** `RenderMemory` (AtelierCore): every kept stage (step 1, Lens Blur, depth map, Select Sky, AI Denoise's full decode) goes through `kept(_:)`, which counts its pixels and clears Core Image's cache before the kept stages pass a budget (a tenth of the Mac's memory, 512 MB to 4 GB). Cleared too when Lens Blur closes, when a photo opens after a full-size one, three seconds after returning to Fit (with the full-size images and session, `DevelopController.releaseFullResolution`), on leaving Develop, and on macOS memory warnings (`watchMemoryPressure`, which also drops the full-size images). Grid thumbnails get a byte limit (a 32nd of memory, at most 512 MB). PRD Non-functional requirements: new Memory row.
+
+**Not changed:** the per-frame clipping copy and the tone stages' coefficients (`LocalContrast.stage`) still use Core Image's cache directly (they are replaced every frame and counting them would clear step 1 during drags); they are let go by the clears above. HDR's own context, model sessions (M1 point 3) and the other AT-076 items.
+
+**Validation:** Swift unbuilt (cloud). `RenderMemoryTests` (budget, clearing; opt-in `ATELIER_MEMORY_TESTS=1` full-size test: 40 Lens Blur edits at 24 MP, peak growth must stay under the budget + 1.5 GB). Needs a Mac build, the memory test before (main) and after, Frame Diagnostics on a Lens Blur and a Basic drag (no regression), and Rosh's acceptance.
+
 ## AT-071 — Cull: compare the suggested keeper and runner-up with linked zoom
 
 **Status:** Proposed / discuss. **Owner:** unassigned. **Dependencies:** AT-059 (Pick By ranking), AT-060 (shared Cull zoom and pan).

@@ -724,7 +724,7 @@ public final class DevelopSession: @unchecked Sendable {
         guard let image = decodeAndCorrect(settings, defringeView: defringeView) else { return nil }
         // Core Image keeps the rendered step 1 in its cache even though the context's
         // intermediates are off, so the next render starts from it instead of the RAW.
-        let kept = image.insertingIntermediate(cache: true)
+        let kept = RenderMemory.shared.kept(image)
         correctedCache.append((key, kept))
         if correctedCache.count > 2 { correctedCache.removeFirst() }
         return kept
@@ -1091,8 +1091,8 @@ public final class DevelopSession: @unchecked Sendable {
         guard let depthFound, depthFound.key == key else { return nil }
         var mask: CIImage?
         if let field = depthFound.field {
-            mask = DepthMap.Field.image(field.sky, width: field.width, height: field.height, on: source.extent)?
-                .insertingIntermediate(cache: true)
+            mask = DepthMap.Field.image(field.sky, width: field.width, height: field.height, on: source.extent)
+                .map { RenderMemory.shared.kept($0) }
         }
         skyFound = (key, mask)
         return mask
@@ -1146,7 +1146,7 @@ public final class DevelopSession: @unchecked Sendable {
         let longEdge = Double(max(extent.width, extent.height))
         let refined = MaskGuidedFilter.apply(mask: map, guide: source, radius: max(1, 0.005 * longEdge), epsilon: 0.0004,
                                              extent: extent) ?? map
-        return refined.cropped(to: extent).insertingIntermediate(cache: true)
+        return RenderMemory.shared.kept(refined.cropped(to: extent))
     }
 
     /// The depths inside `box` (top-left fractions of the upright, uncropped photo), 0 nearest
