@@ -2,22 +2,18 @@ import AtelierCore
 import SwiftUI
 
 /// The Fine Edges models' downloads and which one runs, shared by the mask panel and
-/// Settings > AI, so both show the same progress and either can start, remove or pick one.
-@MainActor
-final class FineEdgesDownload: ObservableObject {
+/// Settings > AI, so both show the same progress and either can start, remove or pick one. The
+/// download itself is `ModelDownloadState`'s, as the depth model's is.
+final class FineEdgesDownload: ModelDownloadState<FineEdges.Model> {
+    /// The one shared download; don't make another.
     static let shared = FineEdgesDownload()
 
     @Published private(set) var installed: Set<FineEdges.Model> = []
     /// The model that runs when both are downloaded.
     @Published private(set) var chosen = FineEdges.chosen
-    /// The model being downloaded (one at a time), and its progress 0...1.
-    @Published private(set) var downloading: FineEdges.Model?
-    @Published private(set) var progress: Double?
-    @Published private(set) var error: String?
     /// The last run's result (model, time, foreground share) or why it failed, from `FineEdges`.
     @Published private(set) var lastRun: String?
     @Published private(set) var runFailure: String?
-    private var task: Task<Void, Never>?
     private var observer: NSObjectProtocol?
 
     /// Whether either model is downloaded.
@@ -25,7 +21,8 @@ final class FineEdgesDownload: ObservableObject {
     /// The model Fine Edges runs (see `FineEdges.active`).
     var active: FineEdges.Model? { installed.contains(chosen) ? chosen : FineEdges.Model.allCases.first { installed.contains($0) } }
 
-    private init() {
+    override init() {
+        super.init()
         refresh()
         observer = NotificationCenter.default.addObserver(forName: FineEdges.statusChanged, object: nil,
                                                           queue: .main) { [weak self] _ in
@@ -51,45 +48,16 @@ final class FineEdgesDownload: ObservableObject {
     /// Downloads `model` and picks it; `then` runs once it is in place (the mask panel turns Fine
     /// Edges on).
     func download(_ model: FineEdges.Model, then: (() -> Void)? = nil) {
-        guard task == nil, !installed.contains(model) else { return }
-        error = nil
-        downloading = model
-        progress = 0
-        task = Task {
-            do {
-                try await FineEdges.install(model) { value in
-                    Task { @MainActor in
-                        if FineEdgesDownload.shared.progress != nil { FineEdgesDownload.shared.progress = value }
-                    }
-                }
-                refresh()
-                then?()
-            } catch {
-                // Cancel already cleared the state, and a new download may have started since.
-                if Task.isCancelled { return }
-                self.error = error.localizedDescription
-            }
-            downloading = nil
-            progress = nil
-            task = nil
-        }
-    }
-
-    func cancel() {
-        task?.cancel()
-        task = nil
-        downloading = nil
-        progress = nil
+        guard !installed.contains(model) else { return }
+        startDownload(model, install: { try await FineEdges.install(model, progress: $0) },
+                      finished: { [weak self] in
+                          self?.refresh()
+                          then?()
+                      })
     }
 
     func remove(_ model: FineEdges.Model) {
-        do {
-            try FineEdges.remove(model)
-            refresh()
-            DeleteFeedback.play(.remove)
-        } catch {
-            self.error = error.localizedDescription
-        }
+        remove({ try FineEdges.remove(model) }, finished: { refresh() })
     }
 }
 
@@ -200,11 +168,7 @@ struct FineEdgesControl: View {
     }
 
     private func downloadProgress(_ progress: Double, model: FineEdges.Model) -> some View {
-        HStack {
-            ProgressView(value: progress)
-            Text("\(Int((progress * 100).rounded()))%").font(.caption).monospacedDigit().foregroundStyle(.secondary)
-            Button("Cancel") { download.cancel() }.controlSize(.small)
-        }
-        .help("Downloading the Fine Edges \(model.name) model (\(model.downloadSize))")
+        ModelDownloadProgress(progress: progress, help: "Downloading the Fine Edges \(model.name) model (\(model.downloadSize))",
+                              cancel: download.cancel)
     }
 }
