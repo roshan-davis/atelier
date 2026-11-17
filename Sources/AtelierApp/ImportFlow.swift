@@ -29,11 +29,11 @@ final class ImportFlow: ObservableObject {
     @Published private(set) var cull: CullModel?
 
     // Options, remembered between imports where the user would expect it.
-    @Published var copyFiles = UserDefaults.standard.bool(forKey: "import.copy") {
-        didSet { UserDefaults.standard.set(copyFiles, forKey: "import.copy") }
+    @Published var copyFiles = UserDefaults.standard.value(Preferences.importCopies) {
+        didSet { UserDefaults.standard.set(copyFiles, for: Preferences.importCopies) }
     }
-    @Published var destinationPath = UserDefaults.standard.string(forKey: "import.destination") ?? ImportFlow.defaultLibrary {
-        didSet { UserDefaults.standard.set(destinationPath, forKey: "import.destination") }
+    @Published var destinationPath = UserDefaults.standard.value(Preferences.importDestination) {
+        didSet { UserDefaults.standard.set(destinationPath, for: Preferences.importDestination) }
     }
     var retiredPreset: DevelopPreset? { DevelopPreset.retiredImportPreset(id: presetID) }
 
@@ -50,11 +50,6 @@ final class ImportFlow: ObservableObject {
     }
     @Published var colorGradingPresetID = UserDefaults.standard.string(forKey: "import.colorGradingPreset") ?? "" {
         didSet { UserDefaults.standard.set(colorGradingPresetID, forKey: "import.colorGradingPreset") }
-    }
-    /// Settings > Import's default library folder.
-    static var defaultLibrary: String {
-        FileManager.default.urls(for: .picturesDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Atelier Library").path
     }
     /// nil is a new import entry.
     @Published var existingGroup: Int64?

@@ -236,7 +236,7 @@ struct AIPanel: View {
 
     private var upscaleFactor: Binding<Int> {
         Binding(get: { AIController.settings.upscaleFactor },
-                set: { UserDefaults.standard.set($0, forKey: "ai.upscaleFactor"); ai.objectWillChange.send() })
+                set: { UserDefaults.standard.set($0, for: Preferences.aiUpscaleFactor); ai.objectWillChange.send() })
     }
 
     @ViewBuilder private var serverLine: some View {

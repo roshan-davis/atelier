@@ -9,6 +9,8 @@ import GRDB
 public enum FilePairs {
     /// The UserDefaults key for Settings > Import > "Show RAW+JPEG pairs as one photo".
     public static let groupKey = "library.groupRawPairs"
+    /// Posted when Settings turns grouping on or off, so the Library can refilter.
+    public static let groupingChanged = Notification.Name("AtelierRawPairGroupingChanged")
 
     /// Whether pairs are grouped; on unless turned off in Settings.
     public static var isGrouping: Bool {

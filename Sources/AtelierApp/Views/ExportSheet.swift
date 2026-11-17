@@ -10,10 +10,8 @@ struct ExportSheet: View {
     @EnvironmentObject private var model: LibraryModel
     @Environment(\.dismiss) private var dismiss
 
-    @AppStorage("export.reveal") private var reveal = true
-    @AppStorage("export.destination") private var destinationPath = FileManager.default
-        .urls(for: .picturesDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("Atelier Exports").path
+    @AppStorage(Preferences.exportReveals) private var reveal: Bool
+    @AppStorage(Preferences.exportDestination) private var destinationPath: String
 
     /// Everything but the folder, which lives in `destinationPath` so Settings can change it.
     @State private var draft: ExportSettings

@@ -36,14 +36,13 @@ final class AIController: ObservableObject {
     /// Settings > AI, as the runner needs them.
     static var settings: AISettings {
         let defaults = UserDefaults.standard
-        let server = defaults.string(forKey: "ai.server").flatMap(URL.init(string:)) ?? AISettings.defaultServer
-        let size = defaults.integer(forKey: "ai.generationSize")
-        let factor = defaults.integer(forKey: "ai.upscaleFactor")
-        return AISettings(server: server,
-                          editModel: defaults.string(forKey: "ai.editModel")?.nilIfEmpty,
-                          upscaleModel: defaults.string(forKey: "ai.upscaleModel")?.nilIfEmpty,
-                          generationSize: size > 0 ? size : 1024,
-                          upscaleFactor: factor > 0 ? factor : 2)
+        let size = defaults.value(Preferences.aiGenerationSize)
+        let factor = defaults.value(Preferences.aiUpscaleFactor)
+        return AISettings(server: URL(string: defaults.value(Preferences.aiServer)) ?? AISettings.defaultServer,
+                          editModel: defaults.value(Preferences.aiEditModel).nilIfEmpty,
+                          upscaleModel: defaults.value(Preferences.aiUpscaleModel).nilIfEmpty,
+                          generationSize: size > 0 ? size : Preferences.aiGenerationSize.defaultValue,
+                          upscaleFactor: factor > 0 ? factor : Preferences.aiUpscaleFactor.defaultValue)
     }
 
     var canGenerate: Bool {

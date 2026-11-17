@@ -388,8 +388,8 @@ struct SliderCompareView: View {
 struct DevelopPanel: View {
     @EnvironmentObject private var model: LibraryModel
     @ObservedObject var develop: DevelopController
-    @AppStorage("develop.expandedPanels") private var expandedList = "histogram,basic"
-    @AppStorage("develop.soloMode") private var soloMode = false
+    @AppStorage(Preferences.expandedPanels) private var expandedList: String
+    @AppStorage(Preferences.soloMode) private var soloMode: Bool
 
     private var expanded: Set<String> {
         Set(expandedList.split(separator: ",").map(String.init))
@@ -575,7 +575,7 @@ struct DevelopPanel: View {
 /// to reset it. The photo's ISO, focal length, aperture and shutter speed sit underneath.
 private struct HistogramView: View {
     @ObservedObject var develop: DevelopController
-    @AppStorage("develop.showClipping") private var showClipping = true
+    @AppStorage(Preferences.showClipping) private var showClipping: Bool
     @State private var hovered: ToneRegion?
     /// The region being dragged and its slider's value when the drag began.
     @State private var drag: (region: ToneRegion, start: Double)?
