@@ -865,6 +865,7 @@ final class DevelopController: ObservableObject {
         // Kept for going straight back (← then →); dropped once it's no longer a neighbour.
         if let previous = self.assetID, let session { prefetched[previous] = session }
         self.assetID = assetID
+        originals?.inUse = assetID
         openAsset.value = assetID
         openGeneration.value += 1
         histogramSink.reset(generation: openGeneration.value)

@@ -129,7 +129,7 @@ extension LibraryModel {
                       shareVolumes.contains(volumeId), let source = detail.fileURL else { continue }
                 let hash = detail.asset.contentHash
                 if (try? originals.copy(for: id, contentHash: hash, source: OriginalCache.SourceInfo(source))) != nil { continue }
-                _ = try? originals.store(id, from: source, contentHash: hash, shouldPause: { paused.value })
+                _ = try? originals.store(id, from: source, contentHash: hash, readAhead: true, shouldPause: { paused.value })
             }
         }
     }
@@ -198,15 +198,25 @@ extension LibraryModel {
     }
 }
 
-/// Hands a background copy's byte count to the main actor, at most every 8 MB chunk.
+/// Hands a background copy's byte count to the main actor, at most ten times a second, so a
+/// 2 GB TIFF doesn't send 250 updates.
 final class ProgressRelay: @unchecked Sendable {
     private let deliver: @MainActor (Int64) -> Void
+    private let lock = NSLock()
+    private var last = Date.distantPast
 
     init(_ deliver: @escaping @MainActor (Int64) -> Void) {
         self.deliver = deliver
     }
 
     func send(_ copied: Int64) {
+        let now = Date()
+        let due = lock.withLock { () -> Bool in
+            guard now.timeIntervalSince(last) >= 0.1 else { return false }
+            last = now
+            return true
+        }
+        guard due else { return }
         Task { @MainActor in self.deliver(copied) }
     }
 }

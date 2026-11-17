@@ -549,7 +549,8 @@ public final class Importer: Sendable {
     /// Copies `source` into the open file `destination` (and closes it), hashing what it reads,
     /// then gives the copy the source's dates, permissions and extended attributes.
     static func copyHashing(_ source: URL, to destination: Int32,
-                            progress: ((Int64) -> Void)? = nil, shouldPause: (() -> Bool)? = nil) throws -> String {
+                            progress: ((Int64) -> Void)? = nil, shouldPause: (() -> Bool)? = nil,
+                            shouldStop: (() -> Bool)? = nil) throws -> String {
         defer { close(destination) }
         let input = open(source.path, O_RDONLY)
         guard input >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
@@ -567,6 +568,7 @@ public final class Importer: Sendable {
                 try Task.checkCancellation()
                 usleep(50_000)
             }
+            if shouldStop?() == true { throw CancellationError() }
             let count = read(input, buffer, size)
             if count < 0 {
                 if errno == EINTR { continue }

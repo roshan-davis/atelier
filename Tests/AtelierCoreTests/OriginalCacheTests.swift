@@ -153,4 +153,30 @@ final class OriginalCacheTests: XCTestCase {
         XCTAssertEqual(try catalog.readableURL(for: 42, cache: cache), cache.readyCopy(for: 42))
         XCTAssertNil(try catalog.readableURL(for: 43, cache: cache))
     }
+
+    /// A read-ahead of a photo already stored (the open photo got there first) reads nothing.
+    func testReadAheadSkipsAPhotoAlreadyStored() throws {
+        let cache = try cache()
+        let (url, hash) = try source("a.jpg")
+        guard case .stored(let first) = try cache.store(1, from: url, contentHash: hash) else { return XCTFail() }
+        var read: Int64 = 0
+        let again = try cache.store(1, from: url, contentHash: hash, readAhead: true, progress: { read = $0 })
+        XCTAssertEqual(again, .stored(first))
+        XCTAssertEqual(read, 0)
+    }
+
+    /// The photo open in Develop keeps its copy when a neighbour's read pushes the cache over size.
+    func testThePhotoInUseIsNeverLetGo() throws {
+        let cache = try cache(limit: 1500)
+        let (a, hashA) = try source("a.jpg", byte: 1)
+        let (b, hashB) = try source("b.jpg", byte: 2)
+        try cache.store(1, from: a, contentHash: hashA)
+        cache.inUse = 1
+        try cache.store(2, from: b, contentHash: hashB, readAhead: true)
+        XCTAssertNotNil(try cache.entry(for: 1))
+        XCTAssertNotNil(try cache.entry(for: 2))
+        try cache.clear()
+        XCTAssertNotNil(try cache.entry(for: 1), "Clear Cache spares the open photo")
+        XCTAssertNil(try cache.entry(for: 2))
+    }
 }

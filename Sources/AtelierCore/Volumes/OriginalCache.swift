@@ -84,6 +84,8 @@ public final class OriginalCache: @unchecked Sendable {
     private let lock = NSLock()
     /// Copies checked or stored this session, for readers that can't wait (`readableURL`).
     private var ready: [Int64: URL] = [:]
+    /// The photo open in Develop: its copy is never let go, whatever is stored after it.
+    private var open: Int64?
     private var limit: Int64
     /// Free space of the cache's disk, for the "at most a quarter" rule; tests pass their own.
     private let freeSpace: @Sendable () -> Int64
@@ -164,6 +166,12 @@ public final class OriginalCache: @unchecked Sendable {
         }
     }
 
+    /// Develop sets the photo it has open (nil when none).
+    public var inUse: Int64? {
+        get { lock.withLock { open } }
+        set { lock.withLock { open = newValue } }
+    }
+
     // MARK: Using a copy
 
     public func entry(for assetID: Int64) throws -> Entry? {
@@ -205,10 +213,14 @@ public final class OriginalCache: @unchecked Sendable {
     /// Reads `source` once, start to end, into the cache, hashing as it reads. The copy is kept only
     /// if its hash is the catalog's; otherwise `.changed` and nothing is kept. Streams in 8 MB
     /// chunks, so memory stays flat whatever the file's size. Throws `CancellationError` when the
-    /// task is cancelled. `shouldPause` lets a prefetch step aside for the photo being opened.
+    /// task is cancelled. `shouldPause` lets a prefetch step aside for the photo being opened; a
+    /// prefetch (`readAhead`) also stops as soon as another read stored the same photo, so a photo
+    /// opened while it was being read ahead is never read over the network twice.
     @discardableResult
     public func store(_ assetID: Int64, from source: URL, contentHash: String, pinned: Bool = false,
+                      readAhead: Bool = false,
                       progress: ((Int64) -> Void)? = nil, shouldPause: (() -> Bool)? = nil) throws -> StoreResult {
+        if readAhead, let existing = readyCopy(for: assetID) { return .stored(existing) }
         guard let info = SourceInfo(source) else { throw CocoaError(.fileReadNoSuchFile, userInfo: [NSFilePathErrorKey: source.path]) }
         let ext = source.pathExtension.isEmpty ? "" : "." + source.pathExtension.lowercased()
         let partial = root.appendingPathComponent("partial/\(assetID)-\(UUID().uuidString)\(ext)")
@@ -216,9 +228,11 @@ public final class OriginalCache: @unchecked Sendable {
         guard fd >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
         let hash: String
         do {
-            hash = try Importer.copyHashing(source, to: fd, progress: progress, shouldPause: shouldPause)
+            hash = try Importer.copyHashing(source, to: fd, progress: progress, shouldPause: shouldPause,
+                                            shouldStop: readAhead ? { [weak self] in self?.readyCopy(for: assetID) != nil } : nil)
         } catch {
             try? FileManager.default.removeItem(at: partial)
+            if readAhead, error is CancellationError, let existing = readyCopy(for: assetID) { return .stored(existing) }
             throw error
         }
         guard hash == contentHash else {
@@ -243,8 +257,8 @@ public final class OriginalCache: @unchecked Sendable {
 
     // MARK: Letting go
 
-    /// Lets the oldest-opened unkept copies go until the cache fits its size. `sparing` is the copy
-    /// just stored for the photo being opened: it stays even when it alone is over the size.
+    /// Lets the oldest-opened unkept copies go until the cache fits its size. `sparing` (the copy
+    /// just stored) and the photo open in Develop (`inUse`) stay, even when over the size alone.
     public func evict(sparing: Int64? = nil) throws {
         let allowed = try effectiveLimit()
         var total = try usage().cachedBytes
@@ -252,7 +266,8 @@ public final class OriginalCache: @unchecked Sendable {
         let candidates = try index.read { db in
             try Entry.filter(Column("pinned") == false).order(Column("lastOpened")).fetchAll(db)
         }
-        for entry in candidates where total > allowed && entry.assetId != sparing {
+        let open = inUse
+        for entry in candidates where total > allowed && entry.assetId != sparing && entry.assetId != open {
             try drop(entry.assetId)
             total -= entry.bytes
         }
@@ -275,7 +290,8 @@ public final class OriginalCache: @unchecked Sendable {
         let entries = try index.read { db in
             includingKept ? try Entry.fetchAll(db) : try Entry.filter(Column("pinned") == false).fetchAll(db)
         }
-        for entry in entries where entry.assetId != sparing { try drop(entry.assetId) }
+        let open = inUse
+        for entry in entries where entry.assetId != sparing && entry.assetId != open { try drop(entry.assetId) }
     }
 
     public func drop(_ assetID: Int64) throws {
