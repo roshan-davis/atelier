@@ -699,6 +699,8 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 **Update 2 (Nov 17, 2026):** Rosh replaced it the same evening with a cleaner version (just the aperture with grey lens discs behind it and the orange bar, no photo frame), also from Gemini; branch `claude/app-icon-aperture-v2`. Same `--rounded-square` cut (corner radius 147 px on the 1024 px source). **Validation:** edges and every size checked in the cloud; not yet built on a Mac.
 
+**Update 3 (Nov 17, 2026):** Rosh switched to a ChatGPT-made version (layered aperture on a navy tile, the orange bar along the bottom edge); branch `claude/app-icon-chatgpt-aperture`. This one has real transparency, so it goes straight into `make_app_icon.py` with no cut-out. **Validation:** edges and every size checked in the cloud; not yet built on a Mac.
+
 ## AT-047 — Match Look: skin masks cover the lips; Protect Skin Tones holds brightness
 
 **Status:** Merged at Rosh's ask on Nov 11, 2026 after Rosh built and ran it in Xcode ("looks good"). XCTest/`check_pr.py` not run (CI billing-blocked). **Owner:** Claude. **Chat:** [Improve Match Colors quality](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKF2JPu63ZaHgkVxXXo1FmSC). **Branch:** `claude/match-look-skin-lips`. **PR:** [#107](https://github.com/roshan-davis/atelier/pull/107). **Baseline:** `2747aea`. **Dependencies:** AT-045 (merged).
