@@ -34,9 +34,11 @@ struct AtelierApp: App {
                                     HelpWindow.shared.show(page: topic.page, section: topic.section)
                                 }
                             }
+                            #if DEBUG
                             if let folder = LayoutSnapshots.outputFolder {
                                 Task { await LayoutSnapshots.run(model: model, into: folder) }
                             }
+                            #endif
                         }
                 } else {
                     CatalogRecoveryView(opening: launch.opening, retry: { launch.open() })
@@ -233,7 +235,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         MainActor.assumeIsolated {
             Theme.current.apply()
+            #if DEBUG
             if snapshots { LayoutSnapshots.hideOffScreen() }
+            #endif
         }
         if !snapshots { NSApp.activate(ignoringOtherApps: true) }
     }
