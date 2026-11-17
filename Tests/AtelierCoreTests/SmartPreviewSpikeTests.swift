@@ -250,10 +250,25 @@ final class SmartPreviewSpikeTests: XCTestCase {
             let m = xx
             let det = m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6]) + m[2] * (m[3] * m[7] - m[4] * m[6])
             guard abs(det) > 1e-12 else { return nil }
-            let inv = [(m[4] * m[8] - m[5] * m[7]), -(m[1] * m[8] - m[2] * m[7]), (m[1] * m[5] - m[2] * m[4]),
-                       -(m[3] * m[8] - m[5] * m[6]), (m[0] * m[8] - m[2] * m[6]), -(m[0] * m[5] - m[2] * m[3]),
-                       (m[3] * m[7] - m[4] * m[6]), -(m[0] * m[7] - m[1] * m[6]), (m[0] * m[4] - m[1] * m[3])].map { $0 / det }
-            return (0..<9).map { k in (0..<3).reduce(0) { $0 + yx[(k / 3) * 3 + $1] * inv[$1 * 3 + k % 3] } }
+            // Split up so the type checker finishes in time.
+            let c00: Double = m[4] * m[8] - m[5] * m[7]
+            let c01: Double = -(m[1] * m[8] - m[2] * m[7])
+            let c02: Double = m[1] * m[5] - m[2] * m[4]
+            let c10: Double = -(m[3] * m[8] - m[5] * m[6])
+            let c11: Double = m[0] * m[8] - m[2] * m[6]
+            let c12: Double = -(m[0] * m[5] - m[2] * m[3])
+            let c20: Double = m[3] * m[7] - m[4] * m[6]
+            let c21: Double = -(m[0] * m[7] - m[1] * m[6])
+            let c22: Double = m[0] * m[4] - m[1] * m[3]
+            let inv: [Double] = [c00, c01, c02, c10, c11, c12, c20, c21, c22].map { $0 / det }
+            var product = [Double](repeating: 0, count: 9)
+            for k in 0..<9 {
+                let row = k / 3, column = k % 3
+                var sum = 0.0
+                for j in 0..<3 { sum += yx[row * 3 + j] * inv[j * 3 + column] }
+                product[k] = sum
+            }
+            return product
         }
 
         for raw in raws {
