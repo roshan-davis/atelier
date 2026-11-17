@@ -304,7 +304,7 @@ private struct StatusBar: View {
                 ProgressItem(progress: progress) { model.agentJob?.cancel() }
             }
             if let progress = model.downloadProgress {
-                ProgressItem(progress: progress) { model.cancelCloudDownload() }
+                ProgressItem(progress: progress) { model.cancelOriginalTransfer() }
             }
             if model.importProgress == nil, model.exportProgress == nil, model.matchProgress == nil,
                model.agentProgress == nil, model.downloadProgress == nil,

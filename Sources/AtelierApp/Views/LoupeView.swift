@@ -147,7 +147,7 @@ struct LoupeView: View {
     /// Renders the original with its develop settings at full size.
     private func loadFullResolution() async {
         guard let key = wantedFullKey, key != fullKey else { return }
-        guard let url = try? model.catalog.fileURL(for: key.id),
+        guard let url = try? model.catalog.readableURL(for: key.id, cache: model.originals),
               let settings = try? model.catalog.developSettings(for: key.id) else { return }
         let rendered = await Task.detached(priority: .userInitiated) { () -> NSImage? in
             guard let cgImage = DevelopRenderer.shared.session(for: url, maxPixelSize: nil)?.render(settings) else { return nil }

@@ -48,7 +48,7 @@
   <figcaption><b>Settings › Storage:</b> each location with where it is, whether it is connected, how many photos it holds and how full it is. Click one to see its details below the list.</figcaption>
 </figure>
 
-<div class="chips"><a href="#add">Add a location</a><a href="#nas">A NAS</a><a href="#cloud">Cloud drive folders</a><a href="#details">Details</a><a href="#offline">Offline</a><a href="#where">What stays on this Mac</a><a href="#remove">Remove</a></div>
+<div class="chips"><a href="#add">Add a location</a><a href="#nas">A NAS</a><a href="#cloud">Cloud drive folders</a><a href="#details">Details</a><a href="#cache">Cache of originals</a><a href="#offline">Offline</a><a href="#where">What stays on this Mac</a><a href="#remove">Remove</a></div>
 
 <h2 id="add">Add a location</h2>
 <ol class="steps">
@@ -85,8 +85,17 @@
   <dt>Show in Finder</dt><dd>Opens the location's folder.</dd>
 </dl>
 
+<h2 id="cache">Cache of originals</h2>
+<p>When you open a photo from a network share in Develop, Atelier reads its original once, start to end, into a folder on this Mac, and edits from that copy, so sliders, zooming in and Export never wait on the network. The first time, the status bar shows <span class="path">Reading DSC_1.NEF · 48 MB from megham…</span> with a progress bar and <span class="path">Cancel</span>; the photo's preview stays on screen meanwhile. The photos just before and after it are read in the background, so stepping through a shoot on the NAS feels local after the first one.</p>
+<ul>
+  <li>Before using a copy, Atelier checks the original's size and date on the share (no download). If the file changed there, it is read again; if its contents differ from what was imported, Atelier says so and doesn't use either file.</li>
+  <li>When the share is off, a photo with a copy on this Mac still opens in Develop at full quality, and the status bar says <i>Using the copy on this Mac from Nov 17; megham is offline, so changes there can't be checked.</i></li>
+  <li>Set its size in <span class="path">Atelier › Settings… › Storage › Cache of Originals</span> (20 GB to start; it never takes more than a quarter of the free space). The copies opened longest ago go first. <span class="path">Clear Cache…</span> removes them; the originals are never touched.</li>
+  <li>Photos in a cloud drive folder aren't copied: the cloud drive's own download is their copy on this Mac.</li>
+</ul>
+
 <h2 id="offline">When a location is offline</h2>
-<p>Its photos stay in the grid from their previews, with the offline mark, and you can still rate, flag and keyword them. <span class="path">Library › Refresh Volumes</span> (<kbd>⌘R</kbd>) checks again after you connect it some other way.</p>
+<p>Its photos stay in the grid from their previews, with the offline mark, and you can still rate, flag and keyword them. One with a copy in the <a href="#cache">cache of originals</a> also opens in Develop. <span class="path">Library › Refresh Volumes</span> (<kbd>⌘R</kbd>) checks again after you connect it some other way.</p>
 
 <h2 id="where">What stays on this Mac</h2>
 <p>The catalog and every preview always stay on this Mac, whatever locations you add, so browsing never waits on the network and a sync app can never damage the catalog.</p>
