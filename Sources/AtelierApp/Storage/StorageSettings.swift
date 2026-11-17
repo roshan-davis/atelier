@@ -101,6 +101,9 @@ struct StorageSettings: View {
             if let originals = model.originals {
                 OriginalCacheSection(cache: originals)
             }
+            if let store = model.smartPreviews {
+                SmartPreviewsSection(store: store)
+            }
         }
         .formStyle(.grouped)
         .sheet(isPresented: $adding) {
@@ -228,6 +231,7 @@ private struct StorageLocationDetail: View {
     let info: StorageLocationInfo
     let remove: () -> Void
     @State private var name = ""
+    @State private var makesSmartPreviews = false
 
     var body: some View {
         SettingsSection(info.location.name, id: "storage.detail") {
@@ -242,6 +246,17 @@ private struct StorageLocationDetail: View {
                     .help(info.rootURL?.path ?? info.detailLine)
             }
             LabeledContent("Photos", value: info.photoCount.formatted())
+            if info.location.kind != .objectStorage {
+                Toggle("Make smart previews for photos here", isOn: Binding(
+                    get: { makesSmartPreviews },
+                    set: { on in
+                        makesSmartPreviews = on
+                        try? model.catalog.setMakesSmartPreviews(info.id, on)
+                    }))
+                    .help("Photos imported from here get a small copy on this Mac, so they can be edited in Develop while it's offline. Library › Previews › Build Smart Previews makes them for photos already here.")
+                    .onAppear { makesSmartPreviews = (try? model.catalog.makesSmartPreviews(info.id)) ?? false }
+                    .onChange(of: info.id) { _, id in makesSmartPreviews = (try? model.catalog.makesSmartPreviews(id)) ?? false }
+            }
             if info.location.kind == .networkShare {
                 Toggle("Connect when Atelier opens", isOn: Binding(
                     get: { info.location.connectAtLaunch },
@@ -374,6 +389,57 @@ private struct OriginalCacheSection: View {
                 (try? cache.clear(includingKept: includingKept, sparing: open)) != nil
             }.value
             if cleared { DeleteFeedback.play(.remove) }
+            await loadUsage()
+        }
+    }
+}
+
+/// Settings > Storage > Smart Previews (AT-079d): how many there are, their size, Discard All.
+private struct SmartPreviewsSection: View {
+    @EnvironmentObject private var model: LibraryModel
+    let store: SmartPreviewStore
+    @State private var usage: SmartPreviewStore.Usage?
+    @State private var confirming = false
+
+    var body: some View {
+        SettingsSection("Smart Previews", id: "storage.smart") {
+            LabeledContent("In use") {
+                Text(usageLine).foregroundStyle(.secondary).monospacedDigit()
+            }
+            HStack {
+                Spacer()
+                Button("Discard All…") { confirming = true }
+                    .disabled((usage?.count ?? 0) == 0)
+            }
+        } footer: {
+            Text("A smart preview is a small editable copy of a photo, about 1 MB, kept on this Mac so you can edit in Develop while the original is offline. Photos in a location with “Make smart previews for photos here” get one when they are imported; for others choose Library > Previews > Build Smart Previews. Your edits apply to the original when it is back.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .confirmationDialog("Discard all smart previews?", isPresented: $confirming) {
+            Button("Discard All", role: .destructive) { discardAll() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The originals and your edits are unchanged. Photos whose original is offline can't be edited in Develop until it is back or you build their smart previews again.")
+        }
+        .task(id: model.smartPreviewProgress == nil) { await loadUsage() }
+    }
+
+    private var usageLine: String {
+        guard let usage else { return "…" }
+        if usage.count == 0 { return "None" }
+        return ByteCountFormatter.string(fromByteCount: usage.bytes, countStyle: .file)
+            + (usage.count == 1 ? " · 1 photo" : " · \(usage.count.formatted()) photos")
+    }
+
+    private func loadUsage() async {
+        let store = self.store
+        usage = await Task.detached(priority: .utility) { store.usage() }.value
+    }
+
+    private func discardAll() {
+        Task {
+            _ = await model.discardAllSmartPreviews()
             await loadUsage()
         }
     }

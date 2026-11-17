@@ -196,6 +196,8 @@ final class LibraryModel: ObservableObject {
     /// Build Smart Previews (AT-079d): the run and its progress in the status bar.
     @Published var smartPreviewProgress: ImportStatus?
     var smartPreviewJob: Task<Void, Never>?
+    /// Photos waiting for the run going now (from imports while it runs).
+    var pendingSmartPreviews: [Int64] = []
     /// When the original changed (AT-079c part 3): the sheet for Export and Edit In, and Use the
     /// New File's read.
     @Published var changedOriginals: ChangedOriginalsReview?
@@ -766,6 +768,8 @@ final class LibraryModel: ObservableObject {
         perform { try $0.refreshVolumes() }
         // Photos on a drive that just came back can be read now.
         previewScheduler.retryFailed()
+        // Develop leaves the smart preview for the original once it is back.
+        develop.reopenFromOriginalIfBack()
     }
 
     /// Settings > Metadata: keeps sidecars in step with catalog edits, quietly.
@@ -865,6 +869,8 @@ final class LibraryModel: ObservableObject {
                 if UserDefaults.standard.value(Preferences.xmpAutoWrite) {
                     self.autoWriteXMP(result.developedAssetIDs)
                 }
+                // Locations with "Make smart previews for photos here" (AT-079d).
+                self.buildSmartPreviewsAfterImport(result.importedAssetIDs)
                 then?(result)
                 self.problems = result.failures.map { Problem(name: $0.url.lastPathComponent, reason: $0.reason) }
                 self.problemsTitle = "These files could not be imported"
