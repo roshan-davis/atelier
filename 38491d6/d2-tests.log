@@ -1,0 +1,75 @@
+[0/1] Planning build
+Test Suite 'Selected tests' started at 2026-11-17 13:39:53.468.
+Test Suite 'AtelierPackageTests.xctest' started at 2026-11-17 13:39:53.469.
+Test Suite 'SmartPreviewLocationTests' started at 2026-11-17 13:39:53.469.
+Test Case '-[AtelierCoreTests.SmartPreviewLocationTests testCandidatesAreMastersInsideALocationThatMakesThem]' started.
+Test Case '-[AtelierCoreTests.SmartPreviewLocationTests testCandidatesAreMastersInsideALocationThatMakesThem]' passed (0.015 seconds).
+Test Case '-[AtelierCoreTests.SmartPreviewLocationTests testOnByDefaultForSharesAndCloudFoldersOnly]' started.
+Test Case '-[AtelierCoreTests.SmartPreviewLocationTests testOnByDefaultForSharesAndCloudFoldersOnly]' passed (0.008 seconds).
+Test Case '-[AtelierCoreTests.SmartPreviewLocationTests testTheMigrationTurnsItOnForExistingShares]' started.
+Test Case '-[AtelierCoreTests.SmartPreviewLocationTests testTheMigrationTurnsItOnForExistingShares]' passed (0.008 seconds).
+Test Suite 'SmartPreviewLocationTests' passed at 2026-11-17 13:39:53.500.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.031 (0.031) seconds
+Test Suite 'SmartPreviewTests' started at 2026-11-17 13:39:53.500.
+Test Case '-[AtelierCoreTests.SmartPreviewTests testASmartPreviewEditsLikeItsRAW]' started.
+Test Case '-[AtelierCoreTests.SmartPreviewTests testASmartPreviewEditsLikeItsRAW]' passed (39.145 seconds).
+Test Case '-[AtelierCoreTests.SmartPreviewTests testMatrixInverse]' started.
+Test Case '-[AtelierCoreTests.SmartPreviewTests testMatrixInverse]' passed (0.000 seconds).
+Test Case '-[AtelierCoreTests.SmartPreviewTests testTheInfoIsInTheDNG]' started.
+Test Case '-[AtelierCoreTests.SmartPreviewTests testTheInfoIsInTheDNG]' passed (0.013 seconds).
+Test Case '-[AtelierCoreTests.SmartPreviewTests testTheStoreKeepsOneFilePerPhoto]' started.
+Test Case '-[AtelierCoreTests.SmartPreviewTests testTheStoreKeepsOneFilePerPhoto]' passed (0.002 seconds).
+Test Case '-[AtelierCoreTests.SmartPreviewTests testTheWhiteTableIsExactOnItsGridAndIdentityAtAsShot]' started.
+Test Case '-[AtelierCoreTests.SmartPreviewTests testTheWhiteTableIsExactOnItsGridAndIdentityAtAsShot]' passed (0.000 seconds).
+Test Suite 'SmartPreviewTests' passed at 2026-11-17 13:40:32.660.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 39.160 (39.160) seconds
+Test Suite 'StorageLocationTests' started at 2026-11-17 13:40:32.660.
+Test Case '-[AtelierCoreTests.StorageLocationTests testAddingTheSamePlaceTwiceKeepsOneLocation]' started.
+Test Case '-[AtelierCoreTests.StorageLocationTests testAddingTheSamePlaceTwiceKeepsOneLocation]' passed (0.008 seconds).
+Test Case '-[AtelierCoreTests.StorageLocationTests testFreshCatalogHasNoLocation]' started.
+Test Case '-[AtelierCoreTests.StorageLocationTests testFreshCatalogHasNoLocation]' passed (0.006 seconds).
+Test Case '-[AtelierCoreTests.StorageLocationTests testImportingFromANewVolumeAddsItsLocation]' started.
+Test Case '-[AtelierCoreTests.StorageLocationTests testImportingFromANewVolumeAddsItsLocation]' passed (0.025 seconds).
+Test Case '-[AtelierCoreTests.StorageLocationTests testOldCatalogGetsOneLocationPerVolumeWithItsName]' started.
+Test Case '-[AtelierCoreTests.StorageLocationTests testOldCatalogGetsOneLocationPerVolumeWithItsName]' passed (0.007 seconds).
+Test Case '-[AtelierCoreTests.StorageLocationTests testPhotoCountsOnlyTheLocationsFolder]' started.
+Test Case '-[AtelierCoreTests.StorageLocationTests testPhotoCountsOnlyTheLocationsFolder]' passed (0.009 seconds).
+Test Case '-[AtelierCoreTests.StorageLocationTests testRemovingALocationKeepsItsPhotos]' started.
+Test Case '-[AtelierCoreTests.StorageLocationTests testRemovingALocationKeepsItsPhotos]' passed (0.009 seconds).
+Test Case '-[AtelierCoreTests.StorageLocationTests testServerAddressesMatchWithoutCredentialsCaseOrDotLocal]' started.
+Test Case '-[AtelierCoreTests.StorageLocationTests testServerAddressesMatchWithoutCredentialsCaseOrDotLocal]' passed (0.000 seconds).
+Test Case '-[AtelierCoreTests.StorageLocationTests testShareMountedLaterLinksToItsLocation]' started.
+Test Case '-[AtelierCoreTests.StorageLocationTests testShareMountedLaterLinksToItsLocation]' passed (0.007 seconds).
+Test Case '-[AtelierCoreTests.StorageLocationTests testSidebarGroupsFoldersUnderTheMostSpecificLocation]' started.
+Test Case '-[AtelierCoreTests.StorageLocationTests testSidebarGroupsFoldersUnderTheMostSpecificLocation]' passed (0.000 seconds).
+Test Case '-[AtelierCoreTests.StorageLocationTests testSubfolderLocationKeepsExistingPathsAndSurvivesRemount]' started.
+Test Case '-[AtelierCoreTests.StorageLocationTests testSubfolderLocationKeepsExistingPathsAndSurvivesRemount]' passed (0.009 seconds).
+Test Suite 'StorageLocationTests' passed at 2026-11-17 13:40:32.740.
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.079 (0.080) seconds
+Test Suite 'AtelierPackageTests.xctest' passed at 2026-11-17 13:40:32.740.
+	 Executed 18 tests, with 0 failures (0 unexpected) in 39.270 (39.271) seconds
+Test Suite 'Selected tests' passed at 2026-11-17 13:40:32.740.
+	 Executed 18 tests, with 0 failures (0 unexpected) in 39.270 (39.272) seconds
+SMART DSC_0348.NEF: 952 KB, made in 2556 ms (includes the camera's white table on its first photo), opened in 9 ms
+SMART DSC_0348.NEF as shot: mean |diff| RGB 2.4/2.4/2.3, render preview 59 ms, RAW 39 ms
+SMART DSC_0348.NEF 4000K: mean |diff| RGB 1.9/2.4/2.5, render preview 9 ms, RAW 38 ms
+SMART DSC_0348.NEF 7500K: mean |diff| RGB 3.0/2.4/2.2, render preview 10 ms, RAW 41 ms
+SMART DSC_0348.NEF tint +30: mean |diff| RGB 2.6/2.4/2.5, render preview 12 ms, RAW 35 ms
+SMART DSC_0348.NEF +1 EV: mean |diff| RGB 3.3/2.7/2.8, render preview 11 ms, RAW 48 ms
+SMART DSC_0358.NEF: 730 KB, made in 251 ms (includes the camera's white table on its first photo), opened in 8 ms
+SMART DSC_0358.NEF as shot: mean |diff| RGB 2.6/2.1/2.3, render preview 29 ms, RAW 40 ms
+SMART DSC_0358.NEF 4000K: mean |diff| RGB 3.0/2.2/2.2, render preview 13 ms, RAW 41 ms
+SMART DSC_0358.NEF 7500K: mean |diff| RGB 2.3/2.1/2.6, render preview 10 ms, RAW 41 ms
+SMART DSC_0358.NEF tint +30: mean |diff| RGB 2.6/2.2/2.2, render preview 10 ms, RAW 41 ms
+SMART DSC_0358.NEF +1 EV: mean |diff| RGB 2.9/2.0/2.6, render preview 14 ms, RAW 34 ms
+SMART Z62_0193.NEF: 402 KB, made in 3846 ms (includes the camera's white table on its first photo), opened in 8 ms
+SMART Z62_0193.NEF as shot: mean |diff| RGB 2.6/2.2/2.1, render preview 26 ms, RAW 53 ms
+SMART Z62_0193.NEF 4000K: mean |diff| RGB 2.4/2.1/2.3, render preview 10 ms, RAW 39 ms
+SMART Z62_0193.NEF 7500K: mean |diff| RGB 2.4/2.1/2.0, render preview 13 ms, RAW 51 ms
+SMART Z62_0193.NEF tint +30: mean |diff| RGB 2.6/2.3/2.1, render preview 9 ms, RAW 39 ms
+SMART Z62_0193.NEF +1 EV: mean |diff| RGB 2.5/2.1/2.2, render preview 12 ms, RAW 44 ms
+SMART footprint 9 MB before, 219 MB after; peak 1642 MB; store 2156 KB
+◇ Test run started.
+↳ Testing Library Version: 1501
+↳ Target Platform: arm64e-apple-macos14.0
+✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.
