@@ -70,7 +70,7 @@ final class SmartPreviewSpikeTests: XCTestCase {
                 try SmartPreviewDNG.write(rgba: rgba, width: width, height: height, neutral: neutral,
                                           make: "Nikon", model: "Z f", encoding: encoding, to: url)
                 guard let shot = CIRAWFilter(imageURL: url) else {
-                    print("SMARTPREVIEW WB \(Int(light))K \(name): CIRAWFilter can't open it"); continue
+                    XCTFail("CIRAWFilter can't open the \(Int(light))K \(name) card"); continue
                 }
                 print(String(format: "SMARTPREVIEW WB card under %dK %@: neutral %.3f/%.3f/%.3f, reported as shot %.0f K tint %.1f, baseline %.2f",
                              Int(light), name, neutral.x, neutral.y, neutral.z, shot.neutralTemperature, shot.neutralTint, shot.baselineExposure))
@@ -84,6 +84,11 @@ final class SmartPreviewSpikeTests: XCTestCase {
                     context.render(image, toBitmap: &pixel, rowBytes: 16, bounds: center, format: .RGBAf, colorSpace: linear)
                     print(String(format: "SMARTPREVIEW WB   at %@: card %.4f/%.4f/%.4f", temperature.map { "\(Int($0))K" } ?? "as shot",
                                  pixel[0], pixel[1], pixel[2]))
+                    if temperature == nil {
+                        XCTAssertGreaterThan(pixel[1], 0.05, "\(name) card under \(Int(light))K renders")
+                        XCTAssertEqual(pixel[0] / pixel[1], 1, accuracy: 0.03, "\(name) card under \(Int(light))K is grey as shot")
+                        XCTAssertEqual(pixel[2] / pixel[1], 1, accuracy: 0.03, "\(name) card under \(Int(light))K is grey as shot")
+                    }
                 }
             }
         }

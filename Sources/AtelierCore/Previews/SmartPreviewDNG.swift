@@ -47,6 +47,9 @@ public enum SmartPreviewDNG {
         if edge > CGFloat(longEdge) { filter.scaleFactor = Float(CGFloat(longEdge) / edge) }
         let temperature = Double(filter.neutralTemperature)
         let tint = Double(filter.neutralTint)
+        // The as-shot white straight from the RAW engine, so no temperature/tint convention can
+        // differ (Apple's tint sign is the opposite of `whiteXY`'s).
+        let white = filter.neutralChromaticity
         // Linear scene data only: Apple's tone curve, shadow boost and the camera's baseline
         // exposure are applied again when the DNG is opened, so they must not be baked in.
         let baseline = Double(filter.baselineExposure)
@@ -68,7 +71,7 @@ public enum SmartPreviewDNG {
             as? [CFString: Any])
         let make = model?[kCGImagePropertyTIFFMake] as? String ?? "Atelier"
         let camera = model?[kCGImagePropertyTIFFModel] as? String ?? "Smart Preview"
-        try write(rgba: pixels, width: width, height: height, neutral: neutral(temperature: temperature, tint: tint),
+        try write(rgba: pixels, width: width, height: height, neutral: neutral(x: Double(white.x), y: Double(white.y)),
                   make: make, model: camera, encoding: encoding, baselineExposure: baseline, to: url)
         return (temperature, tint)
     }
@@ -78,6 +81,11 @@ public enum SmartPreviewDNG {
     /// The as-shot white in Rec. 2020 (max 1): what a white surface reads under that light.
     public static func neutral(temperature: Double, tint: Double) -> SIMD3<Double> {
         let (x, y) = whiteXY(temperature: temperature, tint: tint)
+        return neutral(x: x, y: y)
+    }
+
+    /// The white of chromaticity (x, y) in Rec. 2020 (max 1).
+    public static func neutral(x: Double, y: Double) -> SIMD3<Double> {
         let xyz = SIMD3(x / y, 1, (1 - x - y) / y)
         let m = xyzToRec2020
         var rgb = SIMD3(m[0] * xyz.x + m[1] * xyz.y + m[2] * xyz.z,
@@ -135,17 +143,19 @@ public enum SmartPreviewDNG {
         let gains = SIMD3<Float>(Float(neutral.x), Float(neutral.y), Float(neutral.z)) / headroom
         var tiff = TIFFWriter()
         var entries: [TIFFWriter.Entry] = []
-        let tilesAcross = (width + tile - 1) / tile, tilesDown = (height + tile - 1) / tile
+        // Tiles no bigger than the photo (rounded up to JPEG's 16-pixel blocks).
+        let tileWidth = min(tile, (width + 15) / 16 * 16), tileHeight = min(tile, (height + 15) / 16 * 16)
+        let tilesAcross = (width + tileWidth - 1) / tileWidth, tilesDown = (height + tileHeight - 1) / tileHeight
         var tileOffsets: [UInt32] = [], tileCounts: [UInt32] = []
 
         switch encoding {
         case .lossless16:
             for ty in 0..<tilesDown {
                 for tx in 0..<tilesAcross {
-                    var data = Data(capacity: tile * tile * 6)
-                    for row in 0..<tile {
-                        for col in 0..<tile {
-                            let x = min(width - 1, tx * tile + col), y = min(height - 1, ty * tile + row)
+                    var data = Data(capacity: tileWidth * tileHeight * 6)
+                    for row in 0..<tileHeight {
+                        for col in 0..<tileWidth {
+                            let x = min(width - 1, tx * tileWidth + col), y = min(height - 1, ty * tileHeight + row)
                             let i = (y * width + x) * 4
                             for c in 0..<3 {
                                 let value = max(0, min(1, rgba[i + c] * gains[c]))
@@ -162,18 +172,18 @@ public enum SmartPreviewDNG {
         case .lossyJPEG(let quality):
             for ty in 0..<tilesDown {
                 for tx in 0..<tilesAcross {
-                    var bytes = [UInt8](repeating: 0, count: tile * tile * 3)
-                    for row in 0..<tile {
-                        for col in 0..<tile {
-                            let x = min(width - 1, tx * tile + col), y = min(height - 1, ty * tile + row)
+                    var bytes = [UInt8](repeating: 0, count: tileWidth * tileHeight * 3)
+                    for row in 0..<tileHeight {
+                        for col in 0..<tileWidth {
+                            let x = min(width - 1, tx * tileWidth + col), y = min(height - 1, ty * tileHeight + row)
                             let i = (y * width + x) * 4
                             for c in 0..<3 {
                                 let linear = max(0, min(1, rgba[i + c] * gains[c]))
-                                bytes[(row * tile + col) * 3 + c] = UInt8(pow(linear, 1 / 2.2) * 255 + 0.5)
+                                bytes[(row * tileWidth + col) * 3 + c] = UInt8(pow(linear, 1 / 2.2) * 255 + 0.5)
                             }
                         }
                     }
-                    let data = try jpeg(bytes, quality: quality)
+                    let data = try jpeg(bytes, width: tileWidth, height: tileHeight, quality: quality)
                     tileOffsets.append(tiff.append(data))
                     tileCounts.append(UInt32(data.count))
                 }
@@ -187,7 +197,7 @@ public enum SmartPreviewDNG {
             .long(254, 0), .long(256, UInt32(width)), .long(257, UInt32(height)),
             .short(262, 34892), .ascii(271, make), .ascii(272, model), .short(274, 1),
             .short(277, 3), .short(284, 1), .ascii(305, "Atelier"),
-            .long(322, UInt32(tile)), .long(323, UInt32(tile)),
+            .long(322, UInt32(tileWidth)), .long(323, UInt32(tileHeight)),
             .longs(324, tileOffsets), .longs(325, tileCounts),
             .bytes(50706, [1, 4, 0, 0]), .bytes(50707, [1, 1, 0, 0]),
             .ascii(50708, "\(make) \(model) (Atelier Smart Preview)"),
@@ -200,9 +210,9 @@ public enum SmartPreviewDNG {
         try tiff.finish(entries).write(to: url)
     }
 
-    static func jpeg(_ rgb: [UInt8], quality: Double) throws -> Data {
+    static func jpeg(_ rgb: [UInt8], width: Int, height: Int, quality: Double) throws -> Data {
         let provider = CGDataProvider(data: Data(rgb) as CFData)!
-        guard let image = CGImage(width: tile, height: tile, bitsPerComponent: 8, bitsPerPixel: 24, bytesPerRow: tile * 3,
+        guard let image = CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 24, bytesPerRow: width * 3,
                                   space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue),
                                   provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent) else {
             throw CocoaError(.fileWriteUnknown)
