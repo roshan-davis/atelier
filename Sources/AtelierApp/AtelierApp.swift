@@ -4,7 +4,17 @@ import AtelierActions
 import AtelierCore
 import SwiftUI
 
+/// Atelier's entry point. Launched with `ModelRunner.helperArgument`, the same executable runs
+/// as an AI model's helper process instead of the app (AT-077: a model's memory then belongs to
+/// the helper and goes back to macOS when it quits); otherwise it starts the app.
 @main
+enum AtelierMain {
+    static func main() {
+        if CommandLine.arguments.dropFirst().contains(ModelRunner.helperArgument) { ModelRunner.serve() }
+        AtelierApp.main()
+    }
+}
+
 struct AtelierApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var launch = CatalogLaunch()

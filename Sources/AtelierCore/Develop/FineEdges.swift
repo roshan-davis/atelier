@@ -171,10 +171,9 @@ public enum FineEdges {
 
     // MARK: Running
 
+    /// Guards the status below (the run itself is serialized by `ModelRunner.fineEdges`, in its
+    /// own helper process, so nothing here is held while a model runs: AT-076 C1).
     private static let lock = NSLock()
-    /// The loaded model (one at a time: Hair Detail alone takes about 1 GB in memory), unloaded
-    /// after `OnnxHost.idleSeconds` without a run (`idle`).
-    nonisolated(unsafe) private static var session: (model: Model, session: ORTSession)?
     /// Why the model last failed to load or run, for the mask panel; nil when it worked.
     nonisolated(unsafe) public private(set) static var failure: String?
     /// What the last run found, for the mask panel: its time and how much of the photo it saw as
@@ -182,7 +181,6 @@ public enum FineEdges {
     nonisolated(unsafe) public private(set) static var lastRun: String?
     /// A matte is being found now (Lens Blur's progress line); `statusChanged` follows each change.
     nonisolated(unsafe) public private(set) static var isWorking = false
-    nonisolated(unsafe) private static var usesCoreML = true
     /// Posted on the main queue whenever `failure` or `lastRun` changes.
     public static let statusChanged = Notification.Name("AtelierFineEdgesStatusChanged")
     /// Posted on the main queue when a matte found in the background is ready, so the editor
@@ -193,23 +191,15 @@ public enum FineEdges {
         DispatchQueue.main.async { NotificationCenter.default.post(name: statusChanged, object: nil) }
     }
 
-    private static let idle = OnnxHost.IdleUnload("Fine Edges") { unloadSession() }
-
-    /// Unloads the model and gives back the memory its runs used (AT-077); its status line
-    /// stays. Waits for a run in progress. The next run loads it again.
-    public static func unloadSession() {
-        idle.cancel()
-        lock.withLock { session = nil }
-    }
-
+    /// Forgets the status and quits the model's helper (a download or removal changed which
+    /// model runs). Returns at once; the helper quits after a run in progress.
     static func forgetSession() {
-        idle.cancel()
-        lock.lock()
-        session = nil
-        failure = nil
-        lastRun = nil
-        lock.unlock()
+        lock.withLock {
+            failure = nil
+            lastRun = nil
+        }
         announce()
+        DispatchQueue.global(qos: .utility).async { ModelRunner.fineEdges.stop() }
     }
 
     /// How many times the model has run in this process (for tests).
@@ -225,74 +215,47 @@ public enum FineEdges {
     /// the CPU's thread count (nil: ONNX Runtime's own choice).
     nonisolated(unsafe) static var coreMLOptionsOverride: [String: String]?
     nonisolated(unsafe) static var intraOpThreads: Int?
-    /// For FineEdgesSpeedTests: extra session config entries and the graph optimization level
-    /// (nil: `.all`), to find the setting whose run needs the least memory.
-    nonisolated(unsafe) static var extraSessionConfig: [String: String] = [:]
-    nonisolated(unsafe) static var optimizationLevel: ORTGraphOptimizationLevel?
 
-    /// `model`, loaded; Core ML runs what it can (ML Program, Neural Engine and GPU), ONNX
-    /// Runtime's CPU code the rest. Call with the lock held.
-    private static func loadedSession(_ model: Model) throws -> ORTSession {
-        if let session, session.model == model { return session.session }
-        session = nil
-        guard model.isInstalled else { throw Failure.noModel }
-        let modelURL = model.modelURL
-        let env = try OnnxHost.environment()
-        func options(coreML: Bool) throws -> ORTSessionOptions {
-            let options = try ORTSessionOptions()
-            try OnnxHost.tune(options)
-            for (key, value) in extraSessionConfig { try options.addConfigEntry(withKey: key, value: value) }
-            try options.setGraphOptimizationLevel(optimizationLevel ?? .all)
-            if let intraOpThreads { try options.setIntraOpNumThreads(Int32(intraOpThreads)) }
-            // Core ML compiles the model once and keeps it here; without a cache it compiles it
-            // again every launch, which takes most of the first run's time.
-            let cache = model.coreMLCacheURL
-            try? FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
-            if coreML, (try? options.appendCoreMLExecutionProvider(withOptionsV2: coreMLOptionsOverride ?? CoreMLProviderOptions.options(cache: cache))) == nil {
-                NSLog("Atelier: Fine Edges runs without Core ML")
-                usesCoreML = false
-            }
-            return options
-        }
-        let made: ORTSession
-        usesCoreML = prefersCoreML
-        do {
-            made = try ORTSession(env: env, modelPath: modelURL.path, sessionOptions: options(coreML: prefersCoreML))
-        } catch {
-            // Core ML can refuse a model this large; ONNX Runtime's own CPU code still runs it.
-            NSLog("Atelier: Fine Edges with Core ML failed (%@), using the CPU", "\(error)")
-            usesCoreML = false
-            made = try ORTSession(env: env, modelPath: modelURL.path, sessionOptions: options(coreML: false))
-        }
-        session = (model, made)
-        return made
+    /// What `model` runs as in its helper: Core ML first when preferred (it compiles the model
+    /// once into `coreMLCacheURL`), ONNX Runtime's CPU code otherwise or if Core ML refuses it.
+    static func request(_ model: Model) -> ModelRunner.Request {
+        ModelRunner.Request(modelPath: model.modelURL.path, optimizationLevels: ["all"],
+                            coreML: prefersCoreML ? (coreMLOptionsOverride ?? CoreMLProviderOptions.options(cache: model.coreMLCacheURL)) : nil,
+                            threads: intraOpThreads, shape: [1, 3, model.size, model.size])
     }
 
     /// `model`'s foreground matte of `image` (any size: it is stretched to the model's square),
     /// 0...1, `model.size` × `model.size`, rows from the top. Nil when the model isn't downloaded
-    /// or fails (`failure` says why).
+    /// or fails (`failure` says why). Runs in the model's helper process (`ModelRunner`).
     public static func matte(of image: CGImage, model: Model) -> [Float]? {
         let size = model.size
+        guard model.isInstalled else {
+            lock.withLock { failure = Failure.noModel.localizedDescription }
+            announce()
+            return nil
+        }
         guard let pixels = rgba(image, size: size) else { return nil }
-        lock.lock()
-        isWorking = true
-        defer { isWorking = false; lock.unlock(); idle.touch(); announce() }
-        runs += 1
-        lastRun = "Fine Edges (\(model.name)) is working… (the first time after a download takes longest)"
-        failure = nil
+        lock.withLock {
+            isWorking = true
+            runs += 1
+            lastRun = "Fine Edges (\(model.name)) is working… (the first time after a download takes longest)"
+            failure = nil
+        }
         announce()
+        defer {
+            lock.withLock { isWorking = false }
+            announce()
+        }
         let started = Date()
         do {
-            let session = try loadedSession(model)
-            let input = NSMutableData(data: inputTensor(pixels, size: size).withUnsafeBufferPointer { Data(buffer: $0) })
-            let value = try ORTValue(tensorData: input, elementType: .float,
-                                     shape: [1, 3, NSNumber(value: size), NSNumber(value: size)])
-            guard let inputName = try session.inputNames().first,
-                  let outputName = try session.outputNames().first else { throw Failure.run("no inputs or outputs") }
-            let outputs = try session.run(withInputs: [inputName: value], outputNames: [outputName],
-                                          runOptions: OnnxHost.runOptions())
-            guard let output = outputs[outputName] else { throw Failure.run("no output") }
-            let data = try output.tensorData() as Data
+            let input = inputTensor(pixels, size: size).withUnsafeBufferPointer { Data(buffer: $0) }
+            let output: ModelRunner.Output
+            do {
+                output = try ModelRunner.fineEdges.run(request(model), input: input)
+            } catch let failure as ModelRunner.Failure {
+                throw Failure.run(failure.reason)
+            }
+            let data = output.data
             let raw: [Float]
             if data.count == size * size * 4 {
                 raw = data.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
@@ -305,14 +268,17 @@ public enum FineEdges {
             saveDiagnostics(input: image, matte: chances, size: size)
             let foreground = Double(chances.lazy.filter { $0 > 0.5 }.count) / Double(max(1, chances.count))
             let seconds = Date().timeIntervalSince(started)
-            failure = nil
-            lastRun = String(format: "Fine Edges (%@) ran in %.1f s (%@); %.0f%% of the photo is foreground",
-                             model.name, seconds, usesCoreML ? "Core ML" : "CPU", foreground * 100)
-            NSLog("Atelier: %@ (outputs %@, input %@)", lastRun ?? "", try session.outputNames().joined(separator: ", "),
-                  inputName)
+            let line = String(format: "Fine Edges (%@) ran in %.1f s (%@); %.0f%% of the photo is foreground",
+                              model.name, seconds, output.usedCoreML ? "Core ML" : "CPU", foreground * 100)
+            lock.withLock {
+                failure = nil
+                lastRun = line
+            }
+            NSLog("Atelier: %@", line)
             return chances
         } catch {
-            failure = error.localizedDescription
+            let reason = error.localizedDescription
+            lock.withLock { failure = reason }
             NSLog("Atelier: Fine Edges failed: %@", "\(error)")
             return nil
         }

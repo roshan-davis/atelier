@@ -437,7 +437,8 @@ public enum AIDenoise {
         let ck = anchorK / k
         let cb = (s / (k * k) - anchorS / (anchorK * anchorK)) * anchorK
         let gain = Float(ck * 256), offset = Float(cb / levels * 256)
-        let (session, coreML) = try loadedSession()
+        guard let url = modelURL else { throw Failure("PMRID.onnx isn't in the app's resources.") }
+        var coreML = false
         let step = tile - 2 * overlap
         let tilesDown = (height + step - 1) / step, tilesAcross = (width + step - 1) / step
         var out = [[Float]](repeating: [Float](repeating: 0, count: width * height), count: 4)
@@ -454,7 +455,8 @@ public enum AIDenoise {
                         for x in 0..<tile { input[target + x] = plane[source + columns[x]] * gain + offset }
                     }
                 }
-                let result = try run(session, input)
+                let (result, tileCoreML) = try run(url, input)
+                coreML = tileCoreML
                 let y0 = ty * step, y1 = min(height, y0 + step), x0 = tx * step, x1 = min(width, x0 + step)
                 for c in 0..<4 {
                     for y in y0..<y1 {
@@ -464,7 +466,6 @@ public enum AIDenoise {
                 }
             }
         }
-        idle.touch()
         return (out, coreML)
     }
 
@@ -476,15 +477,18 @@ public enum AIDenoise {
         return m < n ? m : period - m
     }
 
-    private static func run(_ session: ORTSession, _ input: [Float]) throws -> [Float] {
-        let data = NSMutableData(data: input.withUnsafeBufferPointer { Data(buffer: $0) })
-        let value = try ORTValue(tensorData: data, elementType: .float,
-                                 shape: [1, 4, NSNumber(value: tile), NSNumber(value: tile)])
-        // No arena shrinkage per tile (it would allocate again for every tile): a tile's working
-        // memory is small, and the whole model is unloaded once idle (`idle`).
-        let outputs = try session.run(withInputs: ["input": value], outputNames: ["output"], runOptions: nil)
-        guard let output = outputs["output"] else { throw Failure("the model gave no output.") }
-        let bytes = try output.tensorData() as Data
+    /// One tile through PMRID, in its model helper (`ModelRunner.denoise`, AT-077).
+    private static func run(_ url: URL, _ input: [Float]) throws -> ([Float], coreML: Bool) {
+        let request = ModelRunner.Request(modelPath: url.path, optimizationLevels: ["all"],
+                                          coreML: usesCoreML ? CoreMLProviderOptions.options(cache: coreMLCacheURL) : nil,
+                                          inputName: "input", outputName: "output", shape: [1, 4, tile, tile])
+        let output: ModelRunner.Output
+        do {
+            output = try ModelRunner.denoise.run(request, input: input.withUnsafeBufferPointer { Data(buffer: $0) })
+        } catch let failure as ModelRunner.Failure {
+            throw Failure(failure.reason)
+        }
+        let bytes = output.data
         let result: [Float]
         if bytes.count == input.count * 4 {
             result = bytes.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
@@ -494,20 +498,9 @@ public enum AIDenoise {
             throw Failure("the model gave \(bytes.count) bytes.")
         }
         guard result.allSatisfy(\.isFinite) else { throw Failure("the model gave numbers out of range.") }
-        return result
+        return (result, output.usedCoreML)
     }
 
-    private static let sessionLock = NSLock()
-    /// The loaded model, unloaded after `OnnxHost.idleSeconds` without a run (`idle`).
-    nonisolated(unsafe) private static var session: (session: ORTSession, coreML: Bool)?
-    private static let idle = OnnxHost.IdleUnload("AI Denoise") { unloadSession() }
-
-    /// Unloads the model and gives back the memory its runs used (AT-077). A denoise in
-    /// progress keeps its own reference and finishes; the next one loads the model again.
-    public static func unloadSession() {
-        idle.cancel()
-        sessionLock.withLock { session = nil }
-    }
     /// The built-in model's version (first 12 hex digits of PMRID.onnx's SHA-256), so a new
     /// model compiles into a new Core ML cache folder.
     static let modelVersion = "2c76727c7b20"
@@ -515,51 +508,17 @@ public enum AIDenoise {
     /// The built-in model in AtelierCore's resources.
     static var modelURL: URL? { BundledModel.resourceURL(name: "PMRID", extension: "onnx") }
 
-    /// Whether PMRID tries ONNX Runtime's Core ML provider (off: see `loadedSession`).
-    static let usesCoreML = false
-
-    /// The model, loaded once: Core ML runs what it can, ONNX Runtime's CPU code the rest.
-    private static func loadedSession() throws -> (ORTSession, coreML: Bool) {
-        sessionLock.lock()
-        defer { sessionLock.unlock() }
-        idle.touch()
-        if let session { return (session.session, coreML: session.coreML) }
-        guard let url = modelURL else { throw Failure("PMRID.onnx isn't in the app's resources.") }
-        let env = try OnnxHost.environment()
+    static var coreMLCacheURL: URL {
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
-        let cache = caches.appendingPathComponent("Atelier/Models/PMRID-CoreML-\(modelVersion)", isDirectory: true)
-        try? FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
-        func options(coreML: Bool) throws -> ORTSessionOptions {
-            let options = try ORTSessionOptions()
-            try OnnxHost.tune(options)
-            try options.setGraphOptimizationLevel(.all)
-            if coreML {
-                try options.appendCoreMLExecutionProvider(withOptionsV2: CoreMLProviderOptions.options(cache: cache))
-            }
-            return options
-        }
-        let cpu = try ORTSession(env: env, modelPath: url.path, sessionOptions: options(coreML: false))
-        var made = (session: cpu, coreML: false)
-        // Core ML stays off for PMRID: with the provider really loading (ALL, not All), ONNX
-        // Runtime 1.24.2's Core ML ConvTranspose check crashes the app (SIGSEGV in
-        // ConvTransposeOpBuilder::IsOpSupportedImpl, Mac check of PR #153, Nov 16, 2026), and a
-        // crash can't be caught. Until then AI Denoise ran on the CPU anyway ("All" was refused).
-        if usesCoreML { do {
-            let accelerated = try ORTSession(env: env, modelPath: url.path, sessionOptions: options(coreML: true))
-            // Core ML may run in half precision on the Neural Engine: check its answer once against
-            // the CPU's on a textured tile, and keep the CPU if they disagree.
-            let probe = (0..<(4 * tile * tile)).map { Float(64 + 16 * sin(Double($0 % 977) * 0.37)) }
-            let fast = try run(accelerated, probe), reference = try run(cpu, probe)
-            let difference = zip(fast, reference).reduce(Float(0)) { max($0, abs($1.0 - $1.1)) }
-            if difference > 2 { throw Failure("Core ML's result differed from the CPU's by \(difference)") }
-            made = (session: accelerated, coreML: true)
-        } catch {
-            NSLog("Atelier: AI Denoise runs on the CPU (%@)", "\(error)")
-        } }
-        session = made
-        return (made.session, coreML: made.coreML)
+        return caches.appendingPathComponent("Atelier/Models/PMRID-CoreML-\(modelVersion)", isDirectory: true)
     }
+
+    /// Whether PMRID tries ONNX Runtime's Core ML provider. Off: with the provider really
+    /// loading (ALL, not All), ONNX Runtime 1.24.2's Core ML ConvTranspose check crashes
+    /// (SIGSEGV in ConvTransposeOpBuilder::IsOpSupportedImpl, Mac check of PR #153, Nov 16,
+    /// 2026). Until then AI Denoise ran on the CPU anyway ("All" was refused).
+    static let usesCoreML = false
 
     // MARK: Tone curve and spreading
 

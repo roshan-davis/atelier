@@ -7,8 +7,7 @@ import XCTest
 /// How fast Fine Edges runs with different ONNX Runtime settings, and whether each gives the same
 /// matte as the CPU. Opt-in, one setting per run (a Core ML attempt can crash the process):
 /// `ATELIER_FINE_EDGES_BENCH=<variant> ATELIER_FINE_EDGES_PHOTO=/path/photo swift test --filter
-/// FineEdgesSpeedTests`. Variants: cpu, cpu-threads-<n>, cpu-noprepack, cpu-basic, cpu-extended,
-/// coreml-mlprogram-all, coreml-neuralnetwork-all, coreml-mlprogram-cpugpu,
+/// FineEdgesSpeedTests`. Variants: cpu, cpu-threads-<n>, coreml-mlprogram-all, coreml-neuralnetwork-all, coreml-mlprogram-cpugpu,
 /// coreml-neuralnetwork-cpugpu. The CPU's matte is kept in the temporary folder for the others to
 /// compare with. Each run also prints the memory the process peaked at (AT-077: on a Z f photo
 /// the Fast run took Atelier from about 6 to 14 GB), so run each variant in its own process.
@@ -29,18 +28,18 @@ final class FineEdgesSpeedTests: XCTestCase {
             try? FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
             FineEdges.coreMLOptionsOverride = ["ModelFormat": format, "MLComputeUnits": units, "ModelCacheDirectory": cache.path]
         }
-        if variant == "cpu-noprepack" { FineEdges.extraSessionConfig = ["session.disable_prepacking": "1"] }
-        if variant == "cpu-basic" { FineEdges.optimizationLevel = .basic }
-        if variant == "cpu-extended" { FineEdges.optimizationLevel = .extended }
-        FineEdges.forgetSession()
+        // The model runs in this process, so its memory is this process's (the app runs it in a
+        // helper, `ModelRunner`).
+        let helper = ModelRunner.executableURL
+        ModelRunner.executableURL = nil
+        ModelRunner.unloadHere()
         let before = RenderMemory.footprint() ?? 0
         defer {
             FineEdges.prefersCoreML = false
-            FineEdges.extraSessionConfig = [:]
-            FineEdges.optimizationLevel = nil
             FineEdges.intraOpThreads = nil
             FineEdges.coreMLOptionsOverride = nil
-            FineEdges.forgetSession()
+            ModelRunner.unloadHere()
+            ModelRunner.executableURL = helper
         }
         var times: [Double] = []
         var matte: [Float]?

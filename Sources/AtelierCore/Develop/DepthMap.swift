@@ -153,26 +153,6 @@ public enum DepthMap {
         }
     }
 
-    private static let lock = NSLock()
-    /// The loaded model, unloaded after `OnnxHost.idleSeconds` without a run (`idle`).
-    nonisolated(unsafe) private static var session: ORTSession?
-    private static let idle = OnnxHost.IdleUnload("Depth") { unloadSession() }
-
-    /// Unloads the model and gives back the memory its runs used (AT-077). Waits for a run in
-    /// progress. The next run loads it again.
-    public static func unloadSession() {
-        idle.cancel()
-        lock.withLock { session = nil }
-    }
-
-    private static func forgetSession() {
-        idle.cancel()
-        lock.lock()
-        session = nil
-        failure = nil
-        lock.unlock()
-    }
-
     /// Whether the depth model tries ONNX Runtime's Core ML provider. Off: with the provider
     /// really loading (ALL, not All), ONNX Runtime splits this half-precision export into 60 Core
     /// ML partitions, and the first Lens Blur frame on a Z6 II NEF took 6.2 s (3.6 s of it making
@@ -180,40 +160,10 @@ public enum DepthMap {
     /// Nov 16, 2026). Until then it ran on the CPU anyway ("All" was refused).
     static let usesCoreML = false
 
-    /// The model, loaded once: Core ML runs what it can, ONNX Runtime's CPU code the rest. Call
-    /// with the lock held.
-    private static func loadedSession() throws -> ORTSession {
-        if let session { return session }
-        guard isInstalled else { throw Failure("the depth model isn't downloaded.") }
-        let env = try OnnxHost.environment()
-        func options(coreML: Bool, level: ORTGraphOptimizationLevel = .basic) throws -> ORTSessionOptions {
-            let options = try ORTSessionOptions()
-            try OnnxHost.tune(options)
-            // Basic at most: the extended fusions (SimplifiedLayerNormFusion) break on this
-            // half-precision export ("Attempting to get index by a name which does not exist:
-            // InsertedPrecisionFreeCast_…", Rosh's Mac, Nov 15, 2026).
-            try options.setGraphOptimizationLevel(level)
-            let cache = coreMLCacheURL
-            try? FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
-            if coreML {
-                try options.appendCoreMLExecutionProvider(withOptionsV2: CoreMLProviderOptions.options(cache: cache))
-            }
-            return options
-        }
-        let made: ORTSession
-        do {
-            made = try ORTSession(env: env, modelPath: modelURL.path, sessionOptions: options(coreML: usesCoreML))
-        } catch {
-            NSLog("Atelier: Depth Range with Core ML failed (%@), using the CPU", "\(error)")
-            do {
-                made = try ORTSession(env: env, modelPath: modelURL.path, sessionOptions: options(coreML: false))
-            } catch {
-                NSLog("Atelier: Depth Range on the CPU failed (%@), trying without graph optimizations", "\(error)")
-                made = try ORTSession(env: env, modelPath: modelURL.path, sessionOptions: options(coreML: false, level: .none))
-            }
-        }
-        session = made
-        return made
+    /// Quits the depth model's helper (a new download, or the model removed).
+    private static func forgetSession() {
+        failure = nil
+        DispatchQueue.global(qos: .utility).async { ModelRunner.depth.stop() }
     }
 
     struct Failure: LocalizedError {
@@ -230,28 +180,26 @@ public enum DepthMap {
         let size = inputSize(width: image.width, height: image.height)
         guard let pixels = rgba(image, width: size.width, height: size.height) else { return nil }
         let input = inputTensor(pixels, width: size.width, height: size.height)
-        lock.lock()
+        guard isInstalled else {
+            failure = Failure("the depth model isn't downloaded.").localizedDescription
+            return nil
+        }
         isWorking = true
         runs += 1
         DispatchQueue.main.async { NotificationCenter.default.post(name: workingChanged, object: nil) }
         defer {
             isWorking = false
-            lock.unlock()
-            idle.touch()
             DispatchQueue.main.async { NotificationCenter.default.post(name: workingChanged, object: nil) }
         }
         do {
-            let session = try loadedSession()
-            guard let inputName = try session.inputNames().first,
-                  let outputName = try session.outputNames().first else { throw Failure("no inputs or outputs") }
-            let shape: [NSNumber] = [1, 3, NSNumber(value: size.height), NSNumber(value: size.width)]
+            // Basic at most: the extended fusions (SimplifiedLayerNormFusion) break on this
+            // half-precision export ("Attempting to get index by a name which does not exist:
+            // InsertedPrecisionFreeCast_…", Rosh's Mac, Nov 15, 2026); none if basic fails too.
             // onnx-community's half-precision exports keep float input and output, as Fine Edges' does.
-            let data = NSMutableData(data: input.withUnsafeBufferPointer { Data(buffer: $0) })
-            let value = try ORTValue(tensorData: data, elementType: .float, shape: shape)
-            let outputs = try session.run(withInputs: [inputName: value], outputNames: [outputName],
-                                          runOptions: OnnxHost.runOptions())
-            guard let output = outputs[outputName] else { throw Failure("no output") }
-            let result = try output.tensorData() as Data
+            let request = ModelRunner.Request(modelPath: modelURL.path, optimizationLevels: ["basic", "none"],
+                                              coreML: usesCoreML ? CoreMLProviderOptions.options(cache: coreMLCacheURL) : nil,
+                                              shape: [1, 3, size.height, size.width])
+            let result = try ModelRunner.depth.run(request, input: input.withUnsafeBufferPointer { Data(buffer: $0) }).data
             let count = size.width * size.height
             let raw: [Float]
             if result.count == count * 4 {

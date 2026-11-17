@@ -88,6 +88,14 @@ Rosh's most common complaint is the same bug showing up tool by tool. Before you
 - Measure before optimizing: time it (Instruments, `os_signpost`, or a timed test) and put the numbers in the PR. Don't add caches, threads or lower-quality paths on a guess.
 - Keep the main thread free: rendering, analysis, file and network work run in the background with progress and Cancel (PRD UX principle 4). Slider and handle drags must stay smooth: renders are coalesced (one in flight plus one follow-up, see `DevelopController`), so never queue a render per event.
 
+### Memory
+
+Atelier must run well on any Apple Silicon Mac, 8 GB included, without hogging memory; memory held after it's needed counts as a leak (Rosh, Nov 16, 2026). Use Apple's standard patterns only, no special-case tweaks (Rosh: "a standard and efficient design only"):
+
+- **Every cache is bounded** (by bytes as well as count, scaled to the Mac's memory) and **let go when its task ends** (a mode closes, the view returns to Fit, a photo closes, Develop is left) and **on macOS memory warnings** (`RenderMemory`). Never keep a stage in Core Image's cache without going through `RenderMemory.kept(_:)`.
+- **Heavy AI models run in a helper process, not in the app** (`ModelRunner`: one per model, quit when idle, on memory warnings and when their task ends), so their memory always goes back to macOS and a run that doesn't fit can't freeze Atelier. Don't add a model that runs in the app's own process, and don't tune a runtime's memory switches instead.
+- **Measure memory, not just speed:** a change to the render path or a model gets the process's footprint and peak (`RenderMemory.footprint()`, `peakFootprint()`, `LensBlurRealPhotoTests.testMemoryAcrossALensBlurSession`) before and after on a full-size RAW, in the PR.
+
 ### GPU and live rendering
 
 Develop is GPU-first, and live drags are fast because of work done in AT-025, AT-036 and AT-039 (#79, #93, #96, #97, #98). A new feature must not quietly undo any of it. Treat these as rules, not suggestions:

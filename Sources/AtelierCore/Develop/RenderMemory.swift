@@ -16,7 +16,7 @@ import Foundation
 /// kept since the last clear pass the budget, the cache is cleared first, so it never holds more
 /// than about the budget. It is also cleared when a photo or the Lens Blur mode closes, when the
 /// view goes back to Fit (`DevelopController`), and when macOS says memory is getting low; the
-/// AI models (`OnnxHost`) are unloaded then too, and after 30 s without a run.
+/// AI models' helper processes (`ModelRunner`) quit then too, and after 30 s without a run.
 /// Clearing costs one slower frame (step 1 is decoded again), never a wrong one.
 public final class RenderMemory: @unchecked Sendable {
     public static let shared = RenderMemory(context: DevelopRenderer.shared.context,
@@ -77,12 +77,12 @@ public final class RenderMemory: @unchecked Sendable {
         clearCaches(because: reason)
     }
 
-    /// `clear(because:)`, and unloads the AI models too (`OnnxHost.unloadAll`): for a memory
+    /// `clear(because:)`, and quits the AI models' helpers too (`ModelRunner.stopAll`): for a memory
     /// warning, and when a photo or Lens Blur closes. Waits for a model run in progress, so call
     /// it off the main thread.
     public func releaseAll(because reason: String) {
         clear(because: reason)
-        OnnxHost.unloadAll()
+        ModelRunner.stopAll()
     }
 
     /// `releaseAll(because:)` on a background queue, for the main thread.

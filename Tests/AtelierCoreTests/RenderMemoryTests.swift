@@ -18,18 +18,22 @@ final class RenderMemoryTests: XCTestCase {
         XCTAssertEqual(RenderMemory.estimatedBytes(of: CIImage(color: .red)), 0, "infinite extents count as nothing")
     }
 
-    func testIdleUnloadRunsOnceAfterTheLastTouch() {
-        let unloaded = expectation(description: "unloaded once")
-        let idle = OnnxHost.IdleUnload("test") { unloaded.fulfill() }
-        idle.touch(delay: 0.2)
-        idle.touch(delay: 0.3) // a second run: the first timer is cancelled
-        wait(for: [unloaded], timeout: 2)
-        let never = expectation(description: "cancelled")
-        never.isInverted = true
-        let cancelled = OnnxHost.IdleUnload("test") { never.fulfill() }
-        cancelled.touch(delay: 0.1)
-        cancelled.cancel()
-        wait(for: [never], timeout: 0.5)
+    func testMessagesRoundTripOverAPipe() throws {
+        var fds: [Int32] = [0, 0]
+        XCTAssertEqual(pipe(&fds), 0)
+        defer { close(fds[0]) }
+        let header = Data("{\"a\":1}".utf8), payload = Data((0..<100_000).map { UInt8($0 % 251) })
+        DispatchQueue.global().async {
+            try? Wire.send(fds[1], header: header, payload: payload)
+            try? Wire.send(fds[1], header: Data(), payload: Data())
+            close(fds[1])
+        }
+        let first = try XCTUnwrap(try Wire.receive(fds[0]))
+        XCTAssertEqual(first.header, header)
+        XCTAssertEqual(first.payload, payload)
+        let empty = try XCTUnwrap(try Wire.receive(fds[0]))
+        XCTAssertTrue(empty.header.isEmpty && empty.payload.isEmpty)
+        XCTAssertNil(try Wire.receive(fds[0]), "the other side closed: no message")
     }
 
     func testKeptStagesClearTheCachePastTheBudget() {
