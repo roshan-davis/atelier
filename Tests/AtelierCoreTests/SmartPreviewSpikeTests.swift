@@ -144,7 +144,7 @@ final class SmartPreviewSpikeTests: XCTestCase {
                 guard let image = filter.outputImage else { print("SMARTPREVIEW BIGCARD \(name): no output"); break }
                 let average = image.applyingFilter("CIAreaAverage", parameters: [kCIInputExtentKey: CIVector(cgRect: image.extent)])
                 var pixel = [Float](repeating: 0, count: 4)
-                context.render(average, toBitmap: &pixel, rowBytes: 16, bounds: CGRect(x: 0, y: 0, width: 1, height: 1),
+                context.render(average, toBitmap: &pixel, rowBytes: 16, bounds: average.extent,
                                format: .RGBAf, colorSpace: linear)
                 print(String(format: "SMARTPREVIEW BIGCARD %@ at %@: %.4f/%.4f/%.4f", name, temperature.map { "\(Int($0))K" } ?? "as shot",
                              pixel[0], pixel[1], pixel[2]))
