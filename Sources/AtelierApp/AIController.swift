@@ -108,7 +108,7 @@ final class AIController: ObservableObject {
         fraction = nil
         let request = AIRequest(recipe: recipe, prompt: recipe.usesPrompt ? prompt : "", strokes: strokes)
         let settings = Self.settings
-        let runner = AIRunner(catalog: model.catalog, client: ComfyClient(baseURL: settings.server))
+        let runner = AIRunner(catalog: model.catalog, client: ComfyClient(baseURL: settings.server), originals: model.originals)
         let recipe = self.recipe
         task = Task.detached {
             do {
@@ -130,6 +130,13 @@ final class AIController: ObservableObject {
                 await MainActor.run {
                     self.finish()
                     model.status = "\(recipe.title) cancelled"
+                }
+            } catch let change as OriginalChangedError {
+                // The choice is the Develop banner's, over the photo this runs on.
+                await MainActor.run {
+                    self.finish()
+                    self.errorMessage = change.localizedDescription
+                    if model.develop.assetID == id { model.develop.originalChanged = change }
                 }
             } catch {
                 await MainActor.run {

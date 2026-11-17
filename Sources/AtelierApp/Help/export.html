@@ -86,7 +86,8 @@
   <li>Exports run in the background, with progress and <b>Cancel</b> in the status bar. Keep working meanwhile.</li>
   <li>Files keep their original names. An existing file is never replaced: a number is added instead. A virtual copy is named <code>name-Copy1.jpg</code>.</li>
   <li>Keywords, title, caption and rating are written into the files (unless Metadata is None).</li>
-  <li>Photos whose drive is offline are listed under <b>Show Problems</b>; the rest still export.</li>
+  <li>Photos whose drive is offline are listed under <b>Show Problems</b>; the rest still export. A photo on a NAS that's offline still exports from its copy on this Mac, if there is one, and <b>Show Problems</b> notes that it couldn't be checked.</li>
+  <li>Photos on a NAS are read through the <a href="storage.html#cache">cache of originals</a>, once each. One whose file changed on the NAS since import isn't exported; a sheet at the end lets you choose for it (see <a href="storage.html#changed">When the original changed</a>).</li>
 </ul>
 
 <div class="see-also">See also: <a href="edit-in.html">Edit In other apps</a> · <a href="settings.html#export">Settings › Export</a></div>

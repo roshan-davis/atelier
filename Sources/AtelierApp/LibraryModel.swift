@@ -191,6 +191,10 @@ final class LibraryModel: ObservableObject {
     @Published var keepRequest: KeepRequest?
     @Published var keepProgress: ImportStatus?
     var keepTask: Task<Void, Never>?
+    /// When the original changed (AT-079c part 3): the sheet for Export and Edit In, and Use the
+    /// New File's read.
+    @Published var changedOriginals: ChangedOriginalsReview?
+    var newOriginalTask: Task<URL, Error>?
     /// The Match Look dialog, while open, and Match each photo's progress in the status bar.
     @Published var matchLook: MatchLookModel?
     @Published var matchProgress: ImportStatus?
@@ -939,12 +943,24 @@ final class LibraryModel: ObservableObject {
                 let count = result.exported.count
                 var parts = ["Exported \(count) photo\(count == 1 ? "" : "s")"]
                 if !result.failures.isEmpty { parts.append("\(result.failures.count) could not be exported") }
+                if !result.changed.isEmpty { parts.append("\(result.changed.count) changed since import") }
+                if !result.notes.isEmpty {
+                    parts.append("\(result.notes.count) from copies on this Mac that couldn't be checked")
+                }
                 if cancelled { parts.insert("Export cancelled", at: 0) }
                 self.status = parts.joined(separator: ", ")
+                // Job notes (AT-079c): which photos came from an unchecked copy, beside any failures.
                 self.problems = result.failures.map { Problem(name: $0.filename, reason: $0.reason) }
-                self.problemsTitle = "These photos could not be exported"
+                    + result.notes.map { Problem(name: "Note", reason: $0) }
+                self.problemsTitle = result.failures.isEmpty ? "Export notes" : "These photos could not be exported"
                 self.exportProgress = nil
                 self.exportTask = nil
+                if !cancelled {
+                    self.reviewChangedOriginals(result.changed, command: "export") { ids in
+                        self.exportIDs = ids
+                        self.runExport(settings: settings, revealWhenDone: revealWhenDone)
+                    }
+                }
                 if revealWhenDone, !result.exported.isEmpty {
                     NSWorkspace.shared.activateFileViewerSelecting(result.exported)
                 }

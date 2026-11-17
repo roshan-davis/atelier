@@ -8,6 +8,8 @@ enum OriginalPrep: Sendable {
     case offline
     case cancelled
     case failed(String)
+    /// The file on the share isn't the one imported (AT-079c part 3): Develop shows the banner.
+    case changed(OriginalChangedError)
 }
 
 /// Remote originals for Develop: a photo on a network share is read once into the cache of
@@ -60,6 +62,7 @@ extension LibraryModel {
     func cancelOriginalTransfer() {
         originalTransfer?.cancel()
         cloudDownload?.download.cancel()
+        newOriginalTask?.cancel()
     }
 
     // MARK: Network share → cache
@@ -71,6 +74,14 @@ extension LibraryModel {
         let source = detail.fileURL
         let hash = detail.asset.contentHash
         let place = locationName(for: detail.volume)
+        let changed = { (kept: Bool) in
+            OriginalChangedError(assetID: detail.asset.id ?? assetID, fileID: assetID, filename: detail.asset.filename,
+                                 place: place, hasKeptCopy: kept)
+        }
+        // Found changed before: ask again, without reading it again.
+        if (try? catalog.originalChange(for: assetID)) != nil {
+            return .changed(changed(originals.keptCopyExists(for: assetID, contentHash: hash)))
+        }
         // One metadata read of the original (off the main thread: a sleeping NAS can take a while).
         let checked = await Task.detached(priority: .userInitiated) { () -> Result<OriginalCache.Copy?, Error> in
             let info = source.flatMap(OriginalCache.SourceInfo.init)
@@ -108,8 +119,9 @@ extension LibraryModel {
         switch result {
         case .success(.stored(let copy)):
             return .ready(copy)
-        case .success(.changed):
-            return .failed("\(source.lastPathComponent) changed on \(place) since it was imported, so Atelier didn't use it. Import it again to edit the new file.")
+        case .success(.changed(let newHash)):
+            try? catalog.noteOriginalChanged(assetID, newHash: newHash, source: source)
+            return .changed(changed(originals.keptCopyExists(for: assetID, contentHash: hash)))
         case .failure(is CancellationError):
             return .cancelled
         case .failure(let error):

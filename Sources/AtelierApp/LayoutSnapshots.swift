@@ -1251,6 +1251,27 @@ enum LayoutSnapshots {
         await capture(AnyView(SidebarView().environmentObject(model).frame(width: 260)),
                       size: CGSize(width: 260, height: 620),
                       to: folder.appendingPathComponent("sidebar-locations.png"))
+        // When the original changed (AT-079c part 3): Develop's banner and the Export sheet.
+        let kept = OriginalChangedError(assetID: 1, fileID: 1, filename: "NZ6_9144.NEF", place: "megham", hasKeptCopy: true)
+        let notKept = OriginalChangedError(assetID: 2, fileID: 2, filename: "NZ6_9152.NEF", place: "megham", hasKeptCopy: false)
+        for theme in [Theme.light, .graphite] {
+            UserDefaults.standard.set(theme.rawValue, forKey: Theme.defaultsKey)
+            theme.apply()
+            await capture(AnyView(VStack(spacing: 16) {
+                OriginalChangedBanner(change: kept)
+                OriginalChangedBanner(change: notKept)
+            }.padding(20).frame(width: 600).environmentObject(model)),
+                          size: CGSize(width: 600, height: 300),
+                          to: folder.appendingPathComponent("original-changed-banner-\(theme.rawValue).png"))
+            var review = ChangedOriginalsReview(command: "export", items: [.init(change: kept), .init(change: notKept)],
+                                                retry: { _ in })
+            review.items[0].choice = .useKeptCopy
+            await capture(AnyView(ChangedOriginalsSheet(review: review).environmentObject(model)),
+                          size: CGSize(width: 520, height: 300),
+                          to: folder.appendingPathComponent("original-changed-sheet-\(theme.rawValue).png"))
+        }
+        UserDefaults.standard.set(Theme.light.rawValue, forKey: Theme.defaultsKey)
+        Theme.light.apply()
     }
 
     private static func capture(_ view: AnyView, size: CGSize, to url: URL) async {

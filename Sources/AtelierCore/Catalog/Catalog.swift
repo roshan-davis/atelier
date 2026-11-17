@@ -164,6 +164,7 @@ public final class Catalog: Sendable {
         registerPrivateMigration(&migrator)
         registerNotesMigration(&migrator)
         registerStorageLocationMigration(&migrator)
+        registerOriginalChangeMigration(&migrator)
         return migrator
     }
 }

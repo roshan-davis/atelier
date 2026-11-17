@@ -215,6 +215,22 @@ public final class OriginalCache: @unchecked Sendable {
         return Copy(url: url, checked: source != nil, storedAt: entry.storedAt)
     }
 
+    /// A copy kept with Keep on This Mac that still matches the catalog's hash (from before the
+    /// original changed), without any network access.
+    public func keptCopyExists(for assetID: Int64, contentHash: String) -> Bool {
+        guard let entry = try? entry(for: assetID), entry.pinned, entry.contentHash == contentHash else { return false }
+        return FileManager.default.fileExists(atPath: root.appendingPathComponent(entry.file).path)
+    }
+
+    /// Use the Kept Copy (AT-079c): the kept copy is what readers use for the rest of this session,
+    /// whatever the share now has. Nil when there is none.
+    public func useKeptCopy(for assetID: Int64, contentHash: String) -> URL? {
+        guard keptCopyExists(for: assetID, contentHash: contentHash), let entry = try? entry(for: assetID) else { return nil }
+        let url = root.appendingPathComponent(entry.file)
+        lock.withLock { ready[assetID] = url }
+        return url
+    }
+
     // MARK: Storing
 
     /// Reads `source` once, start to end, into the cache, hashing as it reads. The copy is kept only
@@ -236,7 +252,8 @@ public final class OriginalCache: @unchecked Sendable {
         let hash: String
         do {
             hash = try Importer.copyHashing(source, to: fd, progress: progress, shouldPause: shouldPause,
-                                            shouldStop: readAhead ? { [weak self] in self?.readyCopy(for: assetID) != nil } : nil)
+                                            shouldStop: readAhead ? { [weak self] in self?.readyCopy(for: assetID) != nil } : nil,
+                                            uncached: true)
         } catch {
             try? FileManager.default.removeItem(at: partial)
             if readAhead, error is CancellationError, let existing = readyCopy(for: assetID) { return .stored(existing) }
@@ -247,11 +264,17 @@ public final class OriginalCache: @unchecked Sendable {
             if let entry = try entry(for: assetID), !entry.pinned { try drop(assetID) }
             return .changed(newHash: hash)
         }
-        let name = "\(assetID)\(ext)"
+        // Named for its content too: after Use the New File the new copy is a new path, so nothing
+        // that keys on a file's URL (ImageIO, a decoded session) can hand back the old pixels.
+        let name = "\(assetID)-\(contentHash.prefix(12))\(ext)"
         let destination = root.appendingPathComponent(name)
-        let wasPinned = (try entry(for: assetID))?.pinned ?? false
+        let previous = try entry(for: assetID)
+        let wasPinned = previous?.pinned ?? false
         try? FileManager.default.removeItem(at: destination)
         try FileManager.default.moveItem(at: partial, to: destination)
+        if let previous, previous.file != name {
+            try? FileManager.default.removeItem(at: root.appendingPathComponent(previous.file))
+        }
         let now = Date()
         let entry = Entry(assetId: assetID, contentHash: contentHash, file: name, bytes: info.size,
                           sourceSize: info.size, sourceModified: info.modified, storedAt: now, lastOpened: now,
