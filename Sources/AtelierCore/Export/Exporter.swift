@@ -125,10 +125,18 @@ public struct ExportResult: Sendable {
 public final class Exporter: Sendable {
     private let catalog: Catalog
     private let renderer: DevelopRenderer
+    /// Photos exported at once by `run`: while one is encoded and written on the CPU, the next
+    /// renders on the GPU. Measured on 12 Z f RAWs (AT-076 P3); `ExportTimingTests` times it.
+    let photosInFlight: Int
 
-    public init(catalog: Catalog, renderer: DevelopRenderer = .shared) {
+    public convenience init(catalog: Catalog, renderer: DevelopRenderer = .shared) {
+        self.init(catalog: catalog, renderer: renderer, photosInFlight: 2)
+    }
+
+    init(catalog: Catalog, renderer: DevelopRenderer, photosInFlight: Int) {
         self.catalog = catalog
         self.renderer = renderer
+        self.photosInFlight = max(1, photosInFlight)
     }
 
     public func run(assetIDs: [Int64], settings: ExportSettings,
@@ -141,19 +149,36 @@ public final class Exporter: Sendable {
                                                  reason: "Can't create the export folder: \(error.localizedDescription)"))
             return result
         }
-        for (index, id) in assetIDs.enumerated() {
-            if Task.isCancelled { break }
-            let filename = (try? catalog.detail(for: id))?.asset.filename ?? "Photo \(id)"
-            progress?(ExportProgress(processed: index, total: assetIDs.count, filename: filename))
-            do {
-                let url = try autoreleasepool { try export(id, settings: settings) }
-                result.exported.append(url)
-            } catch {
-                result.failures.append(ExportFailure(filename: filename, reason: error.localizedDescription))
+        // Up to `photosInFlight` photos at once; results keep the photos' order.
+        var outcomes = [Result<URL, Error>?](repeating: nil, count: assetIDs.count)
+        var finished = 0
+        await withTaskGroup(of: (Int, Result<URL, Error>).self) { group in
+            var next = 0
+            func startNext() {
+                guard next < assetIDs.count, !Task.isCancelled else { return }
+                let index = next, id = assetIDs[index]
+                next += 1
+                group.addTask {
+                    (index, Result { try autoreleasepool { try self.export(id, settings: settings) } })
+                }
+            }
+            for _ in 0..<photosInFlight { startNext() }
+            progress?(ExportProgress(processed: 0, total: assetIDs.count, filename: filename(assetIDs.first)))
+            for await (index, outcome) in group {
+                outcomes[index] = outcome
+                finished += 1
+                progress?(ExportProgress(processed: finished, total: assetIDs.count,
+                                         filename: filename(next < assetIDs.count ? assetIDs[next] : nil)))
+                startNext()
             }
         }
-        progress?(ExportProgress(processed: result.exported.count + result.failures.count,
-                                 total: assetIDs.count, filename: ""))
+        for (id, outcome) in zip(assetIDs, outcomes) {
+            switch outcome {
+            case .success(let url): result.exported.append(url)
+            case .failure(let error): result.failures.append(ExportFailure(filename: filename(id), reason: error.localizedDescription))
+            case nil: break  // cancelled before it started
+            }
+        }
         return result
     }
 
@@ -207,8 +232,11 @@ public final class Exporter: Sendable {
         image = Watermark.apply(settings.watermark, to: image)
 
         let format: CIFormat = settings.format.isSixteenBit ? .RGBA16 : .RGBA8
+        // Rendered here, on the GPU, not deferred until the encoder pulls the pixels: the encode
+        // then only reads memory, and the next photo can render meanwhile.
         guard let cgImage = renderer.context.createCGImage(image, from: image.extent, format: format,
-                                                            colorSpace: settings.colorSpace.cgColorSpace) else {
+                                                            colorSpace: settings.colorSpace.cgColorSpace,
+                                                            deferred: false) else {
             throw ExportError("Rendering failed.")
         }
 
@@ -216,9 +244,10 @@ public final class Exporter: Sendable {
         if baseName == nil, detail.asset.virtualCopyOf != nil, let copy = try catalog.virtualCopyName(of: assetID) {
             base += "-\(copy.replacingOccurrences(of: " ", with: ""))"
         }
-        let target = Self.uniqueURL(in: settings.destination, base: base, extension: settings.format.fileExtension)
+        let target = Self.claimUniqueURL(in: settings.destination, base: base, extension: settings.format.fileExtension)
         guard let destination = CGImageDestinationCreateWithURL(target as CFURL, settings.format.type.identifier as CFString,
                                                                 1, nil) else {
+            try? FileManager.default.removeItem(at: target)
             throw ExportError("\(settings.format.label) export isn't supported on this Mac.")
         }
         let properties = Self.properties(source: source, detail: detail, settings: settings,
@@ -229,6 +258,23 @@ public final class Exporter: Sendable {
             throw ExportError("The file could not be written.")
         }
         return target
+    }
+
+    /// `uniqueURL`, created empty at once so a photo exported alongside can't take the same name.
+    static func claimUniqueURL(in folder: URL, base: String, extension ext: String) -> URL {
+        var counter = 1
+        while true {
+            let name = counter == 1 ? base : "\(base) (\(counter))"
+            let candidate = folder.appendingPathComponent(name).appendingPathExtension(ext)
+            let file = open(candidate.path, O_CREAT | O_EXCL | O_WRONLY, 0o644)
+            if file >= 0 {
+                close(file)
+                return candidate
+            }
+            // Taken: try the next name. Any other error shows when the file is written.
+            guard errno == EEXIST else { return candidate }
+            counter += 1
+        }
     }
 
     /// `name.jpg`, then `name (2).jpg`, and so on; existing files are never overwritten.

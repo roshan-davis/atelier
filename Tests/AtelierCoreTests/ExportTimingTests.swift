@@ -1,12 +1,10 @@
-import CoreImage
 import Foundation
 import XCTest
 @testable import AtelierCore
 
-/// AT-076 P3, measure first: how long Export takes per photo on real RAWs, how much of that is
-/// rendering (decode and develop to pixels) and how much encoding and writing the file, and the
-/// memory the process peaks at. Prints EXPORTBENCH lines. Opt-in, one setting per run so each
-/// peak is its own: `ATELIER_EXPORT_BENCH=<full-jpeg|2048-jpeg|full-tiff>
+/// AT-076 P3: how long Export takes per photo on real RAWs, the memory the process peaks at, and
+/// what it keeps afterwards. Prints EXPORTBENCH lines. Opt-in, one setting per run so each peak
+/// is its own: `ATELIER_EXPORT_BENCH=<full-jpeg|2048-jpeg|full-tiff> [ATELIER_EXPORT_INFLIGHT=1|2]
 /// ATELIER_SAMPLE_RAWS=/folder/of/raws swift test --filter ExportTimingTests`.
 final class ExportTimingTests: XCTestCase {
     func testExportTime() async throws {
@@ -43,34 +41,21 @@ final class ExportTimingTests: XCTestCase {
         default: return XCTFail("unknown variant \(variant)")
         }
 
-        // Export first, so the render-only pass below can't warm it up.
+        let inFlight = Int(environment["ATELIER_EXPORT_INFLIGHT"] ?? "") ?? 2
         let before = RenderMemory.footprint() ?? 0
         let began = Date()
-        let result = await Exporter(catalog: catalog).run(assetIDs: ids, settings: settings)
+        let result = await Exporter(catalog: catalog, renderer: .shared, photosInFlight: inFlight)
+            .run(assetIDs: ids, settings: settings)
         let total = Date().timeIntervalSince(began) * 1000
         XCTAssertEqual(result.failures, [])
         XCTAssertEqual(result.exported.count, ids.count)
         let peak = RenderMemory.peakFootprint() ?? 0, after = RenderMemory.footprint() ?? 0
-        RenderMemory.shared.releaseAll(because: "bench")
-
-        // Rendering alone, as Export renders: the photo's develop settings to a CGImage.
-        let renderer = DevelopRenderer.shared
-        var renders: [Double] = []
-        for (id, url) in zip(ids, raws) {
-            let began = Date()
-            try autoreleasepool {
-                let session = try XCTUnwrap(renderer.session(for: url, maxPixelSize: settings.longEdge))
-                let image = try XCTUnwrap(session.image(with: try catalog.developSettings(for: id)))
-                let format: CIFormat = settings.format == .tiff ? .RGBA16 : .RGBA8
-                _ = try XCTUnwrap(renderer.context.createCGImage(image, from: image.extent.integral, format: format,
-                                                                  colorSpace: settings.colorSpace.cgColorSpace))
-            }
-            renders.append(Date().timeIntervalSince(began) * 1000)
-        }
-        let perPhoto = total / Double(ids.count), render = renders.reduce(0, +) / Double(renders.count)
+        RenderMemory.shared.clear(because: "bench")
+        let cleared = RenderMemory.footprint() ?? 0
+        let perPhoto = total / Double(ids.count)
         let mb: (UInt64) -> UInt64 = { $0 / 1_048_576 }
-        print("EXPORTBENCH variant=\(variant) photos=\(ids.count) total_ms=\(Int(total)) per_photo_ms=\(Int(perPhoto)) "
-            + "render_ms=\(Int(render)) encode_write_ms=\(Int(max(0, perPhoto - render))) "
-            + "before_mb=\(mb(before)) peak_mb=\(mb(peak)) after_mb=\(mb(after))")
+        print("EXPORTBENCH variant=\(variant) in_flight=\(inFlight) photos=\(ids.count) total_ms=\(Int(total)) "
+            + "per_photo_ms=\(Int(perPhoto)) before_mb=\(mb(before)) peak_mb=\(mb(peak)) after_mb=\(mb(after)) "
+            + "after_clear_mb=\(mb(cleared))")
     }
 }
