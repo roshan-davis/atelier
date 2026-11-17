@@ -17,7 +17,7 @@ final class SmartPreviewTests: XCTestCase {
                 matrices.append([1 + m, 0, 0, 0, 1 + n / 1000, 0, 0, 0, 1 - m])
             }
         }
-        return CameraWhite(camera: "Test", temperatures: temperatures, tints: tints, matrices: matrices)
+        return CameraWhite(camera: "Test", space: CameraWhite.currentSpace, temperatures: temperatures, tints: tints, matrices: matrices)
     }
 
     func testTheWhiteTableIsExactOnItsGridAndIdentityAtAsShot() {

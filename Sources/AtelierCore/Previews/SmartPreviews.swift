@@ -54,7 +54,9 @@ public final class SmartPreviewStore: @unchecked Sendable {
         try SmartPreviewDNG.make(from: original, to: temporary, cameraMatch: cameraMatch, context: context)
         guard let info = SmartPreviewInfo.read(temporary) else { throw CocoaError(.fileWriteUnknown) }
         guard ensureWhite(for: info.camera, from: original, context: context, shouldStop: shouldStop) != nil else {
-            throw CocoaError(.userCancelled)
+            if shouldStop() { throw CocoaError(.userCancelled) }
+            throw CocoaError(.fileReadCorruptFile, userInfo: [
+                NSLocalizedDescriptionKey: "Atelier couldn't measure how this camera's white balance works from this photo."])
         }
         let destination = url(for: fileID)
         if FileManager.default.fileExists(atPath: destination.path) {
@@ -79,7 +81,7 @@ public final class SmartPreviewStore: @unchecked Sendable {
     public func white(for camera: String) -> CameraWhite? {
         if let known = lock.withLock({ whites[camera] }) { return known }
         guard let data = try? Data(contentsOf: whiteURL(camera)),
-              let white = try? JSONDecoder().decode(CameraWhite.self, from: data) else { return nil }
+              let white = try? JSONDecoder().decode(CameraWhite.self, from: data), white.isCurrent else { return nil }
         lock.withLock { whites[camera] = white }
         return white
     }
@@ -113,8 +115,9 @@ public final class SmartPreviewStore: @unchecked Sendable {
 
     /// The white table for a smart preview file, from the folder it is in (for `DevelopSession`).
     static func white(forPreview url: URL, camera: String) -> CameraWhite? {
-        guard let data = try? Data(contentsOf: whiteURL(camera, root: url.deletingLastPathComponent())) else { return nil }
-        return try? JSONDecoder().decode(CameraWhite.self, from: data)
+        guard let data = try? Data(contentsOf: whiteURL(camera, root: url.deletingLastPathComponent())),
+              let white = try? JSONDecoder().decode(CameraWhite.self, from: data), white.isCurrent else { return nil }
+        return white
     }
 }
 

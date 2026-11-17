@@ -3,8 +3,10 @@ import Foundation
 
 /// How a camera's RAW engine changes a photo when Temp and Tint move (AT-079d), so a smart
 /// preview, which has no camera data, can follow the original exactly. For a grid of whites, the
-/// 3×3 that takes the camera's render at a 5000 K reference to its render at that white, in Core
-/// Image's working space (extended linear sRGB, what `CIRAWFilter.linearSpaceFilter` sees). A
+/// 3×3 that takes the camera's render at a 5000 K reference to its render at that white, in the
+/// working space of the context that renders it (`DevelopRenderer.workingSpace`, extended linear
+/// Rec. 2020: `CIRAWFilter.linearSpaceFilter` sees the rendering context's working space, so a
+/// table fitted in another space puts red off by up to 28/255; the Mac check of Nov 17). A
 /// change from the as-shot white to any other is then `matrix(to) · matrix(as shot)⁻¹`.
 ///
 /// Fitted once per camera model from its first photo (least squares over the unclipped pixels of
@@ -13,6 +15,9 @@ import Foundation
 public struct CameraWhite: Codable, Hashable, Sendable {
     public var version = 1
     public var camera: String
+    /// The colour space the matrices work in; a table in another space than the renderer's is
+    /// fitted again.
+    public var space: String
     /// Grid temperatures in Kelvin, warm to cool (evenly spaced in mired).
     public var temperatures: [Double]
     /// Grid tints, Apple's scale (as `CIRAWFilter.neutralTint`).
@@ -21,6 +26,10 @@ public struct CameraWhite: Codable, Hashable, Sendable {
     public var matrices: [[Double]]
 
     public static let reference = (temperature: 5000.0, tint: 0.0)
+    /// The renderer's working space by name, as `space` records it.
+    public static var currentSpace: String { (DevelopRenderer.workingSpace.name as String?) ?? "" }
+    /// Whether this table works in the renderer's current space.
+    public var isCurrent: Bool { space == Self.currentSpace }
     /// 2000–50000 K (Develop's range) in 18 mired steps, 9 tints across −150…150.
     public static let gridTemperatures: [Double] = {
         let warm = 1e6 / 2000, cool = 1e6 / 50000
@@ -79,7 +88,7 @@ public struct CameraWhite: Codable, Hashable, Sendable {
                 matrices.append(matrix)
             }
         }
-        return CameraWhite(camera: camera, temperatures: gridTemperatures, tints: gridTints, matrices: matrices)
+        return CameraWhite(camera: camera, space: currentSpace, temperatures: gridTemperatures, tints: gridTints, matrices: matrices)
     }
 
     /// Long edge of the fitting renders: enough pixels for a 3×3, fast to decode.
@@ -100,7 +109,8 @@ public struct CameraWhite: Codable, Hashable, Sendable {
     static func linearPixels(_ filter: CIRAWFilter, temperature: Double, tint: Double, context: CIContext) -> [Float]? {
         filter.neutralTemperature = Float(temperature)
         filter.neutralTint = Float(tint)
-        guard let image = filter.outputImage, let space = CGColorSpace(name: CGColorSpace.extendedLinearSRGB) else { return nil }
+        guard let image = filter.outputImage else { return nil }
+        let space = DevelopRenderer.workingSpace
         let extent = image.extent.integral
         var pixels = [Float](repeating: 0, count: Int(extent.width) * Int(extent.height) * 4)
         pixels.withUnsafeMutableBytes { buffer in
@@ -122,7 +132,10 @@ public struct CameraWhite: Codable, Hashable, Sendable {
             // The target is only checked for being a number: at the warm end of the grid
             // (2000–2250 K) red, and green with a magenta tint, are negative for every pixel in
             // extended linear sRGB (out of gamut, gamut mapping off) yet still a linear change.
-            guard ok(x0), ok(x1), ok(x2), y0.isFinite, y1.isFinite, y2.isFinite else { continue }
+            // The target may go negative (warm whites push red below zero, unclamped); only its
+            // highlights, where the engine's recovery isn't linear, are left out.
+            let fine = { (v: Double) in v.isFinite && v < 0.9 }
+            guard ok(x0), ok(x1), ok(x2), fine(y0), fine(y1), fine(y2) else { continue }
             let x = [x0, x1, x2], y = [y0, y1, y2]
             for r in 0..<3 {
                 for c in 0..<3 {
