@@ -136,9 +136,16 @@ final class MCPSocketTests: XCTestCase {
         XCTAssertEqual(ClientIdentity.outerBundle(in: "/Applications/Claude.app/Contents/Frameworks/Helper.app/Contents/MacOS/x"),
                        "/Applications/Claude.app")
         XCTAssertNil(ClientIdentity.outerBundle(in: "/usr/local/bin/opencode"))
-        // On Linux there are no bundles: the client is named after the parent process.
+        // On Linux there are no bundles: the client is named after the parent process. On a Mac
+        // the tests may run under an app (Xcode, Terminal, a chat app), which names it instead
+        // (AT-080; found by Easel's copy, EA-075).
         let me = ClientIdentity.client(forHelper: getpid())
+        #if os(Linux)
         XCTAssertTrue(me.id.hasPrefix("process#"))
+        #else
+        XCTAssertTrue(me.id.hasPrefix("process#") || me.id.contains("#"), me.id)
+        if !me.id.hasPrefix("process#") { XCTAssertNotNil(me.path) }
+        #endif
         XCTAssertEqual(me.pid, getpid())
     }
 
