@@ -26,8 +26,12 @@ public enum VolumeIdentity {
         .volumeUUIDStringKey, .volumeURLForRemountingKey, .volumeNameKey, .volumeIsLocalKey,
     ]
 
-    /// The volume that holds `url`.
+    /// The volume that holds `url`. A file in a cloud drive folder is on that provider's folder,
+    /// not on the Mac's disk (AT-079b), so its photos relink on a new Mac.
     public static func volume(containing url: URL) throws -> MountedVolume {
+        if let provider = CloudFolders.provider(containing: url, in: cloudProviders.current()) {
+            return provider
+        }
         let values = try url.resourceValues(forKeys: [.volumeURLKey])
         guard let root = values.volume else {
             throw CocoaError(.fileReadUnknown, userInfo: [NSFilePathErrorKey: url.path])
@@ -55,7 +59,7 @@ public enum VolumeIdentity {
 
     public static func mountedVolumes() -> [MountedVolume] {
         let roots = FileManager.default.mountedVolumeURLs(includingResourceValuesForKeys: Array(rootKeys)) ?? []
-        return roots.compactMap { try? volume(atRoot: $0) }
+        return roots.compactMap { try? volume(atRoot: $0) } + cloudProviders.refresh()
     }
 
     /// Path of `url` relative to `root`, without leading or trailing slashes.
@@ -78,6 +82,10 @@ public enum VolumeIdentity {
         }
         return String(relative).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
     }
+
+    /// The provider folders, listed once and again whenever volumes are refreshed, so importing
+    /// thousands of files doesn't list `~/Library/CloudStorage` for each one.
+    static let cloudProviders = CloudProviderList()
 
     static func stripCredentials(_ url: URL) -> String {
         guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
@@ -120,5 +128,23 @@ extension Catalog {
             url.appendPathComponent(folder.relativePath, isDirectory: true)
         }
         return url.appendingPathComponent(filename, isDirectory: false)
+    }
+}
+
+/// `CloudFolders.providers()`, kept between refreshes.
+final class CloudProviderList: @unchecked Sendable {
+    private let lock = NSLock()
+    private var providers: [MountedVolume]?
+
+    func current() -> [MountedVolume] {
+        if let providers = lock.withLock({ providers }) { return providers }
+        return refresh()
+    }
+
+    @discardableResult
+    func refresh() -> [MountedVolume] {
+        let found = CloudFolders.providers()
+        lock.withLock { providers = found }
+        return found
     }
 }

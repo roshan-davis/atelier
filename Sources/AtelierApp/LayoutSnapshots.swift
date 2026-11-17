@@ -1189,11 +1189,23 @@ enum LayoutSnapshots {
                                   serverAddress: "smb://megham.local/Photos")
         let drive = MountedVolume(identityKey: "uuid:SNAPSHOT-SSD", name: "Photos SSD", kind: .local,
                                   rootURL: URL(fileURLWithPath: "/Volumes/Photos SSD", isDirectory: true))
+        // Cloud drive folders (AT-079b): one synced, one whose app has signed out.
+        let dropbox = MountedVolume(identityKey: "cloud:Dropbox", name: "Dropbox", kind: .cloud,
+                                    rootURL: URL(fileURLWithPath: "/Users/rosh/Library/CloudStorage/Dropbox", isDirectory: true))
+        let iCloud = MountedVolume(identityKey: "cloud:iCloudDrive", name: "iCloud Drive", kind: .cloud,
+                                   rootURL: URL(fileURLWithPath: "/Users/rosh/Library/Mobile Documents/com~apple~CloudDocs",
+                                                isDirectory: true))
+        let googleDrive = MountedVolume(identityKey: "cloud:GoogleDrive-rosh@example.com", name: "Google Drive", kind: .cloud,
+                                        rootURL: URL(fileURLWithPath: "/Users/rosh/Library/CloudStorage/GoogleDrive-rosh@example.com",
+                                                     isDirectory: true))
         do {
             try catalog.addStorageLocation(folder: share.rootURL, on: share, name: "megham", connectAtLaunch: true)
             try catalog.addStorageLocation(folder: drive.rootURL.appendingPathComponent("Portfolio"), on: drive)
+            try catalog.addStorageLocation(folder: dropbox.rootURL.appendingPathComponent("Shoots"), on: dropbox,
+                                           name: "Dropbox Shoots")
+            try catalog.addStorageLocation(folder: googleDrive.rootURL, on: googleDrive)
             try await catalog.writer.write { db in
-                try db.execute(sql: "UPDATE volume SET isOnline = 0 WHERE identityKey = 'uuid:SNAPSHOT-SSD'")
+                try db.execute(sql: "UPDATE volume SET isOnline = 0 WHERE identityKey IN ('uuid:SNAPSHOT-SSD', 'cloud:GoogleDrive-rosh@example.com')")
                 var pending = StorageLocation(name: "Studio Mac", kind: .networkShare, volumeId: nil,
                                               serverAddress: "smb://studio.local/Archive")
                 try pending.insert(db)
@@ -1201,13 +1213,13 @@ enum LayoutSnapshots {
         } catch {
             print("SNAPSHOT: storage sample locations failed: \(error)")
         }
-        for _ in 0..<20 where model.sidebar.locations.count < 3 { try? await Task.sleep(for: .milliseconds(250)) }
-        print("SNAPSHOT: storage locations \(model.sidebar.locations.map { "\($0.location.name) \($0.status.word) \($0.detailLine) photos=\($0.photoCount)" })")
+        for _ in 0..<20 where model.sidebar.locations.count < 5 { try? await Task.sleep(for: .milliseconds(250)) }
+        print("SNAPSHOT: storage locations \(model.sidebar.locations.map { "\($0.location.name) \($0.statusWord) \($0.detailLine) photos=\($0.photoCount)" })")
         for theme in [Theme.light, .graphite] {
             UserDefaults.standard.set(theme.rawValue, forKey: Theme.defaultsKey)
             theme.apply()
             await capture(AnyView(StorageSettings().environmentObject(model).frame(width: 640)),
-                          size: CGSize(width: 640, height: 620),
+                          size: CGSize(width: 640, height: 760),
                           to: folder.appendingPathComponent("settings-storage-\(theme.rawValue).png"))
         }
         UserDefaults.standard.set(Theme.light.rawValue, forKey: Theme.defaultsKey)
@@ -1226,13 +1238,18 @@ enum LayoutSnapshots {
             ("3-name", AddLocationSheet(step: .name, kind: .networkShare,
                                         place: .init(mounted: share, folder: share.rootURL), name: "megham",
                                         added: { _ in })),
+            ("4-cloud", AddLocationSheet(step: .place, kind: .cloudFolder, previewProviders: [iCloud, dropbox, googleDrive],
+                                         added: { _ in })),
+            ("5-cloud-name", AddLocationSheet(step: .name, kind: .cloudFolder,
+                                              place: .init(mounted: dropbox, folder: dropbox.rootURL.appendingPathComponent("Shoots")),
+                                              name: "Shoots", added: { _ in })),
         ]
         for (name, sheet) in steps {
             await capture(AnyView(sheet.environmentObject(model)), size: AddLocationSheet.size,
                           to: folder.appendingPathComponent("add-location-\(name).png"))
         }
         await capture(AnyView(SidebarView().environmentObject(model).frame(width: 260)),
-                      size: CGSize(width: 260, height: 560),
+                      size: CGSize(width: 260, height: 620),
                       to: folder.appendingPathComponent("sidebar-locations.png"))
     }
 

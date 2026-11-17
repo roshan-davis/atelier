@@ -347,6 +347,8 @@ private struct LocationLabel: View {
     private var help: String {
         switch info.status {
         case .connected: return "Connected"
+        case .offline where info.location.kind == .cloudFolder:
+            return "Signed out of its cloud drive app: browsing previews only"
         case .offline: return "Offline: browsing previews only"
         case .notConnectedYet: return "Not connected yet"
         }

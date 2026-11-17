@@ -99,7 +99,7 @@ struct OverlayPill<Content: View>: View {
 /// - top left: the photo's number in the Filmstrip, and its flag;
 /// - top right: stack, virtual copy, AI or Edit In version, RAW+JPEG pair, cull group;
 /// - bottom left: stars and color label;
-/// - bottom right: has Develop edits, cropped, has masks, original offline.
+/// - bottom right: has Develop edits, cropped, has masks, original not downloaded or offline.
 /// Used by the grid and the Filmstrip; the Cull view uses the same pill and ring.
 struct ThumbnailBadges: View {
     let row: AssetRow
@@ -279,6 +279,9 @@ struct ThumbnailBadges: View {
         if row.isCropped { marks.append(StatusMark(symbol: "crop", description: "Cropped")) }
         if row.hasMasks { marks.append(StatusMark(symbol: "circle.dashed", description: "Has masks")) }
         if row.hasNotes { marks.append(StatusMark(symbol: "note.text", color: .systemYellow, description: "Has notes")) }
+        if row.notDownloaded {
+            marks.append(StatusMark(symbol: "icloud.and.arrow.down", description: "Original is in the cloud, not downloaded yet"))
+        }
         if row.isOffline {
             marks.append(StatusMark(symbol: "exclamationmark.triangle.fill", color: .systemOrange,
                                     description: "Original is offline"))

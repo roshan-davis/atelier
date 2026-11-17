@@ -136,7 +136,12 @@ extension Catalog {
                    (develop.json IS NOT NULL AND IFNULL(json_array_length(develop.json, '$.masks'), 0) > 0) AS hasMasks,
                    \(hasNotesCondition()) AS hasNotes,
                    IFNULL((SELECT NOT volume.isOnline FROM folder JOIN volume ON volume.id = folder.volumeId
-                           WHERE folder.id = asset.folderId), 0) AS isOffline
+                           WHERE folder.id = asset.folderId), 0) AS isOffline,
+                   (SELECT volume.mountPath || CASE folder.relativePath WHEN '' THEN '' ELSE '/' || folder.relativePath END
+                           || '/' || asset.filename
+                    FROM folder JOIN volume ON volume.id = folder.volumeId
+                    WHERE folder.id = asset.folderId AND volume.kind = 'cloud' AND volume.isOnline) AS cloudPath,
+                   0 AS notDownloaded
             FROM asset
             JOIN metadata ON metadata.assetId = asset.id
             LEFT JOIN version stackVersion ON stackVersion.derivedAssetId = asset.id
@@ -224,7 +229,15 @@ extension Catalog {
              ORDER BY \(key) \(direction), \(captureTime) \(direction),
                       COALESCE(stackParent.id, asset.id) \(direction), asset.id
             """
-        return try AssetRow.fetchAll(db, sql: sql, arguments: StatementArguments(arguments))
+        var rows = try AssetRow.fetchAll(db, sql: sql, arguments: StatementArguments(arguments))
+        // Cloud drive folders (AT-079b): which originals are still only in the cloud. Reads each
+        // file's flags on this Mac's disk (no download, no network); local photos skip it.
+        for index in rows.indices {
+            if let path = rows[index].cloudPath {
+                rows[index].notDownloaded = CloudFiles.needsDownload(URL(fileURLWithPath: path))
+            }
+        }
+        return rows
     }
 
     /// The master version's settings change something. Neutral settings are saved as only their

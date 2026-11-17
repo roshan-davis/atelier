@@ -29,7 +29,7 @@
 
 <div class="eyebrow">Library</div>
 <h1>Storage locations</h1>
-<p class="lede">Atelier has no cloud of its own. You add the places you already keep photos (a NAS, an external drive, a folder) in <span class="path">Atelier › Settings… › Storage</span>, and Atelier uses them. Nothing is set up until you add it.</p>
+<p class="lede">Atelier has no cloud of its own. You add the places you already keep photos (a NAS, an external drive, a folder, a cloud drive folder such as Dropbox) in <span class="path">Atelier › Settings… › Storage</span>, and Atelier uses them. Nothing is set up until you add it.</p>
 
 <figure>
   <div class="pane" aria-label="A drawn Storage pane">
@@ -40,28 +40,41 @@
     <div class="row"><span class="tile" style="background:#8f97a3">▭</span>
       <div><div class="name">Portfolio</div><div class="sub">Drive · Photos SSD/Portfolio</div></div>
       <div class="right"><div><span class="dot" style="background:#9a9a9a"></span>Offline</div><div class="sub">1,920 photos</div></div></div>
+    <div class="row"><span class="tile" style="background:#a9c1d9">☁</span>
+      <div><div class="name">Dropbox Shoots</div><div class="sub">Cloud drive folder · Dropbox/Shoots</div><div class="bar"><i style="width:48%"></i></div></div>
+      <div class="right"><div><span class="dot" style="background:#34c759"></span>Connected</div><div class="sub">846 photos</div></div></div>
     <div class="pm"><span>+</span><span>−</span></div>
   </div>
   <figcaption><b>Settings › Storage:</b> each location with where it is, whether it is connected, how many photos it holds and how full it is. Click one to see its details below the list.</figcaption>
 </figure>
 
-<div class="chips"><a href="#add">Add a location</a><a href="#nas">A NAS</a><a href="#details">Details</a><a href="#offline">Offline</a><a href="#where">What stays on this Mac</a><a href="#remove">Remove</a></div>
+<div class="chips"><a href="#add">Add a location</a><a href="#nas">A NAS</a><a href="#cloud">Cloud drive folders</a><a href="#details">Details</a><a href="#offline">Offline</a><a href="#where">What stays on this Mac</a><a href="#remove">Remove</a></div>
 
 <h2 id="add">Add a location</h2>
 <ol class="steps">
   <li>Open <span class="path">Atelier › Settings… › Storage</span> and click <span class="path">+</span>.</li>
-  <li>Choose <b>Network Share (NAS)</b> or <b>Drive or Folder on This Mac</b>, then <span class="path">Continue</span>.</li>
-  <li>Pick the place: a server found on your network, an address such as <code>smb://megham.local/Photos</code>, or a drive or folder in the Open panel.</li>
+  <li>Choose <b>Drive or Folder on This Mac</b>, <b>Network Share (NAS)</b> or <b>Cloud Drive Folder</b>, then <span class="path">Continue</span>.</li>
+  <li>Pick the place: a drive or folder in the Open panel, a server found on your network or an address such as <code>smb://megham.local/Photos</code>, or a cloud drive found on this Mac.</li>
   <li>Check the name (it starts as the share's or folder's name) and click <span class="path">Add Location</span>.</li>
 </ol>
 <p>You can add only a folder on a drive, for example <b>Photos SSD/Portfolio</b>. Photos Atelier already has from that drive stay exactly where they are; a location never moves or renames anything.</p>
-<p>Cloud drive folders (iCloud Drive, Dropbox, Google Drive, OneDrive) and S3-compatible backups come in later updates.</p>
+<p>Backups to S3-compatible storage (Backblaze B2, Cloudflare R2, Amazon S3, MinIO) come in a later update.</p>
 
 <h2 id="nas">A NAS</h2>
 <ul>
   <li>Servers that share over SMB on your network are listed by name. Double-click one, or select it and click <span class="path">Connect</span>.</li>
   <li>macOS asks for the user name and password the first time, in its own window, and keeps them in your Keychain. If you saved the password in Finder before (<i>Remember this password in my keychain</i>), nothing is asked. Atelier never stores a password itself.</li>
   <li><b>Connect when Atelier opens</b> (on by default for a share) connects it at launch, quietly, with the Keychain's password. If the NAS is off, Atelier opens as usual and the status bar says it is offline.</li>
+</ul>
+
+<h2 id="cloud">Cloud drive folders</h2>
+<p>iCloud Drive, Dropbox, Google Drive, OneDrive, Box, Synology Drive and other cloud drives work through their own Mac app, which keeps a folder in sync. Atelier never signs in to them; it reads the files in that folder.</p>
+<ul>
+  <li>The cloud drives on this Mac are listed by name. Select one and click <span class="path">Use All of Dropbox</span> (or double-click it), or <span class="path">Choose Folder…</span> to pick only the folder where you keep photos.</li>
+  <li>Photos are remembered by cloud drive, not by where the Mac keeps its folder, so signing in again or moving to a new Mac keeps them linked.</li>
+  <li>A photo that is still only in the cloud shows <b>a cloud mark</b> on its thumbnail. Its preview shows as usual; when you open it in Develop, Atelier asks the cloud drive's app to download it, shows the download in the status bar with <span class="path">Cancel</span>, and you can edit as soon as it arrives. Nothing is downloaded just by browsing.</li>
+  <li>The Import dialog says how much it will download before you import from a cloud folder, for example “412 photos · 18.4 GB · 11.6 GB will be downloaded”.</li>
+  <li>If the cloud drive's app signs out or is removed, the location shows <b>Signed Out</b> and its photos stay browsable from their previews.</li>
 </ul>
 
 <h2 id="details">Details</h2>

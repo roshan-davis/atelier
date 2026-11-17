@@ -20,6 +20,8 @@ final class ImportFlow: ObservableObject {
         /// Every file, a RAW's JPEG included, and their total size.
         var fileCount = 0
         var bytes: Int64 = 0
+        /// Of those, the bytes still only in a cloud drive folder (AT-079b): importing downloads them.
+        var downloadBytes: Int64 = 0
         var id: URL { url }
     }
 
@@ -85,6 +87,7 @@ final class ImportFlow: ObservableObject {
     var photos: [URL] { sources.flatMap { $0.photos ?? [] } }
     var photoCount: Int { sources.reduce(0) { $0 + ($1.photos?.count ?? 0) } }
     var bytes: Int64 { sources.reduce(0) { $0 + $1.bytes } }
+    var downloadBytes: Int64 { sources.reduce(0) { $0 + $1.downloadBytes } }
 
     func add(_ urls: [URL]) {
         for url in urls where !sources.contains(where: { $0.url == url }) {
@@ -95,11 +98,14 @@ final class ImportFlow: ObservableObject {
                 let bytes = files.reduce(Int64(0)) {
                     $0 + Int64((try? $1.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
                 }
+                // Reads each file's flags only: listing a cloud folder never downloads it.
+                let download = CloudFiles.downloadSize(of: files).bytes
                 await MainActor.run { [weak self] in
                     guard let self, let index = self.sources.firstIndex(where: { $0.url == url }) else { return }
                     self.sources[index].photos = photos
                     self.sources[index].fileCount = files.count
                     self.sources[index].bytes = bytes
+                    self.sources[index].downloadBytes = download
                 }
             }
         }

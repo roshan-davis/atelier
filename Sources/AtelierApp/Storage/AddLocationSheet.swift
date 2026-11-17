@@ -2,20 +2,35 @@ import AppKit
 import AtelierCore
 import SwiftUI
 
-/// Settings > Storage > + (AT-079a): one sheet of one size in three steps, as the Import dialog:
-/// what kind, which one (starting from what Atelier can find), then the name. Cloud drive folders
-/// and object storage join the first step with AT-079b and AT-079e.
+/// Settings > Storage > + (AT-079a, cloud drive folders AT-079b): one sheet of one size in three
+/// steps, as the Import dialog: what kind, which one (starting from what Atelier can find), then the
+/// name. Object storage joins the first step with AT-079e.
 struct AddLocationSheet: View {
     static let size = CGSize(width: 600, height: 440)
 
     enum Kind: String, CaseIterable, Identifiable {
-        case drive, networkShare
+        case drive, networkShare, cloudFolder
         var id: String { rawValue }
-        var storageKind: StorageLocationKind { self == .drive ? .drive : .networkShare }
-        var title: String { self == .drive ? "Drive or Folder on This Mac" : "Network Share (NAS)" }
+        var storageKind: StorageLocationKind {
+            switch self {
+            case .drive: return .drive
+            case .networkShare: return .networkShare
+            case .cloudFolder: return .cloudFolder
+            }
+        }
+        var title: String {
+            switch self {
+            case .drive: return "Drive or Folder on This Mac"
+            case .networkShare: return "Network Share (NAS)"
+            case .cloudFolder: return "Cloud Drive Folder"
+            }
+        }
         var line: String {
-            self == .drive ? "This Mac, an external drive, or a folder on one."
-                : "A NAS or another Mac sharing over SMB."
+            switch self {
+            case .drive: return "This Mac, an external drive, or a folder on one."
+            case .networkShare: return "A NAS or another Mac sharing over SMB."
+            case .cloudFolder: return "iCloud Drive, Dropbox, Google Drive, OneDrive, synced by their Mac app."
+            }
         }
     }
 
@@ -39,19 +54,26 @@ struct AddLocationSheet: View {
     @State private var address: String
     @State private var connecting: String?
     @State private var problem: String?
-    /// Snapshots show these instead of a live Bonjour search.
+    /// Cloud drive folders found on this Mac, and the one picked in step 2.
+    @State private var providers: [MountedVolume] = []
+    @State private var provider: MountedVolume?
+    /// Snapshots show these instead of a live Bonjour search or this Mac's provider folders.
     var previewServers: [ShareBrowser.Server]?
+    var previewProviders: [MountedVolume]?
     let added: (StorageLocation) -> Void
 
     init(step: Step = .kind, kind: Kind = .networkShare, place: Place? = nil, name: String = "",
          address: String = "", previewServers: [ShareBrowser.Server]? = nil,
-         added: @escaping (StorageLocation) -> Void) {
+         previewProviders: [MountedVolume]? = nil, added: @escaping (StorageLocation) -> Void) {
         _step = State(initialValue: step)
         _kind = State(initialValue: kind)
         _place = State(initialValue: place)
         _name = State(initialValue: name)
         _address = State(initialValue: address)
         self.previewServers = previewServers
+        self.previewProviders = previewProviders
+        _providers = State(initialValue: previewProviders ?? [])
+        _provider = State(initialValue: previewProviders?.first)
         self.added = added
     }
 
@@ -62,7 +84,12 @@ struct AddLocationSheet: View {
             Group {
                 switch step {
                 case .kind: kindStep
-                case .place: kind == .networkShare ? AnyView(shareStep) : AnyView(driveStep)
+                case .place:
+                    switch kind {
+                    case .networkShare: AnyView(shareStep)
+                    case .drive: AnyView(driveStep)
+                    case .cloudFolder: AnyView(cloudStep)
+                    }
                 case .name: nameStep
                 }
             }
@@ -113,13 +140,20 @@ struct AddLocationSheet: View {
                 Button("Continue") { advanceFromKind() }
                     .keyboardShortcut(.defaultAction)
             case .place:
-                if kind == .networkShare {
+                switch kind {
+                case .networkShare:
                     Button("Connect") { connect(address) }
                         .keyboardShortcut(.defaultAction)
                         .disabled(connecting != nil || ServerAddress.normalized(address) == nil)
-                } else {
+                case .drive:
                     Button("Choose…") { chooseFolder() }
                         .keyboardShortcut(.defaultAction)
+                case .cloudFolder:
+                    Button("Choose Folder…") { chooseCloudFolder() }
+                        .disabled(provider == nil)
+                    Button("Use All of \(provider?.name ?? "It")") { useWholeProvider() }
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(provider == nil)
                 }
             case .name:
                 Button("Add Location") { add() }
@@ -143,7 +177,7 @@ struct AddLocationSheet: View {
                         .onClick(perform: { kind = k }, doubleClick: { kind = k; advanceFromKind() })
                 }
             }
-            Text("Cloud drive folders (iCloud Drive, Dropbox, Google Drive, OneDrive) and S3 backups come in the next updates.")
+            Text("Backups to S3-compatible storage (Backblaze B2, Cloudflare R2, Amazon S3, MinIO) come in a later update.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -191,6 +225,41 @@ struct AddLocationSheet: View {
         .onAppear { if previewServers == nil { browser.start() } }
     }
 
+    private var cloudStep: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Choose a cloud drive")
+                .font(.headline)
+            List {
+                if providers.isEmpty {
+                    Text("No cloud drive folders on this Mac. Install iCloud Drive, Dropbox, Google Drive, OneDrive or another provider's Mac app and sign in; its folder shows up here.")
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                ForEach(providers, id: \.identityKey) { found in
+                    HStack(spacing: 10) {
+                        StorageKindTile(kind: .cloudFolder, size: 22)
+                        Text(found.name)
+                        Spacer()
+                    }
+                    .contentShape(Rectangle())
+                    .onClick(perform: { provider = found }, doubleClick: { provider = found; useWholeProvider() })
+                    .listRowBackground(provider?.identityKey == found.identityKey ? Color.accentColor.opacity(0.14) : Color.clear)
+                }
+            }
+            .listStyle(.bordered)
+            .frame(minHeight: 150)
+            Text("Use all of it, or choose the folder where you keep photos. The provider's app keeps the files in sync; Atelier never signs in. A photo that's only in the cloud shows a cloud badge and downloads when you open it in Develop.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .onAppear {
+            guard previewProviders == nil else { return }
+            providers = CloudFolders.providers()
+            if provider == nil { provider = providers.first }
+        }
+    }
+
     private var driveStep: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Choose a drive or a folder")
@@ -208,18 +277,20 @@ struct AddLocationSheet: View {
         VStack(alignment: .leading, spacing: 14) {
             if let place {
                 HStack(spacing: 12) {
-                    StorageKindTile(kind: kind.storageKind, size: 36)
+                    StorageKindTile(kind: placeKind, size: 36)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(place.folder.path).lineLimit(1).truncationMode(.middle)
                         if let server = place.mounted.serverAddress.flatMap(ServerAddress.display) {
                             Text(server).font(.caption).foregroundStyle(.secondary)
+                        } else if place.mounted.kind == .cloud {
+                            Text("Synced by \(place.mounted.name)").font(.caption).foregroundStyle(.secondary)
                         }
                     }
                 }
             }
             Form {
                 TextField("Name", text: $name)
-                if kind == .networkShare {
+                if placeKind == .networkShare {
                     Toggle("Connect when Atelier opens", isOn: $connectAtLaunch)
                 }
             }
@@ -229,6 +300,12 @@ struct AddLocationSheet: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    /// What the chosen place is, whichever tile led there: a folder picked under "Drive or Folder"
+    /// that is in Dropbox is a cloud drive folder, one on a mounted share is a network share.
+    private var placeKind: StorageLocationKind {
+        place.map { StorageLocationKind($0.mounted.kind) } ?? kind.storageKind
     }
 
     // MARK: Actions
@@ -269,6 +346,29 @@ struct AddLocationSheet: View {
         }
     }
 
+    private func useWholeProvider() {
+        guard let provider else { return }
+        choose(Place(mounted: provider, folder: provider.rootURL))
+    }
+
+    /// The Open panel inside the chosen provider's folder; a folder elsewhere isn't a cloud folder.
+    private func chooseCloudFolder() {
+        guard let provider else { return }
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = provider.rootURL
+        panel.prompt = "Choose"
+        panel.message = "Choose the folder in \(provider.name) where you keep photos."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard let holder = CloudFolders.provider(containing: url, in: providers) else {
+            problem = "That folder isn't in a cloud drive folder. Choose one inside \(provider.name)."
+            return
+        }
+        choose(Place(mounted: holder, folder: url))
+    }
+
     private func chooseFolder() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
@@ -296,7 +396,7 @@ struct AddLocationSheet: View {
         do {
             let location = try model.catalog.addStorageLocation(
                 folder: place.folder, on: place.mounted, name: name.trimmingCharacters(in: .whitespaces),
-                kind: kind.storageKind, connectAtLaunch: kind == .networkShare && connectAtLaunch)
+                kind: placeKind, connectAtLaunch: placeKind == .networkShare && connectAtLaunch)
             model.refreshVolumes()
             added(location)
             dismiss()
@@ -314,7 +414,9 @@ private struct KindTile: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             StorageKindTile(kind: kind.storageKind, size: 40)
-            Text(kind.title).font(.body.weight(.semibold))
+            Text(kind.title)
+                .font(.body.weight(.semibold))
+                .fixedSize(horizontal: false, vertical: true)
             Text(kind.line)
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -322,7 +424,7 @@ private struct KindTile: View {
             Spacer(minLength: 0)
         }
         .padding(14)
-        .frame(width: 260, height: 150, alignment: .topLeading)
+        .frame(maxWidth: .infinity, minHeight: 172, maxHeight: 172, alignment: .topLeading)
         .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
             .fill(Color.primary.opacity(isSelected ? 0.08 : 0.03)))
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)

@@ -7,6 +7,8 @@ import GRDB
 public enum VolumeKind: String, Codable, Sendable, DatabaseValueConvertible {
     case local
     case nas
+    /// A cloud drive folder synced by its provider's Mac app (AT-079b); see `CloudFolders`.
+    case cloud
 }
 
 public struct Volume: Codable, Identifiable, Hashable, Sendable, FetchableRecord, MutablePersistableRecord {
@@ -234,6 +236,10 @@ public struct AssetRow: Codable, Hashable, Identifiable, Sendable, FetchableReco
     public var isCropped = false
     public var hasMasks = false
     public var isOffline = false
+    /// In a cloud drive folder (AT-079b): the original's path on this Mac, and whether its bytes are
+    /// still only in the cloud (a placeholder the provider downloads on open).
+    public var cloudPath: String?
+    public var notDownloaded = false
     /// The photo has notes (AT-058): a folded-note badge on its thumbnail.
     public var hasNotes = false
 }

@@ -226,6 +226,10 @@ private struct ImportChooseStep: View {
         if flow.isScanning { return "Looking for photos…" }
         let size = ByteCountFormatter.string(fromByteCount: flow.bytes, countStyle: .file)
         var parts = ["\(flow.photoCount) photo\(flow.photoCount == 1 ? "" : "s")", size]
+        // Some are only in a cloud drive folder (AT-079b): say what importing will download.
+        if flow.downloadBytes > 0 {
+            parts.append(ByteCountFormatter.string(fromByteCount: flow.downloadBytes, countStyle: .file) + " will be downloaded")
+        }
         if flow.copyFiles {
             parts.append("copied into \(URL(fileURLWithPath: flow.destinationPath).lastPathComponent)")
         } else {
