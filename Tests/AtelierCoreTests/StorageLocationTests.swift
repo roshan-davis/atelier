@@ -164,4 +164,27 @@ final class StorageLocationTests: XCTestCase {
         XCTAssertEqual(info.location.name, "megham")
         XCTAssertEqual(info.detailLine, "Network share · megham.local/Photos")
     }
+
+    /// The sidebar lists locations, not volumes: a share never connected gets its own row, a subfolder
+    /// location is named for itself, and a folder shows under the most specific location only.
+    func testSidebarGroupsFoldersUnderTheMostSpecificLocation() {
+        func info(_ id: Int64, _ name: String, volume: Int64?, root: String = "") -> StorageLocationInfo {
+            let location = StorageLocation(id: id, name: name, kind: .drive, volumeId: volume, rootPath: root)
+            return StorageLocationInfo(location: location, volume: nil, photoCount: 0)
+        }
+        func folder(_ id: Int64, _ volume: Int64, _ path: String) -> Folder {
+            Folder(id: id, volumeId: volume, relativePath: path)
+        }
+        let rows = SidebarLocation.make(
+            locations: [info(1, "Photos SSD", volume: 7), info(2, "Portfolio", volume: 7, root: "Portfolio"),
+                        info(3, "Studio Mac", volume: nil)],
+            folders: [folder(10, 7, "Family"), folder(11, 7, "Portfolio"), folder(12, 7, "Portfolio/2026"),
+                      folder(13, 7, "PortfolioOld"), folder(14, 8, "Elsewhere")])
+        XCTAssertEqual(rows.map(\.info.location.name), ["Photos SSD", "Portfolio", "Studio Mac"])
+        XCTAssertEqual(rows[0].folders.map(\.relativePath), ["Family", "PortfolioOld"])
+        XCTAssertNil(rows[0].rootFolder)
+        XCTAssertEqual(rows[1].rootFolder?.id, 11)
+        XCTAssertEqual(rows[1].folders.map(\.relativePath), ["Portfolio/2026"])
+        XCTAssertEqual(rows[2].folders, [])
+    }
 }

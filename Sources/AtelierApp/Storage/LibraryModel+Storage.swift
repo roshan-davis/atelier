@@ -75,3 +75,13 @@ extension LibraryModel {
     }
 
 }
+
+extension SidebarLocation {
+    /// What selecting the sidebar row shows: the whole volume, or the location's own folder.
+    /// Nil while there is nothing to show (never connected, or nothing imported from that folder).
+    var sidebarItem: SidebarItem? {
+        guard let volumeId = info.location.volumeId else { return nil }
+        if info.location.rootPath.isEmpty { return .volume(volumeId) }
+        return rootFolder?.id.map(SidebarItem.folder)
+    }
+}
