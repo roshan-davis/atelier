@@ -3,8 +3,8 @@ import CoreGraphics
 @testable import AtelierHDRCore
 
 /// The faster tone mapper (kept exposure analysis, work split across cores, Nov 12, 2026) must
-/// give exactly the same pixels as the single-threaded version it replaced, which is kept
-/// below verbatim as the reference.
+/// give the same pixels, to Float rounding, as the single-threaded version it replaced, which is
+/// kept below verbatim as the reference. The GPU preview kernel must match the CPU render.
 final class HDRToneMapperSpeedTests: XCTestCase {
     /// A 400x267 test photo with gradients, texture and hard edges, values from deep black to
     /// well above white.
@@ -35,13 +35,20 @@ final class HDRToneMapperSpeedTests: XCTestCase {
         return list
     }
 
-    func testMatchesTheSingleThreadedRendererExactly() throws {
+    /// The same pixels to Float rounding: the library is built optimized and this reference isn't,
+    /// so sums can round in the last bit (the Mac measured at most 1e-7 on values up to 7, Nov 16,
+    /// 2026, AT-076 D4). 1e-5 is still 400 times finer than one 8-bit step.
+    func testMatchesTheSingleThreadedRenderer() throws {
         let image = try sample()
         for settings in settingsToTry {
             let reference = try SerialReferenceToneMapper.render(image, settings: settings)
-            XCTAssertEqual(try HDRToneMapper.render(image, settings: settings).rgb, reference.rgb)
             let analysis = try HDRToneMapper.analyze(image, exposure: settings.exposure)
-            XCTAssertEqual(try HDRToneMapper.render(image, settings: settings, analysis: analysis).rgb, reference.rgb)
+            for rendered in [try HDRToneMapper.render(image, settings: settings),
+                             try HDRToneMapper.render(image, settings: settings, analysis: analysis)] {
+                XCTAssertEqual(rendered.rgb.count, reference.rgb.count)
+                let worst = zip(rendered.rgb, reference.rgb).map { abs($0 - $1) }.max() ?? 0
+                XCTAssertLessThanOrEqual(worst, 1e-5, "\(settings)")
+            }
         }
     }
 
