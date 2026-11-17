@@ -125,22 +125,19 @@ public struct ExportResult: Sendable {
 public final class Exporter: Sendable {
     private let catalog: Catalog
     private let renderer: DevelopRenderer
-    /// Photos exported at once by `run`: while one is encoded and written on the CPU, the next
-    /// renders on the GPU. Measured on 12 Z f RAWs (AT-076 P3); `ExportTimingTests` times it.
+    /// Photos exported at once by `run`. Export used one core of the CPU and the GPU in turn;
+    /// two at once overlap them. On 12 Z f RAWs (AT-076 P3, `ExportTimingTests`): full-size
+    /// JPEG 3.49 → 2.19 s, peak 2.6 → 3.4 GB, back to 0.25 GB within 3 s; a third adds 7%.
     let photosInFlight: Int
-    /// Renders each photo fully before encoding it, rather than letting the encoder pull it.
-    /// Measuring only (AT-076 P3): `ExportTimingTests` compares the two.
-    let rendersFirst: Bool
 
     public convenience init(catalog: Catalog, renderer: DevelopRenderer = .shared) {
         self.init(catalog: catalog, renderer: renderer, photosInFlight: 2)
     }
 
-    init(catalog: Catalog, renderer: DevelopRenderer, photosInFlight: Int, rendersFirst: Bool = true) {
+    init(catalog: Catalog, renderer: DevelopRenderer, photosInFlight: Int) {
         self.catalog = catalog
         self.renderer = renderer
         self.photosInFlight = max(1, photosInFlight)
-        self.rendersFirst = rendersFirst
     }
 
     public func run(assetIDs: [Int64], settings: ExportSettings,
@@ -242,11 +239,10 @@ public final class Exporter: Sendable {
         image = Watermark.apply(settings.watermark, to: image)
 
         let format: CIFormat = settings.format.isSixteenBit ? .RGBA16 : .RGBA8
-        // Rendered here, on the GPU, not deferred until the encoder pulls the pixels: the encode
-        // then only reads memory, and the next photo can render meanwhile.
+        // Deferred: the encoder pulls the pixels as it writes (measured 11% faster than rendering
+        // first, and the files stay byte for byte as before).
         guard let cgImage = renderer.context.createCGImage(image, from: image.extent, format: format,
-                                                            colorSpace: settings.colorSpace.cgColorSpace,
-                                                            deferred: !rendersFirst) else {
+                                                            colorSpace: settings.colorSpace.cgColorSpace) else {
             throw ExportError("Rendering failed.")
         }
 

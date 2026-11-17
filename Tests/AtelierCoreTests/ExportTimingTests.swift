@@ -3,7 +3,7 @@ import XCTest
 @testable import AtelierCore
 
 /// AT-076 P3: how long Export takes per photo on real RAWs, the memory the process peaks at, and
-/// what it keeps afterwards. Prints EXPORTBENCH lines. Opt-in, one setting per run so each peak
+/// what it keeps right after and 3 s later (Core Image hands its memory back within about 3 s). Prints EXPORTBENCH lines. Opt-in, one setting per run so each peak
 /// is its own: `ATELIER_EXPORT_BENCH=<full-jpeg|2048-jpeg|full-tiff> [ATELIER_EXPORT_INFLIGHT=1|2]
 /// ATELIER_SAMPLE_RAWS=/folder/of/raws swift test --filter ExportTimingTests`.
 final class ExportTimingTests: XCTestCase {
@@ -41,30 +41,22 @@ final class ExportTimingTests: XCTestCase {
         default: return XCTFail("unknown variant \(variant)")
         }
 
-        // ATELIER_EXPORT_DEFERRED=1: the encoder pulls the pixels (as before P3).
-        // ATELIER_EXPORT_CONTEXT=fresh: Export renders with its own Core Image context, dropped
-        // when it ends, to see whether what Export leaves behind belongs to the context.
         let inFlight = Int(environment["ATELIER_EXPORT_INFLIGHT"] ?? "") ?? 2
-        let deferred = environment["ATELIER_EXPORT_DEFERRED"] == "1"
-        let fresh = environment["ATELIER_EXPORT_CONTEXT"] == "fresh"
         let before = RenderMemory.footprint() ?? 0
         let began = Date()
-        var renderer: DevelopRenderer? = fresh ? DevelopRenderer() : .shared
-        let result = await Exporter(catalog: catalog, renderer: renderer!, photosInFlight: inFlight, rendersFirst: !deferred)
+        let result = await Exporter(catalog: catalog, renderer: .shared, photosInFlight: inFlight)
             .run(assetIDs: ids, settings: settings)
         let total = Date().timeIntervalSince(began) * 1000
         XCTAssertEqual(result.failures, [])
         XCTAssertEqual(result.exported.count, ids.count)
         let peak = RenderMemory.peakFootprint() ?? 0, after = RenderMemory.footprint() ?? 0
-        renderer?.context.clearCaches()
-        renderer = nil
         RenderMemory.shared.clear(because: "bench")
         let cleared = RenderMemory.footprint() ?? 0
         try await Task.sleep(for: .seconds(3))
         let settled = RenderMemory.footprint() ?? 0
         let perPhoto = total / Double(ids.count)
         let mb: (UInt64) -> UInt64 = { $0 / 1_048_576 }
-        print("EXPORTBENCH variant=\(variant) in_flight=\(inFlight) deferred=\(deferred) context=\(fresh ? "fresh" : "shared") photos=\(ids.count) total_ms=\(Int(total)) "
+        print("EXPORTBENCH variant=\(variant) in_flight=\(inFlight) photos=\(ids.count) total_ms=\(Int(total)) "
             + "per_photo_ms=\(Int(perPhoto)) before_mb=\(mb(before)) peak_mb=\(mb(peak)) after_mb=\(mb(after)) "
             + "after_clear_mb=\(mb(cleared)) settled_3s_mb=\(mb(settled))")
     }
