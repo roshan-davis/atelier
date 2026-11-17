@@ -1,0 +1,36 @@
+[0/1] Planning build
+Test Suite 'Selected tests' started at 2026-11-17 12:33:46.855.
+Test Suite 'AtelierPackageTests.xctest' started at 2026-11-17 12:33:46.856.
+Test Suite 'SmartPreviewSpikeTests' started at 2026-11-17 12:33:46.856.
+Test Case '-[AtelierCoreTests.SmartPreviewSpikeTests testWhichLossyDNGsOpen]' started.
+Test Case '-[AtelierCoreTests.SmartPreviewSpikeTests testWhichLossyDNGsOpen]' passed (13.421 seconds).
+Test Suite 'SmartPreviewSpikeTests' passed at 2026-11-17 12:34:00.277.
+	 Executed 1 test, with 0 failures (0 unexpected) in 13.421 (13.421) seconds
+Test Suite 'AtelierPackageTests.xctest' passed at 2026-11-17 12:34:00.277.
+	 Executed 1 test, with 0 failures (0 unexpected) in 13.421 (13.421) seconds
+Test Suite 'Selected tests' passed at 2026-11-17 12:34:00.277.
+	 Executed 1 test, with 0 failures (0 unexpected) in 13.421 (13.422) seconds
+SMARTPREVIEW LOSSY 512x512 flat: 8548 bytes, type public.tiff, as shot 5000 K, output (inf, inf, 0.0, 0.0)
+SMARTPREVIEW LOSSY 512x512 gradient: 18532 bytes, type public.tiff, as shot 5000 K, output (inf, inf, 0.0, 0.0)
+SMARTPREVIEW LOSSY 512x512 noisy: 66072 bytes, type public.tiff, as shot 5000 K, output (inf, inf, 0.0, 0.0)
+SMARTPREVIEW LOSSY 1024x683 flat: 23604 bytes, type public.tiff, as shot 5000 K, output (inf, inf, 0.0, 0.0)
+SMARTPREVIEW LOSSY 1024x683 gradient: 42858 bytes, type public.tiff, as shot 5000 K, output (inf, inf, 0.0, 0.0)
+SMARTPREVIEW LOSSY 1024x683 noisy: 188968 bytes, type com.adobe.raw-image, as shot 5005 K, output (0.0, 0.0, 1024.0, 683.0)
+SMARTPREVIEW LOSSY 2048x1365 flat: 91356 bytes, type public.tiff, as shot 5000 K, output (inf, inf, 0.0, 0.0)
+SMARTPREVIEW LOSSY 2048x1365 gradient: 138534 bytes, type com.adobe.raw-image, as shot 5005 K, output (0.0, 0.0, 2048.0, 1365.0)
+SMARTPREVIEW LOSSY 2048x1365 noisy: 754366 bytes, type com.adobe.raw-image, as shot 5005 K, output (0.0, 0.0, 2048.0, 1365.0)
+SMARTPREVIEW LOSSY 2560x1706 flat: 132760 bytes, type com.adobe.raw-image, as shot 5005 K, output (0.0, 0.0, 2560.0, 1706.0)
+SMARTPREVIEW LOSSY 2560x1706 gradient: 192110 bytes, type com.adobe.raw-image, as shot 5005 K, output (0.0, 0.0, 2560.0, 1706.0)
+SMARTPREVIEW LOSSY 2560x1706 noisy: 1119964 bytes, type com.adobe.raw-image, as shot 5005 K, output (0.0, 0.0, 2560.0, 1706.0)
+SMARTPREVIEW BIGCARD lossless at as shot: 0.1716/0.1716/0.1716
+SMARTPREVIEW BIGCARD lossless at 3000K: 0.1692/0.2238/0.4358
+SMARTPREVIEW BIGCARD lossless at 4000K: 0.1696/0.1922/0.2570
+SMARTPREVIEW BIGCARD lossless at 8000K: 0.2157/0.1848/0.1189
+SMARTPREVIEW BIGCARD lossy at as shot: 0.1753/0.1763/0.1806
+SMARTPREVIEW BIGCARD lossy at 3000K: 0.1736/0.2298/0.4536
+SMARTPREVIEW BIGCARD lossy at 4000K: 0.1732/0.1973/0.2704
+SMARTPREVIEW BIGCARD lossy at 8000K: 0.2204/0.1898/0.1253
+◇ Test run started.
+↳ Testing Library Version: 1501
+↳ Target Platform: arm64e-apple-macos14.0
+✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.
