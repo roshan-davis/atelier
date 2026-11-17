@@ -556,7 +556,9 @@ public final class Importer: Sendable {
         guard input >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
         defer { close(input) }
         _ = fcntl(input, F_RDAHEAD, 1)
-        let size = 8 * 1024 * 1024
+        // A copy that can pause (read-ahead, AT-079c) reads 1 MB at a time, so a photo being opened
+        // waits at most one small read: with 8 MB the open photo was ~19% slower on megham.
+        let size = (shouldPause == nil ? 8 : 1) * 1024 * 1024
         let buffer = UnsafeMutableRawPointer.allocate(byteCount: size, alignment: 16)
         defer { buffer.deallocate() }
         var hasher = SHA256()
