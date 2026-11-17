@@ -695,6 +695,8 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 **Acceptance:** on Rosh's Mac, Product > Run shows the new icon in the Dock and in Remove Photos; a `build_macos_app.py` build shows it in Finder. **Deferred:** none.
 
+**Update (Nov 17, 2026):** Rosh asked for a new design (white aperture in a photo frame with grey lens discs and an orange bar, on navy), shared as a Gemini image. Owner Claude, project thread "Update Atelier app icon", branch `claude/project-thread-h5bwxw`. It also came with a drawn checkerboard, plus a drop shadow drawn onto it that is as dark as the checkerboard, so `cut_out_flat_icon.py --rounded-square` fits a clean rounded square (corner radius 153 px on the 1024 px source) instead of tracing the edge; the drawn shadow is dropped. The original is kept as `Scripts/icon/AppIcon-original.png`. **Validation:** icon set and `.icns` regenerated and the edges checked at every size on light and dark; not yet built or seen on a Mac.
+
 ## AT-047 — Match Look: skin masks cover the lips; Protect Skin Tones holds brightness
 
 **Status:** Merged at Rosh's ask on Nov 11, 2026 after Rosh built and ran it in Xcode ("looks good"). XCTest/`check_pr.py` not run (CI billing-blocked). **Owner:** Claude. **Chat:** [Improve Match Colors quality](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKF2JPu63ZaHgkVxXXo1FmSC). **Branch:** `claude/match-look-skin-lips`. **PR:** [#107](https://github.com/roshan-davis/atelier/pull/107). **Baseline:** `2747aea`. **Dependencies:** AT-045 (merged).
