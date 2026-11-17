@@ -636,6 +636,23 @@
     },
     {
       "exposed": true,
+      "id": "library.buildSmartPreviews",
+      "kind": "writesFiles",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Library > Previews > Build Smart Previews",
+      "summary": "Makes a smart preview (a small DNG kept on this Mac, about 1 MB) of each photo whose original is online and has none yet, in the background with progress and Cancel, so the photos can be edited in Develop while their originals are offline.",
+      "targets": "photos",
+      "tier": "asksFirst",
+      "title": "Build Smart Previews",
+      "version": 1
+    },
+    {
+      "exposed": true,
       "id": "library.connectLocation",
       "kind": "writesFiles",
       "parameters": {
@@ -688,6 +705,23 @@
       "summary": "Opens the focused photo in Develop.",
       "tier": "runs",
       "title": "Develop",
+      "version": 1
+    },
+    {
+      "exposed": false,
+      "id": "library.discardSmartPreviews",
+      "kind": "deletes",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Library > Previews > Discard Smart Previews",
+      "summary": "Removes the photos' smart previews from this Mac. Their originals and edits stay.",
+      "targets": "photos",
+      "tier": "never",
+      "title": "Discard Smart Previews",
       "version": 1
     },
     {
