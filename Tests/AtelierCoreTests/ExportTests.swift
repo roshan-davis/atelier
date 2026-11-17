@@ -108,6 +108,11 @@ final class ExportTests: XCTestCase {
         XCTAssertEqual(export.exported.map { loadImage($0)?.width }, [80, 90, 100, 110], "in the photos' order")
     }
 
+    func testOnePhotoAtATimeOnAnEightGigabyteMac() {
+        XCTAssertEqual(Exporter.photosInFlight(physicalMemory: 8 * 1_073_741_824), 1)
+        XCTAssertEqual(Exporter.photosInFlight(physicalMemory: 16 * 1_073_741_824), 2)
+    }
+
     func testOfflineOriginalIsReported() async throws {
         let source = sourceDir.appendingPathComponent("IMG_0044.jpg")
         try makeJPEG(at: source, width: 40, height: 40)

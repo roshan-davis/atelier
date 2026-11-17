@@ -127,11 +127,17 @@ public final class Exporter: Sendable {
     private let renderer: DevelopRenderer
     /// Photos exported at once by `run`. Export used one core of the CPU and the GPU in turn;
     /// two at once overlap them. On 12 Z f RAWs (AT-076 P3, `ExportTimingTests`): full-size
-    /// JPEG 3.49 → 2.19 s, peak 2.6 → 3.4 GB, back to 0.25 GB within 3 s; a third adds 7%.
+    /// JPEG 3.49 → 2.19 s, peak 2.6 → 3.4 GB (TIFF 4 GB), back to 0.25 GB within 3 s; a third adds 7%.
     let photosInFlight: Int
 
     public convenience init(catalog: Catalog, renderer: DevelopRenderer = .shared) {
-        self.init(catalog: catalog, renderer: renderer, photosInFlight: 2)
+        self.init(catalog: catalog, renderer: renderer,
+                  photosInFlight: Self.photosInFlight(physicalMemory: ProcessInfo.processInfo.physicalMemory))
+    }
+
+    /// Two photos at once, one on an 8 GB Mac: two full-size 16-bit TIFFs peak at about 4 GB.
+    static func photosInFlight(physicalMemory: UInt64) -> Int {
+        physicalMemory > 8 * 1_073_741_824 ? 2 : 1
     }
 
     init(catalog: Catalog, renderer: DevelopRenderer, photosInFlight: Int) {
