@@ -276,7 +276,8 @@ public enum AIDenoise {
             let count = before.count
             var out = [Float](repeating: 0, count: count)
             out.withUnsafeMutableBufferPointer { buffer in
-                let pointer = buffer.baseAddress!
+                // Each chunk writes only its own range.
+                nonisolated(unsafe) let pointer = buffer.baseAddress!
                 let chunks = 16
                 DispatchQueue.concurrentPerform(iterations: chunks) { chunk in
                     for j in (count * chunk / chunks)..<(count * (chunk + 1) / chunks) {
@@ -590,7 +591,8 @@ public enum AIDenoise {
         let weights: [Float] = [0.25, 0.5, 0.25, 0.5, 1, 0.5, 0.25, 0.5, 0.25]
         let one = half(1)
         out.withUnsafeMutableBufferPointer { buffer in
-            let pointer = buffer.baseAddress!
+            // Each row writes only its own pixels.
+            nonisolated(unsafe) let pointer = buffer.baseAddress!
             DispatchQueue.concurrentPerform(iterations: height) { y in
                 for x in 0..<width {
                     var sum = SIMD3<Float>(repeating: 0), weight = SIMD3<Float>(repeating: 0)

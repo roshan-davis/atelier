@@ -76,7 +76,8 @@ enum ColorLUT {
         // Rebuilt on every tick of an HSL or wheel drag, so spread it over the cores: each blue
         // slice is independent, and `map` only reads its settings.
         values.withUnsafeMutableBufferPointer { buffer in
-            let output = buffer
+            // Each blue slice writes only its own nodes, and `map` only reads its settings.
+            nonisolated(unsafe) let output = buffer
             func slice(_ b: Int) {
                 // Core Image cubes vary red fastest, then green, then blue.
                 var index = b * n * n * 4
@@ -93,7 +94,10 @@ enum ColorLUT {
                 }
             }
             if buildsInParallel {
-                DispatchQueue.concurrentPerform(iterations: n) { slice($0) }
+                withoutActuallyEscaping(slice) { slice in
+                    nonisolated(unsafe) let slice = slice
+                    DispatchQueue.concurrentPerform(iterations: n) { slice($0) }
+                }
             } else {
                 for b in 0..<n { slice(b) }
             }
@@ -385,7 +389,7 @@ struct BWMix {
 /// built in Oklab, so the same Saturation looks equally strong at every hue. Luminance raises or
 /// lowers lightness with a roll-off toward white and black, so it never clips; a tint that would
 /// leave the screen's colors (Display P3) is shortened instead of clipped, so it keeps its hue.
-public struct ColorGrade {
+public struct ColorGrade: Sendable {
     public typealias Region = DevelopSettings.GradeRegion
     /// Oklab chroma a wheel adds at Saturation 100 where its range has full weight.
     static let chroma = 0.10
