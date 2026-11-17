@@ -237,6 +237,16 @@ final class LibraryModel: ObservableObject {
 
     private var rowsTask: Task<Void, Never>?
     private var sidebarTask: Task<Void, Never>?
+    /// Removed with the model (AT-076 M4).
+    private let observers = NotificationObservers()
+
+    // The library is the app's for its whole run; a model let go of (a test's, a closed
+    // catalog's) stops watching the catalog (AT-076 M4). Its agent server closes its socket
+    // in its own deinit.
+    deinit {
+        rowsTask?.cancel()
+        sidebarTask?.cancel()
+    }
     private var inputMonitor: Any?
     private var revisionScheduled = false
 
@@ -260,8 +270,7 @@ final class LibraryModel: ObservableObject {
         installInputMonitor()
         observeMounts()
         // Settings > Import > "Show RAW+JPEG pairs as one photo".
-        NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil,
-                                               queue: .main) { [weak self] _ in
+        observers.observe(UserDefaults.didChangeNotification) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self, self.filter.groupsRawPairs != FilePairs.isGrouping else { return }
                 self.filter.groupsRawPairs = FilePairs.isGrouping
@@ -288,8 +297,7 @@ final class LibraryModel: ObservableObject {
         // that memory is low (AT-077).
         RenderMemory.shared.watchMemoryPressure()
         // Folder events can be missed on network shares; coming back from the editor checks too.
-        NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil,
-                                               queue: .main) { [weak self] _ in
+        observers.observe(NSApplication.didBecomeActiveNotification) { [weak self] _ in
             MainActor.assumeIsolated { self?.editWatcher.check() }
         }
     }
@@ -364,9 +372,8 @@ final class LibraryModel: ObservableObject {
     }
 
     private func observeMounts() {
-        let center = NSWorkspace.shared.notificationCenter
         for name in [NSWorkspace.didMountNotification, NSWorkspace.didUnmountNotification] {
-            center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+            observers.observe(name, center: NSWorkspace.shared.notificationCenter) { [weak self] _ in
                 MainActor.assumeIsolated { self?.refreshVolumes() }
             }
         }

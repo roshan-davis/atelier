@@ -517,6 +517,15 @@ public final class DevelopSession: @unchecked Sendable {
     /// Fine Edges' foreground mattes on the corrected photo, by the square each was found in,
     /// for one lens geometry and one Fine Edges model (nil inside when it failed).
     private var fineMattes: [FineRegion: CIImage?] = [:]
+    /// Masks and mattes one session keeps for a photo before starting over: every box or square
+    /// a photo's masks use, with room to spare; what's let go of is found again in the shared
+    /// caches (`SubjectMaskCache`, `FineMatteCache`) (AT-076 M4).
+    static let sessionMaskLimit = 16
+
+    private func remember(_ matte: CIImage?, for grid: FineRegion) {
+        if fineMattes.count >= Self.sessionMaskLimit { fineMattes = [:] }
+        fineMattes[grid] = matte
+    }
     private var fineKey: DevelopSettings?
     private var fineModel: FineEdges.Model?
     /// Depth Range's depth of the corrected photo, found once per lens geometry (nil inside when
@@ -979,6 +988,8 @@ public final class DevelopSession: @unchecked Sendable {
                 found = placed.cropped(to: extent)
             }
         }
+        // Bounded (AT-076 M4): the shared caches behind it keep what's let go of here.
+        if subjectMasks.count >= Self.sessionMaskLimit { subjectMasks = [:] }
         subjectMasks.updateValue(found, forKey: box)
         return found
     }
@@ -1031,7 +1042,7 @@ public final class DevelopSession: @unchecked Sendable {
         switch FineMatteCache.shared.lookup(shared) {
         case .found(let values):
             let matte = Self.placedMatte(values, size: model.size, in: region)
-            fineMattes[grid] = matte
+            remember(matte, for: grid)
             return matte
         case .pending where interactive:
             return nil
@@ -1046,7 +1057,7 @@ public final class DevelopSession: @unchecked Sendable {
         default:
             // Export and Save wait: for the run already going (the editor's), or for their own.
             let matte = Self.placedMatte(FineMatteCache.shared.matte(for: shared, find: find), size: model.size, in: region)
-            fineMattes[grid] = matte
+            remember(matte, for: grid)
             return matte
         }
     }

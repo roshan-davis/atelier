@@ -7,12 +7,23 @@ import SwiftUI
 /// right panel and the Loupe overlay. Develop reads its own when a photo opens.
 @MainActor
 enum ShootingInfoCache {
-    private static var cache: [URL: ShootingInfo] = [:]
+    private final class Entry {
+        let info: ShootingInfo
+        init(_ info: ShootingInfo) { self.info = info }
+    }
+
+    /// Bounded (AT-076 M4): a few thousand photos' worth, the ones looked at last kept; one let
+    /// go is read again from its file when shown.
+    private static let cache: NSCache<NSURL, Entry> = {
+        let cache = NSCache<NSURL, Entry>()
+        cache.countLimit = 2000
+        return cache
+    }()
 
     static func info(for url: URL) async -> ShootingInfo {
-        if let cached = cache[url] { return cached }
+        if let cached = cache.object(forKey: url as NSURL) { return cached.info }
         let info = await Task.detached(priority: .userInitiated) { ShootingInfo(url: url) }.value
-        cache[url] = info
+        cache.setObject(Entry(info), forKey: url as NSURL)
         return info
     }
 }

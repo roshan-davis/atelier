@@ -782,51 +782,32 @@ final class DevelopController: ObservableObject {
         self.previews = previews
         self.isPrimaryButtonPressed = isPrimaryButtonPressed
         presets = presetStore.all()
-        // Fine Edges finds its matte in the background; render again once it is in.
-        fineEdgesObserver = NotificationCenter.default.addObserver(forName: FineEdges.matteReady, object: nil,
-                                                                   queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.backgroundWorkArrived() }
-        }
-        // So does Depth Range's depth map (until then the mask is empty).
-        depthObserver = NotificationCenter.default.addObserver(forName: DepthMap.ready, object: nil,
-                                                               queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.backgroundWorkArrived() }
+        // Fine Edges finds its matte in the background; render again once it is in. So does
+        // Depth Range's depth map (until then the mask is empty).
+        for name in [FineEdges.matteReady, DepthMap.ready] {
+            observers.observe(name) { [weak self] _ in MainActor.assumeIsolated { self?.backgroundWorkArrived() } }
         }
         // Lens Blur's progress line follows the models starting and stopping.
-        workObservers = [DepthMap.workingChanged, FineEdges.statusChanged].map { name in
-            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.noteLensBlurWork() }
-            }
+        for name in [DepthMap.workingChanged, FineEdges.statusChanged] {
+            observers.observe(name) { [weak self] _ in MainActor.assumeIsolated { self?.noteLensBlurWork() } }
         }
-        // So does Content-Aware Remove's fill (until then the spot shows Heal).
-        spotFillObserver = NotificationCenter.default.addObserver(forName: ContentAwareFill.fillReady, object: nil,
-                                                                  queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.scheduleRender() }
+        // So does Content-Aware Remove's fill (until then the spot shows Heal), and AI Denoise's
+        // noise picture (until then the photo shows Apple's noise reduction).
+        for name in [ContentAwareFill.fillReady, AIDenoise.ready] {
+            observers.observe(name) { [weak self] _ in MainActor.assumeIsolated { self?.scheduleRender() } }
+        }
+        observers.observe(AIDenoise.statusChanged) { [weak self] _ in
+            MainActor.assumeIsolated { self?.aiDenoiseStatusChanges += 1 }
         }
         // macOS says memory is low: Core Image's cache is already cleared (`RenderMemory`); let go
         // of the full-size images too unless the photo is zoomed in (AT-077).
-        memoryPressureObserver = NotificationCenter.default.addObserver(forName: RenderMemory.pressure, object: nil,
-                                                                        queue: .main) { [weak self] _ in
+        observers.observe(RenderMemory.pressure) { [weak self] _ in
             MainActor.assumeIsolated { self?.releaseFullResolution(because: "memory pressure") }
         }
-        // And AI Denoise's noise picture (until then the photo shows Apple's noise reduction).
-        aiDenoiseObservers = [
-            NotificationCenter.default.addObserver(forName: AIDenoise.ready, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.scheduleRender() }
-            },
-            NotificationCenter.default.addObserver(forName: AIDenoise.statusChanged, object: nil,
-                                                   queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.aiDenoiseStatusChanges += 1 }
-            },
-        ]
     }
 
-    private var fineEdgesObserver: NSObjectProtocol?
-    private var memoryPressureObserver: NSObjectProtocol?
-    private var workObservers: [NSObjectProtocol] = []
-    private var depthObserver: NSObjectProtocol?
-    private var spotFillObserver: NSObjectProtocol?
-    private var aiDenoiseObservers: [NSObjectProtocol] = []
+    /// Removed with the controller (AT-076 M4).
+    private let observers = NotificationObservers()
     /// Counts AI Denoise's status changes, so the Detail panel shows the new one.
     @Published private var aiDenoiseStatusChanges = 0
 

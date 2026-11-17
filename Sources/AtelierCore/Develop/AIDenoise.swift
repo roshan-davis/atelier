@@ -119,9 +119,21 @@ public enum AIDenoise {
         private let residuals = NSCache<NSString, Residual>()
         private let lock = NSLock()
         private var pending: Set<String> = []
-        /// Files whose noise couldn't be found this launch, so a render doesn't try again.
-        private var failed: [String: String] = [:]
-        private var statuses: [String: Status] = [:]
+        /// Files whose noise couldn't be found this launch, so a render doesn't try again, and each
+        /// file's last status for the Detail panel. Bounded (AT-076 M4): one let go is tried again,
+        /// or shows no status, the next time.
+        private let failed = Store.bounded(NSCache<NSString, Boxed<String>>())
+        private let statuses = Store.bounded(NSCache<NSString, Boxed<Status>>())
+
+        private final class Boxed<Value> {
+            let value: Value
+            init(_ value: Value) { self.value = value }
+        }
+
+        private static func bounded<Value>(_ cache: NSCache<NSString, Value>) -> NSCache<NSString, Value> {
+            cache.countLimit = 500
+            return cache
+        }
         /// One photo at a time: a 24 MP photo takes about 1 GB while it is worked on.
         private let queue = DispatchQueue(label: "atelier.ai-denoise", qos: .userInitiated)
 
@@ -133,7 +145,7 @@ public enum AIDenoise {
         func status(for url: URL) -> Status? {
             lock.lock()
             defer { lock.unlock() }
-            return statuses[url.path]
+            return statuses.object(forKey: url.path as NSString)?.value
         }
 
         /// The noise picture for `file` (`fileKey(_:)`) if it has been found.
@@ -147,7 +159,7 @@ public enum AIDenoise {
             let key = "\(file)|\(profileCorrections)"
             if let found = residuals.object(forKey: key as NSString) { return found }
             lock.lock()
-            if failed[key] != nil || (!waits && pending.contains(key)) {
+            if failed.object(forKey: key as NSString) != nil || (!waits && pending.contains(key)) {
                 lock.unlock()
                 return nil
             }
@@ -184,7 +196,7 @@ public enum AIDenoise {
                 let reason = error.localizedDescription
                 NSLog("Atelier: AI Denoise failed on %@: %@", url.lastPathComponent, reason)
                 lock.lock()
-                failed[key] = reason
+                failed.setObject(Boxed(reason), forKey: key as NSString)
                 lock.unlock()
                 set(.failed(reason), for: url)
                 return nil
@@ -193,7 +205,7 @@ public enum AIDenoise {
 
         private func set(_ status: Status, for url: URL) {
             lock.lock()
-            statuses[url.path] = status
+            statuses.setObject(Boxed(status), forKey: url.path as NSString)
             lock.unlock()
             DispatchQueue.main.async { NotificationCenter.default.post(name: AIDenoise.statusChanged, object: nil) }
         }
