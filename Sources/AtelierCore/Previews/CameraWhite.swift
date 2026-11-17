@@ -119,7 +119,10 @@ public struct CameraWhite: Codable, Hashable, Sendable {
             let x0 = Double(a[i]), x1 = Double(a[i + 1]), x2 = Double(a[i + 2])
             let y0 = Double(b[i]), y1 = Double(b[i + 1]), y2 = Double(b[i + 2])
             let ok = { (v: Double) in v > 0.002 && v < 0.9 }
-            guard ok(x0), ok(x1), ok(x2), ok(y0), ok(y1), ok(y2) else { continue }
+            // The target is only checked for being a number: at the warm end of the grid
+            // (2000–2250 K) red, and green with a magenta tint, are negative for every pixel in
+            // extended linear sRGB (out of gamut, gamut mapping off) yet still a linear change.
+            guard ok(x0), ok(x1), ok(x2), y0.isFinite, y1.isFinite, y2.isFinite else { continue }
             let x = [x0, x1, x2], y = [y0, y1, y2]
             for r in 0..<3 {
                 for c in 0..<3 {
