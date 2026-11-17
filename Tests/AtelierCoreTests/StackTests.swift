@@ -66,6 +66,32 @@ final class StackTests: XCTestCase {
         XCTAssertEqual(try catalog.detail(for: edit)?.asset.width, 40)
     }
 
+    /// AT-076 D3: Edit In and the AI recipes share one host: it renders the input, stacks the
+    /// result on its source with how it was made, and says plainly when the original is offline.
+    func testProcessorHostStacksTheResultAndReportsAnOfflineOriginal() async throws {
+        let original = workDir.appendingPathComponent("A.jpg")
+        try makeJPEG(at: original)
+        let catalog = try Catalog()
+        let imported = await Importer(catalog: catalog, previews: nil)
+            .run(sources: [original], options: ImportOptions(buildPreviews: false))
+        let id = try XCTUnwrap(imported.assetIDsBySource[original])
+        let host = ProcessorHost(catalog: catalog)
+
+        var settings = ExportSettings(destination: DerivedFiles.folder(for: original))
+        settings.format = .tiff
+        let input = try host.renderInput(of: id, settings: settings, baseName: "A-Edit")
+        XCTAssertEqual(input.lastPathComponent, "A-Edit.tif")
+        let result = try host.registerResult(input, on: id, kind: .ai, name: "Relight", provenance: #"{"recipe":"relight"}"#)
+        XCTAssertEqual(result.url, input)
+        XCTAssertEqual(try catalog.derivation(of: result.assetID)?.name, "Relight")
+        XCTAssertEqual(try catalog.derivation(of: result.assetID)?.provenance, #"{"recipe":"relight"}"#)
+
+        try FileManager.default.removeItem(at: original)
+        XCTAssertThrowsError(try host.renderInput(of: id, settings: settings)) { error in
+            XCTAssertEqual(error.localizedDescription, "The original is offline. Connect its drive and try again.")
+        }
+    }
+
     func testCullGroupsKeepTheRejectsForReview() async throws {
         for name in ["A", "B", "C"] { try makeJPEG(at: workDir.appendingPathComponent("\(name).jpg")) }
         let catalog = try Catalog()
