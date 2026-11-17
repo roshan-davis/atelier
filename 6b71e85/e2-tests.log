@@ -1,0 +1,155 @@
+[0/1] Planning build
+Test Suite 'Selected tests' started at 2026-11-17 14:05:20.486.
+Test Suite 'AtelierPackageTests.xctest' started at 2026-11-17 14:05:20.487.
+Test Suite 'AtelierActionsTests' started at 2026-11-17 14:05:20.487.
+Test Case '-[AtelierActionsTests.AtelierActionsTests testCatalogHasNoProblems]' started.
+Test Case '-[AtelierActionsTests.AtelierActionsTests testCatalogHasNoProblems]' passed (0.002 seconds).
+Test Case '-[AtelierActionsTests.AtelierActionsTests testCommittedCatalogIsCurrent]' started.
+Test Case '-[AtelierActionsTests.AtelierActionsTests testCommittedCatalogIsCurrent]' passed (0.002 seconds).
+Test Case '-[AtelierActionsTests.AtelierActionsTests testDeletesAreNeverExposed]' started.
+Test Case '-[AtelierActionsTests.AtelierActionsTests testDeletesAreNeverExposed]' passed (0.000 seconds).
+Test Case '-[AtelierActionsTests.AtelierActionsTests testEveryDeclaredActionIsListed]' started.
+Test Case '-[AtelierActionsTests.AtelierActionsTests testEveryDeclaredActionIsListed]' passed (0.001 seconds).
+Test Case '-[AtelierActionsTests.AtelierActionsTests testMenusAreBuiltOnlyFromActions]' started.
+Test Case '-[AtelierActionsTests.AtelierActionsTests testMenusAreBuiltOnlyFromActions]' passed (0.002 seconds).
+Test Suite 'AtelierActionsTests' passed at 2026-11-17 14:05:20.494.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.007 (0.007) seconds
+Test Suite 'AtelierAgentToolsTests' started at 2026-11-17 14:05:20.494.
+Test Case '-[AtelierActionsTests.AtelierAgentToolsTests testCommandRunAgreesWithCommandList]' started.
+Test Case '-[AtelierActionsTests.AtelierAgentToolsTests testCommandRunAgreesWithCommandList]' passed (0.014 seconds).
+Test Case '-[AtelierActionsTests.AtelierAgentToolsTests testDevelopEditsNeedEditAndLibraryEditsOrganize]' started.
+Test Case '-[AtelierActionsTests.AtelierAgentToolsTests testDevelopEditsNeedEditAndLibraryEditsOrganize]' passed (0.000 seconds).
+Test Case '-[AtelierActionsTests.AtelierAgentToolsTests testSetMetadataAddsNotes]' started.
+Test Case '-[AtelierActionsTests.AtelierAgentToolsTests testSetMetadataAddsNotes]' passed (0.001 seconds).
+Test Case '-[AtelierActionsTests.AtelierAgentToolsTests testSetMetadataDecodesAndCatchesTypos]' started.
+Test Case '-[AtelierActionsTests.AtelierAgentToolsTests testSetMetadataDecodesAndCatchesTypos]' passed (0.000 seconds).
+Test Case '-[AtelierActionsTests.AtelierAgentToolsTests testSetMetadataSchemaUsesSnakeCaseAndChoices]' started.
+Test Case '-[AtelierActionsTests.AtelierAgentToolsTests testSetMetadataSchemaUsesSnakeCaseAndChoices]' passed (0.000 seconds).
+Test Case '-[AtelierActionsTests.AtelierAgentToolsTests testTypedToolSchemasReadCleanly]' started.
+Test Case '-[AtelierActionsTests.AtelierAgentToolsTests testTypedToolSchemasReadCleanly]' passed (0.002 seconds).
+Test Suite 'AtelierAgentToolsTests' passed at 2026-11-17 14:05:20.512.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.017 (0.018) seconds
+Test Suite 'AtelierBatchToolTests' started at 2026-11-17 14:05:20.512.
+Test Case '-[AtelierActionsTests.AtelierBatchToolTests testAtomicTakesOnlyWhatCanBePutBack]' started.
+Test Case '-[AtelierActionsTests.AtelierBatchToolTests testAtomicTakesOnlyWhatCanBePutBack]' passed (0.001 seconds).
+Test Case '-[AtelierActionsTests.AtelierBatchToolTests testBatchParsesAtelierSteps]' started.
+Test Case '-[AtelierActionsTests.AtelierBatchToolTests testBatchParsesAtelierSteps]' passed (0.000 seconds).
+Test Case '-[AtelierActionsTests.AtelierBatchToolTests testBatchToolsFollowTheProfile]' started.
+Test Case '-[AtelierActionsTests.AtelierBatchToolTests testBatchToolsFollowTheProfile]' passed (0.000 seconds).
+Test Suite 'AtelierBatchToolTests' passed at 2026-11-17 14:05:20.513.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'AtelierDevelopToolsTests' started at 2026-11-17 14:05:20.513.
+Test Case '-[AtelierActionsTests.AtelierDevelopToolsTests testApplyPresetAsksForKindWhenANameIsInTwoLists]' started.
+Test Case '-[AtelierActionsTests.AtelierDevelopToolsTests testApplyPresetAsksForKindWhenANameIsInTwoLists]' passed (0.000 seconds).
+Test Case '-[AtelierActionsTests.AtelierDevelopToolsTests testApplyPresetFindsPanelPresetsByNameOrId]' started.
+Test Case '-[AtelierActionsTests.AtelierDevelopToolsTests testApplyPresetFindsPanelPresetsByNameOrId]' passed (0.000 seconds).
+Test Case '-[AtelierActionsTests.AtelierDevelopToolsTests testApplyPresetKindLimitsTheSearchAndSuggests]' started.
+Test Case '-[AtelierActionsTests.AtelierDevelopToolsTests testApplyPresetKindLimitsTheSearchAndSuggests]' passed (0.000 seconds).
+Test Case '-[AtelierActionsTests.AtelierDevelopToolsTests testChangesReadNamedSlidersAndOther]' started.
+Test Case '-[AtelierActionsTests.AtelierDevelopToolsTests testChangesReadNamedSlidersAndOther]' passed (0.000 seconds).
+Test Case '-[AtelierActionsTests.AtelierDevelopToolsTests testChangesRefuseTyposAndTwice]' started.
+Test Case '-[AtelierActionsTests.AtelierDevelopToolsTests testChangesRefuseTyposAndTwice]' passed (0.000 seconds).
+Test Case '-[AtelierActionsTests.AtelierDevelopToolsTests testSchemasReadCleanlyAndNeedEdit]' started.
+Test Case '-[AtelierActionsTests.AtelierDevelopToolsTests testSchemasReadCleanlyAndNeedEdit]' passed (0.000 seconds).
+Test Case '-[AtelierActionsTests.AtelierDevelopToolsTests testSetAddAndClamp]' started.
+Test Case '-[AtelierActionsTests.AtelierDevelopToolsTests testSetAddAndClamp]' passed (0.000 seconds).
+Test Case '-[AtelierActionsTests.AtelierDevelopToolsTests testSnakeNames]' started.
+Test Case '-[AtelierActionsTests.AtelierDevelopToolsTests testSnakeNames]' passed (0.000 seconds).
+Test Case '-[AtelierActionsTests.AtelierDevelopToolsTests testSyncDefaultLeavesCropAndMasks]' started.
+Test Case '-[AtelierActionsTests.AtelierDevelopToolsTests testSyncDefaultLeavesCropAndMasks]' passed (0.000 seconds).
+Test Suite 'AtelierDevelopToolsTests' passed at 2026-11-17 14:05:20.515.
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
+Test Suite 'AtelierEditToolsTests' started at 2026-11-17 14:05:20.515.
+Test Case '-[AtelierActionsTests.AtelierEditToolsTests testAspectNames]' started.
+Test Case '-[AtelierActionsTests.AtelierEditToolsTests testAspectNames]' passed (0.000 seconds).
+Test Case '-[AtelierActionsTests.AtelierEditToolsTests testAutoTitles]' started.
+Test Case '-[AtelierActionsTests.AtelierEditToolsTests testAutoTitles]' passed (0.000 seconds).
+Test Case '-[AtelierActionsTests.AtelierEditToolsTests testCropPlanAndTitle]' started.
+Test Case '-[AtelierActionsTests.AtelierEditToolsTests testCropPlanAndTitle]' passed (0.000 seconds).
+Test Case '-[AtelierActionsTests.AtelierEditToolsTests testCropRefusals]' started.
+Test Case '-[AtelierActionsTests.AtelierEditToolsTests testCropRefusals]' passed (0.000 seconds).
+Test Case '-[AtelierActionsTests.AtelierEditToolsTests testDepthMaskTakesARangeOfDepths]' started.
+Test Case '-[AtelierActionsTests.AtelierEditToolsTests testDepthMaskTakesARangeOfDepths]' passed (0.000 seconds).
+Test Case '-[AtelierActionsTests.AtelierEditToolsTests testMaskDefaultsAndTitle]' started.
+Test Case '-[AtelierActionsTests.AtelierEditToolsTests testMaskDefaultsAndTitle]' passed (0.000 seconds).
+Test Case '-[AtelierActionsTests.AtelierEditToolsTests testMaskFieldsBelongToTheirKind]' started.
+Test Case '-[AtelierActionsTests.AtelierEditToolsTests testMaskFieldsBelongToTheirKind]' passed (0.000 seconds).
+Test Case '-[AtelierActionsTests.AtelierEditToolsTests testMaskSettingsAreChecked]' started.
+Test Case '-[AtelierActionsTests.AtelierEditToolsTests testMaskSettingsAreChecked]' passed (0.000 seconds).
+Test Case '-[AtelierActionsTests.AtelierEditToolsTests testMatchLookChecks]' started.
+Test Case '-[AtelierActionsTests.AtelierEditToolsTests testMatchLookChecks]' passed (0.000 seconds).
+Test Case '-[AtelierActionsTests.AtelierEditToolsTests testSchemas]' started.
+Test Case '-[AtelierActionsTests.AtelierEditToolsTests testSchemas]' passed (0.000 seconds).
+Test Case '-[AtelierActionsTests.AtelierEditToolsTests testSkyMaskTakesTheEdgeControls]' started.
+Test Case '-[AtelierActionsTests.AtelierEditToolsTests testSkyMaskTakesTheEdgeControls]' passed (0.000 seconds).
+Test Case '-[AtelierActionsTests.AtelierEditToolsTests testStudyNamesAreFoundLoosely]' started.
+Test Case '-[AtelierActionsTests.AtelierEditToolsTests testStudyNamesAreFoundLoosely]' passed (0.001 seconds).
+Test Suite 'AtelierEditToolsTests' passed at 2026-11-17 14:05:20.517.
+	 Executed 12 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
+Test Suite 'AtelierPhotoCarouselTests' started at 2026-11-17 14:05:20.517.
+Test Case '-[AtelierActionsTests.AtelierPhotoCarouselTests testThumbnailIDsAreChecked]' started.
+Test Case '-[AtelierActionsTests.AtelierPhotoCarouselTests testThumbnailIDsAreChecked]' passed (0.000 seconds).
+Test Case '-[AtelierActionsTests.AtelierPhotoCarouselTests testThumbnailsAreOnlyForTheView]' started.
+Test Case '-[AtelierActionsTests.AtelierPhotoCarouselTests testThumbnailsAreOnlyForTheView]' passed (0.000 seconds).
+Test Case '-[AtelierActionsTests.AtelierPhotoCarouselTests testViewIsAnMCPAppWithNoOutsideConnections]' started.
+Test Case '-[AtelierActionsTests.AtelierPhotoCarouselTests testViewIsAnMCPAppWithNoOutsideConnections]' passed (0.004 seconds).
+Test Suite 'AtelierPhotoCarouselTests' passed at 2026-11-17 14:05:20.521.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.004 (0.004) seconds
+Test Suite 'ObjectStorageTests' started at 2026-11-17 14:05:20.521.
+Test Case '-[AtelierCoreTests.ObjectStorageTests testABucketOnMinIO]' started.
+/Users/rosh/RoshProjects/Atelier/worktrees/at079d/Tests/AtelierCoreTests/ObjectStorageTests.swift:168: -[AtelierCoreTests.ObjectStorageTests testABucketOnMinIO] : Test skipped - Set ATELIER_S3_TEST_ENDPOINT, _ACCESS_KEY, _SECRET_KEY (and _BUCKET)
+Test Case '-[AtelierCoreTests.ObjectStorageTests testABucketOnMinIO]' skipped (0.001 seconds).
+Test Case '-[AtelierCoreTests.ObjectStorageTests testBackupsToAFolderKeepTheNewest]' started.
+Test Case '-[AtelierCoreTests.ObjectStorageTests testBackupsToAFolderKeepTheNewest]' passed (0.016 seconds).
+Test Case '-[AtelierCoreTests.ObjectStorageTests testBucketURLs]' started.
+Test Case '-[AtelierCoreTests.ObjectStorageTests testBucketURLs]' passed (0.000 seconds).
+Test Case '-[AtelierCoreTests.ObjectStorageTests testListingAndErrorsFromXML]' started.
+Test Case '-[AtelierCoreTests.ObjectStorageTests testListingAndErrorsFromXML]' passed (0.001 seconds).
+Test Case '-[AtelierCoreTests.ObjectStorageTests testObjectStorageKeepsKeysOutOfTheCatalog]' started.
+Test Case '-[AtelierCoreTests.ObjectStorageTests testObjectStorageKeepsKeysOutOfTheCatalog]' passed (0.032 seconds).
+Test Case '-[AtelierCoreTests.ObjectStorageTests testScheduleAndBackupLocation]' started.
+Test Case '-[AtelierCoreTests.ObjectStorageTests testScheduleAndBackupLocation]' passed (0.007 seconds).
+Test Case '-[AtelierCoreTests.ObjectStorageTests testSignaturesMatchBotocore]' started.
+Test Case '-[AtelierCoreTests.ObjectStorageTests testSignaturesMatchBotocore]' passed (0.001 seconds).
+Test Suite 'ObjectStorageTests' passed at 2026-11-17 14:05:20.580.
+	 Executed 7 tests, with 1 test skipped and 0 failures (0 unexpected) in 0.058 (0.059) seconds
+Test Suite 'SmartPreviewLocationTests' started at 2026-11-17 14:05:20.580.
+Test Case '-[AtelierCoreTests.SmartPreviewLocationTests testCandidatesAreMastersInsideALocationThatMakesThem]' started.
+Test Case '-[AtelierCoreTests.SmartPreviewLocationTests testCandidatesAreMastersInsideALocationThatMakesThem]' passed (0.009 seconds).
+Test Case '-[AtelierCoreTests.SmartPreviewLocationTests testOnByDefaultForSharesAndCloudFoldersOnly]' started.
+Test Case '-[AtelierCoreTests.SmartPreviewLocationTests testOnByDefaultForSharesAndCloudFoldersOnly]' passed (0.007 seconds).
+Test Case '-[AtelierCoreTests.SmartPreviewLocationTests testTheMigrationTurnsItOnForExistingShares]' started.
+Test Case '-[AtelierCoreTests.SmartPreviewLocationTests testTheMigrationTurnsItOnForExistingShares]' passed (0.007 seconds).
+Test Suite 'SmartPreviewLocationTests' passed at 2026-11-17 14:05:20.604.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.024 (0.024) seconds
+Test Suite 'StorageLocationTests' started at 2026-11-17 14:05:20.604.
+Test Case '-[AtelierCoreTests.StorageLocationTests testAddingTheSamePlaceTwiceKeepsOneLocation]' started.
+Test Case '-[AtelierCoreTests.StorageLocationTests testAddingTheSamePlaceTwiceKeepsOneLocation]' passed (0.007 seconds).
+Test Case '-[AtelierCoreTests.StorageLocationTests testFreshCatalogHasNoLocation]' started.
+Test Case '-[AtelierCoreTests.StorageLocationTests testFreshCatalogHasNoLocation]' passed (0.006 seconds).
+Test Case '-[AtelierCoreTests.StorageLocationTests testImportingFromANewVolumeAddsItsLocation]' started.
+Test Case '-[AtelierCoreTests.StorageLocationTests testImportingFromANewVolumeAddsItsLocation]' passed (0.028 seconds).
+Test Case '-[AtelierCoreTests.StorageLocationTests testOldCatalogGetsOneLocationPerVolumeWithItsName]' started.
+Test Case '-[AtelierCoreTests.StorageLocationTests testOldCatalogGetsOneLocationPerVolumeWithItsName]' passed (0.006 seconds).
+Test Case '-[AtelierCoreTests.StorageLocationTests testPhotoCountsOnlyTheLocationsFolder]' started.
+Test Case '-[AtelierCoreTests.StorageLocationTests testPhotoCountsOnlyTheLocationsFolder]' passed (0.008 seconds).
+Test Case '-[AtelierCoreTests.StorageLocationTests testRemovingALocationKeepsItsPhotos]' started.
+Test Case '-[AtelierCoreTests.StorageLocationTests testRemovingALocationKeepsItsPhotos]' passed (0.008 seconds).
+Test Case '-[AtelierCoreTests.StorageLocationTests testServerAddressesMatchWithoutCredentialsCaseOrDotLocal]' started.
+Test Case '-[AtelierCoreTests.StorageLocationTests testServerAddressesMatchWithoutCredentialsCaseOrDotLocal]' passed (0.000 seconds).
+Test Case '-[AtelierCoreTests.StorageLocationTests testShareMountedLaterLinksToItsLocation]' started.
+Test Case '-[AtelierCoreTests.StorageLocationTests testShareMountedLaterLinksToItsLocation]' passed (0.007 seconds).
+Test Case '-[AtelierCoreTests.StorageLocationTests testSidebarGroupsFoldersUnderTheMostSpecificLocation]' started.
+Test Case '-[AtelierCoreTests.StorageLocationTests testSidebarGroupsFoldersUnderTheMostSpecificLocation]' passed (0.000 seconds).
+Test Case '-[AtelierCoreTests.StorageLocationTests testSubfolderLocationKeepsExistingPathsAndSurvivesRemount]' started.
+Test Case '-[AtelierCoreTests.StorageLocationTests testSubfolderLocationKeepsExistingPathsAndSurvivesRemount]' passed (0.009 seconds).
+Test Suite 'StorageLocationTests' passed at 2026-11-17 14:05:20.684.
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.080 (0.080) seconds
+Test Suite 'AtelierPackageTests.xctest' passed at 2026-11-17 14:05:20.684.
+	 Executed 58 tests, with 1 test skipped and 0 failures (0 unexpected) in 0.193 (0.197) seconds
+Test Suite 'Selected tests' passed at 2026-11-17 14:05:20.684.
+	 Executed 58 tests, with 1 test skipped and 0 failures (0 unexpected) in 0.193 (0.198) seconds
+◇ Test run started.
+↳ Testing Library Version: 1501
+↳ Target Platform: arm64e-apple-macos14.0
+✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.
