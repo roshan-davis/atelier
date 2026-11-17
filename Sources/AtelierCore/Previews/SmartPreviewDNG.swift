@@ -207,13 +207,17 @@ public enum SmartPreviewDNG {
             .srationals(50730, [Int32(((baselineExposure + Double(log2(headroom))) * 1000).rounded())], denominator: 1000),
             .short(50778, 21),
         ]
+        // macOS reads a file under about 100 KB as a plain TIFF, not a DNG (spike round 5: 91 KB
+        // failed, 133 KB opened, whatever the pixel size), so a tiny one is padded.
+        let minimum = 256 * 1024
+        if tiff.body.count < minimum { _ = tiff.append(Data(count: minimum - tiff.body.count)) }
         try tiff.finish(entries).write(to: url)
     }
 
     static func jpeg(_ rgb: [UInt8], width: Int, height: Int, quality: Double) throws -> Data {
         let provider = CGDataProvider(data: Data(rgb) as CFData)!
         guard let image = CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 24, bytesPerRow: width * 3,
-                                  space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue),
+                                  space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue),
                                   provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent) else {
             throw CocoaError(.fileWriteUnknown)
         }
@@ -223,7 +227,26 @@ public enum SmartPreviewDNG {
         }
         CGImageDestinationAddImage(destination, image, [kCGImageDestinationLossyCompressionQuality: quality] as CFDictionary)
         guard CGImageDestinationFinalize(destination) else { throw CocoaError(.fileWriteUnknown) }
-        return out as Data
+        return withoutMetadata(out as Data)
+    }
+
+    /// The JPEG without its APP1 (Exif) and APP2 (ICC profile) segments: a DNG tile's values are
+    /// the linearization table's codes, so nothing may colour-manage them (spike round 5: lossy
+    /// read 2–5% high, blue most).
+    static func withoutMetadata(_ jpeg: Data) -> Data {
+        let bytes = [UInt8](jpeg)
+        guard bytes.count > 4, bytes[0] == 0xFF, bytes[1] == 0xD8 else { return jpeg }
+        var out: [UInt8] = [0xFF, 0xD8]
+        var i = 2
+        while i + 4 <= bytes.count, bytes[i] == 0xFF {
+            let marker = bytes[i + 1]
+            if marker == 0xDA { break }  // start of scan: the rest is image data
+            let length = Int(bytes[i + 2]) << 8 | Int(bytes[i + 3])
+            if marker != 0xE1, marker != 0xE2 { out += bytes[i..<min(bytes.count, i + 2 + length)] }
+            i += 2 + length
+        }
+        if i < bytes.count { out += bytes[i...] }
+        return Data(out)
     }
 }
 
