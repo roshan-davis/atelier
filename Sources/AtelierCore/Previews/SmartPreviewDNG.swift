@@ -39,7 +39,7 @@ public enum SmartPreviewDNG {
     /// Decodes `raw` at the smart preview's size with its as-shot settings and writes the DNG.
     /// Returns the as-shot temperature and tint used.
     @discardableResult
-    public static func make(from raw: URL, to url: URL, encoding: Encoding,
+    public static func make(from raw: URL, to url: URL, encoding: Encoding, balancedCamera: Bool = false,
                             context: CIContext = CIContext(options: [.cacheIntermediates: false])) throws -> (temperature: Double, tint: Double) {
         guard let filter = CIRAWFilter(imageURL: raw) else { throw CocoaError(.fileReadCorruptFile) }
         let native = filter.nativeSize
@@ -72,7 +72,8 @@ public enum SmartPreviewDNG {
         let make = model?[kCGImagePropertyTIFFMake] as? String ?? "Atelier"
         let camera = model?[kCGImagePropertyTIFFModel] as? String ?? "Smart Preview"
         try write(rgba: pixels, width: width, height: height, neutral: neutral(x: Double(white.x), y: Double(white.y)),
-                  make: make, model: camera, encoding: encoding, baselineExposure: baseline, to: url)
+                  make: make, model: camera, encoding: encoding, balancedCamera: balancedCamera,
+                  baselineExposure: baseline, to: url)
         return (temperature, tint)
     }
 
@@ -137,10 +138,17 @@ public enum SmartPreviewDNG {
     // MARK: Writing
 
     /// Writes white-balanced linear Rec. 2020 RGBA floats as LinearRaw camera data.
+    ///
+    /// `balancedCamera`: the camera space is the as-shot-balanced Rec. 2020 itself (`ColorMatrix1`
+    /// = diag(1 / neutral) · XYZ→Rec. 2020, `AsShotNeutral` 1, 1, 1), so the pixels are stored
+    /// white-balanced: a grey stays grey in the JPEG (no chroma to quantize) and no channel is
+    /// scaled down. The same light either way, as CIRAWFilter sees it.
     public static func write(rgba: [Float], width: Int, height: Int, neutral: SIMD3<Double>,
-                             make: String, model: String, encoding: Encoding, baselineExposure: Double = 0,
-                             to url: URL) throws {
-        let gains = SIMD3<Float>(Float(neutral.x), Float(neutral.y), Float(neutral.z)) / headroom
+                             make: String, model: String, encoding: Encoding, balancedCamera: Bool = false,
+                             baselineExposure: Double = 0, to url: URL) throws {
+        let gains = balancedCamera
+            ? SIMD3<Float>(repeating: 1 / headroom)
+            : SIMD3<Float>(Float(neutral.x), Float(neutral.y), Float(neutral.z)) / headroom
         var tiff = TIFFWriter()
         var entries: [TIFFWriter.Entry] = []
         // Fixed 256 px tiles: CIRAWFilter can't read a DNG whose tiles are smaller (spike round 3).
@@ -192,7 +200,9 @@ public enum SmartPreviewDNG {
             entries += [.shorts(258, [8, 8, 8]), .short(259, 34892), .shorts(50712, table)]
         }
 
-        let m = xyzToRec2020
+        let rec = xyzToRec2020
+        let m = balancedCamera ? (0..<9).map { rec[$0] / [neutral.x, neutral.y, neutral.z][$0 / 3] } : rec
+        let asShot = balancedCamera ? [1.0, 1, 1] : [neutral.x, neutral.y, neutral.z]
         entries += [
             .long(254, 0), .long(256, UInt32(width)), .long(257, UInt32(height)),
             .short(262, 34892), .ascii(271, make), .ascii(272, model), .short(274, 1),
@@ -203,7 +213,7 @@ public enum SmartPreviewDNG {
             .ascii(50708, "\(make) \(model) (Atelier Smart Preview)"),
             .longs(50714, [0, 0, 0]), .longs(50717, [65535, 65535, 65535]),
             .srationals(50721, m.map { Int32(($0 * 10000).rounded()) }, denominator: 10000),
-            .rationals(50728, [neutral.x, neutral.y, neutral.z].map { UInt32(($0 * 1_000_000).rounded()) }, denominator: 1_000_000),
+            .rationals(50728, asShot.map { UInt32(($0 * 1_000_000).rounded()) }, denominator: 1_000_000),
             .srationals(50730, [Int32(((baselineExposure + Double(log2(headroom))) * 1000).rounded())], denominator: 1000),
             .short(50778, 21),
         ]
