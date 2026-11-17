@@ -128,15 +128,19 @@ public final class Exporter: Sendable {
     /// Photos exported at once by `run`: while one is encoded and written on the CPU, the next
     /// renders on the GPU. Measured on 12 Z f RAWs (AT-076 P3); `ExportTimingTests` times it.
     let photosInFlight: Int
+    /// Renders each photo fully before encoding it, rather than letting the encoder pull it.
+    /// Measuring only (AT-076 P3): `ExportTimingTests` compares the two.
+    let rendersFirst: Bool
 
     public convenience init(catalog: Catalog, renderer: DevelopRenderer = .shared) {
         self.init(catalog: catalog, renderer: renderer, photosInFlight: 2)
     }
 
-    init(catalog: Catalog, renderer: DevelopRenderer, photosInFlight: Int) {
+    init(catalog: Catalog, renderer: DevelopRenderer, photosInFlight: Int, rendersFirst: Bool = true) {
         self.catalog = catalog
         self.renderer = renderer
         self.photosInFlight = max(1, photosInFlight)
+        self.rendersFirst = rendersFirst
     }
 
     public func run(assetIDs: [Int64], settings: ExportSettings,
@@ -242,7 +246,7 @@ public final class Exporter: Sendable {
         // then only reads memory, and the next photo can render meanwhile.
         guard let cgImage = renderer.context.createCGImage(image, from: image.extent, format: format,
                                                             colorSpace: settings.colorSpace.cgColorSpace,
-                                                            deferred: false) else {
+                                                            deferred: !rendersFirst) else {
             throw ExportError("Rendering failed.")
         }
 
