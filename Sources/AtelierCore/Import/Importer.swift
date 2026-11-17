@@ -548,14 +548,21 @@ public final class Importer: Sendable {
 
     /// Copies `source` into the open file `destination` (and closes it), hashing what it reads,
     /// then gives the copy the source's dates, permissions and extended attributes.
+    /// `uncached` (the cache of originals) keeps both files' data out of the unified buffer cache
+    /// (`F_NOCACHE`): a streamed copy is read once and the copy is decoded later from disk, so
+    /// caching it would only hold memory.
     static func copyHashing(_ source: URL, to destination: Int32,
                             progress: ((Int64) -> Void)? = nil, shouldPause: (() -> Bool)? = nil,
-                            shouldStop: (() -> Bool)? = nil) throws -> String {
+                            shouldStop: (() -> Bool)? = nil, uncached: Bool = false) throws -> String {
         defer { close(destination) }
         let input = open(source.path, O_RDONLY)
         guard input >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
         defer { close(input) }
         _ = fcntl(input, F_RDAHEAD, 1)
+        if uncached {
+            _ = fcntl(input, F_NOCACHE, 1)
+            _ = fcntl(destination, F_NOCACHE, 1)
+        }
         // A copy that can pause (read-ahead, AT-079c) reads 1 MB at a time, so a photo being opened
         // waits at most one small read: with 8 MB the open photo was ~19% slower on megham.
         let size = (shouldPause == nil ? 8 : 1) * 1024 * 1024
