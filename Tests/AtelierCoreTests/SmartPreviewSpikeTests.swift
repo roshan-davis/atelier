@@ -94,6 +94,64 @@ final class SmartPreviewSpikeTests: XCTestCase {
         }
     }
 
+    /// Which lossy DNGs CIRAWFilter can read: sizes × content (flat, gradient, noisy). Then a noisy
+    /// grey card at 2560 × 1706 under 5000 K, lossless against lossy, at as shot, 3000, 4000 and 8000 K.
+    func testWhichLossyDNGsOpen() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("SmartPreviewLossy-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        var seed: UInt64 = 1
+        func noise() -> Float { seed = seed &* 6364136223846793005 &+ 1442695040888963407; return Float(seed >> 40) / Float(1 << 24) - 0.5 }
+        func card(_ width: Int, _ height: Int, _ content: String) -> [Float] {
+            var rgba = [Float](repeating: 0.18, count: width * height * 4)
+            for y in 0..<height {
+                for x in 0..<width {
+                    let i = (y * width + x) * 4
+                    for c in 0..<3 {
+                        switch content {
+                        case "gradient": rgba[i + c] = 0.05 + 0.4 * Float(x + y) / Float(width + height)
+                        case "noisy": rgba[i + c] = 0.18 * (1 + 0.3 * noise())
+                        default: break
+                        }
+                    }
+                }
+            }
+            return rgba
+        }
+        let neutral = SmartPreviewDNG.neutral(temperature: 5000, tint: 0)
+        for (width, height) in [(512, 512), (1024, 683), (2048, 1365), (2560, 1706)] {
+            for content in ["flat", "gradient", "noisy"] {
+                let url = folder.appendingPathComponent("\(width)-\(content).dng")
+                try SmartPreviewDNG.write(rgba: card(width, height, content), width: width, height: height, neutral: neutral,
+                                          make: "Nikon", model: "Z f", encoding: .lossyJPEG(quality: 0.9), to: url)
+                let type = CGImageSourceCreateWithURL(url as CFURL, nil).flatMap { CGImageSourceGetType($0) as String? } ?? "?"
+                let filter = CIRAWFilter(imageURL: url)
+                print("SMARTPREVIEW LOSSY \(width)x\(height) \(content): \(try Data(contentsOf: url).count) bytes, type \(type), as shot \(filter.map { "\(Int($0.neutralTemperature)) K" } ?? "nil"), output \(filter?.outputImage?.extent.debugDescription ?? "nil")")
+            }
+        }
+        let context = CIContext(options: [.cacheIntermediates: false])
+        let linear = CGColorSpace(name: CGColorSpace.linearITUR_2020)!
+        let (width, height) = (2560, 1706)
+        let pixels = card(width, height, "noisy")
+        for (name, encoding) in [("lossless", SmartPreviewDNG.Encoding.lossless16), ("lossy", .lossyJPEG(quality: 0.9))] {
+            let url = folder.appendingPathComponent("big-\(name).dng")
+            try SmartPreviewDNG.write(rgba: pixels, width: width, height: height, neutral: neutral,
+                                      make: "Nikon", model: "Z f", encoding: encoding, to: url)
+            for temperature in [Float?.none, 3000, 4000, 8000] {
+                guard let filter = CIRAWFilter(imageURL: url) else { print("SMARTPREVIEW BIGCARD \(name): nil"); break }
+                filter.boostAmount = 0
+                if let temperature { filter.neutralTemperature = temperature }
+                guard let image = filter.outputImage else { print("SMARTPREVIEW BIGCARD \(name): no output"); break }
+                let average = image.applyingFilter("CIAreaAverage", parameters: [kCIInputExtentKey: CIVector(cgRect: image.extent)])
+                var pixel = [Float](repeating: 0, count: 4)
+                context.render(average, toBitmap: &pixel, rowBytes: 16, bounds: CGRect(x: 0, y: 0, width: 1, height: 1),
+                               format: .RGBAf, colorSpace: linear)
+                print(String(format: "SMARTPREVIEW BIGCARD %@ at %@: %.4f/%.4f/%.4f", name, temperature.map { "\(Int($0))K" } ?? "as shot",
+                             pixel[0], pixel[1], pixel[2]))
+            }
+        }
+    }
+
     /// The real comparison, on a Mac with sample RAWs.
     func testSmartPreviewsAgainstTheRAW() throws {
         let environment = ProcessInfo.processInfo.environment
