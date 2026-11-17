@@ -109,6 +109,9 @@ extension LibraryModel {
         }
         r.bind(AtelierAction.writeAllXMP) { model, _, _ in model.writeXMP(selectionOnly: false) }
         r.bind(AtelierAction.refreshVolumes) { model, _, _ in model.refreshVolumes() }
+        r.bind(AtelierAction.connectLocation) { model, parameters, _ in model.connectLocation(parameters.location) }
+        r.bind(AtelierAction.disconnectLocation) { model, parameters, _ in model.disconnectLocation(parameters.location) }
+        r.bind(AtelierAction.showLocationInFinder) { model, parameters, _ in model.showLocationInFinder(parameters.location) }
     }
 
     private static func bindPhoto(_ r: AtelierRegistry) {

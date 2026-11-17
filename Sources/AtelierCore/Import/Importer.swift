@@ -334,6 +334,7 @@ public final class Importer: Sendable {
             volumeRecord.lastSeen = Date()
             volumeRecord.isOnline = true
             try volumeRecord.save(db)
+            try Catalog.ensureLocation(for: volumeRecord, db)
 
             var folder = try Folder
                 .filter(Column("volumeId") == volumeRecord.id! && Column("relativePath") == relativeFolder)

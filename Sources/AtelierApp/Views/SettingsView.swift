@@ -28,7 +28,7 @@ struct SettingsView: View {
 
 /// The panes of the Settings window, in sidebar order.
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case general, appearance, keyboard, imports = "import", develop, export, metadata, editIn, ai, agents
+    case general, appearance, keyboard, imports = "import", storage, develop, export, metadata, editIn, ai, agents
 
     static let defaultsKey = "settings.pane"
 
@@ -37,7 +37,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
     /// Sidebar groups: the app itself, the photo workflow, then other apps and AI.
     static let groups: [(title: String, panes: [SettingsPane])] = [
         ("Atelier", [.general, .appearance, .keyboard]),
-        ("Photos", [.imports, .develop, .export, .metadata]),
+        ("Photos", [.imports, .storage, .develop, .export, .metadata]),
         ("Editors & AI", [.editIn, .ai, .agents]),
     ]
 
@@ -47,6 +47,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .appearance: return "Appearance"
         case .keyboard: return "Keyboard"
         case .imports: return "Import"
+        case .storage: return "Storage"
         case .develop: return "Develop"
         case .export: return "Export"
         case .metadata: return "Metadata"
@@ -62,6 +63,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .appearance: return "paintpalette"
         case .keyboard: return "keyboard"
         case .imports: return "square.and.arrow.down"
+        case .storage: return "externaldrive.connected.to.line.below"
         case .develop: return "slider.horizontal.3"
         case .export: return "square.and.arrow.up"
         case .metadata: return "tag"
@@ -78,6 +80,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .appearance: return SettingsPalette.lavender
         case .keyboard: return SettingsPalette.periwinkle
         case .imports: return SettingsPalette.sky
+        case .storage: return SettingsPalette.amber
         case .develop: return SettingsPalette.peach
         case .export: return SettingsPalette.sage
         case .metadata: return SettingsPalette.seafoam
@@ -94,6 +97,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .appearance: return "The theme for every window, Settings included."
         case .keyboard: return "The key for each command. Click a key, then press a new one."
         case .imports: return "What the Import dialog starts with, and RAW+JPEG pairs."
+        case .storage: return "The drives, NAS shares and folders you keep photos on."
         case .develop: return "Zoom and panel behavior in Develop."
         case .export: return "Where exports go. Formats and presets are in File > Export…"
         case .metadata: return "Writing ratings, keywords and edits to XMP sidecars."
@@ -223,6 +227,7 @@ private struct SettingsPaneView: View {
         case .appearance: AppearanceSettings()
         case .keyboard: KeyboardSettings()
         case .imports: ImportSettings()
+        case .storage: StorageSettings()
         case .develop: DevelopSettingsTab()
         case .export: ExportSettingsTab()
         case .metadata: MetadataSettings()

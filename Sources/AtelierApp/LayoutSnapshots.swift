@@ -78,6 +78,7 @@ enum LayoutSnapshots {
         if !only.isEmpty {
             if only.contains("lens-blur") { await snapshotLensBlurMode(model: model, into: folder) }
             if only.contains("hdr") { await snapshotHDR(model: model, into: folder) }
+            if only.contains("storage") { await snapshotStorage(model: model, into: folder) }
             fflush(stdout)
             exit(0)
         }
@@ -190,6 +191,7 @@ enum LayoutSnapshots {
         await capture(AnyView(GeneralSettings().environmentObject(model).frame(width: 640)), size: CGSize(width: 640, height: 780),
                       to: folder.appendingPathComponent("settings-general.png"))
         await snapshotSettingsWindow(model: model, into: folder)
+        await snapshotStorage(model: model, into: folder)
         await snapshotExport(model: model, into: folder)
         // The splash with each built-in image, and with none.
         for url in SplashController.builtInImages {
@@ -1176,6 +1178,62 @@ enum LayoutSnapshots {
         if let image = context.makeImage() {
             try? NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])?.write(to: url)
         }
+    }
+
+    /// Settings > Storage (AT-079a) with a connected share, an offline drive, a subfolder location
+    /// and a share not connected yet; Add Location's three steps; the sidebar's Locations.
+    static func snapshotStorage(model: LibraryModel, into folder: URL) async {
+        let catalog = model.catalog
+        let share = MountedVolume(identityKey: "uuid:SNAPSHOT-MEGHAM", name: "Photos", kind: .nas,
+                                  rootURL: URL(fileURLWithPath: "/Volumes/Photos", isDirectory: true),
+                                  serverAddress: "smb://megham.local/Photos")
+        let drive = MountedVolume(identityKey: "uuid:SNAPSHOT-SSD", name: "Photos SSD", kind: .local,
+                                  rootURL: URL(fileURLWithPath: "/Volumes/Photos SSD", isDirectory: true))
+        do {
+            try catalog.addStorageLocation(folder: share.rootURL, on: share, name: "megham", connectAtLaunch: true)
+            try catalog.addStorageLocation(folder: drive.rootURL.appendingPathComponent("Portfolio"), on: drive)
+            try catalog.writer.write { db in
+                try db.execute(sql: "UPDATE volume SET isOnline = 0 WHERE identityKey = 'uuid:SNAPSHOT-SSD'")
+                var pending = StorageLocation(name: "Studio Mac", kind: .networkShare, volumeId: nil,
+                                              serverAddress: "smb://studio.local/Archive")
+                try pending.insert(db)
+            }
+        } catch {
+            print("SNAPSHOT: storage sample locations failed: \(error)")
+        }
+        for _ in 0..<20 where model.sidebar.locations.count < 3 { try? await Task.sleep(for: .milliseconds(250)) }
+        print("SNAPSHOT: storage locations \(model.sidebar.locations.map { "\($0.location.name) \($0.status.word) \($0.detailLine) photos=\($0.photoCount)" })")
+        for theme in [Theme.light, .graphite] {
+            UserDefaults.standard.set(theme.rawValue, forKey: Theme.defaultsKey)
+            theme.apply()
+            await capture(AnyView(StorageSettings().environmentObject(model).frame(width: 640)),
+                          size: CGSize(width: 640, height: 620),
+                          to: folder.appendingPathComponent("settings-storage-\(theme.rawValue).png"))
+        }
+        UserDefaults.standard.set(Theme.light.rawValue, forKey: Theme.defaultsKey)
+        Theme.light.apply()
+        let savedPane = UserDefaults.standard.object(forKey: SettingsPane.defaultsKey)
+        UserDefaults.standard.set(SettingsPane.storage.rawValue, forKey: SettingsPane.defaultsKey)
+        await capture(AnyView(SettingsView().environmentObject(model)), size: SettingsView.size,
+                      to: folder.appendingPathComponent("settings-window-storage-light.png"))
+        if let savedPane { UserDefaults.standard.set(savedPane, forKey: SettingsPane.defaultsKey) }
+        else { UserDefaults.standard.removeObject(forKey: SettingsPane.defaultsKey) }
+        let servers = [ShareBrowser.Server(name: "megham"), ShareBrowser.Server(name: "Studio Mac")]
+        let steps: [(String, AddLocationSheet)] = [
+            ("1-kind", AddLocationSheet(added: { _ in })),
+            ("2-share", AddLocationSheet(step: .place, kind: .networkShare, address: "smb://megham.local",
+                                         previewServers: servers, added: { _ in })),
+            ("3-name", AddLocationSheet(step: .name, kind: .networkShare,
+                                        place: .init(mounted: share, folder: share.rootURL), name: "megham",
+                                        added: { _ in })),
+        ]
+        for (name, sheet) in steps {
+            await capture(AnyView(sheet.environmentObject(model)), size: AddLocationSheet.size,
+                          to: folder.appendingPathComponent("add-location-\(name).png"))
+        }
+        await capture(AnyView(SidebarView().environmentObject(model).frame(width: 260)),
+                      size: CGSize(width: 260, height: 560),
+                      to: folder.appendingPathComponent("sidebar-locations.png"))
     }
 
     private static func capture(_ view: AnyView, size: CGSize, to url: URL) async {

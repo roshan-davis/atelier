@@ -7,6 +7,16 @@ public struct MountedVolume: Sendable, Hashable {
     public var name: String
     public var kind: VolumeKind
     public var rootURL: URL
+    /// For a network share, its address without credentials ("smb://megham.local/Photos").
+    public var serverAddress: String?
+
+    public init(identityKey: String, name: String, kind: VolumeKind, rootURL: URL, serverAddress: String? = nil) {
+        self.identityKey = identityKey
+        self.name = name
+        self.kind = kind
+        self.rootURL = rootURL
+        self.serverAddress = serverAddress
+    }
 }
 
 /// Photos point at files by volume identity plus relative path, so remounting a drive or the
@@ -29,6 +39,8 @@ public enum VolumeIdentity {
     public static func volume(atRoot root: URL) throws -> MountedVolume {
         let values = try root.resourceValues(forKeys: rootKeys)
         let name = values.volumeName ?? root.lastPathComponent
+        let isLocal = values.volumeIsLocal ?? true
+        let address = isLocal ? nil : values.volumeURLForRemounting.flatMap { ServerAddress.normalized(stripCredentials($0)) }
         let key: String
         if let uuid = values.volumeUUIDString {
             key = "uuid:" + uuid
@@ -37,9 +49,8 @@ public enum VolumeIdentity {
         } else {
             key = "name:" + name
         }
-        return MountedVolume(identityKey: key, name: name,
-                             kind: (values.volumeIsLocal ?? true) ? .local : .nas,
-                             rootURL: root)
+        return MountedVolume(identityKey: key, name: name, kind: isLocal ? .local : .nas,
+                             rootURL: root, serverAddress: address)
     }
 
     public static func mountedVolumes() -> [MountedVolume] {
@@ -81,7 +92,11 @@ public enum VolumeIdentity {
 extension Catalog {
     /// Marks each known volume online or offline and records where it is mounted now.
     public func refreshVolumes() throws {
-        let mounted = VolumeIdentity.mountedVolumes()
+        try refreshVolumes(mounted: VolumeIdentity.mountedVolumes())
+    }
+
+    /// `refreshVolumes` with the mounted volumes given (tests pass their own).
+    public func refreshVolumes(mounted: [MountedVolume]) throws {
         let byKey = Dictionary(mounted.map { ($0.identityKey, $0) }, uniquingKeysWith: { first, _ in first })
         try writer.write { db in
             for var volume in try Volume.fetchAll(db) {
@@ -94,6 +109,7 @@ extension Catalog {
                 }
                 try volume.update(db)
             }
+            try Self.linkPendingLocations(mounted, db)
         }
     }
 

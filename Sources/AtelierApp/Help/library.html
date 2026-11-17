@@ -21,7 +21,7 @@
 <dl class="defs">
   <dt>Library › All Photographs</dt><dd>Every photo in the catalog.</dd>
   <dt>Imports</dt><dd>One entry per import, named after its folder. Right-click to Rename…, Import More Photos Into This…, Cull… or Delete Import…. Deleting the list keeps the photos in the catalog and on disk, unless you tick <b>Also delete the photos and move their files to the Trash</b>. That box always starts unticked, and ticking it shows how many files will go to the Trash before you confirm with <b>Delete Import and Files</b>.</dd>
-  <dt>Volumes</dt><dd>Your drives and the NAS, each with its folders as they are on disk. An offline drive is marked; its photos stay browsable.</dd>
+  <dt>Locations</dt><dd>Your drives and NAS shares (the ones you add in <a href="storage.html">Settings › Storage</a>, and any you import from), each with its folders as they are on disk. An offline one is marked; its photos stay browsable. Right-click one to Connect, Disconnect or Show in Finder.</dd>
   <dt>Collections</dt><dd>Your own lists. A photo can be in any number of them. <b>+</b> makes a new one.</dd>
 </dl>
 <p>Imports and collections marked with a lock are <a href="#private">private</a>.</p>
@@ -131,7 +131,7 @@
 <p>New sidecar writes include retained History steps, the selected step and redo steps, plus snapshot names, dates and saved looks. Earlier sidecars containing only current edits recover one state, shown as <b>Recovered from XMP</b>. Write XMP explicitly to back up history from earlier edits. Atelier currently keeps up to 500 history steps per photo. Virtual copies, stacks, collections and AI provenance still require catalog backups. Subject and object masks are regenerated from their saved instructions, so edges may change with macOS. Keep separate backups of originals and external/AI result files. Other apps can read the standard metadata, but the Develop settings are specific to Atelier.</p>
 
 <h2 id="volumes">Drives and the NAS</h2>
-<p>Atelier remembers photos by drive, not by where it's mounted, so plugging a drive in somewhere else doesn't break anything. When the NAS or a drive is off, its photos stay in the grid from their previews, marked Offline. <span class="path">Library › Refresh Volumes</span> (<kbd>⌘R</kbd>) checks again after you connect one.</p>
+<p>Atelier remembers photos by drive, not by where it's mounted, so plugging a drive in somewhere else doesn't break anything. When the NAS or a drive is off, its photos stay in the grid from their previews, marked Offline. <span class="path">Library › Refresh Volumes</span> (<kbd>⌘R</kbd>) checks again after you connect one. To add a NAS or a drive, see <a href="storage.html">Storage locations</a>.</p>
 
 <div class="see-also">See also: <a href="photos.html">Virtual copies, stacks and removing</a> · <a href="shortcuts.html">Keyboard shortcuts</a></div>
 
