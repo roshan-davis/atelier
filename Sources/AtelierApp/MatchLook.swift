@@ -534,13 +534,29 @@ final class MatchLookModel: ObservableObject, Identifiable {
         guard !others.isEmpty else { return }
         switch applyMode {
         case .same:
+            // AT-076 E1: a photo whose settings can't be read is skipped (matching it from neutral
+            // would replace its edits), and one that can't be saved is counted, not dropped.
+            var failure: Error?
+            var failed = 0
             for id in others {
-                let settings = match.applied(to: (try? library.catalog.developSettings(for: id)) ?? .neutral,
-                                             strength: strength)
-                try? library.catalog.saveDevelopSettings(settings, for: id, step: step)
-                library.develop.refreshPreviews(for: id, settings: settings)
+                do {
+                    let current = try library.catalog.developSettings(for: id)
+                    let settings = match.applied(to: current, strength: strength)
+                    try library.catalog.saveDevelopSettings(settings, for: id, step: step)
+                    library.develop.refreshPreviews(for: id, settings: settings)
+                } catch {
+                    failure = failure ?? error
+                    failed += 1
+                }
             }
-            library.status = "Matched \(targets.count) photos to \(referenceName ?? "the reference")"
+            let reference = referenceName ?? "the reference"
+            if let failure {
+                let matched = targets.count - failed
+                library.status = "Matched \(matched) photo\(matched == 1 ? "" : "s") to \(reference); "
+                    + "\(failed) could not be saved: \(failure.localizedDescription)"
+            } else {
+                library.status = "Matched \(targets.count) photos to \(reference)"
+            }
         case .each:
             library.matchEach(others, target: fittedTarget, options: options, strength: strength, step: step,
                               firstPhotoChanged: firstPhotoChanged)

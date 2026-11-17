@@ -557,15 +557,25 @@ final class CullModel: ObservableObject, Identifiable {
 
     /// The click on the photo that pins the waiting note (0...1 across and down the photo).
     func placeNote(at point: CGPoint) {
-        guard let id = placingNote, let catalog else { return }
+        guard let id = placingNote, catalog != nil else { return }
         placingNote = nil
-        _ = try? catalog.setNoteSpot(id, point)
+        pinNote(id, at: point)
     }
 
     func removePin(_ note: PhotoNote) {
-        guard let id = note.id, let catalog else { return }
+        guard let id = note.id, catalog != nil else { return }
         if placingNote == id { placingNote = nil }
-        _ = try? catalog.setNoteSpot(id, nil)
+        pinNote(id, at: nil)
+    }
+
+    /// Pins a note to a spot or unpins it; a failed save is said in the status line (AT-076 E1).
+    private func pinNote(_ id: Int64, at point: CGPoint?) {
+        guard let catalog else { return }
+        do {
+            _ = try catalog.setNoteSpot(id, point)
+        } catch {
+            model?.status = "Couldn't save the note's pin: \(error.localizedDescription)"
+        }
     }
 
     /// The focused photo's faces with what culling concluded about each, for the preview's
@@ -675,12 +685,18 @@ final class CullModel: ObservableObject, Identifiable {
                 let rejected = photos.filter { !kept.contains($0.id) }
                 let rejects = rejected.compactMap { id($0.id) }
                 let rejectFiles = rejects + rejected.flatMap { $0.siblings.compactMap { result.assetIDsBySource[$0] } }
-                try? model.catalog.removeAssets(rejectFiles, fromImportGroup: entry)
-                try? model.catalog.applyCull(groups: groups.map { $0.compactMap(id) },
-                                             keepers: Set(kept.compactMap(id)))
-                try? model.catalog.writeCullNotes(rejected: Self.byAsset(notes, id), spots: Self.byAsset(spots, id),
-                                                  kept: keptInGroups.compactMap(id))
-                model.status = "Imported \(kept.count) kept photo\(kept.count == 1 ? "" : "s"); \(rejects.count) culled shot\(rejects.count == 1 ? " is" : "s are") in Show Cull Group"
+                // AT-076 E1: as for culling cataloged photos below, a failed write is said, not
+                // reported as culled.
+                do {
+                    try model.catalog.removeAssets(rejectFiles, fromImportGroup: entry)
+                    try model.catalog.applyCull(groups: groups.map { $0.compactMap(id) },
+                                                keepers: Set(kept.compactMap(id)))
+                    try model.catalog.writeCullNotes(rejected: Self.byAsset(notes, id), spots: Self.byAsset(spots, id),
+                                                     kept: keptInGroups.compactMap(id))
+                    model.status = "Imported \(kept.count) kept photo\(kept.count == 1 ? "" : "s"); \(rejects.count) culled shot\(rejects.count == 1 ? " is" : "s are") in Show Cull Group"
+                } catch {
+                    model.status = "Imported \(photos.count) photo\(photos.count == 1 ? "" : "s"), but the cull couldn't be saved: \(error.localizedDescription)"
+                }
             }
         case .photos:
             let id = { (index: Int) in photos[index].assetID }

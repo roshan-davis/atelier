@@ -27,6 +27,10 @@ final class PhotoNotesModel: ObservableObject {
     /// The note just deleted, while its Undo shows.
     @Published private(set) var recentlyDeleted: PhotoNote?
 
+    /// Why the last change couldn't be saved to the catalog, shown in the panel until a later
+    /// change saves (AT-076 E1: a note that isn't saved must never look saved).
+    @Published private(set) var saveError: String?
+
     /// Other selected photos a new note also goes to when typing ends ("Adding to 12 photos").
     @Published private(set) var alsoFor: [Int64] = []
     private var observation: Task<Void, Never>?
@@ -110,16 +114,18 @@ final class PhotoNotesModel: ObservableObject {
     private func saveDraft() {
         pendingSave?.cancel()
         pendingSave = nil
+        saveError = nil
         if isNew {
             guard let assetID, !NoteText.cleaned(draft).isEmpty,
-                  let note = (try? catalog.addNote(draft, to: [assetID]))?.first, let id = note.id else { return }
+                  let note = saving({ try catalog.addNote(draft, to: [assetID]) })?.first,
+                  let id = note.id else { return }
             isNew = false
             typingNewNote = true
             editingID = id
             return
         }
         guard let id = editingID else { return }
-        _ = try? catalog.updateNote(id, text: draft, marksEdited: !typingNewNote)
+        saving { try catalog.updateNote(id, text: draft, marksEdited: !typingNewNote) }
     }
 
     /// Esc, ⌘Return, clicking Done, another photo or hiding the panel. An empty note goes away;
@@ -127,9 +133,10 @@ final class PhotoNotesModel: ObservableObject {
     func finishEditing() {
         pendingSave?.cancel()
         pendingSave = nil
+        saveError = nil
         if isNew {
             let text = NoteText.cleaned(draft)
-            if let assetID, !text.isEmpty { _ = try? catalog.addNote(text, to: [assetID] + alsoFor) }
+            if let assetID, !text.isEmpty { saving { try catalog.addNote(text, to: [assetID] + alsoFor) } }
             isNew = false
             alsoFor = []
             draft = ""
@@ -137,10 +144,10 @@ final class PhotoNotesModel: ObservableObject {
         }
         guard let id = editingID else { return }
         let text = NoteText.cleaned(draft)
-        _ = try? catalog.updateNote(id, text: text, marksEdited: !typingNewNote)
+        saving { try catalog.updateNote(id, text: text, marksEdited: !typingNewNote) }
         typingNewNote = false
-        let removed = (try? catalog.finishNote(id)) ?? false
-        if !removed, !alsoFor.isEmpty { _ = try? catalog.addNote(text, to: alsoFor) }
+        let removed = saving { try catalog.finishNote(id) } ?? false
+        if !removed, !alsoFor.isEmpty { saving { try catalog.addNote(text, to: alsoFor) } }
         editingID = nil
         alsoFor = []
         draft = ""
@@ -153,7 +160,8 @@ final class PhotoNotesModel: ObservableObject {
         let toggled = NoteText.togglingCheckbox(atLine: line, in: text)
         guard toggled != text else { return }
         if id == editingID { draft = toggled }
-        _ = try? catalog.updateNote(id, text: toggled)
+        saveError = nil
+        saving { try catalog.updateNote(id, text: toggled) }
     }
 
     /// Deletes a note at once (no question, as Notes does) with Undo in the panel for ten seconds.
@@ -166,7 +174,8 @@ final class PhotoNotesModel: ObservableObject {
             alsoFor = []
             draft = ""
         }
-        guard let deleted = try? catalog.deleteNote(id) else { return }
+        saveError = nil
+        guard let deleted = saving({ try catalog.deleteNote(id) }) ?? nil else { return }
         notes.removeAll { $0.id == id }
         // A note emptied while typing has nothing to bring back: no sound, no Undo.
         guard !NoteText.cleaned(deleted.text).isEmpty else { return }
@@ -182,7 +191,20 @@ final class PhotoNotesModel: ObservableObject {
 
     func undoDelete() {
         guard let note = recentlyDeleted else { return }
-        try? catalog.restoreNote(note)
+        saveError = nil
+        saving { try catalog.restoreNote(note) }
         recentlyDeleted = nil
+    }
+
+    /// Runs one catalog write: nil, and `saveError` set, if it failed. Each change clears the
+    /// error first, so it names the latest change that didn't save.
+    @discardableResult
+    private func saving<T>(_ write: () throws -> T) -> T? {
+        do {
+            return try write()
+        } catch {
+            saveError = "Couldn't save the note: \(error.localizedDescription)"
+            return nil
+        }
     }
 }
