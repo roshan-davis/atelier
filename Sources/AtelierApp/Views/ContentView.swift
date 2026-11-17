@@ -314,8 +314,12 @@ private struct StatusBar: View {
             if let progress = model.keepProgress {
                 ProgressItem(progress: progress) { model.cancelKeep() }
             }
+            if let progress = model.smartPreviewProgress {
+                ProgressItem(progress: progress) { model.cancelSmartPreviews() }
+            }
             if model.importProgress == nil, model.exportProgress == nil, model.matchProgress == nil,
                model.agentProgress == nil, model.downloadProgress == nil, model.keepProgress == nil,
+               model.smartPreviewProgress == nil,
                let status = model.status {
                 Text(status).lineLimit(1)
                 if !model.problems.isEmpty {

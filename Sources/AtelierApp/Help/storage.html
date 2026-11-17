@@ -115,11 +115,21 @@
 </ul>
 <p>When the share is offline, an export from a copy on this Mac still runs at full quality, and <span class="path">Show Problems</span> in the status bar lists <i>Export notes</i> naming each photo whose copy couldn't be checked against the share.</p>
 
+<h2 id="smart">Smart previews</h2>
+<p>A smart preview is a small editable copy of a photo (a 2560 px DNG of about 1 MB) that Atelier keeps on this Mac, so you can go on editing in Develop while the original is offline, as in Lightroom. Select photos whose originals are online, then choose <span class="path">Library › Previews › Build Smart Previews</span>; they're made in the background, with progress and <span class="path">Cancel</span> in the status bar, behind the photo you're opening. The first photo of each camera model takes about 20 seconds longer, while Atelier learns how that camera's white balance works.</p>
+<ul>
+  <li>When the original is offline and the photo has no copy in the <a href="#cache">cache of originals</a>, Develop opens its smart preview and says <i>Smart Preview</i> under the histogram. Every edit works as usual and is saved in the catalog; your previews update, and the edits apply to the original when it's back.</li>
+  <li>Temp, Tint and Exposure behave as they do on the original: the smart preview follows your camera's own white balance, not a generic one.</li>
+  <li>Lens profile corrections are already applied in the smart preview, and AI Denoise waits for the original.</li>
+  <li><span class="path">Library › Previews › Discard Smart Previews</span> removes them for the selected photos. The originals and your edits aren't touched.</li>
+  <li>Export and Edit In always use the original, never a smart preview.</li>
+</ul>
+
 <h2 id="offline">When a location is offline</h2>
-<p>Its photos stay in the grid from their previews, with the offline mark, and you can still rate, flag and keyword them. One with a copy in the <a href="#cache">cache of originals</a> also opens in Develop. <span class="path">Library › Refresh Volumes</span> (<kbd>⌘R</kbd>) checks again after you connect it some other way.</p>
+<p>Its photos stay in the grid from their previews, with the offline mark, and you can still rate, flag and keyword them. One with a copy in the <a href="#cache">cache of originals</a> or a <a href="#smart">smart preview</a> also opens in Develop. <span class="path">Library › Refresh Volumes</span> (<kbd>⌘R</kbd>) checks again after you connect it some other way.</p>
 
 <h2 id="where">What stays on this Mac</h2>
-<p>The catalog and every preview always stay on this Mac, whatever locations you add, so browsing never waits on the network and a sync app can never damage the catalog.</p>
+<p>The catalog, every preview and the smart previews always stay on this Mac (smart previews inside the catalog, in its <i>Smart Previews</i> folder), whatever locations you add, so browsing never waits on the network and a sync app can never damage the catalog.</p>
 
 <h2 id="remove">Remove a location</h2>
 <p>Select it and click <span class="path">−</span>, or <span class="path">Remove Location…</span> in its details. Its photos stay in the catalog (offline while the drive isn't there), and nothing on the location is changed.</p>

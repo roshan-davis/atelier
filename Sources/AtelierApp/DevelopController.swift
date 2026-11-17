@@ -123,6 +123,9 @@ final class DevelopController: ObservableObject {
     /// The open photo's original changed on its share since import (AT-079c part 3): the banner
     /// over the photo with Use the New File and Use the Kept Copy.
     @Published var originalChanged: OriginalChangedError?
+    /// The open photo is being edited from its smart preview, its original being offline
+    /// (AT-079d); the histogram says "Smart Preview".
+    @Published private(set) var editsSmartPreview = false
     @Published private(set) var asShotTemperature: Double = 5500
     /// The camera's tint, which the stored Tint is relative to; shown added, as Lightroom does.
     @Published private(set) var asShotTint: Double = 0
@@ -690,6 +693,8 @@ final class DevelopController: ObservableObject {
     var prefetchOriginals: (@MainActor ([Int64]) -> Void)?
     /// Copies of remote originals on this Mac (AT-079c); readers prefer a checked copy.
     var originals: OriginalCache?
+    /// The catalog's smart previews (AT-079d), edited from when an original is offline.
+    var smartPreviews: SmartPreviewStore?
     /// Whether a photo's original needs that first (`url` is its original, nil while offline).
     var needsPreparing: (@MainActor (Int64, URL?) -> Bool)?
     private var session: DevelopSession?
@@ -908,6 +913,7 @@ final class DevelopController: ObservableObject {
         sourceURL = nil
         errorMessage = nil
         originalChanged = nil
+        editsSmartPreview = false
         showingBefore = false
         isCropping = false
         isGuiding = false
@@ -988,8 +994,13 @@ final class DevelopController: ObservableObject {
                 case .ready(let ready):
                     self.decodeOpened(assetID, url: ready, generation: generation, afterPreparing: true)
                 case .offline:
-                    self.isLoading = false
-                    self.errorMessage = "The original is offline. Connect its drive to edit this photo."
+                    if let smart = self.smartPreviewURL(assetID) {
+                        self.editsSmartPreview = true
+                        self.decodeOpened(assetID, url: smart, generation: generation, afterPreparing: true)
+                    } else {
+                        self.isLoading = false
+                        self.errorMessage = "The original is offline. Connect its drive to edit this photo."
+                    }
                 case .cancelled:
                     self.isLoading = false
                     self.errorMessage = "The original isn't on this Mac yet. Open the photo again to get it."
@@ -1004,13 +1015,25 @@ final class DevelopController: ObservableObject {
             return
         }
         guard let url else {
-            errorMessage = "The original is offline. Connect its drive to edit this photo."
+            if let smart = smartPreviewURL(assetID) {
+                editsSmartPreview = true
+                decodeOpened(assetID, url: smart, generation: generation, afterPreparing: false)
+            } else {
+                errorMessage = "The original is offline. Connect its drive to edit this photo."
+            }
             return
         }
         decodeOpened(assetID, url: url, generation: generation, afterPreparing: false)
     }
 
     /// Decodes the open photo's proxy from `url`, its original or the copy on this Mac.
+    /// The photo's smart preview, when it has one (virtual copies share their master's).
+    func smartPreviewURL(_ assetID: Int64) -> URL? {
+        guard let smartPreviews else { return nil }
+        let fileID = (try? catalog.originalID(for: assetID)) ?? assetID
+        return smartPreviews.has(fileID) ? smartPreviews.url(for: fileID) : nil
+    }
+
     private func decodeOpened(_ assetID: Int64, url: URL, generation: Int, afterPreparing: Bool) {
         sourceURL = url
         isLoading = true

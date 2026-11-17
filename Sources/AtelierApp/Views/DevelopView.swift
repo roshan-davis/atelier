@@ -661,6 +661,12 @@ private struct HistogramView: View {
         if let active {
             Text("\(active.parameter.label)  \(active.format(develop.sliderValue(active.parameter)))")
                 .foregroundStyle(.primary)
+        } else if develop.editsSmartPreview {
+            // Lightroom's "Smart Preview" under the histogram (AT-079d).
+            Label("Smart Preview", systemImage: "square.on.square.dashed")
+                .labelStyle(.titleAndIcon)
+                .frame(maxWidth: .infinity)
+                .help("The original is offline, so you're editing its smart preview. Your edits apply to the original when it's back.")
         } else {
             ShootingInfoLine(info: develop.shootingInfo)
         }

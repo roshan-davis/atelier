@@ -488,6 +488,13 @@ public final class DevelopSession: @unchecked Sendable {
     public let focalLength35: Double
     /// Whether Apple's RAW engine has lens corrections for this file.
     public let lensCorrectionSupported: Bool
+    /// Set when the file is an Atelier smart preview (AT-079d): what it knows of its original, and
+    /// the camera's white table. Temp and Tint then go through `whiteChange` instead of the DNG's
+    /// own white balance.
+    public let smartPreview: SmartPreviewInfo?
+    private let cameraWhite: CameraWhite?
+    /// The white change last handed to the RAW engine, so an unchanged one isn't set again.
+    private var appliedWhite: [Double]?
     private let lock = NSLock()
     /// Lens Blur renders only where it is made: the Lens Blur mode's live renders and its Save
     /// (AT-074). Everywhere else (Develop, export, previews, the Loupe) a photo's Lens Blur
@@ -563,21 +570,30 @@ public final class DevelopSession: @unchecked Sendable {
         self.lensName = lensName?.trimmingCharacters(in: .whitespaces)
         focalLength35 = focal
         let type = UTType(filenameExtension: url.pathExtension)
+        let smart = type?.conforms(to: .rawImage) == true ? SmartPreviewInfo.read(url) : nil
+        smartPreview = smart
+        cameraWhite = smart.flatMap { SmartPreviewStore.white(forPreview: url, camera: $0.camera) }
         if type?.conforms(to: .rawImage) == true, let raw = CIRAWFilter(imageURL: url) {
             isRAW = true
             rawFilter = raw
             baseImage = nil
-            if let maxPixelSize {
-                let longEdge = max(raw.nativeSize.width, raw.nativeSize.height)
-                if longEdge > 0 { raw.scaleFactor = Float(min(1, Double(maxPixelSize) / Double(longEdge))) }
+            let nativeEdge = Double(max(raw.nativeSize.width, raw.nativeSize.height))
+            if let maxPixelSize, nativeEdge > 0 { raw.scaleFactor = Float(min(1, Double(maxPixelSize) / nativeEdge)) }
+            if let smart, nativeEdge > 0 {
+                renderScale = Double(raw.scaleFactor) * nativeEdge / Double(max(1, smart.originalLongEdge))
+                asShotTemperature = smart.temperature
+                asShotTint = smart.tint
+                cameraMatch = smart.cameraMatch
+                lensCorrectionSupported = false
+            } else {
+                renderScale = Double(raw.scaleFactor)
+                asShotTemperature = Double(raw.neutralTemperature)
+                asShotTint = Double(raw.neutralTint)
+                cameraMatch = renderer.cameraMatch(for: url)
+                lensCorrectionSupported = raw.isLensCorrectionSupported
             }
-            renderScale = Double(raw.scaleFactor)
             nativeNoiseReduction = (raw.luminanceNoiseReductionAmount, raw.colorNoiseReductionAmount)
             sourceSize = raw.outputImage?.extent.size ?? raw.nativeSize
-            asShotTemperature = Double(raw.neutralTemperature)
-            asShotTint = Double(raw.neutralTint)
-            cameraMatch = renderer.cameraMatch(for: url)
-            lensCorrectionSupported = raw.isLensCorrectionSupported
         } else {
             guard var image = CIImage(contentsOf: url, options: [.applyOrientationProperty: true]) else { return nil }
             var scale = 1.0
@@ -834,15 +850,28 @@ public final class DevelopSession: @unchecked Sendable {
     private func decodeAndCorrect(_ settings: DevelopSettings, defringeView: Defringe.View) -> CIImage? {
         var image: CIImage
         if let raw = rawFilter {
-            raw.neutralTemperature = Float(settings.temperature ?? asShotTemperature)
-            raw.neutralTint = Float(asShotTint + settings.tint)
+            let temperature = settings.temperature ?? asShotTemperature, tint = asShotTint + settings.tint
+            if smartPreview != nil {
+                // The DNG stays at its as-shot white; the camera's own change of white is applied
+                // in the engine's linear stage (none when the camera's table is missing).
+                let change = cameraWhite?.change(from: (asShotTemperature, asShotTint), to: temperature, tint: tint)
+                    ?? WhiteMatrix3.identity
+                if change != appliedWhite {
+                    raw.linearSpaceFilter = change == WhiteMatrix3.identity ? nil : WhiteMatrix3.filter(change)
+                    appliedWhite = change
+                }
+            } else {
+                raw.neutralTemperature = Float(temperature)
+                raw.neutralTint = Float(tint)
+            }
             raw.exposure = Float(settings.exposure)
             if lensCorrectionSupported, raw.isLensCorrectionEnabled != settings.lensProfileCorrections {
                 raw.isLensCorrectionEnabled = settings.lensProfileCorrections
             }
             // AI Denoise (AT-067) replaces Apple's noise reduction once the photo's noise is found:
             // in the background while editing, before rendering in exports and previews.
-            let amount = settings[.aiDenoise] / 100
+            // Not on a smart preview: its noise is the original's, scaled and already smoothed.
+            let amount = smartPreview == nil ? settings[.aiDenoise] / 100 : 0
             let residual = amount > 0
                 ? AIDenoise.store.residual(for: url, file: denoiseFile, profileCorrections: settings.lensProfileCorrections,
                                            waits: !interactive, context: renderer.context)

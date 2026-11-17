@@ -82,6 +82,8 @@ final class LibraryModel: ObservableObject {
     /// item that is no longer listed.
     var leavesHiddenScope = false
     let previews: PreviewCache
+    /// Smart previews (AT-079d), in the catalog package; nil for an in-memory catalog.
+    let smartPreviews: SmartPreviewStore?
     let previewScheduler: PreviewScheduler
     let develop: DevelopController
     let editWatcher = EditWatcher()
@@ -191,6 +193,9 @@ final class LibraryModel: ObservableObject {
     @Published var keepRequest: KeepRequest?
     @Published var keepProgress: ImportStatus?
     var keepTask: Task<Void, Never>?
+    /// Build Smart Previews (AT-079d): the run and its progress in the status bar.
+    @Published var smartPreviewProgress: ImportStatus?
+    var smartPreviewJob: Task<Void, Never>?
     /// When the original changed (AT-079c part 3): the sheet for Export and Edit In, and Use the
     /// New File's read.
     @Published var changedOriginals: ChangedOriginalsReview?
@@ -282,6 +287,8 @@ final class LibraryModel: ObservableObject {
         previews.discardIfOutdated()
         previewScheduler = PreviewScheduler(cache: previews)
         develop = DevelopController(catalog: catalog, previews: previews)
+        smartPreviews = catalog.smartPreviewsURL.map(SmartPreviewStore.init(root:))
+        develop.smartPreviews = smartPreviews
         report("Checking drives and network volumes…", 0.55)
         try? catalog.refreshVolumes()
         report("Loading library…", 0.75)
@@ -979,7 +986,8 @@ final class LibraryModel: ObservableObject {
     /// 2560 px preview is marked urgent so it jumps the queue.
     func thumbnailURL(for id: Int64, size: PreviewCache.Size = .thumbnail) -> URL? {
         if previews.has(size, for: id) { return previews.url(for: id, size: size) }
-        if let source = try? catalog.readableURL(for: id, cache: originals) {
+        // Offline, an edited photo's previews are rebuilt from its smart preview (AT-079d).
+        if let source = (try? catalog.readableURL(for: id, cache: originals)) ?? develop.smartPreviewURL(id) {
             // Edited photos are rebuilt with their settings, for example after the cache is cleared.
             let settings = try? catalog.developSettings(for: id)
             previewScheduler.request(size, for: id, source: source, urgent: size == .preview || mode == .grid,
