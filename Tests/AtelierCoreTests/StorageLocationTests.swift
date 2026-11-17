@@ -29,7 +29,9 @@ final class StorageLocationTests: XCTestCase {
                 INSERT INTO asset (folderId, filename, fileSize, contentHash, importedAt)
                 VALUES (?, ?, 100, ?, ?)
                 """, arguments: [folderId, filename, UUID().uuidString, Date()])
-            return db.lastInsertedRowID
+            let assetId = db.lastInsertedRowID
+            try AssetMetadata(assetId: assetId).insert(db)
+            return assetId
         }
     }
 
@@ -131,7 +133,7 @@ final class StorageLocationTests: XCTestCase {
         try Data("not a photo but a file".utf8).write(to: dir.appendingPathComponent("a.jpg"))
         let catalog = try Catalog()
         _ = await Importer(catalog: catalog, previews: nil).run(sources: [dir], options: ImportOptions(buildPreviews: false))
-        let volumes = try catalog.writer.read { db in try Volume.fetchCount(db) }
+        let volumes = try await catalog.writer.read { db in try Volume.fetchCount(db) }
         let locations = try catalog.storageLocations()
         XCTAssertEqual(locations.count, volumes)
         XCTAssertEqual(locations.first?.location.rootPath, "")

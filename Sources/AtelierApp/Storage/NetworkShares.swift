@@ -28,6 +28,7 @@ enum NetworkShares {
     /// share). `allowUI` false connects silently with the Keychain's password, for "Connect when
     /// Atelier opens". Runs off the main thread; the completion comes back on the main thread with
     /// the mounted volume roots.
+    @MainActor
     static func connect(_ address: String, allowUI: Bool,
                         completion: @escaping @MainActor @Sendable (Result<[URL], ConnectError>) -> Void) {
         guard let normalized = ServerAddress.normalized(address), let url = URL(string: normalized) else {

@@ -1,4 +1,5 @@
 import AppKit
+import AtelierActions
 import AtelierCore
 import SwiftUI
 

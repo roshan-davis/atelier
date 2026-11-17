@@ -1192,7 +1192,7 @@ enum LayoutSnapshots {
         do {
             try catalog.addStorageLocation(folder: share.rootURL, on: share, name: "megham", connectAtLaunch: true)
             try catalog.addStorageLocation(folder: drive.rootURL.appendingPathComponent("Portfolio"), on: drive)
-            try catalog.writer.write { db in
+            try await catalog.writer.write { db in
                 try db.execute(sql: "UPDATE volume SET isOnline = 0 WHERE identityKey = 'uuid:SNAPSHOT-SSD'")
                 var pending = StorageLocation(name: "Studio Mac", kind: .networkShare, volumeId: nil,
                                               serverAddress: "smb://studio.local/Archive")

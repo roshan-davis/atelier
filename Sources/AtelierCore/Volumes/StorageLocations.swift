@@ -201,30 +201,40 @@ extension Catalog {
     }
 
     /// For observations (the sidebar and Settings > Storage update when a share mounts).
+    /// Photo counts come from one pass over the catalog, grouped by folder, then summed per
+    /// location, so the cost doesn't grow with the number of locations.
     public static func fetchStorageLocations(_ db: Database) throws -> [StorageLocationInfo] {
-        do {
-            let volumes = Dictionary(uniqueKeysWithValues: try Volume.fetchAll(db).compactMap { v in v.id.map { ($0, v) } })
-            return try StorageLocation.order(Column("createdAt"), Column("id")).fetchAll(db).map { location in
-                let volume = location.volumeId.flatMap { volumes[$0] }
-                return StorageLocationInfo(location: location, volume: volume,
-                                           photoCount: try Self.photoCount(in: location, db))
+        let volumes = Dictionary(uniqueKeysWithValues: try Volume.fetchAll(db).compactMap { v in v.id.map { ($0, v) } })
+        let locations = try StorageLocation.order(Column("createdAt"), Column("id")).fetchAll(db)
+        var folderCounts: [Int64: [(path: String, count: Int)]] = [:]
+        if locations.contains(where: { $0.volumeId != nil }) {
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT folder.volumeId AS volumeId, folder.relativePath AS path, COUNT(*) AS n
+                FROM asset JOIN folder ON folder.id = asset.folderId
+                WHERE asset.virtualCopyOf IS NULL
+                GROUP BY asset.folderId
+                """)
+            for row in rows {
+                folderCounts[row["volumeId"], default: []].append((row["path"], row["n"]))
             }
+        }
+        return locations.map { location in
+            let volume = location.volumeId.flatMap { volumes[$0] }
+            return StorageLocationInfo(location: location, volume: volume,
+                                       photoCount: photoCount(in: location, folders: folderCounts))
         }
     }
 
-    static func photoCount(in location: StorageLocation, _ db: Database) throws -> Int {
-        guard let volumeId = location.volumeId else { return 0 }
-        if location.rootPath.isEmpty {
-            return try Int.fetchOne(db, sql: """
-                SELECT COUNT(*) FROM asset JOIN folder ON folder.id = asset.folderId
-                WHERE folder.volumeId = ? AND asset.virtualCopyOf IS NULL
-                """, arguments: [volumeId]) ?? 0
+    /// Photos in the location's folder and the folders inside it (never a sibling such as
+    /// "PortfolioOld" for "Portfolio").
+    static func photoCount(in location: StorageLocation, folders: [Int64: [(path: String, count: Int)]]) -> Int {
+        guard let volumeId = location.volumeId, let onVolume = folders[volumeId] else { return 0 }
+        let root = location.rootPath
+        if root.isEmpty { return onVolume.reduce(0) { $0 + $1.count } }
+        let prefix = root + "/"
+        return onVolume.reduce(0) { total, folder in
+            folder.path == root || folder.path.hasPrefix(prefix) ? total + folder.count : total
         }
-        return try Int.fetchOne(db, sql: """
-            SELECT COUNT(*) FROM asset JOIN folder ON folder.id = asset.folderId
-            WHERE folder.volumeId = ? AND asset.virtualCopyOf IS NULL
-              AND (folder.relativePath = ? OR substr(folder.relativePath, 1, ?) = ?)
-            """, arguments: [volumeId, location.rootPath, location.rootPath.count + 1, location.rootPath + "/"]) ?? 0
     }
 
     /// Adds the folder `folder` (a volume root or any folder on it) as a location. The volume's

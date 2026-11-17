@@ -636,6 +636,29 @@
     },
     {
       "exposed": true,
+      "id": "library.connectLocation",
+      "kind": "writesFiles",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {
+          "location": {
+            "description": "A storage location's id (Settings > Storage).",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "location"
+        ],
+        "type": "object"
+      },
+      "place": "Sidebar > Locations > right-click > Connect, Settings > Storage",
+      "summary": "Connects a network share added in Settings > Storage. macOS asks for the password only if the Keychain has none.",
+      "tier": "asksFirst",
+      "title": "Connect",
+      "version": 1
+    },
+    {
+      "exposed": true,
       "id": "library.cullImport",
       "kind": "view",
       "parameters": {
@@ -665,6 +688,29 @@
       "summary": "Opens the focused photo in Develop.",
       "tier": "runs",
       "title": "Develop",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "library.disconnectLocation",
+      "kind": "writesFiles",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {
+          "location": {
+            "description": "A storage location's id (Settings > Storage).",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "location"
+        ],
+        "type": "object"
+      },
+      "place": "Sidebar > Locations > right-click > Disconnect, Settings > Storage",
+      "summary": "Disconnects a network share. Its photos stay in the catalog, offline, browsable from previews.",
+      "tier": "asksFirst",
+      "title": "Disconnect",
       "version": 1
     },
     {
@@ -716,6 +762,29 @@
       "summary": "Checks which drives are connected and retries photos that couldn't be read.",
       "tier": "runs",
       "title": "Refresh Volumes",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "library.showLocationInFinder",
+      "kind": "opensApp",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {
+          "location": {
+            "description": "A storage location's id (Settings > Storage).",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "location"
+        ],
+        "type": "object"
+      },
+      "place": "Sidebar > Locations > right-click > Show in Finder, Settings > Storage",
+      "summary": "Shows a connected storage location's folder in Finder.",
+      "tier": "asksFirst",
+      "title": "Show in Finder",
       "version": 1
     },
     {
