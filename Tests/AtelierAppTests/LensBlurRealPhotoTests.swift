@@ -215,11 +215,12 @@ final class LensBlurRealPhotoTests: XCTestCase {
     /// end and after letting go of each part. Rosh, Nov 16, 2026: 16 GB after Lens Blur work.
     /// Prints `LENSBLUR-MEM:` lines; fails only if the session can't run.
     func testMemoryAcrossALensBlurSession() async throws {
+        let sessionStarted = Date()
         func log(_ step: String) {
             let mb = (RenderMemory.footprint() ?? 0) / 1_048_576
             let status = RenderMemory.shared.status
             let peak = (RenderMemory.peakFootprint() ?? 0) / 1_048_576
-            print("LENSBLUR-MEM: \(step): \(mb) MB, peak so far \(peak) MB (cache clears \(status.clears), Fine Edges runs \(FineEdges.runs), "
+            print("LENSBLUR-MEM: [\(Int(Date().timeIntervalSince(sessionStarted))) s] \(step): \(mb) MB, peak so far \(peak) MB (cache clears \(status.clears), Fine Edges runs \(FineEdges.runs), "
                 + "depth runs \(DepthMap.runs))")
         }
         log("photo open, proxy")
