@@ -334,7 +334,7 @@ final class MatchLookModel: ObservableObject, Identifiable {
 
     /// A catalog photo with its current edits.
     func useCatalogPhoto(_ id: Int64) {
-        guard let library, let url = try? library.catalog.fileURL(for: id) else {
+        guard let library, let url = try? library.catalog.readableURL(for: id, cache: library.originals) else {
             failReference("That photo's original is offline.")
             return
         }
@@ -610,7 +610,7 @@ extension LibraryModel {
             return
         }
         develop.flushSave()
-        guard let url = try? catalog.fileURL(for: assetID) else {
+        guard let url = try? catalog.readableURL(for: assetID, cache: originals) else {
             status = "The original is offline. Connect its drive to match this photo."
             return
         }
@@ -645,7 +645,7 @@ extension LibraryModel {
                     guard let self else { return nil }
                     self.matchProgress = ImportStatus(phase: "Matching \(index + 1) of \(total)",
                                                       fraction: Double(index) / Double(total))
-                    guard let url = try? self.catalog.fileURL(for: id),
+                    guard let url = try? self.catalog.readableURL(for: id, cache: self.originals),
                           let settings = try? self.catalog.developSettings(for: id) else { return nil }
                     return (url, settings)
                 }

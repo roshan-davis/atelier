@@ -98,6 +98,9 @@ struct StorageSettings: View {
             if let selected {
                 StorageLocationDetail(info: selected) { removing = selected }
             }
+            if let originals = model.originals {
+                OriginalCacheSection(cache: originals)
+            }
         }
         .formStyle(.grouped)
         .sheet(isPresented: $adding) {
@@ -278,6 +281,78 @@ private struct StorageLocationDetail: View {
         change(&location)
         do { try model.catalog.updateStorageLocation(location) } catch {
             model.status = "Couldn't save the location: \(error.localizedDescription)"
+        }
+    }
+}
+
+/// Settings > Storage > Cache (AT-079c): the copies of originals on network shares kept on this Mac.
+private struct OriginalCacheSection: View {
+    @EnvironmentObject private var model: LibraryModel
+    let cache: OriginalCache
+    @State private var limit: Int64 = OriginalCache.defaultLimit
+    @State private var usage: OriginalCache.Usage?
+    @State private var clearing = false
+
+    private static let sizes: [Int64] = [5, 10, 20, 50, 100, 200].map { $0 * 1_000_000_000 }
+
+    var body: some View {
+        SettingsSection("Cache of Originals", id: "storage.cache") {
+            Picker("Cache size", selection: $limit) {
+                ForEach(Self.sizes, id: \.self) { size in
+                    Text(ByteCountFormatter.string(fromByteCount: size, countStyle: .file)).tag(size)
+                }
+            }
+            .onChange(of: limit) { _, size in
+                UserDefaults.standard.set(size, forKey: LibraryModel.originalCacheLimitKey)
+                Task.detached { cache.limitBytes = size }
+                Task { await loadUsage() }
+            }
+            LabeledContent("In use") {
+                Text(usageLine).foregroundStyle(.secondary).monospacedDigit()
+            }
+            HStack {
+                Spacer()
+                Button("Clear Cache…") { clearing = true }
+                    .disabled((usage?.cachedCount ?? 0) == 0)
+            }
+        } footer: {
+            Text("Photos on a network share are read once into this Mac's Caches folder and opened from there, so editing never waits on the network. The oldest-opened copies go first; the cache never takes more than a quarter of the free space.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .confirmationDialog("Clear the cache of originals?", isPresented: $clearing) {
+            Button("Clear Cache", role: .destructive) { clear() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The originals stay where they are; Atelier reads them again when you open them.")
+        }
+        .task {
+            limit = cache.limitBytes
+            await loadUsage()
+        }
+    }
+
+    private var usageLine: String {
+        guard let usage else { return "…" }
+        if usage.cachedCount == 0 && usage.keptCount == 0 { return "Empty" }
+        var line = ByteCountFormatter.string(fromByteCount: usage.cachedBytes, countStyle: .file)
+            + (usage.cachedCount == 1 ? " · 1 photo" : " · \(usage.cachedCount.formatted()) photos")
+        if usage.keptCount > 0 {
+            line += ", plus " + ByteCountFormatter.string(fromByteCount: usage.keptBytes, countStyle: .file) + " kept"
+        }
+        return line
+    }
+
+    private func loadUsage() async {
+        usage = await Task.detached(priority: .utility) { try? cache.usage() }.value
+    }
+
+    private func clear() {
+        let open = model.mode == .develop ? model.develop.assetID : nil
+        Task {
+            let cleared = await Task.detached(priority: .userInitiated) { (try? cache.clear(sparing: open)) != nil }.value
+            if cleared { DeleteFeedback.play(.remove) }
+            await loadUsage()
         }
     }
 }

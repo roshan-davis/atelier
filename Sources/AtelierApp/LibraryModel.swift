@@ -181,6 +181,12 @@ final class LibraryModel: ObservableObject {
     /// An original being downloaded from a cloud drive folder (AT-079b), and that download.
     @Published var downloadProgress: ImportStatus?
     var cloudDownload: (assetID: Int64, download: CloudDownload)?
+    /// The cache of remote originals (AT-079c), the open photo's read into it, the neighbours'
+    /// reads behind it, and whether the open photo is reading (the neighbours' reads pause).
+    let originals: OriginalCache? = LibraryModel.makeOriginalCache()
+    var originalTransfer: Task<OriginalCache.StoreResult, Error>?
+    var prefetchTask: Task<Void, Never>?
+    let foregroundReading = LockedValue(false)
     /// The Match Look dialog, while open, and Match each photo's progress in the status bar.
     @Published var matchLook: MatchLookModel?
     @Published var matchProgress: ImportStatus?
@@ -277,9 +283,10 @@ final class LibraryModel: ObservableObject {
         installInputMonitor()
         observeMounts()
         connectLocationsAtLaunch()
-        develop.downloadOriginal = { [weak self] id, url in
-            await self?.downloadOriginal(id, at: url) ?? .cancelled
-        }
+        develop.originals = originals
+        develop.needsPreparing = { [weak self] id, url in self?.originalNeedsPreparing(id, url: url) ?? false }
+        develop.prepareOriginal = { [weak self] id in await self?.prepareOriginal(id) ?? .cancelled }
+        develop.prefetchOriginals = { [weak self] ids in self?.prefetchOriginals(ids) }
         // Settings > Import > "Show RAW+JPEG pairs as one photo" (only that setting, not every
         // defaults write).
         observers.observe(FilePairs.groupingChanged) { [weak self] _ in
@@ -911,7 +918,7 @@ final class LibraryModel: ObservableObject {
 
     func runExport(settings: ExportSettings, revealWhenDone: Bool) {
         let ids = exportIDs
-        let exporter = Exporter(catalog: catalog)
+        let exporter = Exporter(catalog: catalog, originals: originals)
         exportProgress = ImportStatus(phase: "Exporting…", fraction: 0)
         exportTask = Task.detached {
             let result = await exporter.run(assetIDs: ids, settings: settings) { progress in
@@ -952,7 +959,7 @@ final class LibraryModel: ObservableObject {
     /// 2560 px preview is marked urgent so it jumps the queue.
     func thumbnailURL(for id: Int64, size: PreviewCache.Size = .thumbnail) -> URL? {
         if previews.has(size, for: id) { return previews.url(for: id, size: size) }
-        if let source = try? catalog.fileURL(for: id) {
+        if let source = try? catalog.readableURL(for: id, cache: originals) {
             // Edited photos are rebuilt with their settings, for example after the cache is cleared.
             let settings = try? catalog.developSettings(for: id)
             previewScheduler.request(size, for: id, source: source, urgent: size == .preview || mode == .grid,

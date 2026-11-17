@@ -129,10 +129,14 @@ public final class Exporter: Sendable {
     /// two at once overlap them. On 12 Z f RAWs (AT-076 P3, `ExportTimingTests`): full-size
     /// JPEG 3.49 → 2.19 s, peak 2.6 → 3.4 GB (TIFF 4 GB), back to 0.25 GB within 3 s; a third adds 7%.
     let photosInFlight: Int
+    /// Copies of remote originals on this Mac (AT-079c): a photo whose copy was checked this session
+    /// exports from it, never over the network again.
+    private let originals: OriginalCache?
 
-    public convenience init(catalog: Catalog, renderer: DevelopRenderer = .shared) {
+    public convenience init(catalog: Catalog, renderer: DevelopRenderer = .shared, originals: OriginalCache? = nil) {
         self.init(catalog: catalog, renderer: renderer,
-                  photosInFlight: Self.defaultPhotosInFlight(physicalMemory: ProcessInfo.processInfo.physicalMemory))
+                  photosInFlight: Self.defaultPhotosInFlight(physicalMemory: ProcessInfo.processInfo.physicalMemory),
+                  originals: originals)
     }
 
     /// Two photos at once, one on an 8 GB Mac: two full-size 16-bit TIFFs peak at about 4 GB.
@@ -140,7 +144,8 @@ public final class Exporter: Sendable {
         physicalMemory > 8 * 1_073_741_824 ? 2 : 1
     }
 
-    init(catalog: Catalog, renderer: DevelopRenderer, photosInFlight: Int) {
+    init(catalog: Catalog, renderer: DevelopRenderer, photosInFlight: Int, originals: OriginalCache? = nil) {
+        self.originals = originals
         self.catalog = catalog
         self.renderer = renderer
         self.photosInFlight = max(1, photosInFlight)
@@ -202,7 +207,8 @@ public final class Exporter: Sendable {
     public func export(_ assetID: Int64, settings: ExportSettings, baseName: String? = nil,
                        develop applyDevelop: Bool = true, lensBlur: Bool = false) throws -> URL {
         guard let detail = try catalog.detail(for: assetID) else { throw ExportError("The photo is no longer in the catalog.") }
-        guard let source = detail.fileURL, FileManager.default.fileExists(atPath: source.path) else {
+        guard let source = originals?.readyCopy(for: assetID) ?? detail.fileURL,
+              FileManager.default.fileExists(atPath: source.path) else {
             throw ExportError("The original is offline. Connect its drive and export again.")
         }
         let develop = applyDevelop ? try catalog.developSettings(for: assetID) : .neutral

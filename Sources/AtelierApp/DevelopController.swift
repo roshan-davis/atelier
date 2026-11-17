@@ -680,9 +680,15 @@ final class DevelopController: ObservableObject {
 
     let catalog: Catalog
     private let previews: PreviewCache
-    /// Brings an original in a cloud drive folder to this Mac before it decodes (AT-079b), with the
-    /// status bar's progress and Cancel; set by `LibraryModel`.
-    var downloadOriginal: (@MainActor (Int64, URL) async -> CloudOriginalResult)?
+    /// Makes an original on a network share or in a cloud drive folder ready on this Mac before it
+    /// decodes (AT-079b, AT-079c), with the status bar's progress and Cancel; set by `LibraryModel`.
+    var prepareOriginal: (@MainActor (Int64) async -> OriginalPrep)?
+    /// Reads the neighbours' originals on a share into the cache, behind the open photo.
+    var prefetchOriginals: (@MainActor ([Int64]) -> Void)?
+    /// Copies of remote originals on this Mac (AT-079c); readers prefer a checked copy.
+    var originals: OriginalCache?
+    /// Whether a photo's original needs that first (`url` is its original, nil while offline).
+    var needsPreparing: (@MainActor (Int64, URL?) -> Bool)?
     private var session: DevelopSession?
     private var rendering = false
     /// Proxy renders, latest-wins; see `submitRender`.
@@ -930,7 +936,7 @@ final class DevelopController: ObservableObject {
         // thread or the proxy renders.
         let cachedPreview = previews.url(for: assetID, size: .preview)
         let hasPreview = previews.has(.preview, for: assetID)
-        let url = try? catalog.fileURL(for: assetID)
+        let url = try? catalog.readableURL(for: assetID, cache: originals)
         if hasPreview, let decoded = PreviewImages.shared.cached(assetID, at: cachedPreview) {
             image = decoded
             showsStandIn = false
@@ -956,10 +962,47 @@ final class DevelopController: ObservableObject {
         }
         measurePreview(image, of: assetID)
 
+        // On a network share or still in a cloud drive folder (AT-079b, AT-079c): the original is
+        // made ready on this Mac first (its checked copy, read once into the cache, or downloaded by
+        // the provider) while the preview stays up and browsable; a local original opens at once.
+        // Reading it straight off the network would hold the decode queue for the whole transfer.
+        if let prepareOriginal, needsPreparing?(assetID, url) == true {
+            isLoading = true
+            let openGeneration = self.openGeneration
+            let now = Date()
+            let rushing = now.timeIntervalSince(lastOpen) < Self.openRest
+            lastOpen = now
+            Task { @MainActor [weak self] in
+                // Passing photos with ← → reads none of them; the one you stop on is read.
+                if rushing { try? await Task.sleep(for: .seconds(Self.openRest)) }
+                guard openGeneration.value == generation else { return }
+                let prep = await prepareOriginal(assetID)
+                guard let self, self.assetID == assetID, openGeneration.value == generation else { return }
+                switch prep {
+                case .ready(let ready):
+                    self.decodeOpened(assetID, url: ready, generation: generation, afterPreparing: true)
+                case .offline:
+                    self.isLoading = false
+                    self.errorMessage = "The original is offline. Connect its drive to edit this photo."
+                case .cancelled:
+                    self.isLoading = false
+                    self.errorMessage = "The original isn't on this Mac yet. Open the photo again to get it."
+                case .failed(let message):
+                    self.isLoading = false
+                    self.errorMessage = message
+                }
+            }
+            return
+        }
         guard let url else {
             errorMessage = "The original is offline. Connect its drive to edit this photo."
             return
         }
+        decodeOpened(assetID, url: url, generation: generation, afterPreparing: false)
+    }
+
+    /// Decodes the open photo's proxy from `url`, its original or the copy on this Mac.
+    private func decodeOpened(_ assetID: Int64, url: URL, generation: Int, afterPreparing: Bool) {
         sourceURL = url
         isLoading = true
         Task.detached(priority: .userInitiated) {
@@ -971,7 +1014,7 @@ final class DevelopController: ObservableObject {
         // While ← → are pressed in quick succession the cached preview shows and nothing is
         // decoded; the photo you stop on starts decoding once you rest. A single move starts at once.
         let now = Date()
-        let rushing = now.timeIntervalSince(lastOpen) < Self.openRest
+        let rushing = !afterPreparing && now.timeIntervalSince(lastOpen) < Self.openRest
         lastOpen = now
         openedAt = DevelopTimingLog.now()
         histogramLogged = false
@@ -1013,33 +1056,10 @@ final class DevelopController: ObservableObject {
                 }
             }
         }
-        // In a cloud drive folder and not downloaded yet (AT-079b): the preview stays up and stays
-        // browsable while the provider downloads it, then the proxy decodes as usual. Reading the
-        // placeholder directly would hold the decode queue for the whole download.
-        var begin = start
-        if let downloadOriginal, CloudFiles.needsDownload(url) {
-            begin = { [weak self] in
-                guard openGeneration.value == generation else { return }
-                Task { @MainActor in
-                    let result = await downloadOriginal(assetID, url)
-                    guard let self, self.assetID == assetID, openGeneration.value == generation else { return }
-                    switch result {
-                    case .ready:
-                        start()
-                    case .cancelled:
-                        self.isLoading = false
-                        self.errorMessage = "The original is still in the cloud. Open the photo again to download it."
-                    case .failed(let message):
-                        self.isLoading = false
-                        self.errorMessage = message
-                    }
-                }
-            }
-        }
         if rushing {
-            DispatchQueue.main.asyncAfter(deadline: .now() + Self.openRest, execute: begin)
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.openRest, execute: start)
         } else {
-            begin()
+            start()
         }
     }
 
@@ -2494,15 +2514,18 @@ final class DevelopController: ObservableObject {
     /// the session), one at a time at utility priority, never for a photo you've already left.
     private func prefetchNeighbours() {
         guard let current = assetID else { return }
+        prefetchOriginals?(neighbours)
         let wanted = Set(neighbours)
         prefetched = prefetched.filter { wanted.contains($0.key) }
         let openAsset = self.openAsset
         let decodesRunning = self.decodesRunning
         let lastRenderRequest = self.lastRenderRequest
         for id in neighbours where prefetched[id] == nil && !prefetching.contains(id) {
-            // Not a placeholder in a cloud drive folder (AT-079b): reading it would download it
-            // unasked and hold a decode slot for the whole transfer.
-            guard let url = try? catalog.fileURL(for: id), !CloudFiles.needsDownload(url) else { continue }
+            // Only from this Mac: a placeholder in a cloud drive folder (AT-079b) or an original on a
+            // share not cached yet (AT-079c) would hold a decode slot for the whole transfer. Shares'
+            // neighbours are read into the cache instead (`prefetchOriginals`, below).
+            guard let url = try? catalog.readableURL(for: id, cache: originals),
+                  needsPreparing?(id, url) != true else { continue }
             let settings = (try? catalog.developSettings(for: id)) ?? .neutral
             let sourceVersion = sourceVersions[id, default: 0]
             prefetching.insert(id)
@@ -2975,7 +2998,7 @@ final class DevelopController: ObservableObject {
     /// came: an agent's edit of hundreds of photos, or several quick ones, mustn't start a decode
     /// per photo per edit all at once (AT-050d; each was its own block on a global queue before).
     func refreshPreviews(for assetID: Int64, settings: DevelopSettings) {
-        guard let url = try? catalog.fileURL(for: assetID) else { return }
+        guard let url = try? catalog.readableURL(for: assetID, cache: originals) else { return }
         let previews = self.previews
         let revisions = previewRevisions
         let revision = nextPreviewRevision(for: assetID)

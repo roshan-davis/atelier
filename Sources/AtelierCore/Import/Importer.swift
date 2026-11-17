@@ -548,7 +548,8 @@ public final class Importer: Sendable {
 
     /// Copies `source` into the open file `destination` (and closes it), hashing what it reads,
     /// then gives the copy the source's dates, permissions and extended attributes.
-    static func copyHashing(_ source: URL, to destination: Int32) throws -> String {
+    static func copyHashing(_ source: URL, to destination: Int32,
+                            progress: ((Int64) -> Void)? = nil, shouldPause: (() -> Bool)? = nil) throws -> String {
         defer { close(destination) }
         let input = open(source.path, O_RDONLY)
         guard input >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
@@ -558,8 +559,14 @@ public final class Importer: Sendable {
         let buffer = UnsafeMutableRawPointer.allocate(byteCount: size, alignment: 16)
         defer { buffer.deallocate() }
         var hasher = SHA256()
+        var copied: Int64 = 0
         while true {
             try Task.checkCancellation()
+            // A background copy steps aside while the photo being opened reads (AT-079c).
+            while shouldPause?() == true {
+                try Task.checkCancellation()
+                usleep(50_000)
+            }
             let count = read(input, buffer, size)
             if count < 0 {
                 if errno == EINTR { continue }
@@ -576,6 +583,8 @@ public final class Importer: Sendable {
                 }
                 written += result
             }
+            copied += Int64(count)
+            progress?(copied)
         }
         // After the data, so the modification date stays the original's.
         _ = fcopyfile(input, destination, nil, copyfile_flags_t(COPYFILE_STAT | COPYFILE_METADATA))

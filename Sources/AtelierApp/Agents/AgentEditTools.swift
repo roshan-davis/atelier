@@ -305,7 +305,7 @@ extension AgentServer {
         let settings = try model.develop.currentSettings(for: ids)
         var offline: [Int64] = []
         let photos = ids.compactMap { id -> MeasuredPhoto? in
-            guard let url = try? model.catalog.fileURL(for: id), let current = settings[id] else {
+            guard let url = try? model.catalog.readableURL(for: id, cache: model.originals), let current = settings[id] else {
                 offline.append(id)
                 return nil
             }
@@ -454,7 +454,7 @@ extension AgentServer {
             }
         } else {
             let id = try resolve(MeasuredTargets(ids: [p.reference ?? 0], catalog: p.catalog), model)[0]
-            guard let url = try model.catalog.fileURL(for: id) else {
+            guard let url = try model.catalog.readableURL(for: id, cache: model.originals) else {
                 throw ArgumentProblem("The reference photo \(id)'s original is offline. Nothing was changed.")
             }
             let settings = try model.develop.currentSettings(for: [id])[id] ?? .neutral

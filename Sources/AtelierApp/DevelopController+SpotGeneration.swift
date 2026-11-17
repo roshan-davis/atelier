@@ -21,7 +21,7 @@ extension DevelopController {
     /// current fill until the new one is in.
     func generateFill(for id: UUID) {
         guard let assetID, let spot = settings.spots.first(where: { $0.id == id }), spot.generative,
-              let url = try? catalog.fileURL(for: assetID) else { return }
+              let url = try? catalog.readableURL(for: assetID, cache: originals) else { return }
         guard FileManager.default.fileExists(atPath: url.path) else {
             spotGenerationError = "The original is offline. Connect its drive and try again."
             return
