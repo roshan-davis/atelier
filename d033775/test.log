@@ -1,0 +1,97 @@
+[0/1] Planning build
+Test Suite 'Selected tests' started at 2026-11-17 12:18:06.840.
+Test Suite 'AtelierPackageTests.xctest' started at 2026-11-17 12:18:06.841.
+Test Suite 'SmartPreviewSpikeTests' started at 2026-11-17 12:18:06.841.
+Test Case '-[AtelierCoreTests.SmartPreviewSpikeTests testSmartPreviewsAgainstTheRAW]' started.
+Test Case '-[AtelierCoreTests.SmartPreviewSpikeTests testSmartPreviewsAgainstTheRAW]' passed (124.489 seconds).
+Test Case '-[AtelierCoreTests.SmartPreviewSpikeTests testWhiteFollowsTemperature]' started.
+/Users/rosh/RoshProjects/Atelier/worktrees/spike-sp/Tests/AtelierCoreTests/SmartPreviewSpikeTests.swift:14: error: -[AtelierCoreTests.SmartPreviewSpikeTests testWhiteFollowsTemperature] : XCTAssertEqualWithAccuracy failed: ("0.9585044306664351") is not equal to ("1.0") +/- ("0.03")
+Test Case '-[AtelierCoreTests.SmartPreviewSpikeTests testWhiteFollowsTemperature]' failed (0.361 seconds).
+Test Case '-[AtelierCoreTests.SmartPreviewSpikeTests testWrittenDNGOpens]' started.
+Test Case '-[AtelierCoreTests.SmartPreviewSpikeTests testWrittenDNGOpens]' passed (0.026 seconds).
+Test Suite 'SmartPreviewSpikeTests' failed at 2026-11-17 12:20:11.717.
+	 Executed 3 tests, with 1 failure (0 unexpected) in 124.875 (124.876) seconds
+Test Suite 'AtelierPackageTests.xctest' failed at 2026-11-17 12:20:11.717.
+	 Executed 3 tests, with 1 failure (0 unexpected) in 124.875 (124.876) seconds
+Test Suite 'Selected tests' failed at 2026-11-17 12:20:11.717.
+	 Executed 3 tests, with 1 failure (0 unexpected) in 124.875 (124.877) seconds
+SMARTPREVIEW DSC_0348 lossless as shot: 26881 KB, made 549 ms, RAW render 76 ms, preview render 72 ms, mean |diff| RGB 29.9/18.7/52.7
+SMARTPREVIEW DSC_0348 lossless 4000K: 26881 KB, made 549 ms, RAW render 74 ms, preview render 26 ms, mean |diff| RGB 39.8/23.6/62.8
+SMARTPREVIEW DSC_0348 lossless 7500K: 26881 KB, made 549 ms, RAW render 74 ms, preview render 26 ms, mean |diff| RGB 22.3/17.4/42.9
+SMARTPREVIEW DSC_0348 lossless tint+30: 26881 KB, made 549 ms, RAW render 76 ms, preview render 27 ms, mean |diff| RGB 27.7/19.5/54.9
+SMARTPREVIEW DSC_0348 lossless +1 EV: 26881 KB, made 549 ms, RAW render 79 ms, preview render 28 ms, mean |diff| RGB 23.1/17.8/45.7
+SMARTPREVIEW DSC_0348 lossless -1 EV: 26881 KB, made 549 ms, RAW render 76 ms, preview render 26 ms, mean |diff| RGB 30.9/17.3/49.3
+SMARTPREVIEW DSC_0348 lossy90 as shot: 1168 KB, made 151 ms, RAW render 72 ms, preview render 35 ms, mean |diff| RGB 33.0/16.0/59.9
+SMARTPREVIEW DSC_0348 lossy90 4000K: 1168 KB, made 151 ms, RAW render 79 ms, preview render 36 ms, mean |diff| RGB 44.7/25.1/70.0
+SMARTPREVIEW DSC_0348 lossy90 7500K: 1168 KB, made 151 ms, RAW render 77 ms, preview render 34 ms, mean |diff| RGB 22.9/13.5/48.6
+SMARTPREVIEW DSC_0348 lossy90 tint+30: 1168 KB, made 151 ms, RAW render 80 ms, preview render 34 ms, mean |diff| RGB 31.8/17.4/62.2
+SMARTPREVIEW DSC_0348 lossy90 +1 EV: 1168 KB, made 151 ms, RAW render 71 ms, preview render 34 ms, mean |diff| RGB 27.9/13.4/53.3
+SMARTPREVIEW DSC_0348 lossy90 -1 EV: 1168 KB, made 151 ms, RAW render 75 ms, preview render 34 ms, mean |diff| RGB 32.6/15.4/54.5
+SMARTPREVIEW DSC_0348 lossy75 as shot: 817 KB, made 149 ms, RAW render 72 ms, preview render 36 ms, mean |diff| RGB 33.1/16.0/59.9
+SMARTPREVIEW DSC_0348 lossy75 4000K: 817 KB, made 149 ms, RAW render 79 ms, preview render 32 ms, mean |diff| RGB 44.8/25.1/70.0
+SMARTPREVIEW DSC_0348 lossy75 7500K: 817 KB, made 149 ms, RAW render 83 ms, preview render 32 ms, mean |diff| RGB 23.0/13.5/48.6
+SMARTPREVIEW DSC_0348 lossy75 tint+30: 817 KB, made 149 ms, RAW render 78 ms, preview render 33 ms, mean |diff| RGB 31.8/17.4/62.3
+SMARTPREVIEW DSC_0348 lossy75 +1 EV: 817 KB, made 149 ms, RAW render 92 ms, preview render 37 ms, mean |diff| RGB 28.0/13.4/53.3
+SMARTPREVIEW DSC_0348 lossy75 -1 EV: 817 KB, made 149 ms, RAW render 75 ms, preview render 34 ms, mean |diff| RGB 32.7/15.4/54.5
+SMARTPREVIEW DSC_0358 lossless as shot: 26881 KB, made 394 ms, RAW render 75 ms, preview render 27 ms, mean |diff| RGB 40.2/20.4/51.1
+SMARTPREVIEW DSC_0358 lossless 4000K: 26881 KB, made 394 ms, RAW render 79 ms, preview render 31 ms, mean |diff| RGB 59.0/35.0/64.4
+SMARTPREVIEW DSC_0358 lossless 7500K: 26881 KB, made 394 ms, RAW render 77 ms, preview render 27 ms, mean |diff| RGB 32.3/16.5/43.1
+SMARTPREVIEW DSC_0358 lossless tint+30: 26881 KB, made 394 ms, RAW render 96 ms, preview render 31 ms, mean |diff| RGB 39.6/22.8/53.0
+SMARTPREVIEW DSC_0358 lossless +1 EV: 26881 KB, made 394 ms, RAW render 77 ms, preview render 28 ms, mean |diff| RGB 34.4/17.1/45.1
+SMARTPREVIEW DSC_0358 lossless -1 EV: 26881 KB, made 394 ms, RAW render 82 ms, preview render 28 ms, mean |diff| RGB 37.2/19.4/44.6
+SMARTPREVIEW DSC_0358 lossy90 as shot: 928 KB, made 146 ms, RAW render 72 ms, preview render 35 ms, mean |diff| RGB 42.8/22.2/56.1
+SMARTPREVIEW DSC_0358 lossy90 4000K: 928 KB, made 146 ms, RAW render 92 ms, preview render 38 ms, mean |diff| RGB 61.5/38.2/69.1
+SMARTPREVIEW DSC_0358 lossy90 7500K: 928 KB, made 146 ms, RAW render 77 ms, preview render 35 ms, mean |diff| RGB 35.0/17.1/47.8
+SMARTPREVIEW DSC_0358 lossy90 tint+30: 928 KB, made 146 ms, RAW render 78 ms, preview render 35 ms, mean |diff| RGB 42.3/24.9/58.1
+SMARTPREVIEW DSC_0358 lossy90 +1 EV: 928 KB, made 146 ms, RAW render 82 ms, preview render 35 ms, mean |diff| RGB 37.8/19.1/50.2
+SMARTPREVIEW DSC_0358 lossy90 -1 EV: 928 KB, made 146 ms, RAW render 80 ms, preview render 36 ms, mean |diff| RGB 38.8/20.5/48.6
+SMARTPREVIEW DSC_0358 lossy75 as shot: 654 KB, made 142 ms, RAW render 66 ms, preview render 36 ms, mean |diff| RGB 42.9/22.1/56.2
+SMARTPREVIEW DSC_0358 lossy75 4000K: 654 KB, made 142 ms, RAW render 80 ms, preview render 37 ms, mean |diff| RGB 61.6/38.1/69.1
+SMARTPREVIEW DSC_0358 lossy75 7500K: 654 KB, made 142 ms, RAW render 79 ms, preview render 34 ms, mean |diff| RGB 35.1/17.1/47.8
+SMARTPREVIEW DSC_0358 lossy75 tint+30: 654 KB, made 142 ms, RAW render 81 ms, preview render 35 ms, mean |diff| RGB 42.4/24.9/58.1
+SMARTPREVIEW DSC_0358 lossy75 +1 EV: 654 KB, made 142 ms, RAW render 76 ms, preview render 35 ms, mean |diff| RGB 37.8/19.0/50.2
+SMARTPREVIEW DSC_0358 lossy75 -1 EV: 654 KB, made 142 ms, RAW render 92 ms, preview render 40 ms, mean |diff| RGB 38.9/20.5/48.6
+SMARTPREVIEW Z62_0193 lossless as shot: 26881 KB, made 452 ms, RAW render 110 ms, preview render 29 ms, mean |diff| RGB 40.5/41.8/39.8
+SMARTPREVIEW Z62_0193 lossless 4000K: 26881 KB, made 452 ms, RAW render 104 ms, preview render 29 ms, mean |diff| RGB 70.2/57.6/45.8
+SMARTPREVIEW Z62_0193 lossless 7500K: 26881 KB, made 452 ms, RAW render 104 ms, preview render 30 ms, mean |diff| RGB 43.6/45.7/45.0
+SMARTPREVIEW Z62_0193 lossless tint+30: 26881 KB, made 452 ms, RAW render 102 ms, preview render 29 ms, mean |diff| RGB 38.7/42.2/38.3
+SMARTPREVIEW Z62_0193 lossless +1 EV: 26881 KB, made 452 ms, RAW render 121 ms, preview render 30 ms, mean |diff| RGB 32.2/31.1/28.8
+SMARTPREVIEW Z62_0193 lossless -1 EV: 26881 KB, made 452 ms, RAW render 112 ms, preview render 30 ms, mean |diff| RGB 39.7/43.1/42.4
+SMARTPREVIEW Z62_0193 lossy90 as shot: 525 KB, made 177 ms, RAW render 103 ms, preview render 37 ms, mean |diff| RGB 40.3/41.4/39.5
+SMARTPREVIEW Z62_0193 lossy90 4000K: 525 KB, made 177 ms, RAW render 109 ms, preview render 36 ms, mean |diff| RGB 71.2/59.1/48.2
+SMARTPREVIEW Z62_0193 lossy90 7500K: 525 KB, made 177 ms, RAW render 112 ms, preview render 35 ms, mean |diff| RGB 44.0/45.8/45.1
+SMARTPREVIEW Z62_0193 lossy90 tint+30: 525 KB, made 177 ms, RAW render 109 ms, preview render 36 ms, mean |diff| RGB 38.4/41.6/38.2
+SMARTPREVIEW Z62_0193 lossy90 +1 EV: 525 KB, made 177 ms, RAW render 109 ms, preview render 33 ms, mean |diff| RGB 31.7/30.7/28.4
+SMARTPREVIEW Z62_0193 lossy90 -1 EV: 525 KB, made 177 ms, RAW render 114 ms, preview render 35 ms, mean |diff| RGB 39.5/42.5/42.0
+SMARTPREVIEW Z62_0193 lossy75 as shot: 382 KB, made 178 ms, RAW render 100 ms, preview render 35 ms, mean |diff| RGB 40.4/41.4/39.6
+SMARTPREVIEW Z62_0193 lossy75 4000K: 382 KB, made 178 ms, RAW render 112 ms, preview render 35 ms, mean |diff| RGB 71.4/59.0/48.3
+SMARTPREVIEW Z62_0193 lossy75 7500K: 382 KB, made 178 ms, RAW render 102 ms, preview render 34 ms, mean |diff| RGB 44.1/45.8/45.1
+SMARTPREVIEW Z62_0193 lossy75 tint+30: 382 KB, made 178 ms, RAW render 105 ms, preview render 34 ms, mean |diff| RGB 38.5/41.6/38.2
+SMARTPREVIEW Z62_0193 lossy75 +1 EV: 382 KB, made 178 ms, RAW render 102 ms, preview render 35 ms, mean |diff| RGB 31.8/30.7/28.5
+SMARTPREVIEW Z62_0193 lossy75 -1 EV: 382 KB, made 178 ms, RAW render 109 ms, preview render 36 ms, mean |diff| RGB 39.6/42.5/42.1
+SMARTPREVIEW synthetic lossless: 786944 bytes, type com.adobe.raw-image, 300x200
+SMARTPREVIEW synthetic lossless: CIRAWFilter ok, output (0.0, 0.0, 300.0, 200.0)
+SMARTPREVIEW synthetic lossy: 10536 bytes, type public.tiff, ?x?
+SMARTPREVIEW synthetic lossy: CIRAWFilter ok, output (inf, inf, 0.0, 0.0)
+◇ Test run started.
+↳ Testing Library Version: 1501
+↳ Target Platform: arm64e-apple-macos14.0
+✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.
+      127.24 real       125.31 user         7.41 sys
+          5275860992  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+             1044259  page reclaims
+                2211  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                 391  voluntary context switches
+              256638  involuntary context switches
+          4508233493  instructions retired
+          1066222732  cycles elapsed
+            28934864  peak memory footprint
