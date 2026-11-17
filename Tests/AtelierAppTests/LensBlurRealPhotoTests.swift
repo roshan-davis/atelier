@@ -253,7 +253,7 @@ final class LensBlurRealPhotoTests: XCTestCase {
         }
         try await idle()
         log("6 Blur areas drawn")
-        for value in stride(from: 100.0, through: 40.0, by: -6) {
+        for value in stride(from: 94.0, through: 34.0, by: -6) { // Amount is 100 after the first loop
             previous = controller.fullImage
             controller.set(.lensBlurAmount, to: value)
             try await fullFrame("memory: Amount \(Int(value)) with the areas", timeout: 120, after: previous)
