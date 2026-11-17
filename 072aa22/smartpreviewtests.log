@@ -1,0 +1,62 @@
+[0/1] Planning build
+Test Suite 'Selected tests' started at 2026-11-17 13:18:39.031.
+Test Suite 'AtelierPackageTests.xctest' started at 2026-11-17 13:18:39.032.
+Test Suite 'SmartPreviewTests' started at 2026-11-17 13:18:39.032.
+Test Case '-[AtelierCoreTests.SmartPreviewTests testASmartPreviewEditsLikeItsRAW]' started.
+/Users/rosh/RoshProjects/Atelier/worktrees/at079d/Tests/AtelierCoreTests/SmartPreviewTests.swift:128: error: -[AtelierCoreTests.SmartPreviewTests testASmartPreviewEditsLikeItsRAW] : XCTAssertLessThan failed: ("27.81587831022594") is not less than ("8.0") - every setting within 8/255 of the RAW
+Test Case '-[AtelierCoreTests.SmartPreviewTests testASmartPreviewEditsLikeItsRAW]' failed (38.855 seconds).
+Test Case '-[AtelierCoreTests.SmartPreviewTests testMatrixInverse]' started.
+Test Case '-[AtelierCoreTests.SmartPreviewTests testMatrixInverse]' passed (0.000 seconds).
+Test Case '-[AtelierCoreTests.SmartPreviewTests testTheInfoIsInTheDNG]' started.
+Test Case '-[AtelierCoreTests.SmartPreviewTests testTheInfoIsInTheDNG]' passed (0.013 seconds).
+Test Case '-[AtelierCoreTests.SmartPreviewTests testTheStoreKeepsOneFilePerPhoto]' started.
+Test Case '-[AtelierCoreTests.SmartPreviewTests testTheStoreKeepsOneFilePerPhoto]' passed (0.001 seconds).
+Test Case '-[AtelierCoreTests.SmartPreviewTests testTheWhiteTableIsExactOnItsGridAndIdentityAtAsShot]' started.
+Test Case '-[AtelierCoreTests.SmartPreviewTests testTheWhiteTableIsExactOnItsGridAndIdentityAtAsShot]' passed (0.000 seconds).
+Test Suite 'SmartPreviewTests' failed at 2026-11-17 13:19:17.902.
+	 Executed 5 tests, with 1 failure (0 unexpected) in 38.870 (38.870) seconds
+Test Suite 'AtelierPackageTests.xctest' failed at 2026-11-17 13:19:17.903.
+	 Executed 5 tests, with 1 failure (0 unexpected) in 38.870 (38.871) seconds
+Test Suite 'Selected tests' failed at 2026-11-17 13:19:17.903.
+	 Executed 5 tests, with 1 failure (0 unexpected) in 38.870 (38.871) seconds
+SMART DSC_0348.NEF: 952 KB, made in 2448 ms (includes the camera's white table on its first photo), opened in 9 ms
+SMART DSC_0348.NEF as shot: mean |diff| RGB 2.4/2.4/2.3, render preview 115 ms, RAW 44 ms
+SMART DSC_0348.NEF 4000K: mean |diff| RGB 8.9/1.9/2.8, render preview 9 ms, RAW 38 ms
+SMART DSC_0348.NEF 7500K: mean |diff| RGB 11.5/4.8/5.7, render preview 10 ms, RAW 37 ms
+SMART DSC_0348.NEF tint +30: mean |diff| RGB 4.3/3.3/2.8, render preview 10 ms, RAW 40 ms
+SMART DSC_0348.NEF +1 EV: mean |diff| RGB 3.3/2.7/2.8, render preview 9 ms, RAW 39 ms
+SMART DSC_0358.NEF: 730 KB, made in 236 ms (includes the camera's white table on its first photo), opened in 7 ms
+SMART DSC_0358.NEF as shot: mean |diff| RGB 2.6/2.1/2.3, render preview 31 ms, RAW 38 ms
+SMART DSC_0358.NEF 4000K: mean |diff| RGB 18.8/1.6/3.5, render preview 10 ms, RAW 40 ms
+SMART DSC_0358.NEF 7500K: mean |diff| RGB 12.0/5.0/6.8, render preview 10 ms, RAW 36 ms
+SMART DSC_0358.NEF tint +30: mean |diff| RGB 6.8/3.7/2.4, render preview 10 ms, RAW 38 ms
+SMART DSC_0358.NEF +1 EV: mean |diff| RGB 2.9/2.0/2.6, render preview 9 ms, RAW 34 ms
+SMART Z62_0193.NEF: 402 KB, made in 3688 ms (includes the camera's white table on its first photo), opened in 8 ms
+SMART Z62_0193.NEF as shot: mean |diff| RGB 2.6/2.2/2.1, render preview 28 ms, RAW 53 ms
+SMART Z62_0193.NEF 4000K: mean |diff| RGB 27.8/1.8/2.8, render preview 9 ms, RAW 43 ms
+SMART Z62_0193.NEF 7500K: mean |diff| RGB 4.3/2.7/2.4, render preview 10 ms, RAW 43 ms
+SMART Z62_0193.NEF tint +30: mean |diff| RGB 6.3/3.9/2.2, render preview 10 ms, RAW 43 ms
+SMART Z62_0193.NEF +1 EV: mean |diff| RGB 2.5/2.1/2.2, render preview 9 ms, RAW 40 ms
+SMART footprint 8 MB before, 220 MB after; peak 1658 MB; store 2156 KB
+◇ Test run started.
+↳ Testing Library Version: 1501
+↳ Target Platform: arm64e-apple-macos14.0
+✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.
+       40.01 real        34.22 user         4.46 sys
+          2114174976  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              280074  page reclaims
+                 826  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                 129  voluntary context switches
+              294136  involuntary context switches
+          4289600522  instructions retired
+          1013794272  cycles elapsed
+            28557984  peak memory footprint

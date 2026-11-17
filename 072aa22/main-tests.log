@@ -1,0 +1,259 @@
+[0/1] Planning build
+Test Suite 'Selected tests' started at 2026-11-17 13:22:48.879.
+Test Suite 'AtelierPackageTests.xctest' started at 2026-11-17 13:22:48.880.
+Test Suite 'AIDenoiseTests' started at 2026-11-17 13:22:48.880.
+Test Case '-[AtelierCoreTests.AIDenoiseTests testARealRAWGetsLessNoisy]' started.
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/AIDenoiseTests.swift:204: -[AtelierCoreTests.AIDenoiseTests testARealRAWGetsLessNoisy] : Test skipped - No sample RAW files (set ATELIER_DENOISE_RAW)
+Test Case '-[AtelierCoreTests.AIDenoiseTests testARealRAWGetsLessNoisy]' skipped (0.001 seconds).
+Test Case '-[AtelierCoreTests.AIDenoiseTests testHalfFloatsRoundTrip]' started.
+Test Case '-[AtelierCoreTests.AIDenoiseTests testHalfFloatsRoundTrip]' passed (0.000 seconds).
+Test Case '-[AtelierCoreTests.AIDenoiseTests testMirror]' started.
+Test Case '-[AtelierCoreTests.AIDenoiseTests testMirror]' passed (0.000 seconds).
+Test Case '-[AtelierCoreTests.AIDenoiseTests testNotRAWNoEffectAndAStatusLine]' started.
+Test Case '-[AtelierCoreTests.AIDenoiseTests testNotRAWNoEffectAndAStatusLine]' passed (0.009 seconds).
+Test Case '-[AtelierCoreTests.AIDenoiseTests testOldEditsHaveNoAIDenoise]' started.
+Test Case '-[AtelierCoreTests.AIDenoiseTests testOldEditsHaveNoAIDenoise]' passed (0.000 seconds).
+Test Case '-[AtelierCoreTests.AIDenoiseTests testTheModelTakesOutNoiseAcrossTiles]' started.
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/AIDenoiseTests.swift:82: error: -[AtelierCoreTests.AIDenoiseTests testTheModelTakesOutNoiseAcrossTiles] : XCTAssertLessThan failed: ("0.010226805784666447") is not less than ("0.009268762469625958") - PMRID removes most of the noise (0.026482178484645597 → 0.010226805784666447)
+Test Case '-[AtelierCoreTests.AIDenoiseTests testTheModelTakesOutNoiseAcrossTiles]' failed (1.699 seconds).
+Test Case '-[AtelierCoreTests.AIDenoiseTests testTheNoiseIsMeasuredOnThePhoto]' started.
+Test Case '-[AtelierCoreTests.AIDenoiseTests testTheNoiseIsMeasuredOnThePhoto]' passed (0.392 seconds).
+Test Case '-[AtelierCoreTests.AIDenoiseTests testTheNoiseIsSpreadToEveryPixelOfItsChannel]' started.
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/AIDenoiseTests.swift:105: error: -[AtelierCoreTests.AIDenoiseTests testTheNoiseIsSpreadToEveryPixelOfItsChannel] : XCTAssertEqualWithAccuracy failed: ("0.0") is not equal to ("1.0") +/- ("0.001")
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/AIDenoiseTests.swift:105: error: -[AtelierCoreTests.AIDenoiseTests testTheNoiseIsSpreadToEveryPixelOfItsChannel] : XCTAssertEqualWithAccuracy failed: ("0.0") is not equal to ("1.0") +/- ("0.001")
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/AIDenoiseTests.swift:105: error: -[AtelierCoreTests.AIDenoiseTests testTheNoiseIsSpreadToEveryPixelOfItsChannel] : XCTAssertEqualWithAccuracy failed: ("0.0") is not equal to ("1.0") +/- ("0.001")
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/AIDenoiseTests.swift:105: error: -[AtelierCoreTests.AIDenoiseTests testTheNoiseIsSpreadToEveryPixelOfItsChannel] : XCTAssertEqualWithAccuracy failed: ("0.0") is not equal to ("1.0") +/- ("0.001")
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/AIDenoiseTests.swift:105: error: -[AtelierCoreTests.AIDenoiseTests testTheNoiseIsSpreadToEveryPixelOfItsChannel] : XCTAssertEqualWithAccuracy failed: ("0.0") is not equal to ("1.0") +/- ("0.001")
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/AIDenoiseTests.swift:105: error: -[AtelierCoreTests.AIDenoiseTests testTheNoiseIsSpreadToEveryPixelOfItsChannel] : XCTAssertEqualWithAccuracy failed: ("0.0") is not equal to ("1.0") +/- ("0.001")
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/AIDenoiseTests.swift:105: error: -[AtelierCoreTests.AIDenoiseTests testTheNoiseIsSpreadToEveryPixelOfItsChannel] : XCTAssertEqualWithAccuracy failed: ("0.0") is not equal to ("1.0") +/- ("0.001")
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/AIDenoiseTests.swift:105: error: -[AtelierCoreTests.AIDenoiseTests testTheNoiseIsSpreadToEveryPixelOfItsChannel] : XCTAssertEqualWithAccuracy failed: ("0.0") is not equal to ("1.0") +/- ("0.001")
+Test Case '-[AtelierCoreTests.AIDenoiseTests testTheNoiseIsSpreadToEveryPixelOfItsChannel]' failed (0.001 seconds).
+Test Case '-[AtelierCoreTests.AIDenoiseTests testTheNoiseIsTakenOutRightSideUpAndScaled]' started.
+Test Case '-[AtelierCoreTests.AIDenoiseTests testTheNoiseIsTakenOutRightSideUpAndScaled]' passed (0.013 seconds).
+Test Case '-[AtelierCoreTests.AIDenoiseTests testTheToneCurveIsFittedPerPhoto]' started.
+Test Case '-[AtelierCoreTests.AIDenoiseTests testTheToneCurveIsFittedPerPhoto]' passed (0.001 seconds).
+Test Suite 'AIDenoiseTests' failed at 2026-11-17 13:22:50.997.
+	 Executed 10 tests, with 1 test skipped and 9 failures (0 unexpected) in 2.117 (2.118) seconds
+Test Suite 'AgentEditToolsTests' started at 2026-11-17 13:22:50.997.
+Test Case '-[AtelierAppTests.AgentEditToolsTests testAgentEditBurstOnTheOpenPhotoStaysCoalesced]' started.
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierAppTests/AgentEditToolsTests.swift:223: error: -[AtelierAppTests.AgentEditToolsTests testAgentEditBurstOnTheOpenPhotoStaysCoalesced] : XCTAssertLessThanOrEqual failed: ("3.0") is greater than ("2.9076249332141786")
+Test Case '-[AtelierAppTests.AgentEditToolsTests testAgentEditBurstOnTheOpenPhotoStaysCoalesced]' failed (0.225 seconds).
+Test Case '-[AtelierAppTests.AgentEditToolsTests testAgentEditsOnOtherPhotosRefreshEachPreviewOnce]' started.
+Test Case '-[AtelierAppTests.AgentEditToolsTests testAgentEditsOnOtherPhotosRefreshEachPreviewOnce]' passed (0.376 seconds).
+Test Case '-[AtelierAppTests.AgentEditToolsTests testAutoMatchesTheAutoButton]' started.
+Test Case '-[AtelierAppTests.AgentEditToolsTests testAutoMatchesTheAutoButton]' passed (0.106 seconds).
+Test Case '-[AtelierAppTests.AgentEditToolsTests testCropNeedsEditAndRefusesBadCalls]' started.
+Test Case '-[AtelierAppTests.AgentEditToolsTests testCropNeedsEditAndRefusesBadCalls]' passed (0.018 seconds).
+Test Case '-[AtelierAppTests.AgentEditToolsTests testCropStraightenRotateAndUndo]' started.
+Test Case '-[AtelierAppTests.AgentEditToolsTests testCropStraightenRotateAndUndo]' passed (0.024 seconds).
+Test Case '-[AtelierAppTests.AgentEditToolsTests testMasksAddAndCombine]' started.
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierAppTests/AgentEditToolsTests.swift:91: error: -[AtelierAppTests.AgentEditToolsTests testMasksAddAndCombine] : XCTAssertEqual failed: ("Optional("Subtract Radial Gradient: mask 1 (Test)")") is not equal to ("Optional("Subtract Radial Gradient: Mask 1 (Test)")")
+Test Case '-[AtelierAppTests.AgentEditToolsTests testMasksAddAndCombine]' failed (0.033 seconds).
+Test Case '-[AtelierAppTests.AgentEditToolsTests testMatchLookToAStudyAndCancel]' started.
+2026-11-17 13:22:52.149 xctest[70133:1260821] FBBA: creating VNFaceBBoxAligner from VNFaceDetectorRevision2: VNFaceDetectorRevision2
+Test Case '-[AtelierAppTests.AgentEditToolsTests testMatchLookToAStudyAndCancel]' passed (1.313 seconds).
+Test Case '-[AtelierAppTests.AgentEditToolsTests testStudyNamesMatchTheBuiltIns]' started.
+Test Case '-[AtelierAppTests.AgentEditToolsTests testStudyNamesMatchTheBuiltIns]' passed (0.000 seconds).
+Test Suite 'AgentEditToolsTests' failed at 2026-11-17 13:22:53.094.
+	 Executed 8 tests, with 2 failures (0 unexpected) in 2.096 (2.096) seconds
+Test Suite 'ColorRangeMaskTests' started at 2026-11-17 13:22:53.094.
+Test Case '-[AtelierCoreTests.ColorRangeMaskTests testColorRangeSurvivesSavingAndAnEmptyOneDecodes]' started.
+Test Case '-[AtelierCoreTests.ColorRangeMaskTests testColorRangeSurvivesSavingAndAnEmptyOneDecodes]' passed (0.001 seconds).
+Test Case '-[AtelierCoreTests.ColorRangeMaskTests testOklabOfWhiteIsNeutralAndSwatchesRoundTrip]' started.
+Test Case '-[AtelierCoreTests.ColorRangeMaskTests testOklabOfWhiteIsNeutralAndSwatchesRoundTrip]' passed (0.000 seconds).
+Test Case '-[AtelierCoreTests.ColorRangeMaskTests testPickingRedDarkensOnlyTheRedHalf]' started.
+Test Case '-[AtelierCoreTests.ColorRangeMaskTests testPickingRedDarkensOnlyTheRedHalf]' passed (0.006 seconds).
+Test Case '-[AtelierCoreTests.ColorRangeMaskTests testWeightIsFullAtThePickAndRefineReachesFurther]' started.
+Test Case '-[AtelierCoreTests.ColorRangeMaskTests testWeightIsFullAtThePickAndRefineReachesFurther]' passed (0.000 seconds).
+Test Suite 'ColorRangeMaskTests' passed at 2026-11-17 13:22:53.101.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.007 (0.007) seconds
+Test Suite 'ContentAwareFillTests' started at 2026-11-17 13:22:53.101.
+Test Case '-[AtelierCoreTests.ContentAwareFillTests testAContentAwareSpotRemovesTheSpeck]' started.
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/ContentAwareFillTests.swift:85: error: -[AtelierCoreTests.ContentAwareFillTests testAContentAwareSpotRemovesTheSpeck] : XCTAssertEqualWithAccuracy failed: ("0.13286832") is not equal to ("0.4") +/- ("0.03")
+Test Case '-[AtelierCoreTests.ContentAwareFillTests testAContentAwareSpotRemovesTheSpeck]' failed (0.016 seconds).
+Test Case '-[AtelierCoreTests.ContentAwareFillTests testFlatAreaFillsWithItsColor]' started.
+Test Case '-[AtelierCoreTests.ContentAwareFillTests testFlatAreaFillsWithItsColor]' passed (0.008 seconds).
+Test Case '-[AtelierCoreTests.ContentAwareFillTests testNoHoleChangesNothing]' started.
+Test Case '-[AtelierCoreTests.ContentAwareFillTests testNoHoleChangesNothing]' passed (0.000 seconds).
+Test Case '-[AtelierCoreTests.ContentAwareFillTests testOldSpotsAndVariationDecode]' started.
+Test Case '-[AtelierCoreTests.ContentAwareFillTests testOldSpotsAndVariationDecode]' passed (0.000 seconds).
+Test Case '-[AtelierCoreTests.ContentAwareFillTests testSameSeedSameFill]' started.
+Test Case '-[AtelierCoreTests.ContentAwareFillTests testSameSeedSameFill]' passed (0.009 seconds).
+Test Case '-[AtelierCoreTests.ContentAwareFillTests testStripesCarryOnThroughTheHole]' started.
+Test Case '-[AtelierCoreTests.ContentAwareFillTests testStripesCarryOnThroughTheHole]' passed (0.010 seconds).
+Test Suite 'ContentAwareFillTests' failed at 2026-11-17 13:22:53.145.
+	 Executed 6 tests, with 1 failure (0 unexpected) in 0.044 (0.044) seconds
+Test Suite 'DisplaySurfacesTests' started at 2026-11-17 13:22:53.145.
+Test Case '-[AtelierCoreTests.DisplaySurfacesTests testPoolNeverHandsOutMoreThanItsLimit]' started.
+Test Case '-[AtelierCoreTests.DisplaySurfacesTests testPoolNeverHandsOutMoreThanItsLimit]' passed (0.001 seconds).
+Test Case '-[AtelierCoreTests.DisplaySurfacesTests testSurfaceFrameMatchesOrdinaryRender]' started.
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/DisplaySurfacesTests.swift:46: error: -[AtelierCoreTests.DisplaySurfacesTests testSurfaceFrameMatchesOrdinaryRender] : XCTAssertEqualWithAccuracy failed: ("39") is not equal to ("234") +/- ("1") - pixel (5, 5) channel 0, clipping false
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/DisplaySurfacesTests.swift:46: error: -[AtelierCoreTests.DisplaySurfacesTests testSurfaceFrameMatchesOrdinaryRender] : XCTAssertEqualWithAccuracy failed: ("95") is not equal to ("147") +/- ("1") - pixel (5, 5) channel 1, clipping false
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/DisplaySurfacesTests.swift:46: error: -[AtelierCoreTests.DisplaySurfacesTests testSurfaceFrameMatchesOrdinaryRender] : XCTAssertEqualWithAccuracy failed: ("225") is not equal to ("34") +/- ("1") - pixel (5, 5) channel 2, clipping false
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/DisplaySurfacesTests.swift:46: error: -[AtelierCoreTests.DisplaySurfacesTests testSurfaceFrameMatchesOrdinaryRender] : XCTAssertEqualWithAccuracy failed: ("39") is not equal to ("234") +/- ("1") - pixel (30, 8) channel 0, clipping false
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/DisplaySurfacesTests.swift:46: error: -[AtelierCoreTests.DisplaySurfacesTests testSurfaceFrameMatchesOrdinaryRender] : XCTAssertEqualWithAccuracy failed: ("95") is not equal to ("147") +/- ("1") - pixel (30, 8) channel 1, clipping false
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/DisplaySurfacesTests.swift:46: error: -[AtelierCoreTests.DisplaySurfacesTests testSurfaceFrameMatchesOrdinaryRender] : XCTAssertEqualWithAccuracy failed: ("225") is not equal to ("34") +/- ("1") - pixel (30, 8) channel 2, clipping false
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/DisplaySurfacesTests.swift:46: error: -[AtelierCoreTests.DisplaySurfacesTests testSurfaceFrameMatchesOrdinaryRender] : XCTAssertEqualWithAccuracy failed: ("234") is not equal to ("39") +/- ("1") - pixel (55, 35) channel 0, clipping false
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/DisplaySurfacesTests.swift:46: error: -[AtelierCoreTests.DisplaySurfacesTests testSurfaceFrameMatchesOrdinaryRender] : XCTAssertEqualWithAccuracy failed: ("147") is not equal to ("95") +/- ("1") - pixel (55, 35) channel 1, clipping false
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/DisplaySurfacesTests.swift:46: error: -[AtelierCoreTests.DisplaySurfacesTests testSurfaceFrameMatchesOrdinaryRender] : XCTAssertEqualWithAccuracy failed: ("34") is not equal to ("225") +/- ("1") - pixel (55, 35) channel 2, clipping false
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/DisplaySurfacesTests.swift:46: error: -[AtelierCoreTests.DisplaySurfacesTests testSurfaceFrameMatchesOrdinaryRender] : XCTAssertEqualWithAccuracy failed: ("234") is not equal to ("39") +/- ("1") - pixel (10, 30) channel 0, clipping false
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/DisplaySurfacesTests.swift:46: error: -[AtelierCoreTests.DisplaySurfacesTests testSurfaceFrameMatchesOrdinaryRender] : XCTAssertEqualWithAccuracy failed: ("147") is not equal to ("95") +/- ("1") - pixel (10, 30) channel 1, clipping false
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/DisplaySurfacesTests.swift:46: error: -[AtelierCoreTests.DisplaySurfacesTests testSurfaceFrameMatchesOrdinaryRender] : XCTAssertEqualWithAccuracy failed: ("34") is not equal to ("225") +/- ("1") - pixel (10, 30) channel 2, clipping false
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/DisplaySurfacesTests.swift:46: error: -[AtelierCoreTests.DisplaySurfacesTests testSurfaceFrameMatchesOrdinaryRender] : XCTAssertEqualWithAccuracy failed: ("234") is not equal to ("39") +/- ("1") - pixel (30, 20) channel 0, clipping false
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/DisplaySurfacesTests.swift:46: error: -[AtelierCoreTests.DisplaySurfacesTests testSurfaceFrameMatchesOrdinaryRender] : XCTAssertEqualWithAccuracy failed: ("147") is not equal to ("95") +/- ("1") - pixel (30, 20) channel 1, clipping false
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/DisplaySurfacesTests.swift:46: error: -[AtelierCoreTests.DisplaySurfacesTests testSurfaceFrameMatchesOrdinaryRender] : XCTAssertEqualWithAccuracy failed: ("34") is not equal to ("225") +/- ("1") - pixel (30, 20) channel 2, clipping false
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/DisplaySurfacesTests.swift:46: error: -[AtelierCoreTests.DisplaySurfacesTests testSurfaceFrameMatchesOrdinaryRender] : XCTAssertEqualWithAccuracy failed: ("39") is not equal to ("234") +/- ("1") - pixel (5, 5) channel 0, clipping true
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/DisplaySurfacesTests.swift:46: error: -[AtelierCoreTests.DisplaySurfacesTests testSurfaceFrameMatchesOrdinaryRender] : XCTAssertEqualWithAccuracy failed: ("95") is not equal to ("147") +/- ("1") - pixel (5, 5) channel 1, clipping true
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/DisplaySurfacesTests.swift:46: error: -[AtelierCoreTests.DisplaySurfacesTests testSurfaceFrameMatchesOrdinaryRender] : XCTAssertEqualWithAccuracy failed: ("225") is not equal to ("34") +/- ("1") - pixel (5, 5) channel 2, clipping true
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/DisplaySurfacesTests.swift:46: error: -[AtelierCoreTests.DisplaySurfacesTests testSurfaceFrameMatchesOrdinaryRender] : XCTAssertEqualWithAccuracy failed: ("39") is not equal to ("234") +/- ("1") - pixel (30, 8) channel 0, clipping true
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/DisplaySurfacesTests.swift:46: error: -[AtelierCoreTests.DisplaySurfacesTests testSurfaceFrameMatchesOrdinaryRender] : XCTAssertEqualWithAccuracy failed: ("95") is not equal to ("147") +/- ("1") - pixel (30, 8) channel 1, clipping true
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/DisplaySurfacesTests.swift:46: error: -[AtelierCoreTests.DisplaySurfacesTests testSurfaceFrameMatchesOrdinaryRender] : XCTAssertEqualWithAccuracy failed: ("225") is not equal to ("34") +/- ("1") - pixel (30, 8) channel 2, clipping true
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/DisplaySurfacesTests.swift:46: error: -[AtelierCoreTests.DisplaySurfacesTests testSurfaceFrameMatchesOrdinaryRender] : XCTAssertEqualWithAccuracy failed: ("234") is not equal to ("39") +/- ("1") - pixel (55, 35) channel 0, clipping true
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/DisplaySurfacesTests.swift:46: error: -[AtelierCoreTests.DisplaySurfacesTests testSurfaceFrameMatchesOrdinaryRender] : XCTAssertEqualWithAccuracy failed: ("147") is not equal to ("95") +/- ("1") - pixel (55, 35) channel 1, clipping true
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/DisplaySurfacesTests.swift:46: error: -[AtelierCoreTests.DisplaySurfacesTests testSurfaceFrameMatchesOrdinaryRender] : XCTAssertEqualWithAccuracy failed: ("34") is not equal to ("225") +/- ("1") - pixel (55, 35) channel 2, clipping true
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/DisplaySurfacesTests.swift:46: error: -[AtelierCoreTests.DisplaySurfacesTests testSurfaceFrameMatchesOrdinaryRender] : XCTAssertEqualWithAccuracy failed: ("234") is not equal to ("39") +/- ("1") - pixel (10, 30) channel 0, clipping true
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/DisplaySurfacesTests.swift:46: error: -[AtelierCoreTests.DisplaySurfacesTests testSurfaceFrameMatchesOrdinaryRender] : XCTAssertEqualWithAccuracy failed: ("147") is not equal to ("95") +/- ("1") - pixel (10, 30) channel 1, clipping true
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/DisplaySurfacesTests.swift:46: error: -[AtelierCoreTests.DisplaySurfacesTests testSurfaceFrameMatchesOrdinaryRender] : XCTAssertEqualWithAccuracy failed: ("34") is not equal to ("225") +/- ("1") - pixel (10, 30) channel 2, clipping true
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/DisplaySurfacesTests.swift:46: error: -[AtelierCoreTests.DisplaySurfacesTests testSurfaceFrameMatchesOrdinaryRender] : XCTAssertEqualWithAccuracy failed: ("234") is not equal to ("39") +/- ("1") - pixel (30, 20) channel 0, clipping true
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/DisplaySurfacesTests.swift:46: error: -[AtelierCoreTests.DisplaySurfacesTests testSurfaceFrameMatchesOrdinaryRender] : XCTAssertEqualWithAccuracy failed: ("147") is not equal to ("95") +/- ("1") - pixel (30, 20) channel 1, clipping true
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/DisplaySurfacesTests.swift:46: error: -[AtelierCoreTests.DisplaySurfacesTests testSurfaceFrameMatchesOrdinaryRender] : XCTAssertEqualWithAccuracy failed: ("34") is not equal to ("225") +/- ("1") - pixel (30, 20) channel 2, clipping true
+Test Case '-[AtelierCoreTests.DisplaySurfacesTests testSurfaceFrameMatchesOrdinaryRender]' failed (0.013 seconds).
+Test Suite 'DisplaySurfacesTests' failed at 2026-11-17 13:22:53.158.
+	 Executed 2 tests, with 30 failures (0 unexpected) in 0.013 (0.013) seconds
+Test Suite 'FaceLandmarkerTests' started at 2026-11-17 13:22:53.158.
+Test Case '-[AtelierCoreTests.FaceLandmarkerTests testBuiltInModelsOnAPortrait]' started.
+Test Case '-[AtelierCoreTests.FaceLandmarkerTests testBuiltInModelsOnAPortrait]' passed (0.102 seconds).
+Test Case '-[AtelierCoreTests.FaceLandmarkerTests testCropPadsOutsideThePhotoWithBlack]' started.
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/FaceLandmarkerTests.swift:31: error: -[AtelierCoreTests.FaceLandmarkerTests testCropPadsOutsideThePhotoWithBlack] : XCTAssertEqualWithAccuracy failed: ("0.8392157") is not equal to ("0.8") +/- ("0.02") - the face
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/FaceLandmarkerTests.swift:32: error: -[AtelierCoreTests.FaceLandmarkerTests testCropPadsOutsideThePhotoWithBlack] : XCTAssertEqualWithAccuracy failed: ("0.8392157") is not equal to ("0.8") +/- ("0.02")
+Test Case '-[AtelierCoreTests.FaceLandmarkerTests testCropPadsOutsideThePhotoWithBlack]' failed (0.001 seconds).
+Test Suite 'FaceLandmarkerTests' failed at 2026-11-17 13:22:53.261.
+	 Executed 2 tests, with 2 failures (0 unexpected) in 0.103 (0.103) seconds
+Test Suite 'MaskGuidedFilterTests' started at 2026-11-17 13:22:53.262.
+Test Case '-[AtelierCoreTests.MaskGuidedFilterTests testRefineEdgeMovesTheEdgeOntoThePhotosEdge]' started.
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/FineEdgesTests.swift:90: error: -[AtelierCoreTests.MaskGuidedFilterTests testRefineEdgeMovesTheEdgeOntoThePhotosEdge] : XCTAssertGreaterThan failed: ("0.2509211") is not greater than ("0.4") - the edge moved out toward the photo's edge (was 0)
+Test Case '-[AtelierCoreTests.MaskGuidedFilterTests testRefineEdgeMovesTheEdgeOntoThePhotosEdge]' failed (0.006 seconds).
+Test Suite 'MaskGuidedFilterTests' failed at 2026-11-17 13:22:53.267.
+	 Executed 1 test, with 1 failure (0 unexpected) in 0.006 (0.006) seconds
+Test Suite 'MaskTests' started at 2026-11-17 13:22:53.267.
+Test Case '-[AtelierCoreTests.MaskTests testBrushPaintsAndErases]' started.
+Test Case '-[AtelierCoreTests.MaskTests testBrushPaintsAndErases]' passed (0.001 seconds).
+Test Case '-[AtelierCoreTests.MaskTests testBrushReachesTheEndOfTheStroke]' started.
+Test Case '-[AtelierCoreTests.MaskTests testBrushReachesTheEndOfTheStroke]' passed (0.000 seconds).
+Test Case '-[AtelierCoreTests.MaskTests testCropMappingRoundTrips]' started.
+Test Case '-[AtelierCoreTests.MaskTests testCropMappingRoundTrips]' passed (0.000 seconds).
+Test Case '-[AtelierCoreTests.MaskTests testLinearGradientBrightensOnlyItsSide]' started.
+Test Case '-[AtelierCoreTests.MaskTests testLinearGradientBrightensOnlyItsSide]' passed (0.004 seconds).
+Test Case '-[AtelierCoreTests.MaskTests testLuminanceRangeWeight]' started.
+Test Case '-[AtelierCoreTests.MaskTests testLuminanceRangeWeight]' passed (0.000 seconds).
+Test Case '-[AtelierCoreTests.MaskTests testMasksKeepTheirInBetweenValues]' started.
+Test Case '-[AtelierCoreTests.MaskTests testMasksKeepTheirInBetweenValues]' passed (0.001 seconds).
+Test Case '-[AtelierCoreTests.MaskTests testMaskSpaceMatchesTheView]' started.
+Test Case '-[AtelierCoreTests.MaskTests testMaskSpaceMatchesTheView]' passed (0.000 seconds).
+Test Case '-[AtelierCoreTests.MaskTests testMasksSurviveSavingAndOldDocumentsHaveNone]' started.
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/MaskTests.swift:92: error: -[AtelierCoreTests.MaskTests testMasksSurviveSavingAndOldDocumentsHaveNone] : XCTAssertTrue failed
+Test Case '-[AtelierCoreTests.MaskTests testMasksSurviveSavingAndOldDocumentsHaveNone]' failed (0.001 seconds).
+Test Case '-[AtelierCoreTests.MaskTests testPresetsLeaveMasksOutUnlessChosen]' started.
+Test Case '-[AtelierCoreTests.MaskTests testPresetsLeaveMasksOutUnlessChosen]' passed (0.000 seconds).
+Test Case '-[AtelierCoreTests.MaskTests testQuarterTurnMovesTopLeftToTopRight]' started.
+Test Case '-[AtelierCoreTests.MaskTests testQuarterTurnMovesTopLeftToTopRight]' passed (0.000 seconds).
+Test Case '-[AtelierCoreTests.MaskTests testRadialSubtractAndOverlay]' started.
+Test Case '-[AtelierCoreTests.MaskTests testRadialSubtractAndOverlay]' passed (0.022 seconds).
+Test Case '-[AtelierCoreTests.MaskTests testSelectObjectKeepsItsBoxAndOldSubjectsStayHard]' started.
+Test Case '-[AtelierCoreTests.MaskTests testSelectObjectKeepsItsBoxAndOldSubjectsStayHard]' passed (0.000 seconds).
+Test Case '-[AtelierCoreTests.MaskTests testTempWarmsAndTintAddsMagenta]' started.
+Test Case '-[AtelierCoreTests.MaskTests testTempWarmsAndTintAddsMagenta]' passed (0.004 seconds).
+Test Suite 'MaskTests' failed at 2026-11-17 13:22:53.302.
+	 Executed 13 tests, with 1 failure (0 unexpected) in 0.033 (0.034) seconds
+Test Suite 'MatchLookModelTests' started at 2026-11-17 13:22:53.302.
+Test Case '-[AtelierAppTests.MatchLookModelTests testChangingMatchControlsDisablesApplyBeforeTheRefitStarts]' started.
+Test Case '-[AtelierAppTests.MatchLookModelTests testChangingMatchControlsDisablesApplyBeforeTheRefitStarts]' passed (1.051 seconds).
+Test Case '-[AtelierAppTests.MatchLookModelTests testLatestReferenceWinsAndBuiltInUsesWholePhotoUntilReturningToCatalog]' started.
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierAppTests/MatchLookModelTests.swift:58: error: -[AtelierAppTests.MatchLookModelTests testLatestReferenceWinsAndBuiltInUsesWholePhotoUntilReturningToCatalog] : XCTAssertNotEqual failed: ("DevelopSettings(schemaVersion: 3, temperature: nil, values: [:], pointCurves: [:], storedCrop: nil, masks: [], lensBlurAreas: [], spots: [], profile: AtelierCore.DevelopSettings.Profile.cameraMatching, lensProfileCorrections: true, removeChromaticAberration: false, upright: nil, constrainCrop: false, showsWholePhoto: false, monochrome: false, disabledPanels: Set([]))") is equal to ("DevelopSettings(schemaVersion: 3, temperature: nil, values: [:], pointCurves: [:], storedCrop: nil, masks: [], lensBlurAreas: [], spots: [], profile: AtelierCore.DevelopSettings.Profile.cameraMatching, lensProfileCorrections: true, removeChromaticAberration: false, upright: nil, constrainCrop: false, showsWholePhoto: false, monochrome: false, disabledPanels: Set([]))")
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierAppTests/MatchLookModelTests.swift:61: error: -[AtelierAppTests.MatchLookModelTests testLatestReferenceWinsAndBuiltInUsesWholePhotoUntilReturningToCatalog] : XCTAssertEqual failed: ("[]") is not equal to ("["Import", "Match Look: Mad Max: Fury Road — Desert Action"]")
+Test Case '-[AtelierAppTests.MatchLookModelTests testLatestReferenceWinsAndBuiltInUsesWholePhotoUntilReturningToCatalog]' failed (0.789 seconds).
+Test Case '-[AtelierAppTests.MatchLookModelTests testMissingSkinAllowsGlobalFitAndDoesNotBlockOtherPortraits]' started.
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierAppTests/MatchLookModelTests.swift:129: error: -[AtelierAppTests.MatchLookModelTests testMissingSkinAllowsGlobalFitAndDoesNotBlockOtherPortraits] : XCTAssertFalse failed
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierAppTests/MatchLookModelTests.swift:138: error: -[AtelierAppTests.MatchLookModelTests testMissingSkinAllowsGlobalFitAndDoesNotBlockOtherPortraits] : XCTAssertEqual failed: ("Optional(Set([AtelierCore.LookMatchNotice.noSubjectInPhoto, AtelierCore.LookMatchNotice.noSkinInPhoto]))") is not equal to ("Optional(Set([AtelierCore.LookMatchNotice.noSkinInPhoto]))")
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierAppTests/MatchLookModelTests.swift:146: error: -[AtelierAppTests.MatchLookModelTests testMissingSkinAllowsGlobalFitAndDoesNotBlockOtherPortraits] : XCTAssertEqual failed: ("Optional("Match Look: Skin Shadows")") is not equal to ("Optional("Match Look: Skin")")
+Test Case '-[AtelierAppTests.MatchLookModelTests testMissingSkinAllowsGlobalFitAndDoesNotBlockOtherPortraits]' failed (1.328 seconds).
+Test Case '-[AtelierAppTests.MatchLookModelTests testSkinChoiceAndBatchApplyUseASeparateMaskForEachPortrait]' started.
+Test Case '-[AtelierAppTests.MatchLookModelTests testSkinChoiceAndBatchApplyUseASeparateMaskForEachPortrait]' passed (2.425 seconds).
+Test Suite 'MatchLookModelTests' failed at 2026-11-17 13:22:58.895.
+	 Executed 4 tests, with 5 failures (0 unexpected) in 5.593 (5.593) seconds
+Test Suite 'SpotGenerationTests' started at 2026-11-17 13:22:58.895.
+Test Case '-[AtelierCoreTests.SpotGenerationTests testAGenerativeSpotShowsItsPatchOnlyOnTheSpot]' started.
+Test Case '-[AtelierCoreTests.SpotGenerationTests testAGenerativeSpotShowsItsPatchOnlyOnTheSpot]' passed (0.004 seconds).
+Test Case '-[AtelierCoreTests.SpotGenerationTests testAMissingPatchFileFallsBackToContentAware]' started.
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/SpotGenerationTests.swift:109: error: -[AtelierCoreTests.SpotGenerationTests testAMissingPatchFileFallsBackToContentAware] : XCTAssertEqualWithAccuracy failed: ("0.13286832") is not equal to ("0.4") +/- ("0.03") - the speck is filled from around it
+Test Case '-[AtelierCoreTests.SpotGenerationTests testAMissingPatchFileFallsBackToContentAware]' failed (0.008 seconds).
+Test Case '-[AtelierCoreTests.SpotGenerationTests testAPatchIsIgnoredWhenGenerativeIsOff]' started.
+Test Case '-[AtelierCoreTests.SpotGenerationTests testAPatchIsIgnoredWhenGenerativeIsOff]' passed (0.002 seconds).
+Test Case '-[AtelierCoreTests.SpotGenerationTests testGenerativeAndPatchRoundTripAndOldSpotsDecode]' started.
+Test Case '-[AtelierCoreTests.SpotGenerationTests testGenerativeAndPatchRoundTripAndOldSpotsDecode]' passed (0.001 seconds).
+Test Case '-[AtelierCoreTests.SpotGenerationTests testTheInputCoversTheSpotWithItsBrushAsTheHole]' started.
+Test Case '-[AtelierCoreTests.SpotGenerationTests testTheInputCoversTheSpotWithItsBrushAsTheHole]' passed (0.001 seconds).
+Test Case '-[AtelierCoreTests.SpotGenerationTests testThePatchFollowsALaterExposureChange]' started.
+Test Case '-[AtelierCoreTests.SpotGenerationTests testThePatchFollowsALaterExposureChange]' passed (0.002 seconds).
+Test Case '-[AtelierCoreTests.SpotGenerationTests testTheSpotsBeforeItAreInTheInput]' started.
+Test Case '-[AtelierCoreTests.SpotGenerationTests testTheSpotsBeforeItAreInTheInput]' passed (0.001 seconds).
+Test Suite 'SpotGenerationTests' failed at 2026-11-17 13:22:58.915.
+	 Executed 7 tests, with 1 failure (0 unexpected) in 0.020 (0.020) seconds
+Test Suite 'XMPRecoveryTests' started at 2026-11-17 13:22:58.915.
+Test Case '-[AtelierCoreTests.XMPRecoveryTests testAllMaskKindsAndGeometrySurviveRecovery]' started.
+Test Case '-[AtelierCoreTests.XMPRecoveryTests testAllMaskKindsAndGeometrySurviveRecovery]' passed (0.002 seconds).
+Test Case '-[AtelierCoreTests.XMPRecoveryTests testCatalogLossRecoveryWinsOverPresetAndPreservesOriginalAndRender]' started.
+Test Case '-[AtelierCoreTests.XMPRecoveryTests testCatalogLossRecoveryWinsOverPresetAndPreservesOriginalAndRender]' passed (0.026 seconds).
+Test Case '-[AtelierCoreTests.XMPRecoveryTests testCollisionRenamedCopyRecoversHistoryAndWritesDestinationKey]' started.
+Test Case '-[AtelierCoreTests.XMPRecoveryTests testCollisionRenamedCopyRecoversHistoryAndWritesDestinationKey]' passed (0.030 seconds).
+Test Case '-[AtelierCoreTests.XMPRecoveryTests testConcurrentPairedWritesKeepBothEntries]' started.
+Test Case '-[AtelierCoreTests.XMPRecoveryTests testConcurrentPairedWritesKeepBothEntries]' passed (0.003 seconds).
+Test Case '-[AtelierCoreTests.XMPRecoveryTests testCopiedImportKeepsRecoveredEditsAndCanWriteAtDestination]' started.
+Test Case '-[AtelierCoreTests.XMPRecoveryTests testCopiedImportKeepsRecoveredEditsAndCanWriteAtDestination]' passed (0.016 seconds).
+Test Case '-[AtelierCoreTests.XMPRecoveryTests testDamagedAndFutureHistoryImportPreservesSidecarAndRejectsPreset]' started.
+Test Case '-[AtelierCoreTests.XMPRecoveryTests testDamagedAndFutureHistoryImportPreservesSidecarAndRejectsPreset]' passed (0.018 seconds).
+Test Case '-[AtelierCoreTests.XMPRecoveryTests testExistingReferenceIsSkippedBeforeDamagedRecoveryIsRead]' started.
+Test Case '-[AtelierCoreTests.XMPRecoveryTests testExistingReferenceIsSkippedBeforeDamagedRecoveryIsRead]' passed (0.009 seconds).
+Test Case '-[AtelierCoreTests.XMPRecoveryTests testFailedAndOfflineWritesStayDirty]' started.
+Test Case '-[AtelierCoreTests.XMPRecoveryTests testFailedAndOfflineWritesStayDirty]' passed (0.010 seconds).
+Test Case '-[AtelierCoreTests.XMPRecoveryTests testHistoryRedoAndSnapshotsRecoverTogether]' started.
+Test Case '-[AtelierCoreTests.XMPRecoveryTests testHistoryRedoAndSnapshotsRecoverTogether]' passed (0.027 seconds).
+Test Case '-[AtelierCoreTests.XMPRecoveryTests testHistoryValidationRejectsCorruptionRatherThanClampingOrDropping]' started.
+Test Case '-[AtelierCoreTests.XMPRecoveryTests testHistoryValidationRejectsCorruptionRatherThanClampingOrDropping]' passed (0.001 seconds).
+Test Case '-[AtelierCoreTests.XMPRecoveryTests testImportAutoWriteCandidatesExcludeUntouchedPhotos]' started.
+Test Case '-[AtelierCoreTests.XMPRecoveryTests testImportAutoWriteCandidatesExcludeUntouchedPhotos]' passed (0.023 seconds).
+Test Case '-[AtelierCoreTests.XMPRecoveryTests testInvalidOrFutureDataIsPreservedAndImportReportsProblem]' started.
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/XMPRecoveryTests.swift:124: error: -[AtelierCoreTests.XMPRecoveryTests testInvalidOrFutureDataIsPreservedAndImportReportsProblem] : XCTAssertThrowsError failed: did not throw an error
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/XMPRecoveryTests.swift:125: error: -[AtelierCoreTests.XMPRecoveryTests testInvalidOrFutureDataIsPreservedAndImportReportsProblem] : XCTAssertThrowsError failed: did not throw an error
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/XMPRecoveryTests.swift:129: error: -[AtelierCoreTests.XMPRecoveryTests testInvalidOrFutureDataIsPreservedAndImportReportsProblem] : XCTAssertEqual failed: ("1") is not equal to ("0")
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/XMPRecoveryTests.swift:130: error: -[AtelierCoreTests.XMPRecoveryTests testInvalidOrFutureDataIsPreservedAndImportReportsProblem] : XCTAssertEqual failed: ("0") is not equal to ("1")
+/Users/rosh/RoshProjects/Atelier/worktrees/main-at079d/Tests/AtelierCoreTests/XMPRecoveryTests.swift:131: error: -[AtelierCoreTests.XMPRecoveryTests testInvalidOrFutureDataIsPreservedAndImportReportsProblem] : XCTAssertEqual failed: ("405 bytes") is not equal to ("384 bytes")
+Test Case '-[AtelierCoreTests.XMPRecoveryTests testInvalidOrFutureDataIsPreservedAndImportReportsProblem]' failed (0.044 seconds).
+Test Case '-[AtelierCoreTests.XMPRecoveryTests testMetadataOnlyWriteDoesNotSuppressFreshImportPreset]' started.
+Test Case '-[AtelierCoreTests.XMPRecoveryTests testMetadataOnlyWriteDoesNotSuppressFreshImportPreset]' passed (0.018 seconds).
+Test Case '-[AtelierCoreTests.XMPRecoveryTests testOldMetadataOnlyAndOldSettingsStillImport]' started.
+Test Case '-[AtelierCoreTests.XMPRecoveryTests testOldMetadataOnlyAndOldSettingsStillImport]' passed (0.009 seconds).
+Test Case '-[AtelierCoreTests.XMPRecoveryTests testPairedHistoryWritesPreserveSiblingAndSettingsOnlyCallerRemovesOwnHistory]' started.
+Test Case '-[AtelierCoreTests.XMPRecoveryTests testPairedHistoryWritesPreserveSiblingAndSettingsOnlyCallerRemovesOwnHistory]' passed (0.003 seconds).
+Test Case '-[AtelierCoreTests.XMPRecoveryTests testResetWritesNeutralInsteadOfResurrectingOldEdits]' started.
+Test Case '-[AtelierCoreTests.XMPRecoveryTests testResetWritesNeutralInsteadOfResurrectingOldEdits]' passed (0.013 seconds).
+Test Case '-[AtelierCoreTests.XMPRecoveryTests testSettingsOnlyCompatibilityAndLegacyCatalogHistory]' started.
+Test Case '-[AtelierCoreTests.XMPRecoveryTests testSettingsOnlyCompatibilityAndLegacyCatalogHistory]' passed (0.011 seconds).
+Test Case '-[AtelierCoreTests.XMPRecoveryTests testSharedSidecarKeepsRAWJPEGEntriesAndForeignTags]' started.
+Test Case '-[AtelierCoreTests.XMPRecoveryTests testSharedSidecarKeepsRAWJPEGEntriesAndForeignTags]' passed (0.003 seconds).
+Test Case '-[AtelierCoreTests.XMPRecoveryTests testStaleHistoryFromOlderWriterBlocksImportAndOverwrite]' started.
+Test Case '-[AtelierCoreTests.XMPRecoveryTests testStaleHistoryFromOlderWriterBlocksImportAndOverwrite]' passed (0.008 seconds).
+Test Case '-[AtelierCoreTests.XMPRecoveryTests testUnreadableForeignSidecarDoesNotBlockImportOrOverwriteIt]' started.
+Test Case '-[AtelierCoreTests.XMPRecoveryTests testUnreadableForeignSidecarDoesNotBlockImportOrOverwriteIt]' passed (0.008 seconds).
+Test Suite 'XMPRecoveryTests' failed at 2026-11-17 13:22:59.198.
+	 Executed 20 tests, with 5 failures (0 unexpected) in 0.282 (0.283) seconds
+Test Suite 'AtelierPackageTests.xctest' failed at 2026-11-17 13:22:59.198.
+	 Executed 77 tests, with 1 test skipped and 57 failures (0 unexpected) in 10.313 (10.319) seconds
+Test Suite 'Selected tests' failed at 2026-11-17 13:22:59.198.
+	 Executed 77 tests, with 1 test skipped and 57 failures (0 unexpected) in 10.313 (10.319) seconds
+AGENT-RENDER-CHECK open photo: 40 edits in 11 ms (0.3 ms each), 3 renders (mean 12.5 ms, longest 16.6 ms), settled 36 ms after the last edit
+AGENT-RENDER-CHECK other photos: 24 edits on 8 photos, 10 refresh renders (mean 10.8 ms), 14 skipped as superseded, all done in 121 ms
+◇ Test run started.
+↳ Testing Library Version: 1501
+↳ Target Platform: arm64e-apple-macos14.0
+✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.
