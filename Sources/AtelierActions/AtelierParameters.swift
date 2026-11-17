@@ -105,3 +105,22 @@ public struct RecipeParameters: ActionParameters, Hashable {
     public static let example = RecipeParameters(recipe: "remove-object")
     public static let fieldNotes = ["recipe": FieldNote("An AI recipe's id, as in the Photo menu's AI items.")]
 }
+
+/// What Keep on This Mac and Free Up Space act on (AT-079c).
+public enum KeepPlaceChoice: String, AgentEnum {
+    case folder, importEntry, collection, location
+}
+
+public struct KeepParameters: ActionParameters, Hashable {
+    public var place: KeepPlaceChoice
+    public var id: Int64
+    public init(place: KeepPlaceChoice, id: Int64) {
+        self.place = place
+        self.id = id
+    }
+    public static let example = KeepParameters(place: .importEntry, id: 1)
+    public static let fieldNotes = [
+        "place": FieldNote("A sidebar folder, import entry, collection or storage location."),
+        "id": FieldNote("Its id."),
+    ]
+}

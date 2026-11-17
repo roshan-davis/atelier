@@ -187,6 +187,10 @@ final class LibraryModel: ObservableObject {
     var originalTransfer: Task<OriginalCache.StoreResult, Error>?
     var prefetchTask: Task<Void, Never>?
     let foregroundReading = LockedValue(false)
+    /// Keep on This Mac (AT-079c): the size dialog, the reading in the status bar, the run.
+    @Published var keepRequest: KeepRequest?
+    @Published var keepProgress: ImportStatus?
+    var keepTask: Task<Void, Never>?
     /// The Match Look dialog, while open, and Match each photo's progress in the status bar.
     @Published var matchLook: MatchLookModel?
     @Published var matchProgress: ImportStatus?

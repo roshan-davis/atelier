@@ -112,6 +112,8 @@ extension LibraryModel {
         r.bind(AtelierAction.connectLocation) { model, parameters, _ in model.connectLocation(parameters.location) }
         r.bind(AtelierAction.disconnectLocation) { model, parameters, _ in model.disconnectLocation(parameters.location) }
         r.bind(AtelierAction.showLocationInFinder) { model, parameters, _ in model.showLocationInFinder(parameters.location) }
+        r.bind(AtelierAction.keepOnThisMac) { model, parameters, _ in model.beginKeep(LibraryModel.keepPlace(parameters)) }
+        r.bind(AtelierAction.freeUpSpace) { model, parameters, _ in model.freeUpSpace(LibraryModel.keepPlace(parameters)) }
     }
 
     private static func bindPhoto(_ r: AtelierRegistry) {
