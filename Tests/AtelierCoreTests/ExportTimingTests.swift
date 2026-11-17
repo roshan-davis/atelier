@@ -15,7 +15,7 @@ final class ExportTimingTests: XCTestCase {
             throw XCTSkip("Set ATELIER_EXPORT_BENCH and ATELIER_SAMPLE_RAWS to time Export.")
         }
         let raws = try FileManager.default.contentsOfDirectory(at: URL(fileURLWithPath: folder), includingPropertiesForKeys: nil)
-            .filter { Catalog.isRaw($0.lastPathComponent) }
+            .filter { FilePairs.isRaw($0.lastPathComponent) }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
         XCTAssertFalse(raws.isEmpty, "no RAWs in \(folder)")
 
