@@ -906,6 +906,7 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 - Folder roots for writes. Destination, overwrite and license gate rechecked at run time.
 - Jobs with progress, Cancel and a list of files written so far.
 - None of these may be in an atomic batch.
+- **Folder roots resolve links in the part of the path that exists** (AT-080, found by Easel's EA-075 item 7): `URL.resolvingSymlinksInPath()` returns the path unchanged when the file doesn't exist yet, which is always the case for a file about to be written, so a link inside an allowed folder could lead outside it. Resolve the deepest existing folder, then add the rest, as Easel's `AgentFolders.resolved` does, and test it with a link.
 - **"This app asks for me" (Rosh, Nov 13, 2026, Docent project thread):** a switch on a client's grant in Settings > Agents, offered only for a client whose code signature is Rosh's own Docent. With it on, Atelier skips its Allow sheet and takes the approval Docent's own card got from Rosh: Docent sends the exact operation it showed (photos, preset or recipe, destination, options), and Atelier runs only that operation, rechecking folders, overwrite and the license gate as usual. Other clients (OpenCode, ollmcp, Cherry Studio, Claude Desktop) always get the sheet. Profiles still cap what Docent may call, edits keep their toast and named undo step, and deletes stay never. Docent's side: [Docent PRD, Approvals](https://github.com/roshan-davis/docent/blob/main/Requirements/Docent-PRD.md#approvals). Update `Docs/Atelier-Agent-Actions.md` ("Approving an export, AI job or Edit In") in the same PR.
 
 **Acceptance:**
@@ -1478,6 +1479,13 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 **Scope:** In the existing Cull view, compare the suggested keeper and the next-ranked frame from the same group under the active Pick By setting. Enable Compare for groups with at least two frames. Reuse the shared photo viewport so zooming or panning either preview updates both.
 
 **Acceptance:** In both pre-import Cull and Show Cull Group, open Compare on a group with at least two frames. Zoom to 100% on a face and pan in either pane. Both panes follow at the same magnification and relative image position. Return to the single-photo view and verify that reviewing the pair preserved the current keep/drop choices. On a single-frame group, Compare is unavailable.
+
+## AT-080 — Agents: MCP follow-ups found while building Easel's copy
+
+**Status:** Done in this PR. **Decision:** Rosh, Nov 17, 2026, Easel project thread "Give Easel MCP support for Docent" ("go ahead" to the follow-up batch). **Owner:** Claude, on Rosh's Mac. **Branch:** `claude/mcp-mac-test-fix`.
+
+1. **A test that fails on a Mac:** `MCPSocketTests.testIdentityFindsOuterAppBundle` expected Linux's `process#…` client id, so on a Mac it failed whenever the tests ran under an app (Xcode, Terminal, Claude), which names the client instead. A false failure, not a bug in `ClientIdentity`. Fixed as in Easel's copy (easel#185): on a Mac either answer passes, and a named app must have a path.
+2. **Folder roots and links:** checked Atelier for the hole Easel found (a link inside an allowed folder leading a write outside it). Atelier has no agent file writes yet (export, Edit In and AI wait for AT-050e), so nothing to fix today; AT-050e's scope now says how to check folders so the hole never appears.
 
 ## AT-079 — Storage you configure: network shares, cloud drive folders, S3 backups
 
