@@ -12,6 +12,9 @@ class ModelDownloadState<Model: Hashable & Sendable>: ObservableObject {
     @Published private(set) var progress: Double?
     @Published private(set) var error: String?
     private var task: Task<Void, Never>?
+    /// Counts downloads started and cancelled, so a download that ends after Cancel (or after a
+    /// newer one started) doesn't clear the newer one's state.
+    private var generation = 0
 
     /// Downloads `model` with `install`, which reports progress 0...1, then runs `finished`.
     /// Does nothing while another download runs.
@@ -22,17 +25,21 @@ class ModelDownloadState<Model: Hashable & Sendable>: ObservableObject {
         error = nil
         downloading = model
         progress = 0
+        generation += 1
+        let mine = generation
         task = Task {
             do {
                 try await install { [weak self] value in
                     Task { @MainActor in
-                        if self?.progress != nil { self?.progress = value }
+                        if self?.generation == mine, self?.progress != nil { self?.progress = value }
                     }
                 }
+                // After Cancel nothing more happens, even if the install ignored it and finished.
+                guard generation == mine else { return }
                 finished()
             } catch {
                 // Cancel already cleared the state, and a new download may have started since.
-                if Task.isCancelled { return }
+                if generation != mine { return }
                 self.error = error.localizedDescription
             }
             downloading = nil
@@ -42,6 +49,7 @@ class ModelDownloadState<Model: Hashable & Sendable>: ObservableObject {
     }
 
     func cancel() {
+        generation += 1
         task?.cancel()
         task = nil
         downloading = nil
