@@ -18,7 +18,7 @@ extension Catalog {
     }
 
     /// Add Location… > Object Storage (S3): saves the keys in `secrets` (the Keychain) first, then
-    /// the location, used for backups. The same bucket and folder twice is the same location
+    /// the location, for backups (the backup location if there is none yet). The same bucket and folder twice is the same location
     /// (its keys are replaced).
     @discardableResult
     public func addObjectStorageLocation(name: String, bucket: S3Bucket, credentials: S3Credentials,
@@ -31,11 +31,13 @@ extension Catalog {
         let reference = UUID().uuidString
         let shownName = name.trimmingCharacters(in: .whitespaces).isEmpty ? bucket.bucket : name
         try secrets.save(credentials, reference: reference, locationName: shownName)
+        // The first place for backups becomes the backup location; after that the user chooses.
+        let firstForBackups = try backupLocationID() == nil
         do {
             return try writer.write { db in
                 var location = StorageLocation(name: shownName, kind: .objectStorage, volumeId: nil,
                                                rootPath: bucket.prefix, serverAddress: endpoint,
-                                               usesPhotos: false, usesBackups: true)
+                                               usesPhotos: false, usesBackups: firstForBackups)
                 try location.insert(db)
                 try db.execute(sql: """
                     UPDATE storageLocation SET bucket = ?, region = ?, pathStyle = ?, keychainItem = ?,

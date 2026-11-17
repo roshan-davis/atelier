@@ -111,7 +111,9 @@ public struct StorageLocationInfo: Identifiable, Hashable, Sendable {
     /// The word beside the status dot. A cloud drive folder whose provider folder is gone (the app
     /// signed out or removed) is "Signed Out" rather than "Offline".
     public var statusWord: String {
-        location.kind == .cloudFolder && status == .offline ? "Signed Out" : status.word
+        // A bucket is reached on demand; it has no connection to show ("Ready" once added).
+        if location.kind == .objectStorage { return "Ready" }
+        return location.kind == .cloudFolder && status == .offline ? "Signed Out" : status.word
     }
 
     /// The grey second line: "Network share · megham.local/Photos", "Drive · Photos SSD/Portfolio".

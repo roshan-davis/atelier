@@ -108,6 +108,7 @@ extension LibraryModel {
             model.withTargets(ids) { model.writeXMP(selectionOnly: true) }
         }
         r.bind(AtelierAction.writeAllXMP) { model, _, _ in model.writeXMP(selectionOnly: false) }
+        r.bind(AtelierAction.backUpCatalog, enabled: { $0.backupJob == nil }) { model, _, _ in model.backUpCatalog() }
         r.bind(AtelierAction.buildSmartPreviews, enabled: { !$0.targetIDs.isEmpty }) { model, _, ids in
             model.buildSmartPreviews(ids)
         }

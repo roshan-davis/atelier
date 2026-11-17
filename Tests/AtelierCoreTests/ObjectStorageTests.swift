@@ -133,6 +133,33 @@ final class ObjectStorageTests: XCTestCase {
         XCTAssertGreaterThan(tables, 0)
     }
 
+    func testScheduleAndBackupLocation() throws {
+        let last = noon
+        XCTAssertTrue(BackupSchedule.everyQuit.isDue(last: last, now: last.addingTimeInterval(60)))
+        XCTAssertFalse(BackupSchedule.daily.isDue(last: last, now: last.addingTimeInterval(3 * 3600)))
+        XCTAssertTrue(BackupSchedule.daily.isDue(last: last, now: last.addingTimeInterval(22 * 3600)))
+        XCTAssertFalse(BackupSchedule.weekly.isDue(last: last, now: last.addingTimeInterval(3 * 86400)))
+        XCTAssertTrue(BackupSchedule.weekly.isDue(last: last, now: last.addingTimeInterval(7 * 86400)))
+        XCTAssertTrue(BackupSchedule.weekly.isDue(last: nil))
+
+        let catalog = try Catalog()
+        let secrets = MemorySecrets()
+        XCTAssertNil(try catalog.backupLocationID())
+        let endpoint = try XCTUnwrap(URL(string: "http://localhost:9000"))
+        let first = try catalog.addObjectStorageLocation(name: "A", bucket: S3Bucket(endpoint: endpoint, region: "", bucket: "a"),
+                                                         credentials: credentials, secrets: secrets)
+        let second = try catalog.addObjectStorageLocation(name: "B", bucket: S3Bucket(endpoint: endpoint, region: "", bucket: "b"),
+                                                          credentials: credentials, secrets: secrets)
+        XCTAssertEqual(try catalog.backupLocationID(), first.id, "the first one becomes the backup location")
+        try catalog.setBackupLocation(second.id)
+        XCTAssertEqual(try catalog.backupLocationID(), second.id)
+        XCTAssertTrue(try catalog.backupDestination(for: XCTUnwrap(second.id), secrets: secrets) is S3BackupDestination)
+        try catalog.setBackupLocation(nil)
+        XCTAssertNil(try catalog.backupLocationID())
+        // Without its keys it says so instead of trying.
+        XCTAssertThrowsError(try catalog.backupDestination(for: XCTUnwrap(first.id), secrets: MemorySecrets()))
+    }
+
     /// Against a real bucket (MinIO): Test Connection, a multipart upload, backups kept, wrong keys.
     func testABucketOnMinIO() async throws {
         let environment = ProcessInfo.processInfo.environment

@@ -98,6 +98,7 @@ struct StorageSettings: View {
             if let selected {
                 StorageLocationDetail(info: selected) { removing = selected }
             }
+            BackupsSection()
             if let originals = model.originals {
                 OriginalCacheSection(cache: originals)
             }
@@ -129,7 +130,11 @@ struct StorageSettings: View {
     private func remove() {
         guard let id = removing?.location.id else { return }
         do {
-            try model.catalog.removeStorageLocation(id)
+            if removing?.location.kind == .objectStorage {
+                try model.catalog.removeObjectStorageLocation(id)  // and its keys in the Keychain
+            } else {
+                try model.catalog.removeStorageLocation(id)
+            }
             DeleteFeedback.play(.remove)
             if selection == id { selection = nil }
         } catch {
@@ -206,11 +211,13 @@ struct StorageLocationRow: View {
             Spacer(minLength: 8)
             VStack(alignment: .trailing, spacing: 2) {
                 HStack(spacing: 5) {
-                    Circle().fill(StorageIcons.dotColor(for: info.status)).frame(width: 7, height: 7)
+                    Circle().fill(StorageIcons.dotColor(for: info.location.kind == .objectStorage ? .connected : info.status))
+                        .frame(width: 7, height: 7)
                     Text(info.statusWord).font(.callout)
                 }
                 .fixedSize()
-                Text(info.photoCount == 1 ? "1 photo" : "\(info.photoCount.formatted()) photos")
+                Text(info.location.kind == .objectStorage ? "Backups"
+                     : info.photoCount == 1 ? "1 photo" : "\(info.photoCount.formatted()) photos")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize()
@@ -245,7 +252,11 @@ private struct StorageLocationDetail: View {
                     .textSelection(.enabled)
                     .help(info.rootURL?.path ?? info.detailLine)
             }
-            LabeledContent("Photos", value: info.photoCount.formatted())
+            if info.location.kind == .objectStorage {
+                ObjectStorageDetail(info: info)
+            } else {
+                LabeledContent("Photos", value: info.photoCount.formatted())
+            }
             if info.location.kind != .objectStorage {
                 Toggle("Make smart previews for photos here", isOn: Binding(
                     get: { makesSmartPreviews },
@@ -268,7 +279,7 @@ private struct StorageLocationDetail: View {
             }
             HStack {
                 let parameters = LocationParameters(location: info.id)
-                if info.location.serverAddress != nil {
+                if info.location.kind == .networkShare, info.location.serverAddress != nil {
                     if info.status == .connected {
                         model.actions.button(AtelierAction.disconnectLocation, parameters)
                             .disabled(!model.canDisconnect(info.id))
@@ -276,8 +287,10 @@ private struct StorageLocationDetail: View {
                         model.actions.button(AtelierAction.connectLocation, parameters)
                     }
                 }
-                model.actions.button(AtelierAction.showLocationInFinder, parameters)
-                    .disabled(info.status != .connected)
+                if info.location.kind != .objectStorage {
+                    model.actions.button(AtelierAction.showLocationInFinder, parameters)
+                        .disabled(info.status != .connected)
+                }
                 Spacer()
                 Button("Remove Location…", role: .destructive, action: remove)
             }
@@ -441,6 +454,187 @@ private struct SmartPreviewsSection: View {
         Task {
             _ = await model.discardAllSmartPreviews()
             await loadUsage()
+        }
+    }
+}
+
+/// Settings > Storage > Backups (AT-079e): where the catalog is backed up, when, how many are
+/// kept there, Back Up Now and the last result. The catalog's own snapshots on quit stay in
+/// Settings > General.
+private struct BackupsSection: View {
+    @EnvironmentObject private var model: LibraryModel
+    @AppStorage(LibraryModel.backupScheduleKey) private var schedule = BackupSchedule.daily.rawValue
+    @AppStorage(LibraryModel.backupKeepKey) private var keep = 10
+    @State private var destination: Int64?
+
+    var body: some View {
+        SettingsSection("Backups", id: "storage.backups") {
+            Picker("Back up the catalog to", selection: Binding(get: { destination }, set: { choose($0) })) {
+                Text("None").tag(Int64?.none)
+                if !model.sidebar.locations.isEmpty { Divider() }
+                ForEach(model.sidebar.locations) { info in
+                    Text(info.location.name).tag(Int64?.some(info.id))
+                }
+            }
+            Picker("When", selection: $schedule) {
+                ForEach(BackupSchedule.allCases, id: \.rawValue) { Text($0.title).tag($0.rawValue) }
+            }
+            .disabled(destination == nil)
+            Stepper("Keep the last \(keep) backup\(keep == 1 ? "" : "s") there", value: $keep, in: 1...100)
+                .disabled(destination == nil)
+            LabeledContent("Last backup") {
+                lastLine
+            }
+            HStack {
+                Spacer()
+                Button("Back Up Now") { model.backUpCatalog() }
+                    .disabled(destination == nil || model.backupJob != nil)
+            }
+        } footer: {
+            Text("A copy of the catalog goes to Atelier Backups in that location when Atelier quits, if one is due, and the oldest are removed. To restore one, quit Atelier and copy it over catalog.sqlite inside the catalog. Photos and previews aren't included: back them up with your drives.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .onAppear { destination = try? model.catalog.backupLocationID() }
+        .onChange(of: model.sidebar.locations.map(\.id)) { destination = try? model.catalog.backupLocationID() }
+    }
+
+    @ViewBuilder private var lastLine: some View {
+        if let progress = model.backupProgress {
+            Text(progress.phase).foregroundStyle(.secondary)
+        } else if let last = model.lastBackup {
+            if let error = last.error {
+                Text(error).foregroundStyle(.red).lineLimit(2)
+            } else {
+                Text("\(last.date.formatted(date: .abbreviated, time: .shortened)) · "
+                     + ByteCountFormatter.string(fromByteCount: last.bytes, countStyle: .file) + " to \(last.location)")
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+        } else {
+            Text("Never").foregroundStyle(.secondary)
+        }
+    }
+
+    private func choose(_ id: Int64?) {
+        do {
+            try model.catalog.setBackupLocation(id)
+            destination = id
+        } catch {
+            model.status = "Couldn't change the backup location: \(error.localizedDescription)"
+        }
+    }
+}
+
+/// A bucket's details: its keys in the Keychain, Test Connection and Sign In Again… (AT-079e).
+private struct ObjectStorageDetail: View {
+    @EnvironmentObject private var model: LibraryModel
+    let info: StorageLocationInfo
+    @State private var hasKeys = true
+    @State private var testing = false
+    @State private var result: String?
+    @State private var resultIsProblem = false
+    @State private var signingIn = false
+
+    var body: some View {
+        LabeledContent("Keys") {
+            Text(hasKeys ? "Kept in your Keychain" : "Not in your Keychain")
+                .foregroundStyle(hasKeys ? Color.secondary : Color.red)
+        }
+        HStack(spacing: 8) {
+            Button("Test Connection") { test() }
+                .disabled(testing || !hasKeys)
+            Button("Sign In Again…") { signingIn = true }
+            if testing { ProgressView().controlSize(.small) }
+            if let result {
+                Label(result, systemImage: resultIsProblem ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                    .foregroundStyle(resultIsProblem ? Color.orange : Color.green)
+                    .lineLimit(2)
+            }
+            Spacer()
+        }
+        .onAppear(perform: check)
+        .onChange(of: info.id) { result = nil; check() }
+        .sheet(isPresented: $signingIn, onDismiss: check) {
+            S3KeysSheet(locationID: info.id, locationName: info.location.name)
+                .environmentObject(model)
+        }
+    }
+
+    private func check() {
+        hasKeys = (try? model.catalog.s3Client(for: info.id)) != nil
+    }
+
+    private func test() {
+        guard let client = try? model.catalog.s3Client(for: info.id) else { return }
+        testing = true
+        result = nil
+        Task {
+            do {
+                try await client.testConnection()
+                result = "Connected"
+                resultIsProblem = false
+            } catch {
+                result = error.localizedDescription
+                resultIsProblem = true
+            }
+            testing = false
+        }
+    }
+}
+
+/// Sign In Again…: new keys for a bucket, checked before they replace the Keychain's.
+private struct S3KeysSheet: View {
+    @EnvironmentObject private var model: LibraryModel
+    @Environment(\.dismiss) private var dismiss
+    let locationID: Int64
+    let locationName: String
+    @State private var accessKey = ""
+    @State private var secretKey = ""
+    @State private var checking = false
+    @State private var problem: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Sign In to “\(locationName)”").font(.headline)
+            Form {
+                TextField("Access Key", text: $accessKey)
+                SecureField("Secret Key", text: $secretKey)
+            }
+            .formStyle(.grouped)
+            .scrollDisabled(true)
+            HStack {
+                if let problem {
+                    Label(problem, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange).font(.callout).lineLimit(2)
+                }
+                Spacer()
+                if checking { ProgressView().controlSize(.small) }
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Sign In") { signIn() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(checking || accessKey.isEmpty || secretKey.isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 420)
+    }
+
+    private func signIn() {
+        guard let storage = try? model.catalog.objectStorage(locationID) else { return }
+        let credentials = S3Credentials(accessKey: accessKey.trimmingCharacters(in: .whitespaces),
+                                        secretKey: secretKey.trimmingCharacters(in: .whitespaces))
+        checking = true
+        problem = nil
+        Task {
+            do {
+                try await S3Client(bucket: storage.bucket, credentials: credentials).testConnection()
+                try KeychainSecrets().save(credentials, reference: storage.keychainItem, locationName: storage.location.name)
+                dismiss()
+            } catch {
+                problem = error.localizedDescription
+            }
+            checking = false
         }
     }
 }
