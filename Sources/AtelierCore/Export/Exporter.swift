@@ -182,6 +182,12 @@ public final class Exporter: Sendable {
         return result
     }
 
+    /// The photo's file name for progress and failures ("" when there is none).
+    private func filename(_ id: Int64?) -> String {
+        guard let id else { return "" }
+        return (try? catalog.detail(for: id))?.asset.filename ?? "Photo \(id)"
+    }
+
     /// Exports one photo and returns the written file. `baseName` replaces the original's
     /// name; with `develop` false the photo is rendered without its develop settings.
     /// `lensBlur` renders the photo's Lens Blur too: only the Lens Blur mode's Save asks for it
