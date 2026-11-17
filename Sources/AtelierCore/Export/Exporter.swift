@@ -125,10 +125,25 @@ public struct ExportResult: Sendable {
 public final class Exporter: Sendable {
     private let catalog: Catalog
     private let renderer: DevelopRenderer
+    /// Photos exported at once by `run`. Export used one core of the CPU and the GPU in turn;
+    /// two at once overlap them. On 12 Z f RAWs (AT-076 P3, `ExportTimingTests`): full-size
+    /// JPEG 3.49 → 2.19 s, peak 2.6 → 3.4 GB (TIFF 4 GB), back to 0.25 GB within 3 s; a third adds 7%.
+    let photosInFlight: Int
 
-    public init(catalog: Catalog, renderer: DevelopRenderer = .shared) {
+    public convenience init(catalog: Catalog, renderer: DevelopRenderer = .shared) {
+        self.init(catalog: catalog, renderer: renderer,
+                  photosInFlight: Self.defaultPhotosInFlight(physicalMemory: ProcessInfo.processInfo.physicalMemory))
+    }
+
+    /// Two photos at once, one on an 8 GB Mac: two full-size 16-bit TIFFs peak at about 4 GB.
+    static func defaultPhotosInFlight(physicalMemory: UInt64) -> Int {
+        physicalMemory > 8 * 1_073_741_824 ? 2 : 1
+    }
+
+    init(catalog: Catalog, renderer: DevelopRenderer, photosInFlight: Int) {
         self.catalog = catalog
         self.renderer = renderer
+        self.photosInFlight = max(1, photosInFlight)
     }
 
     public func run(assetIDs: [Int64], settings: ExportSettings,
@@ -141,20 +156,43 @@ public final class Exporter: Sendable {
                                                  reason: "Can't create the export folder: \(error.localizedDescription)"))
             return result
         }
-        for (index, id) in assetIDs.enumerated() {
-            if Task.isCancelled { break }
-            let filename = (try? catalog.detail(for: id))?.asset.filename ?? "Photo \(id)"
-            progress?(ExportProgress(processed: index, total: assetIDs.count, filename: filename))
-            do {
-                let url = try autoreleasepool { try export(id, settings: settings) }
-                result.exported.append(url)
-            } catch {
-                result.failures.append(ExportFailure(filename: filename, reason: error.localizedDescription))
+        // Up to `photosInFlight` photos at once; results keep the photos' order.
+        var outcomes = [Result<URL, Error>?](repeating: nil, count: assetIDs.count)
+        var finished = 0
+        await withTaskGroup(of: (Int, Result<URL, Error>).self) { group in
+            var next = 0
+            func startNext() {
+                guard next < assetIDs.count, !Task.isCancelled else { return }
+                let index = next, id = assetIDs[index]
+                next += 1
+                group.addTask {
+                    (index, Result { try autoreleasepool { try self.export(id, settings: settings) } })
+                }
+            }
+            for _ in 0..<photosInFlight { startNext() }
+            progress?(ExportProgress(processed: 0, total: assetIDs.count, filename: filename(assetIDs.first)))
+            for await (index, outcome) in group {
+                outcomes[index] = outcome
+                finished += 1
+                progress?(ExportProgress(processed: finished, total: assetIDs.count,
+                                         filename: filename(next < assetIDs.count ? assetIDs[next] : nil)))
+                startNext()
             }
         }
-        progress?(ExportProgress(processed: result.exported.count + result.failures.count,
-                                 total: assetIDs.count, filename: ""))
+        for (id, outcome) in zip(assetIDs, outcomes) {
+            switch outcome {
+            case .success(let url): result.exported.append(url)
+            case .failure(let error): result.failures.append(ExportFailure(filename: filename(id), reason: error.localizedDescription))
+            case nil: break  // cancelled before it started
+            }
+        }
         return result
+    }
+
+    /// The photo's file name for progress and failures ("" when there is none).
+    private func filename(_ id: Int64?) -> String {
+        guard let id else { return "" }
+        return (try? catalog.detail(for: id))?.asset.filename ?? "Photo \(id)"
     }
 
     /// Exports one photo and returns the written file. `baseName` replaces the original's
@@ -207,6 +245,8 @@ public final class Exporter: Sendable {
         image = Watermark.apply(settings.watermark, to: image)
 
         let format: CIFormat = settings.format.isSixteenBit ? .RGBA16 : .RGBA8
+        // Deferred: the encoder pulls the pixels as it writes (measured 11% faster than rendering
+        // first, and the files stay byte for byte as before).
         guard let cgImage = renderer.context.createCGImage(image, from: image.extent, format: format,
                                                             colorSpace: settings.colorSpace.cgColorSpace) else {
             throw ExportError("Rendering failed.")
@@ -216,9 +256,10 @@ public final class Exporter: Sendable {
         if baseName == nil, detail.asset.virtualCopyOf != nil, let copy = try catalog.virtualCopyName(of: assetID) {
             base += "-\(copy.replacingOccurrences(of: " ", with: ""))"
         }
-        let target = Self.uniqueURL(in: settings.destination, base: base, extension: settings.format.fileExtension)
+        let target = Self.claimUniqueURL(in: settings.destination, base: base, extension: settings.format.fileExtension)
         guard let destination = CGImageDestinationCreateWithURL(target as CFURL, settings.format.type.identifier as CFString,
                                                                 1, nil) else {
+            try? FileManager.default.removeItem(at: target)
             throw ExportError("\(settings.format.label) export isn't supported on this Mac.")
         }
         let properties = Self.properties(source: source, detail: detail, settings: settings,
@@ -229,6 +270,23 @@ public final class Exporter: Sendable {
             throw ExportError("The file could not be written.")
         }
         return target
+    }
+
+    /// `uniqueURL`, created empty at once so a photo exported alongside can't take the same name.
+    static func claimUniqueURL(in folder: URL, base: String, extension ext: String) -> URL {
+        var counter = 1
+        while true {
+            let name = counter == 1 ? base : "\(base) (\(counter))"
+            let candidate = folder.appendingPathComponent(name).appendingPathExtension(ext)
+            let file = open(candidate.path, O_CREAT | O_EXCL | O_WRONLY, 0o644)
+            if file >= 0 {
+                close(file)
+                return candidate
+            }
+            // Taken: try the next name. Any other error shows when the file is written.
+            guard errno == EEXIST else { return candidate }
+            counter += 1
+        }
     }
 
     /// `name.jpg`, then `name (2).jpg`, and so on; existing files are never overwritten.

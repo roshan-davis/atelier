@@ -85,6 +85,34 @@ final class ExportTests: XCTestCase {
         XCTAssertEqual(image.bitsPerComponent, 16)
     }
 
+    /// AT-076 P3: photos export two at a time; same-named photos still get their own files,
+    /// and the result keeps the photos' order.
+    func testPhotosInFlightKeepOrderAndNames() async throws {
+        var sources: [URL] = []
+        for (index, folder) in ["A", "B", "C", "D"].enumerated() {
+            let dir = sourceDir.appendingPathComponent(folder, isDirectory: true)
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let url = dir.appendingPathComponent("IMG_0050.jpg")
+            try makeJPEG(at: url, width: 80 + index * 10, height: 60)
+            sources.append(url)
+        }
+        let catalog = try Catalog()
+        let imported = await Importer(catalog: catalog, previews: nil)
+            .run(sources: sources, options: ImportOptions(buildPreviews: false))
+        let ids = try sources.map { try XCTUnwrap(imported.assetIDsBySource[$0]) }
+        let export = await Exporter(catalog: catalog, renderer: .shared, photosInFlight: 2)
+            .run(assetIDs: ids, settings: ExportSettings(destination: exportDir))
+        XCTAssertEqual(export.failures, [])
+        XCTAssertEqual(Set(export.exported.map(\.lastPathComponent)),
+                       ["IMG_0050.jpg", "IMG_0050 (2).jpg", "IMG_0050 (3).jpg", "IMG_0050 (4).jpg"])
+        XCTAssertEqual(export.exported.map { loadImage($0)?.width }, [80, 90, 100, 110], "in the photos' order")
+    }
+
+    func testOnePhotoAtATimeOnAnEightGigabyteMac() {
+        XCTAssertEqual(Exporter.defaultPhotosInFlight(physicalMemory: 8 * 1_073_741_824), 1)
+        XCTAssertEqual(Exporter.defaultPhotosInFlight(physicalMemory: 16 * 1_073_741_824), 2)
+    }
+
     func testOfflineOriginalIsReported() async throws {
         let source = sourceDir.appendingPathComponent("IMG_0044.jpg")
         try makeJPEG(at: source, width: 40, height: 40)
