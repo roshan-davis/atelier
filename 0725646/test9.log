@@ -1,0 +1,127 @@
+[0/1] Planning build
+Test Suite 'Selected tests' started at 2026-11-17 12:55:42.593.
+Test Suite 'AtelierPackageTests.xctest' started at 2026-11-17 12:55:42.593.
+Test Suite 'SmartPreviewSpikeTests' started at 2026-11-17 12:55:42.593.
+Test Case '-[AtelierCoreTests.SmartPreviewSpikeTests testSmartPreviewsAgainstTheRAW]' started.
+Test Case '-[AtelierCoreTests.SmartPreviewSpikeTests testSmartPreviewsAgainstTheRAW]' passed (136.800 seconds).
+Test Suite 'SmartPreviewSpikeTests' passed at 2026-11-17 12:57:59.394.
+	 Executed 1 test, with 0 failures (0 unexpected) in 136.800 (136.801) seconds
+Test Suite 'AtelierPackageTests.xctest' passed at 2026-11-17 12:57:59.394.
+	 Executed 1 test, with 0 failures (0 unexpected) in 136.800 (136.801) seconds
+Test Suite 'Selected tests' passed at 2026-11-17 12:57:59.394.
+	 Executed 1 test, with 0 failures (0 unexpected) in 136.800 (136.801) seconds
+SMARTPREVIEW camera DSC_0348.NEF: NIKON D3100
+SMARTPREVIEW camera DSC_0358.NEF: NIKON D3100
+SMARTPREVIEW camera Z62_0193.NEF: NIKON Z 6_2
+SMARTPREVIEW DSC_0348 lossy90b: RAW as shot 4835 K tint 45.6; DNG reports 4836 K tint 45.6, baseline 1.00
+SMARTPREVIEW DSC_0348 lossy90b as shot: 949 KB, made 196 ms, RAW render 67 ms, preview render 66 ms, mean |diff| RGB 3.0/2.7/2.9
+SMARTPREVIEW DSC_0348 lossy90b 4000K: 949 KB, made 196 ms, RAW render 77 ms, preview render 34 ms, mean |diff| RGB 9.3/11.1/16.7
+SMARTPREVIEW DSC_0348 lossy90b 7500K: 949 KB, made 196 ms, RAW render 77 ms, preview render 37 ms, mean |diff| RGB 27.5/27.0/22.8
+SMARTPREVIEW DSC_0348 lossy90b tint+30: 949 KB, made 196 ms, RAW render 77 ms, preview render 37 ms, mean |diff| RGB 2.8/2.4/5.1
+SMARTPREVIEW DSC_0348 lossy90b +1 EV: 949 KB, made 196 ms, RAW render 82 ms, preview render 34 ms, mean |diff| RGB 3.5/2.8/3.2
+SMARTPREVIEW DSC_0348 lossy90b -1 EV: 949 KB, made 196 ms, RAW render 77 ms, preview render 34 ms, mean |diff| RGB 2.4/2.2/2.2
+SMARTPREVIEW DSC_0348 lossy90b+matrix: RAW as shot 4835 K tint 45.6; DNG reports 4836 K tint 45.6, baseline 1.00
+SMARTPREVIEW DSC_0348 lossy90b+matrix as shot: 949 KB, made 149 ms, RAW render 66 ms, preview render 34 ms, mean |diff| RGB 3.0/2.7/2.9
+SMARTPREVIEW DSC_0348 lossy90b+matrix 4000K: matrix 0.875 -0.089 -0.079 0.004 0.978 -0.062 -0.010 0.056 1.318 in 410 ms
+SMARTPREVIEW DSC_0348 lossy90b+matrix 4000K: 949 KB, made 149 ms, RAW render 78 ms, preview render 38 ms, mean |diff| RGB 3.1/2.7/3.1
+SMARTPREVIEW DSC_0348 lossy90b+matrix 7500K: matrix 1.265 0.164 0.139 -0.009 1.026 0.081 0.011 -0.058 0.655 in 398 ms
+SMARTPREVIEW DSC_0348 lossy90b+matrix 7500K: 949 KB, made 149 ms, RAW render 80 ms, preview render 39 ms, mean |diff| RGB 3.1/2.7/2.6
+SMARTPREVIEW DSC_0348 lossy90b+matrix tint+30: matrix 1.073 0.031 0.009 -0.004 0.983 -0.058 -0.005 0.045 1.184 in 386 ms
+SMARTPREVIEW DSC_0348 lossy90b+matrix tint+30: 949 KB, made 149 ms, RAW render 75 ms, preview render 36 ms, mean |diff| RGB 3.0/2.7/3.0
+SMARTPREVIEW DSC_0348 lossy90b+matrix +1 EV: 949 KB, made 149 ms, RAW render 80 ms, preview render 35 ms, mean |diff| RGB 3.5/2.8/3.2
+SMARTPREVIEW DSC_0348 lossy90b+matrix -1 EV: 949 KB, made 149 ms, RAW render 74 ms, preview render 36 ms, mean |diff| RGB 2.4/2.2/2.2
+SMARTPREVIEW DSC_0348 lossy90b+model: RAW as shot 4835 K tint 45.6; DNG reports 4836 K tint 45.6, baseline 1.00
+SMARTPREVIEW DSC_0348 lossy90b+model as shot: 949 KB, made 151 ms, RAW render 65 ms, preview render 35 ms, mean |diff| RGB 3.0/2.7/2.9
+SMARTPREVIEW DSC_0348 lossy90b+model 4000K: from DSC_0348.NEF
+SMARTPREVIEW DSC_0348 lossy90b+model 4000K: matrix 0.875 -0.089 -0.079 0.004 0.978 -0.062 -0.010 0.057 1.318 in 790 ms
+SMARTPREVIEW DSC_0348 lossy90b+model 4000K: 949 KB, made 151 ms, RAW render 73 ms, preview render 38 ms, mean |diff| RGB 3.1/2.7/3.1
+SMARTPREVIEW DSC_0348 lossy90b+model 7500K: from DSC_0348.NEF
+SMARTPREVIEW DSC_0348 lossy90b+model 7500K: matrix 1.265 0.165 0.138 -0.009 1.027 0.081 0.011 -0.059 0.656 in 788 ms
+SMARTPREVIEW DSC_0348 lossy90b+model 7500K: 949 KB, made 151 ms, RAW render 77 ms, preview render 36 ms, mean |diff| RGB 3.1/2.7/2.6
+SMARTPREVIEW DSC_0348 lossy90b+model tint+30: from DSC_0348.NEF
+SMARTPREVIEW DSC_0348 lossy90b+model tint+30: matrix 1.073 0.031 0.009 -0.004 0.983 -0.058 -0.005 0.046 1.184 in 785 ms
+SMARTPREVIEW DSC_0348 lossy90b+model tint+30: 949 KB, made 151 ms, RAW render 79 ms, preview render 35 ms, mean |diff| RGB 3.0/2.7/3.0
+SMARTPREVIEW DSC_0348 lossy90b+model +1 EV: 949 KB, made 151 ms, RAW render 79 ms, preview render 36 ms, mean |diff| RGB 3.5/2.8/3.2
+SMARTPREVIEW DSC_0348 lossy90b+model -1 EV: 949 KB, made 151 ms, RAW render 79 ms, preview render 37 ms, mean |diff| RGB 2.4/2.2/2.2
+SMARTPREVIEW DSC_0358 lossy90b: RAW as shot 5181 K tint 35.9; DNG reports 5182 K tint 35.9, baseline 1.00
+SMARTPREVIEW DSC_0358 lossy90b as shot: 727 KB, made 145 ms, RAW render 67 ms, preview render 36 ms, mean |diff| RGB 2.8/2.4/2.6
+SMARTPREVIEW DSC_0358 lossy90b 4000K: 727 KB, made 145 ms, RAW render 89 ms, preview render 37 ms, mean |diff| RGB 15.5/15.4/21.1
+SMARTPREVIEW DSC_0358 lossy90b 7500K: 727 KB, made 145 ms, RAW render 80 ms, preview render 37 ms, mean |diff| RGB 23.4/21.9/18.0
+SMARTPREVIEW DSC_0358 lossy90b tint+30: 727 KB, made 145 ms, RAW render 79 ms, preview render 38 ms, mean |diff| RGB 3.2/2.0/3.9
+SMARTPREVIEW DSC_0358 lossy90b +1 EV: 727 KB, made 145 ms, RAW render 80 ms, preview render 36 ms, mean |diff| RGB 3.1/2.1/2.8
+SMARTPREVIEW DSC_0358 lossy90b -1 EV: 727 KB, made 145 ms, RAW render 79 ms, preview render 36 ms, mean |diff| RGB 2.1/2.1/2.0
+SMARTPREVIEW DSC_0358 lossy90b+matrix: RAW as shot 5181 K tint 35.9; DNG reports 5182 K tint 35.9, baseline 1.00
+SMARTPREVIEW DSC_0358 lossy90b+matrix as shot: 727 KB, made 150 ms, RAW render 68 ms, preview render 37 ms, mean |diff| RGB 2.8/2.4/2.6
+SMARTPREVIEW DSC_0358 lossy90b+matrix 4000K: matrix 0.852 -0.130 -0.085 0.006 0.969 -0.069 -0.023 0.087 1.371 in 391 ms
+SMARTPREVIEW DSC_0358 lossy90b+matrix 4000K: 727 KB, made 150 ms, RAW render 82 ms, preview render 37 ms, mean |diff| RGB 3.3/2.4/2.8
+SMARTPREVIEW DSC_0358 lossy90b+matrix 7500K: matrix 1.192 0.145 0.089 -0.009 1.024 0.062 0.016 -0.061 0.741 in 390 ms
+SMARTPREVIEW DSC_0358 lossy90b+matrix 7500K: 727 KB, made 150 ms, RAW render 80 ms, preview render 37 ms, mean |diff| RGB 2.6/2.4/2.5
+SMARTPREVIEW DSC_0358 lossy90b+matrix tint+30: matrix 1.074 0.040 0.008 -0.003 0.982 -0.048 -0.009 0.047 1.147 in 395 ms
+SMARTPREVIEW DSC_0358 lossy90b+matrix tint+30: 727 KB, made 150 ms, RAW render 78 ms, preview render 35 ms, mean |diff| RGB 2.7/2.4/2.7
+SMARTPREVIEW DSC_0358 lossy90b+matrix +1 EV: 727 KB, made 150 ms, RAW render 83 ms, preview render 35 ms, mean |diff| RGB 3.1/2.1/2.8
+SMARTPREVIEW DSC_0358 lossy90b+matrix -1 EV: 727 KB, made 150 ms, RAW render 77 ms, preview render 37 ms, mean |diff| RGB 2.1/2.1/2.0
+SMARTPREVIEW DSC_0358 lossy90b+model: RAW as shot 5181 K tint 35.9; DNG reports 5182 K tint 35.9, baseline 1.00
+SMARTPREVIEW DSC_0358 lossy90b+model as shot: 727 KB, made 162 ms, RAW render 66 ms, preview render 36 ms, mean |diff| RGB 2.8/2.4/2.6
+SMARTPREVIEW DSC_0358 lossy90b+model 4000K: from DSC_0348.NEF
+SMARTPREVIEW DSC_0358 lossy90b+model 4000K: matrix 0.843 -0.112 -0.103 0.004 0.973 -0.074 -0.012 0.066 1.393 in 797 ms
+SMARTPREVIEW DSC_0358 lossy90b+model 4000K: 727 KB, made 162 ms, RAW render 78 ms, preview render 37 ms, mean |diff| RGB 3.2/2.5/2.8
+SMARTPREVIEW DSC_0358 lossy90b+model 7500K: from DSC_0348.NEF
+SMARTPREVIEW DSC_0358 lossy90b+model 7500K: matrix 1.202 0.124 0.111 -0.007 1.021 0.066 0.008 -0.046 0.726 in 810 ms
+SMARTPREVIEW DSC_0358 lossy90b+model 7500K: 727 KB, made 162 ms, RAW render 80 ms, preview render 37 ms, mean |diff| RGB 2.6/2.4/2.5
+SMARTPREVIEW DSC_0358 lossy90b+model tint+30: from DSC_0348.NEF
+SMARTPREVIEW DSC_0358 lossy90b+model tint+30: matrix 1.077 0.034 0.014 -0.004 0.985 -0.051 -0.004 0.038 1.156 in 798 ms
+SMARTPREVIEW DSC_0358 lossy90b+model tint+30: 727 KB, made 162 ms, RAW render 77 ms, preview render 37 ms, mean |diff| RGB 2.7/2.4/2.7
+SMARTPREVIEW DSC_0358 lossy90b+model +1 EV: 727 KB, made 162 ms, RAW render 81 ms, preview render 38 ms, mean |diff| RGB 3.1/2.1/2.8
+SMARTPREVIEW DSC_0358 lossy90b+model -1 EV: 727 KB, made 162 ms, RAW render 82 ms, preview render 37 ms, mean |diff| RGB 2.1/2.1/2.0
+SMARTPREVIEW Z62_0193 lossy90b: RAW as shot 6418 K tint -2.7; DNG reports 6420 K tint -2.7, baseline 1.68
+SMARTPREVIEW Z62_0193 lossy90b as shot: 399 KB, made 187 ms, RAW render 164 ms, preview render 41 ms, mean |diff| RGB 2.7/2.4/2.2
+SMARTPREVIEW Z62_0193 lossy90b 4000K: 399 KB, made 187 ms, RAW render 158 ms, preview render 34 ms, mean |diff| RGB 26.5/22.7/22.6
+SMARTPREVIEW Z62_0193 lossy90b 7500K: 399 KB, made 187 ms, RAW render 108 ms, preview render 37 ms, mean |diff| RGB 6.1/5.2/5.6
+SMARTPREVIEW Z62_0193 lossy90b tint+30: 399 KB, made 187 ms, RAW render 107 ms, preview render 37 ms, mean |diff| RGB 2.8/2.4/3.6
+SMARTPREVIEW Z62_0193 lossy90b +1 EV: 399 KB, made 187 ms, RAW render 107 ms, preview render 39 ms, mean |diff| RGB 2.7/2.3/2.4
+SMARTPREVIEW Z62_0193 lossy90b -1 EV: 399 KB, made 187 ms, RAW render 114 ms, preview render 38 ms, mean |diff| RGB 2.3/2.2/1.9
+SMARTPREVIEW Z62_0193 lossy90b+matrix: RAW as shot 6418 K tint -2.7; DNG reports 6420 K tint -2.7, baseline 1.68
+SMARTPREVIEW Z62_0193 lossy90b+matrix as shot: 399 KB, made 183 ms, RAW render 106 ms, preview render 37 ms, mean |diff| RGB 2.7/2.4/2.2
+SMARTPREVIEW Z62_0193 lossy90b+matrix 4000K: matrix 0.760 -0.147 -0.104 -0.004 0.963 -0.083 0.012 0.053 1.487 in 472 ms
+SMARTPREVIEW Z62_0193 lossy90b+matrix 4000K: 399 KB, made 183 ms, RAW render 99 ms, preview render 35 ms, mean |diff| RGB 2.9/2.3/2.5
+SMARTPREVIEW Z62_0193 lossy90b+matrix 7500K: matrix 1.065 0.030 0.026 -0.003 1.004 0.028 -0.003 -0.014 0.918 in 460 ms
+SMARTPREVIEW Z62_0193 lossy90b+matrix 7500K: 399 KB, made 183 ms, RAW render 105 ms, preview render 43 ms, mean |diff| RGB 2.8/2.5/2.2
+SMARTPREVIEW Z62_0193 lossy90b+matrix tint+30: matrix 1.084 0.035 0.020 -0.008 0.990 -0.038 0.004 0.018 1.097 in 457 ms
+SMARTPREVIEW Z62_0193 lossy90b+matrix tint+30: 399 KB, made 183 ms, RAW render 106 ms, preview render 36 ms, mean |diff| RGB 2.8/2.5/2.3
+SMARTPREVIEW Z62_0193 lossy90b+matrix +1 EV: 399 KB, made 183 ms, RAW render 110 ms, preview render 36 ms, mean |diff| RGB 2.7/2.3/2.4
+SMARTPREVIEW Z62_0193 lossy90b+matrix -1 EV: 399 KB, made 183 ms, RAW render 107 ms, preview render 36 ms, mean |diff| RGB 2.3/2.2/1.9
+SMARTPREVIEW Z62_0193 lossy90b+model: RAW as shot 6418 K tint -2.7; DNG reports 6420 K tint -2.7, baseline 1.68
+SMARTPREVIEW Z62_0193 lossy90b+model as shot: 399 KB, made 176 ms, RAW render 99 ms, preview render 38 ms, mean |diff| RGB 2.7/2.4/2.2
+SMARTPREVIEW Z62_0193 lossy90b+model 4000K: from Z62_0193.NEF
+SMARTPREVIEW Z62_0193 lossy90b+model 4000K: matrix 0.762 -0.148 -0.104 -0.004 0.963 -0.083 0.011 0.054 1.488 in 917 ms
+SMARTPREVIEW Z62_0193 lossy90b+model 4000K: 399 KB, made 176 ms, RAW render 102 ms, preview render 36 ms, mean |diff| RGB 2.9/2.3/2.5
+SMARTPREVIEW Z62_0193 lossy90b+model 7500K: from Z62_0193.NEF
+SMARTPREVIEW Z62_0193 lossy90b+model 7500K: matrix 1.067 0.026 0.027 -0.003 1.003 0.028 -0.005 -0.012 0.917 in 928 ms
+SMARTPREVIEW Z62_0193 lossy90b+model 7500K: 399 KB, made 176 ms, RAW render 110 ms, preview render 39 ms, mean |diff| RGB 2.8/2.5/2.2
+SMARTPREVIEW Z62_0193 lossy90b+model tint+30: from Z62_0193.NEF
+SMARTPREVIEW Z62_0193 lossy90b+model tint+30: matrix 1.087 0.031 0.022 -0.008 0.990 -0.038 0.003 0.020 1.096 in 906 ms
+SMARTPREVIEW Z62_0193 lossy90b+model tint+30: 399 KB, made 176 ms, RAW render 103 ms, preview render 37 ms, mean |diff| RGB 2.8/2.5/2.3
+SMARTPREVIEW Z62_0193 lossy90b+model +1 EV: 399 KB, made 176 ms, RAW render 109 ms, preview render 37 ms, mean |diff| RGB 2.7/2.3/2.4
+SMARTPREVIEW Z62_0193 lossy90b+model -1 EV: 399 KB, made 176 ms, RAW render 109 ms, preview render 38 ms, mean |diff| RGB 2.3/2.2/1.9
+◇ Test run started.
+↳ Testing Library Version: 1501
+↳ Target Platform: arm64e-apple-macos14.0
+✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.
+      139.18 real       136.96 user        12.86 sys
+          8293711872  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+             1324609  page reclaims
+                1999  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                 224  voluntary context switches
+              480799  involuntary context switches
+          4302279013  instructions retired
+          1088812418  cycles elapsed
+            29377208  peak memory footprint
