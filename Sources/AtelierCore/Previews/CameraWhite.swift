@@ -30,9 +30,9 @@ public struct CameraWhite: Codable, Hashable, Sendable {
 
     /// The change from the as-shot white to (temperature, tint): identity when they are the same.
     public func change(from shot: (temperature: Double, tint: Double), to temperature: Double, tint: Double) -> [Double] {
-        if abs(shot.temperature - temperature) < 0.5, abs(shot.tint - tint) < 0.01 { return Matrix3.identity }
-        let back = Matrix3.inverse(matrix(temperature: shot.temperature, tint: shot.tint)) ?? Matrix3.identity
-        return Matrix3.multiply(matrix(temperature: temperature, tint: tint), back)
+        if abs(shot.temperature - temperature) < 0.5, abs(shot.tint - tint) < 0.01 { return WhiteMatrix3.identity }
+        let back = WhiteMatrix3.inverse(matrix(temperature: shot.temperature, tint: shot.tint)) ?? WhiteMatrix3.identity
+        return WhiteMatrix3.multiply(matrix(temperature: temperature, tint: tint), back)
     }
 
     /// The grid's matrix at (temperature, tint), bilinear in mired and tint, clamped to the grid.
@@ -129,13 +129,13 @@ public struct CameraWhite: Codable, Hashable, Sendable {
             }
             used += 1
         }
-        guard used >= 64, let inverse = Matrix3.inverse(xx) else { return nil }
-        return Matrix3.multiply(yx, inverse)
+        guard used >= 64, let inverse = WhiteMatrix3.inverse(xx) else { return nil }
+        return WhiteMatrix3.multiply(yx, inverse)
     }
 }
 
 /// Row-major 3×3 helpers, written out so the type checker finishes.
-public enum Matrix3 {
+public enum WhiteMatrix3 {
     public static let identity: [Double] = [1, 0, 0, 0, 1, 0, 0, 0, 1]
 
     public static func multiply(_ a: [Double], _ b: [Double]) -> [Double] {

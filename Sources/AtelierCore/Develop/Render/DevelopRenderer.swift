@@ -855,9 +855,9 @@ public final class DevelopSession: @unchecked Sendable {
                 // The DNG stays at its as-shot white; the camera's own change of white is applied
                 // in the engine's linear stage (none when the camera's table is missing).
                 let change = cameraWhite?.change(from: (asShotTemperature, asShotTint), to: temperature, tint: tint)
-                    ?? Matrix3.identity
+                    ?? WhiteMatrix3.identity
                 if change != appliedWhite {
-                    raw.linearSpaceFilter = change == Matrix3.identity ? nil : Matrix3.filter(change)
+                    raw.linearSpaceFilter = change == WhiteMatrix3.identity ? nil : WhiteMatrix3.filter(change)
                     appliedWhite = change
                 }
             } else {

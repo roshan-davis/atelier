@@ -24,7 +24,7 @@ final class SmartPreviewTests: XCTestCase {
         let white = syntheticWhite()
         let t = CameraWhite.gridTemperatures[5], n = CameraWhite.gridTints[3]
         XCTAssertEqual(white.matrix(temperature: t, tint: n), white.matrices[5 * CameraWhite.gridTints.count + 3])
-        XCTAssertEqual(white.change(from: (5183, 35.9), to: 5183, tint: 35.9), Matrix3.identity)
+        XCTAssertEqual(white.change(from: (5183, 35.9), to: 5183, tint: 35.9), WhiteMatrix3.identity)
         // Linear in mired and tint, so the bilinear lookup is exact between grid points too.
         let between = white.matrix(temperature: 4321, tint: 12)
         XCTAssertEqual(between[0], 1 + (1e6 / 4321 - 200) / 1000, accuracy: 1e-9)
@@ -32,16 +32,16 @@ final class SmartPreviewTests: XCTestCase {
         // A change and its way back cancel.
         let there = white.change(from: (5000, 0), to: 3200, tint: 20)
         let back = white.change(from: (3200, 20), to: 5000, tint: 0)
-        for (a, b) in zip(Matrix3.multiply(there, back), Matrix3.identity) { XCTAssertEqual(a, b, accuracy: 1e-9) }
+        for (a, b) in zip(WhiteMatrix3.multiply(there, back), WhiteMatrix3.identity) { XCTAssertEqual(a, b, accuracy: 1e-9) }
         // Outside the grid it holds the edge.
         XCTAssertEqual(white.matrix(temperature: 1000, tint: 400), white.matrix(temperature: 2000, tint: 150))
     }
 
     func testMatrixInverse() throws {
         let m = [2.0, 0.1, 0, 0.3, 1.2, -0.1, 0, 0.2, 0.9]
-        let product = Matrix3.multiply(m, try XCTUnwrap(Matrix3.inverse(m)))
-        for (a, b) in zip(product, Matrix3.identity) { XCTAssertEqual(a, b, accuracy: 1e-12) }
-        XCTAssertNil(Matrix3.inverse([1, 2, 3, 2, 4, 6, 0, 0, 1]))
+        let product = WhiteMatrix3.multiply(m, try XCTUnwrap(WhiteMatrix3.inverse(m)))
+        for (a, b) in zip(product, WhiteMatrix3.identity) { XCTAssertEqual(a, b, accuracy: 1e-12) }
+        XCTAssertNil(WhiteMatrix3.inverse([1, 2, 3, 2, 4, 6, 0, 0, 1]))
     }
 
     /// The info rides in the DNG and is read back from its IFD; any other file reads nil.
