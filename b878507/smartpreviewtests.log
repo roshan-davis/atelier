@@ -1,0 +1,61 @@
+[0/1] Planning build
+Test Suite 'Selected tests' started at 2026-11-17 13:26:27.989.
+Test Suite 'AtelierPackageTests.xctest' started at 2026-11-17 13:26:27.990.
+Test Suite 'SmartPreviewTests' started at 2026-11-17 13:26:27.990.
+Test Case '-[AtelierCoreTests.SmartPreviewTests testASmartPreviewEditsLikeItsRAW]' started.
+Test Case '-[AtelierCoreTests.SmartPreviewTests testASmartPreviewEditsLikeItsRAW]' passed (38.526 seconds).
+Test Case '-[AtelierCoreTests.SmartPreviewTests testMatrixInverse]' started.
+Test Case '-[AtelierCoreTests.SmartPreviewTests testMatrixInverse]' passed (0.000 seconds).
+Test Case '-[AtelierCoreTests.SmartPreviewTests testTheInfoIsInTheDNG]' started.
+Test Case '-[AtelierCoreTests.SmartPreviewTests testTheInfoIsInTheDNG]' passed (0.013 seconds).
+Test Case '-[AtelierCoreTests.SmartPreviewTests testTheStoreKeepsOneFilePerPhoto]' started.
+Test Case '-[AtelierCoreTests.SmartPreviewTests testTheStoreKeepsOneFilePerPhoto]' passed (0.001 seconds).
+Test Case '-[AtelierCoreTests.SmartPreviewTests testTheWhiteTableIsExactOnItsGridAndIdentityAtAsShot]' started.
+Test Case '-[AtelierCoreTests.SmartPreviewTests testTheWhiteTableIsExactOnItsGridAndIdentityAtAsShot]' passed (0.000 seconds).
+Test Suite 'SmartPreviewTests' passed at 2026-11-17 13:27:06.530.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 38.540 (38.541) seconds
+Test Suite 'AtelierPackageTests.xctest' passed at 2026-11-17 13:27:06.530.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 38.540 (38.541) seconds
+Test Suite 'Selected tests' passed at 2026-11-17 13:27:06.530.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 38.540 (38.541) seconds
+SMART DSC_0348.NEF: 952 KB, made in 2484 ms (includes the camera's white table on its first photo), opened in 9 ms
+SMART DSC_0348.NEF as shot: mean |diff| RGB 2.4/2.4/2.3, render preview 58 ms, RAW 40 ms
+SMART DSC_0348.NEF 4000K: mean |diff| RGB 1.9/2.4/2.5, render preview 12 ms, RAW 38 ms
+SMART DSC_0348.NEF 7500K: mean |diff| RGB 3.0/2.4/2.2, render preview 9 ms, RAW 39 ms
+SMART DSC_0348.NEF tint +30: mean |diff| RGB 2.6/2.4/2.5, render preview 13 ms, RAW 39 ms
+SMART DSC_0348.NEF +1 EV: mean |diff| RGB 3.3/2.7/2.8, render preview 9 ms, RAW 39 ms
+SMART DSC_0358.NEF: 730 KB, made in 233 ms (includes the camera's white table on its first photo), opened in 8 ms
+SMART DSC_0358.NEF as shot: mean |diff| RGB 2.6/2.1/2.3, render preview 27 ms, RAW 37 ms
+SMART DSC_0358.NEF 4000K: mean |diff| RGB 3.0/2.2/2.2, render preview 12 ms, RAW 38 ms
+SMART DSC_0358.NEF 7500K: mean |diff| RGB 2.3/2.1/2.6, render preview 12 ms, RAW 38 ms
+SMART DSC_0358.NEF tint +30: mean |diff| RGB 2.6/2.2/2.2, render preview 9 ms, RAW 40 ms
+SMART DSC_0358.NEF +1 EV: mean |diff| RGB 2.9/2.0/2.6, render preview 11 ms, RAW 35 ms
+SMART Z62_0193.NEF: 402 KB, made in 3645 ms (includes the camera's white table on its first photo), opened in 9 ms
+SMART Z62_0193.NEF as shot: mean |diff| RGB 2.6/2.2/2.1, render preview 30 ms, RAW 65 ms
+SMART Z62_0193.NEF 4000K: mean |diff| RGB 2.4/2.1/2.3, render preview 10 ms, RAW 47 ms
+SMART Z62_0193.NEF 7500K: mean |diff| RGB 2.4/2.1/2.0, render preview 10 ms, RAW 48 ms
+SMART Z62_0193.NEF tint +30: mean |diff| RGB 2.6/2.3/2.1, render preview 9 ms, RAW 56 ms
+SMART Z62_0193.NEF +1 EV: mean |diff| RGB 2.5/2.1/2.2, render preview 10 ms, RAW 43 ms
+SMART footprint 8 MB before, 218 MB after; peak 1641 MB; store 2156 KB
+◇ Test run started.
+↳ Testing Library Version: 1501
+↳ Target Platform: arm64e-apple-macos14.0
+✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.
+       40.74 real        34.61 user         4.66 sys
+          1946386432  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              330231  page reclaims
+                1987  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                 195  voluntary context switches
+              300400  involuntary context switches
+          4285797989  instructions retired
+          1087830866  cycles elapsed
+            28885688  peak memory footprint

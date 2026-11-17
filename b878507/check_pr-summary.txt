@@ -1,0 +1,17 @@
+Revision: b878507978d22b62ad1b254fd5a26c8638ed8a13
+Selected groups: checks, build, swift
+PR base: origin/main (merge base de10d0b700b4a621bec662dd0eea2cb3bb0be660)
+Working changes at start:
+(clean)
+Working changes at end:
+(clean)
+Xcode: /Applications/Xcode.app/Contents/Developer
+toolchain: PASS
+whitespace: PASS
+script-tests: PASS
+help: PASS
+build: PASS
+tests: FAIL (exit 1)
+Groups not selected: smoke, visual
+Real RAW coverage: inspect tests.log for skipped tests; sample files are never downloaded.
+No sample RAW directory supplied; real-RAW tests may skip.
