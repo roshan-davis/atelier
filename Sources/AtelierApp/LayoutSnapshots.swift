@@ -1219,7 +1219,7 @@ enum LayoutSnapshots {
             UserDefaults.standard.set(theme.rawValue, forKey: Theme.defaultsKey)
             theme.apply()
             await capture(AnyView(StorageSettings().environmentObject(model).frame(width: 640)),
-                          size: CGSize(width: 640, height: 980),
+                          size: CGSize(width: 640, height: 1020),
                           to: folder.appendingPathComponent("settings-storage-\(theme.rawValue).png"))
         }
         UserDefaults.standard.set(Theme.light.rawValue, forKey: Theme.defaultsKey)

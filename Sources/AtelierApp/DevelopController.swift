@@ -866,7 +866,7 @@ final class DevelopController: ObservableObject {
         if let previous = self.assetID, let session { prefetched[previous] = session }
         self.assetID = assetID
         // A virtual copy uses its master's copy, so that one is spared.
-        originals?.inUse = originals == nil ? assetID : ((try? catalog.originalID(for: assetID)) ?? assetID)
+        originals?.inUse = assetID.map { id in (try? catalog.originalID(for: id)) ?? id }
         openAsset.value = assetID
         openGeneration.value += 1
         histogramSink.reset(generation: openGeneration.value)
