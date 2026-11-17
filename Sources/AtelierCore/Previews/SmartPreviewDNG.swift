@@ -3,20 +3,24 @@ import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 
-/// Smart previews (AT-079d, feasibility spike): a 2560 px linear DNG of a photo, kept on this Mac,
-/// that Develop can edit while the original is offline. macOS reads DNG but can't write it, so
-/// this writes the TIFF/DNG container itself.
+/// Smart previews (AT-079d, PRD "Storage locations and offline photos"): a 2560 px linear DNG of
+/// a photo, kept on this Mac, that Develop edits while the original is offline. macOS reads DNG but
+/// can't write it, so this writes the TIFF/DNG container itself (findings: BACKLOG AT-079d spike).
 ///
-/// The pixels are the photo as CIRAWFilter decodes it (demosaiced, in linear Rec. 2020), with the
-/// as-shot white balance taken back out, so the DNG is "LinearRaw" camera data whose camera space
-/// is Rec. 2020: `ColorMatrix1` is XYZ (D65) → Rec. 2020 and `AsShotNeutral` the as-shot white in
-/// it. CIRAWFilter then white-balances and exposes it as it does a RAW, so Temp, Tint and Exposure
-/// keep working. It is decoded linear (no tone curve, shadow boost or baseline exposure), since
-/// opening the DNG applies those again; the RAW's baseline exposure goes in `BaselineExposure`,
-/// plus one stop for the highlight headroom kept by storing half the value.
+/// The pixels are the photo as CIRAWFilter decodes it (demosaiced, linear Rec. 2020, no tone curve,
+/// shadow boost or baseline exposure, since opening the DNG applies those again), stored already
+/// white-balanced: the DNG's camera space is the as-shot-balanced Rec. 2020 (`ColorMatrix1` =
+/// diag(1 / as-shot white) · XYZ→Rec. 2020, `AsShotNeutral` 1, 1, 1), so a grey stays grey in the
+/// JPEG tiles and no channel loses precision. The RAW's baseline exposure goes in
+/// `BaselineExposure`, plus one stop for the highlight headroom kept by storing half the value.
+/// Lightroom-style lossy encoding: 8-bit JPEG tiles through a gamma-2.2 `LinearizationTable` (DNG
+/// 1.4 compression 34892), about 0.4–0.9 MB a photo.
 ///
-/// Two encodings, for the spike to compare: lossless 16-bit, and Lightroom-style lossy (8-bit
-/// JPEG tiles through a `LinearizationTable`, DNG 1.4 compression 34892).
+/// Temp and Tint aren't left to the DNG's own white balance, whose normalisation follows its
+/// made-up camera space and so differs from the camera's: the session opens the DNG at as shot and
+/// applies the camera's own change of white (`CameraWhite`) as a 3×3 in the RAW engine's linear
+/// stage. `SmartPreviewInfo`, in the DNG's ImageDescription, carries what the original's session
+/// had and the DNG can't tell: its size, as-shot white and camera match.
 public enum SmartPreviewDNG {
     public enum Encoding: Sendable, Equatable {
         case lossless16
@@ -36,10 +40,15 @@ public enum SmartPreviewDNG {
 
     // MARK: From a RAW
 
+    /// The smart preview's encoding: lossy, quality 0.9 (0.75 saved only ~30% more and matched the
+    /// RAW as well; 0.9 keeps fine detail for 1:1).
+    public static let standard = Encoding.lossyJPEG(quality: 0.9)
+
     /// Decodes `raw` at the smart preview's size with its as-shot settings and writes the DNG.
     /// Returns the as-shot temperature and tint used.
     @discardableResult
-    public static func make(from raw: URL, to url: URL, encoding: Encoding, balancedCamera: Bool = false,
+    public static func make(from raw: URL, to url: URL, encoding: Encoding = SmartPreviewDNG.standard, balancedCamera: Bool = true,
+                            cameraMatch: CameraMatch = .identity,
                             context: CIContext = CIContext(options: [.cacheIntermediates: false])) throws -> (temperature: Double, tint: Double) {
         guard let filter = CIRAWFilter(imageURL: raw) else { throw CocoaError(.fileReadCorruptFile) }
         let native = filter.nativeSize
@@ -57,6 +66,9 @@ public enum SmartPreviewDNG {
         filter.boostAmount = 0
         filter.boostShadowAmount = 0
         if filter.isLocalToneMapSupported { filter.localToneMapAmount = 0 }
+        // Lens profile corrections are baked in (the DNG has no lens data), so editing offline
+        // looks like the default; turning them off there changes nothing until the original is back.
+        if filter.isLensCorrectionSupported { filter.isLensCorrectionEnabled = true }
         guard let image = filter.outputImage else { throw CocoaError(.fileReadCorruptFile) }
         let extent = image.extent.integral
         let width = Int(extent.width), height = Int(extent.height)
@@ -71,19 +83,16 @@ public enum SmartPreviewDNG {
             as? [CFString: Any])
         let make = model?[kCGImagePropertyTIFFMake] as? String ?? "Atelier"
         let camera = model?[kCGImagePropertyTIFFModel] as? String ?? "Smart Preview"
+        let info = SmartPreviewInfo(originalWidth: Int(native.width), originalHeight: Int(native.height),
+                                    temperature: temperature, tint: tint, camera: "\(make) \(camera)",
+                                    cameraMatchCurve: cameraMatch.curve, cameraMatchSaturation: cameraMatch.saturation)
         try write(rgba: pixels, width: width, height: height, neutral: neutral(x: Double(white.x), y: Double(white.y)),
                   make: make, model: camera, encoding: encoding, balancedCamera: balancedCamera,
-                  baselineExposure: baseline, to: url)
+                  baselineExposure: baseline, info: info, to: url)
         return (temperature, tint)
     }
 
     // MARK: White
-
-    /// The as-shot white in Rec. 2020 (max 1): what a white surface reads under that light.
-    public static func neutral(temperature: Double, tint: Double) -> SIMD3<Double> {
-        let (x, y) = whiteXY(temperature: temperature, tint: tint)
-        return neutral(x: x, y: y)
-    }
 
     /// The white of chromaticity (x, y) in Rec. 2020 (max 1).
     public static func neutral(x: Double, y: Double) -> SIMD3<Double> {
@@ -100,41 +109,6 @@ public enum SmartPreviewDNG {
         return rgb / max(rgb.x, rgb.y, rgb.z)
     }
 
-    /// Correlated colour temperature and Adobe-style tint → chromaticity: Kang et al. (2002) for
-    /// the Planckian locus, tint as an offset across it in CIE 1960 uv (3000 tint = 1 uv unit,
-    /// positive towards magenta), as the DNG SDK does.
-    public static func whiteXY(temperature: Double, tint: Double) -> (Double, Double) {
-        func planck(_ t: Double) -> (Double, Double) {
-            let t = min(25000, max(1667, t))
-            let x = t <= 4000
-                ? -0.2661239e9 / (t * t * t) - 0.2343589e6 / (t * t) + 0.8776956e3 / t + 0.179910
-                : -3.0258469e9 / (t * t * t) + 2.1070379e6 / (t * t) + 0.2226347e3 / t + 0.240390
-            let y: Double
-            if t <= 2222 {
-                y = -1.1063814 * x * x * x - 1.34811020 * x * x + 2.18555832 * x - 0.20219683
-            } else if t <= 4000 {
-                y = -0.9549476 * x * x * x - 1.37418593 * x * x + 2.09137015 * x - 0.16748867
-            } else {
-                y = 3.0817580 * x * x * x - 5.87338670 * x * x + 3.75112997 * x - 0.37001483
-            }
-            return (x, y)
-        }
-        func uv(_ p: (Double, Double)) -> (Double, Double) {
-            let d = -2 * p.0 + 12 * p.1 + 3
-            return (4 * p.0 / d, 6 * p.1 / d)
-        }
-        let here = uv(planck(temperature))
-        let next = uv(planck(temperature + 50))
-        var normal = (-(next.1 - here.1), next.0 - here.0)
-        let length = (normal.0 * normal.0 + normal.1 * normal.1).squareRoot()
-        normal = (normal.0 / length, normal.1 / length)
-        if normal.1 < 0 { normal = (-normal.0, -normal.1) }  // towards green (+v)
-        let offset = -tint / 3000
-        let u = here.0 + normal.0 * offset, v = here.1 + normal.1 * offset
-        let d = 2 * u - 8 * v + 4
-        return (3 * u / d, 2 * v / d)
-    }
-
     // MARK: Writing
 
     /// Writes white-balanced linear Rec. 2020 RGBA floats as LinearRaw camera data.
@@ -145,7 +119,7 @@ public enum SmartPreviewDNG {
     /// scaled down. The same light either way, as CIRAWFilter sees it.
     public static func write(rgba: [Float], width: Int, height: Int, neutral: SIMD3<Double>,
                              make: String, model: String, encoding: Encoding, balancedCamera: Bool = false,
-                             baselineExposure: Double = 0, to url: URL) throws {
+                             baselineExposure: Double = 0, info: SmartPreviewInfo? = nil, to url: URL) throws {
         let gains = balancedCamera
             ? SIMD3<Float>(repeating: 1 / headroom)
             : SIMD3<Float>(Float(neutral.x), Float(neutral.y), Float(neutral.z)) / headroom
@@ -206,7 +180,7 @@ public enum SmartPreviewDNG {
         entries += [
             .long(254, 0), .long(256, UInt32(width)), .long(257, UInt32(height)),
             .short(262, 34892), .ascii(271, make), .ascii(272, model), .short(274, 1),
-            .short(277, 3), .short(284, 1), .ascii(305, "Atelier"),
+            .short(277, 3), .short(284, 1), .ascii(305, SmartPreviewInfo.software),
             .long(322, UInt32(tileWidth)), .long(323, UInt32(tileHeight)),
             .longs(324, tileOffsets), .longs(325, tileCounts),
             .bytes(50706, [1, 4, 0, 0]), .bytes(50707, [1, 1, 0, 0]),
@@ -217,11 +191,14 @@ public enum SmartPreviewDNG {
             .srationals(50730, [Int32(((baselineExposure + Double(log2(headroom))) * 1000).rounded())], denominator: 1000),
             .short(50778, 21),
         ]
+        if let info, let json = try? JSONEncoder().encode(info), let text = String(data: json, encoding: .utf8) {
+            entries.append(.ascii(270, text))
+        }
         // macOS reads a file under about 100 KB as a plain TIFF, not a DNG (spike round 5: 91 KB
         // failed, 133 KB opened, whatever the pixel size), so a tiny one is padded.
         let minimum = 256 * 1024
         if tiff.body.count < minimum { _ = tiff.append(Data(count: minimum - tiff.body.count)) }
-        try tiff.finish(entries).write(to: url)
+        try tiff.finish(entries).write(to: url, options: .atomic)
     }
 
     static func jpeg(_ rgb: [UInt8], width: Int, height: Int, quality: Double) throws -> Data {
@@ -331,5 +308,58 @@ struct TIFFWriter {
         }
         put(UInt32(0))
         return body
+    }
+}
+
+/// What a smart preview knows about its original, stored as JSON in the DNG's ImageDescription.
+public struct SmartPreviewInfo: Codable, Hashable, Sendable {
+    /// The TIFF Software tag that marks a DNG as an Atelier smart preview.
+    public static let software = "Atelier Smart Preview"
+
+    public var version = 1
+    /// The original's decoded size, for `DevelopSession.renderScale` (sharpening and noise radii
+    /// match the original's).
+    public var originalWidth: Int
+    public var originalHeight: Int
+    /// The original's as-shot white, exactly as its RAW engine read it (the catalog's Temp is
+    /// absolute, so offline edits must start from the same value).
+    public var temperature: Double
+    public var tint: Double
+    /// "NIKON CORPORATION NIKON Z 6_2": the `CameraWhite` table's key.
+    public var camera: String
+    /// The original's camera match (its embedded JPEG isn't in the DNG to fit one from).
+    public var cameraMatchCurve: [Float]
+    public var cameraMatchSaturation: Double
+
+    public var cameraMatch: CameraMatch { CameraMatch(curve: cameraMatchCurve, saturation: cameraMatchSaturation) }
+    public var originalLongEdge: Int { max(originalWidth, originalHeight) }
+
+    /// The info of an Atelier smart preview, read from its own IFD; nil for any other file.
+    public static func read(_ url: URL) -> SmartPreviewInfo? {
+        guard url.pathExtension.lowercased() == "dng",
+              let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        guard let header = try? handle.read(upToCount: 8), header.count == 8, header[0] == 0x49, header[1] == 0x49 else { return nil }
+        func u16(_ d: Data, _ o: Int) -> Int { Int(d[d.startIndex + o]) | Int(d[d.startIndex + o + 1]) << 8 }
+        func u32(_ d: Data, _ o: Int) -> Int { u16(d, o) | u16(d, o + 2) << 16 }
+        let ifd = u32(header, 4)
+        guard (try? handle.seek(toOffset: UInt64(ifd))) != nil, let countData = try? handle.read(upToCount: 2), countData.count == 2 else { return nil }
+        let count = u16(countData, 0)
+        guard count < 512, let table = try? handle.read(upToCount: count * 12), table.count == count * 12 else { return nil }
+        var strings: [Int: (offset: Int, length: Int)] = [:]
+        for i in 0..<count {
+            let tag = u16(table, i * 12), type = u16(table, i * 12 + 2), length = u32(table, i * 12 + 4)
+            guard type == 2, tag == 270 || tag == 305 else { continue }
+            strings[tag] = (length > 4 ? u32(table, i * 12 + 8) : ifd + 2 + i * 12 + 8, length)
+        }
+        func string(_ tag: Int) -> Data? {
+            guard let (offset, length) = strings[tag], length < 1 << 20,
+                  (try? handle.seek(toOffset: UInt64(offset))) != nil,
+                  let data = try? handle.read(upToCount: length) else { return nil }
+            return data.prefix { $0 != 0 }
+        }
+        guard let software = string(305), String(decoding: software, as: UTF8.self) == Self.software,
+              let json = string(270) else { return nil }
+        return try? JSONDecoder().decode(SmartPreviewInfo.self, from: json)
     }
 }

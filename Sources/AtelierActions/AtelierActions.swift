@@ -98,6 +98,16 @@ public enum AtelierAction {
         "library.writeAllXMP", "Write All Unsaved XMP", place: "Library > Write All Unsaved XMP",
         summary: "Writes XMP sidecars for every photo with unsaved changes.",
         kind: .writesFiles, shortcut: KeyShortcut("s", [.command, .option]))
+    public static let buildSmartPreviews = Action<NoParameters>(
+        "library.buildSmartPreviews", "Build Smart Previews",
+        place: "Library > Previews > Build Smart Previews",
+        summary: "Makes a smart preview (a small DNG kept on this Mac, about 1 MB) of each photo whose original is online and has none yet, in the background with progress and Cancel, so the photos can be edited in Develop while their originals are offline.",
+        kind: .writesFiles, targets: .photos)
+    public static let discardSmartPreviews = Action<NoParameters>(
+        "library.discardSmartPreviews", "Discard Smart Previews",
+        place: "Library > Previews > Discard Smart Previews",
+        summary: "Removes the photos' smart previews from this Mac. Their originals and edits stay.",
+        kind: .deletes, targets: .photos)
     public static let refreshVolumes = Action<NoParameters>(
         "library.refreshVolumes", "Refresh Volumes", place: "Library > Refresh Volumes",
         summary: "Checks which drives are connected and retries photos that couldn't be read.",
@@ -311,7 +321,7 @@ public enum AtelierAction {
         undo.descriptor, redo.descriptor, zoomIn.descriptor, zoomOut.descriptor, zoomToFit.descriptor,
         zoomTo100.descriptor, toggleZoom.descriptor, setZoom.descriptor, showFilmstrip.descriptor,
         showNotes.descriptor, privatePhotos.descriptor, grid.descriptor, loupe.descriptor, develop.descriptor,
-        cullImport.descriptor, writeXMP.descriptor, writeAllXMP.descriptor, refreshVolumes.descriptor,
+        cullImport.descriptor, writeXMP.descriptor, writeAllXMP.descriptor, buildSmartPreviews.descriptor, discardSmartPreviews.descriptor, refreshVolumes.descriptor,
         connectLocation.descriptor, disconnectLocation.descriptor, showLocationInFinder.descriptor,
         keepOnThisMac.descriptor, freeUpSpace.descriptor,
         createVirtualCopy.descriptor, removeVirtualCopy.descriptor, removePhoto.descriptor,

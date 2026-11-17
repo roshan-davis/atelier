@@ -146,6 +146,11 @@ private struct ReadyLibraryCommands: Commands {
                 actions.button(AtelierAction.writeXMP)
                 actions.button(AtelierAction.writeAllXMP)
                 Divider()
+                Menu("Previews") {
+                    actions.button(AtelierAction.buildSmartPreviews)
+                    actions.button(AtelierAction.discardSmartPreviews)
+                }
+                Divider()
                 actions.button(AtelierAction.refreshVolumes)
             }
             CommandMenu("Photo") {
