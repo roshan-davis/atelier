@@ -56,7 +56,7 @@ final class SmartPreviewSpikeTests: XCTestCase {
     /// with that neutral; each is then opened as shot, and at 3000, 5000 and 8000 K. Printed: the
     /// as-shot temperature and tint CIRAWFilter reports, and the card's rendered linear RGB.
     func testWhiteBalanceFollowsTheNeutral() throws {
-        let width = 64, height = 64
+        let width = 512, height = 512
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("SmartPreviewWB-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: folder) }

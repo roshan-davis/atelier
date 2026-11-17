@@ -143,8 +143,8 @@ public enum SmartPreviewDNG {
         let gains = SIMD3<Float>(Float(neutral.x), Float(neutral.y), Float(neutral.z)) / headroom
         var tiff = TIFFWriter()
         var entries: [TIFFWriter.Entry] = []
-        // Tiles no bigger than the photo (rounded up to JPEG's 16-pixel blocks).
-        let tileWidth = min(tile, (width + 15) / 16 * 16), tileHeight = min(tile, (height + 15) / 16 * 16)
+        // Fixed 256 px tiles: CIRAWFilter can't read a DNG whose tiles are smaller (spike round 3).
+        let tileWidth = tile, tileHeight = tile
         let tilesAcross = (width + tileWidth - 1) / tileWidth, tilesDown = (height + tileHeight - 1) / tileHeight
         var tileOffsets: [UInt32] = [], tileCounts: [UInt32] = []
 
