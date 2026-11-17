@@ -192,6 +192,7 @@ struct AddLocationSheet: View {
                         .onClick(perform: { kind = k }, doubleClick: { kind = k; advanceFromKind() })
                 }
             }
+            .fixedSize(horizontal: false, vertical: true)
             Text("Object storage keeps catalog backups; photos stay on drives, shares and cloud drive folders.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -551,7 +552,9 @@ private struct KindTile: View {
             Spacer(minLength: 0)
         }
         .padding(14)
-        .frame(maxWidth: .infinity, minHeight: 172, maxHeight: 172, alignment: .topLeading)
+        // Grows with its text; the row makes all four as tall as the tallest (four tiles leave
+        // the Cloud Drive and Object Storage descriptions too long for a fixed 172 pt).
+        .frame(maxWidth: .infinity, minHeight: 172, maxHeight: .infinity, alignment: .topLeading)
         .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
             .fill(Color.primary.opacity(isSelected ? 0.08 : 0.03)))
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
