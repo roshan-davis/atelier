@@ -124,6 +124,8 @@ Evidence baseline, October 30, 2026:
 
 **Evidence:** review §4/8: cached browsing and metadata exist; Develop/export/AI require originals; durable AI queue and smart-preview editing are incomplete. **Scope to discuss:** explicit offline availability, reconnect and deferred work behavior.
 
+**Owns the offline job queue for AT-079 (Codex review of PR #178, Nov 17, 2026):** Export, Edit In and AI jobs whose original is on an offline or not-downloaded location wait in one queue stored in the catalog. Semantics to agree: a queued job survives quitting and relaunching; each job and the whole queue can be cancelled, and a cancelled job leaves no partial output; when the location returns the job runs once (no duplicate output), or asks if its photo's settings changed since it was queued; a job the user chose to run on the smart preview says so in its details. AT-079 slices don't build this queue; until it exists, those commands say the location is offline and offer Connect.
+
 **Acceptance to agree:** offline browse/rate/reconnect tests, missing-preview/original errors, queue cancellation/restart semantics and no silent loss or duplicate output. Measure NAS behavior with AT-011.
 
 ## AT-010 — Color, film and grain visual acceptance
@@ -1491,6 +1493,15 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 4. **AT-079d Smart previews** for offline editing (AT-009's smart-preview part; white balance and exposure must be applied outside CIRAWFilter).
 5. **AT-079e Backups to a location:** catalog backups on quit/daily/weekly to any backup location, S3-compatible client (SigV4 in URLSession, streamed multipart, Test Connection, Keychain), copy-import second copy.
 
-**Acceptance (per slice, on a Mac):** a fresh catalog has no location; adding megham by Bonjour and by address gives one location; an old catalog's volumes show as locations with photos still linked; offline and not-downloaded photos browse and edit from smart previews and write XMP on reconnect; no credential appears in the catalog, backups, logs or the MCP catalog; first open of a NAS RAW timed with and without the cache; peak memory during a 10 GB backup upload stays flat.
+**Acceptance, per slice, on a Mac (each slice verified on its own; none waits for smart previews):**
+
+- **a:** a fresh catalog has no location. Adding megham by Bonjour and by address gives one location. An old catalog's volumes show as locations with every photo still opening. Adding a subfolder of an already-cataloged volume (for example `/Volumes/Photos/Portfolio` when `Portfolio/2026` is cataloged) leaves those photos opening from the same files. Reconnecting the share under a different mount path (`/Volumes/Photos-1`) keeps them linked. No credential appears in the catalog, its backups, logs or the MCP catalog.
+- **b:** a cloud placeholder lists without downloading; Import shows the download size; opening one downloads with progress and Cancel; signing in again relinks by domain.
+- **c:** first open of a NAS RAW timed with and without the cache. A cached original changed at the source is read again when reachable; with the source offline the cached copy is used and the "couldn't be checked" note shows. Keep on This Mac survives Clear Cache unless its checkbox is ticked and refuses when the disk would fall under 10% free. XMP conflicts: edit a rating offline in Atelier, change the same sidecar in another app, reconnect: Atelier doesn't overwrite it, badges the photo, and Read Metadata from File / Save Metadata to File each resolve it.
+- **d:** offline and not-downloaded photos edit from smart previews; edits write to XMP on reconnect under the conflict rule.
+- **e:** a catalog backup reaches a share, a cloud folder and an S3 bucket; Test Connection reports a wrong key plainly; peak memory during a 10 GB upload stays flat.
+- Offline Export, Edit In and AI jobs are accepted under AT-009, not here.
+
+**Codex review (PR #178, Nov 17, 2026) addressed in the PRD:** location roots never rebase stored paths; cache freshness and Keep on This Mac pinning; XMP conflicts on reconnect; the offline job queue assigned to AT-009.
 
 **Open:** whether megham is used over Wi-Fi or Ethernet (sets the default cache size); whether location backups also include presets and Settings (AT-006).
