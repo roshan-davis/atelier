@@ -59,6 +59,9 @@ struct LibraryHistogram: View {
     let histogram: Histogram?
     let info: ShootingInfo?
     let isLoading: Bool
+    /// Lightroom's line under the histogram: "Original Photo", "Original + Smart Preview",
+    /// "Smart Preview" or "Photo is missing" (AT-079d); nil while it is being worked out.
+    var previews: PhotoPreviews? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -74,6 +77,13 @@ struct LibraryHistogram: View {
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, minHeight: 14)
+            if let previews {
+                Label(previews.title, systemImage: previews.symbol)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+                    .help(previews.help)
+            }
         }
     }
 
@@ -89,5 +99,45 @@ struct LibraryHistogram: View {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
               let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return nil }
         return Histogram(image: image)
+    }
+}
+
+/// What Atelier can edit a photo from: its original, its smart preview, both or neither.
+enum PhotoPreviews: Equatable {
+    case original, originalAndSmart, smart, missing
+
+    init(originalOnline: Bool, hasSmartPreview: Bool) {
+        switch (originalOnline, hasSmartPreview) {
+        case (true, false): self = .original
+        case (true, true): self = .originalAndSmart
+        case (false, true): self = .smart
+        case (false, false): self = .missing
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .original: "Original Photo"
+        case .originalAndSmart: "Original + Smart Preview"
+        case .smart: "Smart Preview"
+        case .missing: "Photo is missing"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .original: "photo"
+        case .originalAndSmart, .smart: "square.on.square.dashed"
+        case .missing: "exclamationmark.triangle"
+        }
+    }
+
+    var help: String {
+        switch self {
+        case .original: "Develop edits the original."
+        case .originalAndSmart: "Develop edits the original; the smart preview is used while it is offline."
+        case .smart: "The original is offline. Develop edits the smart preview, and the edits apply to the original when it is back."
+        case .missing: "The original is offline and there is no smart preview, so it can't be edited until it is back."
+        }
     }
 }

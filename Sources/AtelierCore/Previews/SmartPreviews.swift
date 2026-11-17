@@ -75,6 +75,31 @@ public final class SmartPreviewStore: @unchecked Sendable {
         return removed
     }
 
+    /// How many smart previews there are and the bytes they and the white tables take.
+    public struct Usage: Equatable, Sendable {
+        public var count: Int
+        public var bytes: Int64
+    }
+
+    public func usage() -> Usage {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? []
+        return Usage(count: names.filter { Self.fileID(ofName: $0) != nil }.count, bytes: totalBytes())
+    }
+
+    /// Settings > Storage > Discard All: every smart preview except `sparing` (the one Develop has
+    /// open). White tables stay, as with `discard`.
+    @discardableResult
+    public func discardAll(sparing: Int64? = nil) -> Int {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? []
+        return discard(names.compactMap(Self.fileID(ofName:)).filter { $0 != sparing })
+    }
+
+    /// The photo id of a smart preview file name ("12.dng"); nil for anything else.
+    static func fileID(ofName name: String) -> Int64? {
+        guard name.hasSuffix(".dng"), !name.hasPrefix(".") else { return nil }
+        return Int64(name.dropLast(4))
+    }
+
     // MARK: White tables
 
     /// The camera's white table: in memory, else from its file, else nil.

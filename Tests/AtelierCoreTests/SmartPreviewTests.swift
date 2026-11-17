@@ -75,6 +75,15 @@ final class SmartPreviewTests: XCTestCase {
         XCTAssertGreaterThan(store.totalBytes(), 0)
         XCTAssertEqual(store.discard([7, 8]), 1)
         XCTAssertFalse(store.has(7))
+        // Discard All spares the photo Develop has open, and the white tables.
+        for id in [1, 2, 3] { try Data(repeating: 1, count: 10).write(to: store.url(for: Int64(id))) }
+        try Data("{}".utf8).write(to: store.whiteURL("Test"))
+        XCTAssertEqual(store.usage().count, 3)
+        XCTAssertEqual(store.discardAll(sparing: 2), 2)
+        XCTAssertEqual(store.usage().count, 1)
+        XCTAssertTrue(store.has(2))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: store.whiteURL("Test").path))
+        XCTAssertNil(SmartPreviewStore.fileID(ofName: ".4-temp.dng"))
     }
 
     /// On a Mac with sample RAWs: each RAW's smart preview, opened as Develop opens a photo,

@@ -108,7 +108,7 @@ extension LibraryModel {
             model.withTargets(ids) { model.writeXMP(selectionOnly: true) }
         }
         r.bind(AtelierAction.writeAllXMP) { model, _, _ in model.writeXMP(selectionOnly: false) }
-        r.bind(AtelierAction.buildSmartPreviews, enabled: { !$0.targetIDs.isEmpty && $0.smartPreviewJob == nil }) { model, _, ids in
+        r.bind(AtelierAction.buildSmartPreviews, enabled: { !$0.targetIDs.isEmpty }) { model, _, ids in
             model.buildSmartPreviews(ids)
         }
         r.bind(AtelierAction.discardSmartPreviews, enabled: { !$0.targetIDs.isEmpty }) { model, _, ids in

@@ -210,6 +210,8 @@ extension Catalog {
               try StorageLocation.filter(Column("volumeId") == id).fetchCount(db) == 0 else { return }
         var location = defaultLocation(for: volume)
         try location.insert(db)
+        try db.execute(sql: "UPDATE storageLocation SET makesSmartPreviews = ? WHERE id = ?",
+                       arguments: [makesSmartPreviewsByDefault(location.kind), location.id])
     }
 
     /// Settings > Storage's list, in the order the locations were added.
@@ -259,7 +261,8 @@ extension Catalog {
     /// the same place twice returns the location already there.
     @discardableResult
     public func addStorageLocation(folder: URL, on mounted: MountedVolume, name: String? = nil,
-                                   kind: StorageLocationKind? = nil, connectAtLaunch: Bool = false) throws -> StorageLocation {
+                                   kind: StorageLocationKind? = nil, connectAtLaunch: Bool = false,
+                                   makesSmartPreviews: Bool? = nil) throws -> StorageLocation {
         let root = VolumeIdentity.relativePath(of: folder, inVolumeAt: mounted.rootURL)
         let resolvedKind = kind ?? StorageLocationKind(mounted.kind)
         return try writer.write { db in
@@ -288,6 +291,8 @@ extension Catalog {
                                            volumeId: volume.id, rootPath: root, serverAddress: address,
                                            connectAtLaunch: connectAtLaunch)
             try location.insert(db)
+            try db.execute(sql: "UPDATE storageLocation SET makesSmartPreviews = ? WHERE id = ?", arguments: [
+                makesSmartPreviews ?? Catalog.makesSmartPreviewsByDefault(resolvedKind), location.id])
             return location
         }
     }

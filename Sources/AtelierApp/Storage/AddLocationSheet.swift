@@ -51,6 +51,8 @@ struct AddLocationSheet: View {
     @State private var place: Place?
     @State private var name: String
     @State private var connectAtLaunch = true
+    /// Starts on for network shares and cloud drive folders, off for a drive (set when the kind is known).
+    @State private var makesSmartPreviews: Bool?
     @State private var address: String
     @State private var connecting: String?
     @State private var problem: String?
@@ -293,6 +295,12 @@ struct AddLocationSheet: View {
                 if placeKind == .networkShare {
                     Toggle("Connect when Atelier opens", isOn: $connectAtLaunch)
                 }
+                if placeKind != .objectStorage {
+                    Toggle("Make smart previews for photos here", isOn: Binding(
+                        get: { makesSmartPreviews ?? Catalog.makesSmartPreviewsByDefault(placeKind) },
+                        set: { makesSmartPreviews = $0 }))
+                        .help("A small copy of each photo you import from here is kept on this Mac, so you can edit it in Develop while this location is offline.")
+                }
             }
             .formStyle(.grouped)
             .scrollDisabled(true)
@@ -396,7 +404,8 @@ struct AddLocationSheet: View {
         do {
             let location = try model.catalog.addStorageLocation(
                 folder: place.folder, on: place.mounted, name: name.trimmingCharacters(in: .whitespaces),
-                kind: placeKind, connectAtLaunch: placeKind == .networkShare && connectAtLaunch)
+                kind: placeKind, connectAtLaunch: placeKind == .networkShare && connectAtLaunch,
+                makesSmartPreviews: placeKind != .objectStorage && (makesSmartPreviews ?? Catalog.makesSmartPreviewsByDefault(placeKind)))
             model.refreshVolumes()
             added(location)
             dismiss()

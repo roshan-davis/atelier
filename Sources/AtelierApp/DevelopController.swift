@@ -859,6 +859,15 @@ final class DevelopController: ObservableObject {
         open(id)
     }
 
+    /// The original of a photo being edited from its smart preview is back (its drive or share
+    /// reconnected): open it again from the original, at full quality, with the edits as they are.
+    /// Nothing happens while it is still offline. Called when volumes are refreshed (AT-079d).
+    func reopenFromOriginalIfBack() {
+        guard editsSmartPreview, let id = assetID,
+              (try? catalog.readableURL(for: id, cache: originals)) != nil else { return }
+        reopen()
+    }
+
     func open(_ assetID: Int64?) {
         guard assetID != self.assetID else { return }
         // The mode is for one photo: another photo cancels it, on the photo it was open on.

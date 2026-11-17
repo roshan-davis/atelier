@@ -32,6 +32,7 @@ private struct DetailForm: View {
     @State private var info: ShootingInfo?
     @State private var histogram: Histogram?
     @State private var loading = true
+    @State private var previews: PhotoPreviews?
 
     private var appliesTo: String {
         let count = model.targetIDs.count
@@ -70,7 +71,7 @@ private struct DetailForm: View {
         ScrollView(.vertical) {
             VStack(spacing: 0) {
                 section("Histogram", "histogram") {
-                    LibraryHistogram(histogram: histogram, info: info, isLoading: loading)
+                    LibraryHistogram(histogram: histogram, info: info, isLoading: loading, previews: previews)
                 }
                 section("File", "file") {
                     VStack(alignment: .leading, spacing: 5) {
@@ -214,7 +215,8 @@ private struct DetailForm: View {
         }
         .onAppear(perform: syncFields)
         .onChange(of: detail) { syncFields() }
-        .task(id: InfoKey(id: detail.asset.id, revision: previewRevision.value, url: detail.fileURL)) {
+        .task(id: InfoKey(id: detail.asset.id, revision: previewRevision.value, url: detail.fileURL,
+                          buildingSmartPreviews: model.smartPreviewProgress != nil)) {
             await loadInfo()
         }
     }
@@ -223,12 +225,21 @@ private struct DetailForm: View {
         var id: Int64?
         var revision: Int
         var url: URL?
+        /// Re-read "Smart Preview" under the histogram when a build or Discard ends.
+        var buildingSmartPreviews: Bool
     }
 
     /// The camera settings from the file and the histogram from the preview, which shows the edits.
     private func loadInfo() async {
         loading = true
         defer { loading = false }
+        if let id = detail.asset.id, let store = model.smartPreviews {
+            let file = (try? model.catalog.originalID(for: id)) ?? id
+            let online = detail.volume.isOnline && detail.fileURL != nil
+            previews = await Task.detached(priority: .userInitiated) {
+                PhotoPreviews(originalOnline: online, hasSmartPreview: store.has(file))
+            }.value
+        }
         if let url = detail.fileURL {
             info = await ShootingInfoCache.info(for: url)
         }

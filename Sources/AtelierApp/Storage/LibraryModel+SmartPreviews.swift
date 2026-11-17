@@ -5,8 +5,14 @@ import Foundation
 /// names. Building reads each original once (a share's through the cache of originals, hash
 /// checked), in the background behind the photo being opened, with progress and Cancel.
 extension LibraryModel {
-    func buildSmartPreviews(_ ids: [Int64]) {
-        guard let store = smartPreviews, smartPreviewJob == nil else { return }
+    /// `quiet`: made by themselves (after an import into a location that makes them), so nothing
+    /// is said unless some were made or failed. A request while a run is going waits for it.
+    func buildSmartPreviews(_ ids: [Int64], quiet: Bool = false) {
+        guard let store = smartPreviews, !ids.isEmpty else { return }
+        guard smartPreviewJob == nil else {
+            pendingSmartPreviews += ids
+            return
+        }
         let catalog = self.catalog
         let originals = self.originals
         let paused = foregroundReading
@@ -22,7 +28,10 @@ extension LibraryModel {
             guard let self, !Task.isCancelled else { return }
             guard !files.isEmpty else {
                 self.smartPreviewJob = nil
-                self.status = ids.count == 1 ? "This photo already has a smart preview." : "These photos already have smart previews."
+                if !quiet {
+                    self.status = ids.count == 1 ? "This photo already has a smart preview." : "These photos already have smart previews."
+                }
+                self.buildPendingSmartPreviews()
                 return
             }
             let count = files.count
@@ -40,14 +49,37 @@ extension LibraryModel {
             let outcome = await withTaskCancellationHandler { await run.value } onCancel: { run.cancel() }
             self.smartPreviewProgress = nil
             self.smartPreviewJob = nil
-            self.status = outcome.summary
-            self.problemsTitle = "Smart previews not built"
-            self.problems = outcome.failed
+            if !quiet || outcome.made > 0 || !outcome.failed.isEmpty {
+                self.status = outcome.summary
+                self.problemsTitle = "Smart previews not built"
+                self.problems = outcome.failed
+            }
+            if !outcome.cancelled { self.buildPendingSmartPreviews() }
+        }
+    }
+
+    private func buildPendingSmartPreviews() {
+        guard !pendingSmartPreviews.isEmpty else { return }
+        let next = pendingSmartPreviews
+        pendingSmartPreviews = []
+        buildSmartPreviews(next, quiet: true)
+    }
+
+    /// After an import: the new photos in locations with "Make smart previews for photos here".
+    func buildSmartPreviewsAfterImport(_ ids: [Int64]) {
+        guard smartPreviews != nil, !ids.isEmpty else { return }
+        let catalog = self.catalog
+        Task { [weak self] in
+            let candidates = await Task.detached(priority: .utility) {
+                (try? catalog.smartPreviewCandidates(among: ids)) ?? []
+            }.value
+            self?.buildSmartPreviews(candidates, quiet: true)
         }
     }
 
     /// The status bar's Cancel: stops after the photo being made; those made stay.
     func cancelSmartPreviews() {
+        pendingSmartPreviews = []
         smartPreviewJob?.cancel()
         smartPreviewJob = nil
         smartPreviewProgress = nil
@@ -64,6 +96,16 @@ extension LibraryModel {
         if removed > 0 { DeleteFeedback.play(.remove) }
         status = removed == 0 ? "No smart previews to discard."
             : "Discarded \(removed == 1 ? "1 smart preview" : "\(removed.formatted()) smart previews"). The originals and edits are unchanged."
+    }
+
+    /// Settings > Storage > Discard All: every smart preview but the one Develop is editing.
+    func discardAllSmartPreviews() async -> Int {
+        guard let store = smartPreviews else { return 0 }
+        cancelSmartPreviews()
+        let open = develop.editsSmartPreview ? develop.assetID.flatMap { try? catalog.originalID(for: $0) } : nil
+        let removed = await Task.detached(priority: .userInitiated) { store.discardAll(sparing: open) }.value
+        if removed > 0 { DeleteFeedback.play(.remove) }
+        return removed
     }
 
     nonisolated private static func runSmartPreviews(_ files: [Int64], catalog: Catalog, store: SmartPreviewStore,
