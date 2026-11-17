@@ -1827,20 +1827,34 @@ final class DevelopController: ObservableObject {
 
     func apply(_ newSettings: DevelopSettings, onto assetIDs: [Int64]?, step: String) {
         let targets = assetIDs ?? assetID.map { [$0] } ?? []
-        for id in targets where id != assetID {
-            do {
-                try catalog.saveDevelopSettings(newSettings, for: id, step: step)
-                onSettingsSaved?(id)
-            } catch {
-                errorMessage = "Could not save: \(error.localizedDescription)"
-                continue
-            }
-            refreshPreviews(for: id, settings: newSettings)
-        }
+        saveToOthers(targets, step: step) { _, _ in newSettings }
         if let assetID, targets.contains(assetID) {
             settings = newSettings
             validateMaskSelection()
             changed(step: step, replacing: true)
+        }
+    }
+
+    /// Changes the saved settings of the photos in `ids` other than the open one, in one catalog
+    /// transaction (AT-076 P2): all of them or, if one fails, none, with "Could not save".
+    private func saveToOthers(_ ids: [Int64], step: String,
+                              _ change: (Int64, DevelopSettings) throws -> DevelopSettings?) {
+        do {
+            try saveToOthersOrThrow(ids, step: step, change)
+        } catch {
+            errorMessage = "Could not save: \(error.localizedDescription)"
+        }
+    }
+
+    private func saveToOthersOrThrow(_ ids: [Int64], step: String,
+                                     _ change: (Int64, DevelopSettings) throws -> DevelopSettings?) throws {
+        let others = ids.filter { $0 != assetID }
+        guard !others.isEmpty else { return }
+        let saved = try catalog.updateDevelop(others, step: step, change)
+        for id in others {
+            guard let settings = saved[id] else { continue }
+            onSettingsSaved?(id)
+            refreshPreviews(for: id, settings: settings)
         }
     }
 
@@ -1853,11 +1867,7 @@ final class DevelopController: ObservableObject {
             return
         }
         if let assetID, newSettings[assetID] != nil { flushSave() }
-        for (id, settings) in newSettings.sorted(by: { $0.key < $1.key }) where id != assetID {
-            try catalog.saveDevelopSettings(settings, for: id, step: step)
-            onSettingsSaved?(id)
-            refreshPreviews(for: id, settings: settings)
-        }
+        try saveToOthersOrThrow(newSettings.keys.sorted(), step: step) { id, _ in newSettings[id] }
         if let assetID, let open = newSettings[assetID] {
             settings = open
             validateMaskSelection()
@@ -1931,18 +1941,9 @@ final class DevelopController: ObservableObject {
         let step = "Preset: \(preset.name)"
         let targets = assetIDs ?? assetID.map { [$0] } ?? []
         if !targets.isEmpty { recentPresetIDs = RecentPresets.adding(preset.id, to: recentPresetIDs) }
-        for id in targets where id != assetID {
-            let base = (try? catalog.developSettings(for: id)) ?? .neutral
-            let newSettings = preset.applied(to: base)
-            do {
-                try catalog.saveDevelopSettings(newSettings, for: id, step: step)
-                onSettingsSaved?(id)
-            } catch {
-                errorMessage = "Could not save: \(error.localizedDescription)"
-                continue
-            }
-            refreshPreviews(for: id, settings: newSettings)
-        }
+        // Each photo's preset goes on top of its own saved settings, read in the same transaction
+        // (a photo whose settings can't be read is never given the preset on neutral).
+        saveToOthers(targets, step: step) { _, base in preset.applied(to: base) }
         if let assetID, targets.contains(assetID) {
             let base = settings
             settings = preset.applied(to: settings)

@@ -90,14 +90,14 @@ extension DevelopController {
             return
         }
         do {
-            var saved = try catalog.developSettings(for: photo)
-            // The spot was removed or changed back from Generative since: nothing to put it on.
-            guard let index = saved.spots.firstIndex(where: { $0.id == id && $0.generative }) else { return }
-            var history = try catalog.developHistory(for: photo)
-            let previous = saved
-            saved.spots[index].patch = patch
-            history.record(step, settings: saved, previous: previous)
-            try catalog.saveDevelop(saved, history: history, for: photo)
+            // Through the one path for photos not open (AT-076 R3). A spot removed or changed back
+            // from Generative since has nothing to put the fill on.
+            try catalog.updateDevelop([photo], step: step) { _, saved in
+                guard let index = saved.spots.firstIndex(where: { $0.id == id && $0.generative }) else { return nil }
+                var filled = saved
+                filled.spots[index].patch = patch
+                return filled
+            }
         } catch {
             // AT-076 E1: the fill finished after another photo opened; if it can't be saved to
             // its own photo, say so instead of dropping it.
