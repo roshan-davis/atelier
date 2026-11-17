@@ -9,10 +9,12 @@ import XCTest
 /// balances and exposures are compared with the RAW's own at the same size.
 final class SmartPreviewSpikeTests: XCTestCase {
     func testWhiteFollowsTemperature() {
+        // D65 sits just off the Planckian locus (on the green side), so 6504 K at tint 0 reads a
+        // few percent from (1, 1, 1).
         let d65 = SmartPreviewDNG.neutral(temperature: 6504, tint: 0)
-        XCTAssertEqual(d65.x, 1, accuracy: 0.03)
-        XCTAssertEqual(d65.y, 1, accuracy: 0.03)
-        XCTAssertEqual(d65.z, 1, accuracy: 0.03)
+        XCTAssertEqual(d65.x, 1, accuracy: 0.06)
+        XCTAssertEqual(d65.y, 1, accuracy: 0.06)
+        XCTAssertEqual(d65.z, 1, accuracy: 0.06)
         let tungsten = SmartPreviewDNG.neutral(temperature: 3000, tint: 0)
         XCTAssertGreaterThan(tungsten.x, tungsten.z * 1.5, "warm light reads red-heavy")
         let magenta = SmartPreviewDNG.whiteXY(temperature: 5000, tint: 30)
@@ -46,6 +48,44 @@ final class SmartPreviewSpikeTests: XCTestCase {
             print("SMARTPREVIEW synthetic \(name): \(try Data(contentsOf: url).count) bytes, type \(CGImageSourceGetType(source) as String? ?? "?"), \(properties?[kCGImagePropertyPixelWidth] ?? "?")x\(properties?[kCGImagePropertyPixelHeight] ?? "?")")
             let filter = CIRAWFilter(imageURL: url)
             print("SMARTPREVIEW synthetic \(name): CIRAWFilter \(filter == nil ? "nil" : "ok"), output \(filter?.outputImage?.extent.debugDescription ?? "nil")")
+        }
+    }
+
+    /// Does CIRAWFilter white-balance the DNG from its AsShotNeutral and the Temp/Tint it is given?
+    /// A grey card shot under 3000, 5000 and 8000 K (the card times each light's neutral) is written
+    /// with that neutral; each is then opened as shot, and at 3000, 5000 and 8000 K. Printed: the
+    /// as-shot temperature and tint CIRAWFilter reports, and the card's rendered linear RGB.
+    func testWhiteBalanceFollowsTheNeutral() throws {
+        let width = 64, height = 64
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("SmartPreviewWB-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let context = CIContext(options: [.cacheIntermediates: false])
+        let linear = CGColorSpace(name: CGColorSpace.linearITUR_2020)!
+        for light in [3000.0, 5000, 8000] {
+            let rgba = [Float](repeating: 0.18, count: width * height * 4)  // alpha is not written
+            let neutral = SmartPreviewDNG.neutral(temperature: light, tint: 0)
+            for (name, encoding) in [("lossless", SmartPreviewDNG.Encoding.lossless16), ("lossy", .lossyJPEG(quality: 0.9))] {
+                let url = folder.appendingPathComponent("card-\(Int(light))-\(name).dng")
+                try SmartPreviewDNG.write(rgba: rgba, width: width, height: height, neutral: neutral,
+                                          make: "Nikon", model: "Z f", encoding: encoding, to: url)
+                guard let shot = CIRAWFilter(imageURL: url) else {
+                    print("SMARTPREVIEW WB \(Int(light))K \(name): CIRAWFilter can't open it"); continue
+                }
+                print(String(format: "SMARTPREVIEW WB card under %dK %@: neutral %.3f/%.3f/%.3f, reported as shot %.0f K tint %.1f, baseline %.2f",
+                             Int(light), name, neutral.x, neutral.y, neutral.z, shot.neutralTemperature, shot.neutralTint, shot.baselineExposure))
+                for temperature in [Float?.none, 3000, 5000, 8000] {
+                    guard let filter = CIRAWFilter(imageURL: url) else { continue }
+                    filter.boostAmount = 0
+                    if let temperature { filter.neutralTemperature = temperature }
+                    guard let image = filter.outputImage else { print("SMARTPREVIEW WB: no output"); continue }
+                    var pixel = [Float](repeating: 0, count: 4)
+                    let center = CGRect(x: image.extent.midX, y: image.extent.midY, width: 1, height: 1)
+                    context.render(image, toBitmap: &pixel, rowBytes: 16, bounds: center, format: .RGBAf, colorSpace: linear)
+                    print(String(format: "SMARTPREVIEW WB   at %@: card %.4f/%.4f/%.4f", temperature.map { "\(Int($0))K" } ?? "as shot",
+                                 pixel[0], pixel[1], pixel[2]))
+                }
+            }
         }
     }
 
@@ -105,6 +145,10 @@ final class SmartPreviewSpikeTests: XCTestCase {
                 let shot = try SmartPreviewDNG.make(from: raw, to: dng, encoding: encoding, context: context)
                 let made = Date().timeIntervalSince(started)
                 let size = try Data(contentsOf: dng).count
+                if let opened = CIRAWFilter(imageURL: dng) {
+                    print(String(format: "SMARTPREVIEW %@ %@: RAW as shot %.0f K tint %.1f; DNG reports %.0f K tint %.1f, baseline %.2f",
+                                 base, name, shot.temperature, shot.tint, opened.neutralTemperature, opened.neutralTint, opened.baselineExposure))
+                }
                 guard CIRAWFilter(imageURL: dng) != nil else {
                     print("SMARTPREVIEW \(base) \(name): \(size) bytes, made in \(Int(made * 1000)) ms, CIRAWFilter can't open it")
                     continue

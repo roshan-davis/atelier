@@ -11,8 +11,9 @@ import UniformTypeIdentifiers
 /// as-shot white balance taken back out, so the DNG is "LinearRaw" camera data whose camera space
 /// is Rec. 2020: `ColorMatrix1` is XYZ (D65) → Rec. 2020 and `AsShotNeutral` the as-shot white in
 /// it. CIRAWFilter then white-balances and exposes it as it does a RAW, so Temp, Tint and Exposure
-/// keep working. One stop of highlight headroom is kept by storing half the value with
-/// `BaselineExposure` +1.
+/// keep working. It is decoded linear (no tone curve, shadow boost or baseline exposure), since
+/// opening the DNG applies those again; the RAW's baseline exposure goes in `BaselineExposure`,
+/// plus one stop for the highlight headroom kept by storing half the value.
 ///
 /// Two encodings, for the spike to compare: lossless 16-bit, and Lightroom-style lossy (8-bit
 /// JPEG tiles through a `LinearizationTable`, DNG 1.4 compression 34892).
@@ -46,6 +47,13 @@ public enum SmartPreviewDNG {
         if edge > CGFloat(longEdge) { filter.scaleFactor = Float(CGFloat(longEdge) / edge) }
         let temperature = Double(filter.neutralTemperature)
         let tint = Double(filter.neutralTint)
+        // Linear scene data only: Apple's tone curve, shadow boost and the camera's baseline
+        // exposure are applied again when the DNG is opened, so they must not be baked in.
+        let baseline = Double(filter.baselineExposure)
+        filter.baselineExposure = 0
+        filter.boostAmount = 0
+        filter.boostShadowAmount = 0
+        if filter.isLocalToneMapSupported { filter.localToneMapAmount = 0 }
         guard let image = filter.outputImage else { throw CocoaError(.fileReadCorruptFile) }
         let extent = image.extent.integral
         let width = Int(extent.width), height = Int(extent.height)
@@ -61,7 +69,7 @@ public enum SmartPreviewDNG {
         let make = model?[kCGImagePropertyTIFFMake] as? String ?? "Atelier"
         let camera = model?[kCGImagePropertyTIFFModel] as? String ?? "Smart Preview"
         try write(rgba: pixels, width: width, height: height, neutral: neutral(temperature: temperature, tint: tint),
-                  make: make, model: camera, encoding: encoding, to: url)
+                  make: make, model: camera, encoding: encoding, baselineExposure: baseline, to: url)
         return (temperature, tint)
     }
 
@@ -122,7 +130,8 @@ public enum SmartPreviewDNG {
 
     /// Writes white-balanced linear Rec. 2020 RGBA floats as LinearRaw camera data.
     public static func write(rgba: [Float], width: Int, height: Int, neutral: SIMD3<Double>,
-                             make: String, model: String, encoding: Encoding, to url: URL) throws {
+                             make: String, model: String, encoding: Encoding, baselineExposure: Double = 0,
+                             to url: URL) throws {
         let gains = SIMD3<Float>(Float(neutral.x), Float(neutral.y), Float(neutral.z)) / headroom
         var tiff = TIFFWriter()
         var entries: [TIFFWriter.Entry] = []
@@ -185,7 +194,7 @@ public enum SmartPreviewDNG {
             .longs(50714, [0, 0, 0]), .longs(50717, [65535, 65535, 65535]),
             .srationals(50721, m.map { Int32(($0 * 10000).rounded()) }, denominator: 10000),
             .rationals(50728, [neutral.x, neutral.y, neutral.z].map { UInt32(($0 * 1_000_000).rounded()) }, denominator: 1_000_000),
-            .srationals(50730, [1], denominator: 1),
+            .srationals(50730, [Int32(((baselineExposure + Double(log2(headroom))) * 1000).rounded())], denominator: 1000),
             .short(50778, 21),
         ]
         try tiff.finish(entries).write(to: url)
