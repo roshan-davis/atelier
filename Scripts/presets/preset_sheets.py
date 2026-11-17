@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Contact sheets of the built-in presets on test photos, for tuning them without a Mac.
 
-Reads the presets straight from Sources/AtelierCore/Develop/BuiltInPresets.swift (so the
+Reads the presets straight from Sources/AtelierCore/Develop/Settings/BuiltInPresets.swift (so the
 sheet always reads the current recipes) and renders each with develop_sim, a numpy port of
 parts of DevelopRenderer. Glow is omitted. Use PresetQualification on macOS for native review. One sheet per pack: a column per photo, a row per preset, the unedited
 photo on top.
@@ -24,7 +24,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 import develop_sim as sim  # noqa: E402
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-SOURCE = os.path.join(ROOT, "Sources/AtelierCore/Develop/BuiltInPresets.swift")
+SOURCE = os.path.join(ROOT, "Sources/AtelierCore/Develop/Settings/BuiltInPresets.swift")
 CELL = 360
 
 HSL = {"hue": "hue", "saturation": "sat", "luminance": "lum"}

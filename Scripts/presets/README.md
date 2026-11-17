@@ -1,6 +1,6 @@
 # Built-in Develop preset qualification
 
-The [built-in preset lookbook](../../Sources/AtelierApp/Help/preset-lookbook.html) is the checked-in visual reference. Each preset has its own heading, best subjects, visible qualities and before/after pair. The prose and fixture choices live in [looks.tsv](looks.tsv). The [Swift recipes](../../Sources/AtelierCore/Develop/BuiltInPresets.swift) are the source for exact slider values and stable IDs.
+The [built-in preset lookbook](../../Sources/AtelierApp/Help/preset-lookbook.html) is the checked-in visual reference. Each preset has its own heading, best subjects, visible qualities and before/after pair. The prose and fixture choices live in [looks.tsv](looks.tsv). The [Swift recipes](../../Sources/AtelierCore/Develop/Settings/BuiltInPresets.swift) are the source for exact slider values and stable IDs.
 
 ## Repeat the review
 

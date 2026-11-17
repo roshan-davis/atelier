@@ -3,8 +3,11 @@ import ImageIO
 import AtelierCore
 import SwiftUI
 
+#if DEBUG
 /// Renders the main window in Develop at a few window sizes to images, so layout can be checked
-/// on CI without a person at the Mac. Runs when ATELIER_SNAPSHOTS names an output folder.
+/// on CI without a person at the Mac. Runs when ATELIER_SNAPSHOTS names an output folder. Debug
+/// builds only (the UI checks, `Scripts/check_ui.py`, build Debug); a Release app has none of it
+/// (AT-076 B2).
 @MainActor
 enum LayoutSnapshots {
     // 1000x584 is the window in Rosh's screenshot.
@@ -1197,3 +1200,9 @@ enum LayoutSnapshots {
         window.orderOut(nil)
     }
 }
+#else
+/// Release builds have no snapshot runs (AT-076 B2).
+enum LayoutSnapshots {
+    static var outputFolder: URL? { nil }
+}
+#endif

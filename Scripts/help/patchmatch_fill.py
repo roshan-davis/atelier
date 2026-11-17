@@ -1,5 +1,5 @@
 """Content-Aware Remove for the Help pictures: the same PatchMatch completion as
-Sources/AtelierCore/Develop/ContentAwareFill.swift (Barnes et al. 2009, Wexler et al. 2007), in NumPy."""
+Sources/AtelierCore/Develop/Spots/ContentAwareFill.swift (Barnes et al. 2009, Wexler et al. 2007), in NumPy."""
 import numpy as np, time
 
 P = 7; H2 = P // 2
