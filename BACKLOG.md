@@ -1431,7 +1431,17 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 
 **Not changed:** the per-frame clipping copy and the tone stages' coefficients (`LocalContrast.stage`) still use Core Image's cache directly (they are replaced every frame and counting them would clear step 1 during drags); they are let go by the clears above. HDR's own context, C1 (the model lock held through a run) and the other AT-076 items. ONNX Runtime's Objective-C API can't turn the CPU arena off, so a run's own peak stays.
 
+**Mac check 6 (06508ec, PR comment 6934173259):** with the helper processes, Atelier's own peak in the Z f Lens Blur session is 7.4 GB (was 20.5 GB; main 20.8 GB), 1.0 GB back at Fit, 0.7 GB with the photo closed. The Fine Edges helper peaks at about 13 GB while it runs and quits 30 s after its last run; Depth's peaks at 2.2 GB. Killing the Fine Edges helper mid-run leaves Atelier running with a message, and the next run starts a new helper. Lens Blur timings unchanged apart from helper start-up (Lens Blur open 735 vs 605 ms, Refine Select Subject 229 vs 180 ms). Full-precision model files don't lower the run's memory (Fast 18.3 vs 18.8 GB, Hair Detail 38 vs 30 GB), so the memory is the network's at its fixed input size.
+
 **Validation:** Swift unbuilt (cloud). `RenderMemoryTests` (budget, clearing; opt-in `ATELIER_MEMORY_TESTS=1` full-size test: 40 Lens Blur edits at 24 MP, peak growth must stay under the budget + 1.5 GB). Needs a Mac build, the memory test before (main) and after, Frame Diagnostics on a Lens Blur and a Basic drag (no regression), and Rosh's acceptance.
+
+## AT-078 — Lens Blur: Amount drags with Blur areas take seconds per frame
+
+**Status:** Proposed / discuss. **Owner:** unassigned. **Found:** Mac check 6 of PR #157 (Nov 16, 2026, Z f NEF, zoomed in at full size).
+
+**Why:** with six Blur areas drawn, each full-size Blur Amount change took 2.3 to 3.0 s, against 0.13 to 0.30 s without areas. A drag should stay smooth (AGENTS.md "GPU and live rendering").
+
+**Scope:** profile `LensBlur.withAreas` (the fill pyramid, `drawnOnce` read-back at full size) for an Amount change, where the areas haven't changed and their stages could be reused; measure with Frame Diagnostics before and after.
 
 ## AT-071 — Cull: compare the suggested keeper and runner-up with linked zoom
 
