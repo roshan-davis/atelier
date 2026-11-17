@@ -1,0 +1,63 @@
+[0/1] Planning build
+Test Suite 'Selected tests' started at 2026-11-17 12:32:29.025.
+Test Suite 'AtelierPackageTests.xctest' started at 2026-11-17 12:32:29.026.
+Test Suite 'SmartPreviewSpikeTests' started at 2026-11-17 12:32:29.026.
+Test Case '-[AtelierCoreTests.SmartPreviewSpikeTests testWhiteBalanceFollowsTheNeutral]' started.
+/Users/rosh/RoshProjects/Atelier/worktrees/spike-sp/Tests/AtelierCoreTests/SmartPreviewSpikeTests.swift:88: error: -[AtelierCoreTests.SmartPreviewSpikeTests testWhiteBalanceFollowsTheNeutral] : XCTAssertGreaterThan failed: ("0.0") is not greater than ("0.05") - lossy card under 3000K renders
+/Users/rosh/RoshProjects/Atelier/worktrees/spike-sp/Tests/AtelierCoreTests/SmartPreviewSpikeTests.swift:89: error: -[AtelierCoreTests.SmartPreviewSpikeTests testWhiteBalanceFollowsTheNeutral] : XCTAssertEqualWithAccuracy failed: ("nan") is not equal to ("1.0") +/- ("0.03") - lossy card under 3000K is grey as shot
+/Users/rosh/RoshProjects/Atelier/worktrees/spike-sp/Tests/AtelierCoreTests/SmartPreviewSpikeTests.swift:90: error: -[AtelierCoreTests.SmartPreviewSpikeTests testWhiteBalanceFollowsTheNeutral] : XCTAssertEqualWithAccuracy failed: ("nan") is not equal to ("1.0") +/- ("0.03") - lossy card under 3000K is grey as shot
+/Users/rosh/RoshProjects/Atelier/worktrees/spike-sp/Tests/AtelierCoreTests/SmartPreviewSpikeTests.swift:88: error: -[AtelierCoreTests.SmartPreviewSpikeTests testWhiteBalanceFollowsTheNeutral] : XCTAssertGreaterThan failed: ("0.0") is not greater than ("0.05") - lossy card under 5000K renders
+/Users/rosh/RoshProjects/Atelier/worktrees/spike-sp/Tests/AtelierCoreTests/SmartPreviewSpikeTests.swift:89: error: -[AtelierCoreTests.SmartPreviewSpikeTests testWhiteBalanceFollowsTheNeutral] : XCTAssertEqualWithAccuracy failed: ("nan") is not equal to ("1.0") +/- ("0.03") - lossy card under 5000K is grey as shot
+/Users/rosh/RoshProjects/Atelier/worktrees/spike-sp/Tests/AtelierCoreTests/SmartPreviewSpikeTests.swift:90: error: -[AtelierCoreTests.SmartPreviewSpikeTests testWhiteBalanceFollowsTheNeutral] : XCTAssertEqualWithAccuracy failed: ("nan") is not equal to ("1.0") +/- ("0.03") - lossy card under 5000K is grey as shot
+/Users/rosh/RoshProjects/Atelier/worktrees/spike-sp/Tests/AtelierCoreTests/SmartPreviewSpikeTests.swift:88: error: -[AtelierCoreTests.SmartPreviewSpikeTests testWhiteBalanceFollowsTheNeutral] : XCTAssertGreaterThan failed: ("0.0") is not greater than ("0.05") - lossy card under 8000K renders
+/Users/rosh/RoshProjects/Atelier/worktrees/spike-sp/Tests/AtelierCoreTests/SmartPreviewSpikeTests.swift:89: error: -[AtelierCoreTests.SmartPreviewSpikeTests testWhiteBalanceFollowsTheNeutral] : XCTAssertEqualWithAccuracy failed: ("nan") is not equal to ("1.0") +/- ("0.03") - lossy card under 8000K is grey as shot
+/Users/rosh/RoshProjects/Atelier/worktrees/spike-sp/Tests/AtelierCoreTests/SmartPreviewSpikeTests.swift:90: error: -[AtelierCoreTests.SmartPreviewSpikeTests testWhiteBalanceFollowsTheNeutral] : XCTAssertEqualWithAccuracy failed: ("nan") is not equal to ("1.0") +/- ("0.03") - lossy card under 8000K is grey as shot
+Test Case '-[AtelierCoreTests.SmartPreviewSpikeTests testWhiteBalanceFollowsTheNeutral]' failed (0.732 seconds).
+Test Case '-[AtelierCoreTests.SmartPreviewSpikeTests testWhiteFollowsTemperature]' started.
+Test Case '-[AtelierCoreTests.SmartPreviewSpikeTests testWhiteFollowsTemperature]' passed (0.000 seconds).
+Test Case '-[AtelierCoreTests.SmartPreviewSpikeTests testWrittenDNGOpens]' started.
+Test Case '-[AtelierCoreTests.SmartPreviewSpikeTests testWrittenDNGOpens]' passed (0.027 seconds).
+Test Suite 'SmartPreviewSpikeTests' failed at 2026-11-17 12:32:29.785.
+	 Executed 3 tests, with 9 failures (0 unexpected) in 0.759 (0.759) seconds
+Test Suite 'AtelierPackageTests.xctest' failed at 2026-11-17 12:32:29.785.
+	 Executed 3 tests, with 9 failures (0 unexpected) in 0.759 (0.759) seconds
+Test Suite 'Selected tests' failed at 2026-11-17 12:32:29.785.
+	 Executed 3 tests, with 9 failures (0 unexpected) in 0.759 (0.760) seconds
+SMARTPREVIEW WB card under 3000K lossless: neutral 1.000/0.645/0.248, reported as shot 2993 K tint -0.2, baseline 1.00
+SMARTPREVIEW WB   at as shot: card 0.1718/0.1717/0.1717
+SMARTPREVIEW WB   at 3000K: card 0.1718/0.1713/0.1706
+SMARTPREVIEW WB   at 5000K: card 0.1736/0.1236/0.0538
+SMARTPREVIEW WB   at 8000K: card 0.2158/0.1330/0.0351
+SMARTPREVIEW WB card under 3000K lossy: neutral 1.000/0.645/0.248, reported as shot 5001 K tint 9.6, baseline 0.00
+SMARTPREVIEW WB   at as shot: card 0.0000/0.0000/0.0000
+SMARTPREVIEW WB   at 3000K: card 0.0000/0.0000/0.0000
+SMARTPREVIEW WB   at 5000K: card 0.0000/0.0000/0.0000
+SMARTPREVIEW WB   at 8000K: card 0.0000/0.0000/0.0000
+SMARTPREVIEW WB card under 5000K lossless: neutral 1.000/0.879/0.710, reported as shot 5006 K tint 0.1, baseline 1.00
+SMARTPREVIEW WB   at as shot: card 0.1718/0.1718/0.1718
+SMARTPREVIEW WB   at 3000K: card 0.1690/0.2242/0.4367
+SMARTPREVIEW WB   at 5000K: card 0.1718/0.1719/0.1722
+SMARTPREVIEW WB   at 8000K: card 0.2159/0.1850/0.1190
+SMARTPREVIEW WB card under 5000K lossy: neutral 1.000/0.879/0.710, reported as shot 5001 K tint 9.6, baseline 0.00
+SMARTPREVIEW WB   at as shot: card 0.0000/0.0000/0.0000
+SMARTPREVIEW WB   at 3000K: card 0.0000/0.0000/0.0000
+SMARTPREVIEW WB   at 5000K: card 0.0000/0.0000/0.0000
+SMARTPREVIEW WB   at 8000K: card 0.0000/0.0000/0.0000
+SMARTPREVIEW WB card under 8000K lossless: neutral 0.805/0.819/1.000, reported as shot 8000 K tint -0.0, baseline 1.00
+SMARTPREVIEW WB   at as shot: card 0.1717/0.1718/0.1718
+SMARTPREVIEW WB   at 3000K: card 0.1579/0.2112/0.5133
+SMARTPREVIEW WB   at 5000K: card 0.1347/0.1580/0.2436
+SMARTPREVIEW WB   at 8000K: card 0.1717/0.1718/0.1718
+SMARTPREVIEW WB card under 8000K lossy: neutral 0.805/0.819/1.000, reported as shot 5001 K tint 9.6, baseline 0.00
+SMARTPREVIEW WB   at as shot: card 0.0000/0.0000/0.0000
+SMARTPREVIEW WB   at 3000K: card 0.0000/0.0000/0.0000
+SMARTPREVIEW WB   at 5000K: card 0.0000/0.0000/0.0000
+SMARTPREVIEW WB   at 8000K: card 0.0000/0.0000/0.0000
+SMARTPREVIEW synthetic lossless: 786944 bytes, type com.adobe.raw-image, 300x200
+SMARTPREVIEW synthetic lossless: CIRAWFilter ok, output (0.0, 0.0, 300.0, 200.0)
+SMARTPREVIEW synthetic lossy: 10536 bytes, type public.tiff, ?x?
+SMARTPREVIEW synthetic lossy: CIRAWFilter ok, output (inf, inf, 0.0, 0.0)
+◇ Test run started.
+↳ Testing Library Version: 1501
+↳ Target Platform: arm64e-apple-macos14.0
+✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.
