@@ -280,6 +280,7 @@ struct NotesPanelView: View {
         VStack(spacing: 0) {
             header
             Divider().overlay(Color(nsColor: palette.faint).opacity(0.4))
+            if let error = notes.saveError { saveErrorRow(error) }
             content
         }
         .background(Color(nsColor: palette.paper))
@@ -479,6 +480,18 @@ struct NotesPanelView: View {
         .font(.system(size: 10, weight: .semibold))
         .foregroundStyle(Color(nsColor: palette.ink).opacity(0.8))
         .cursor(.link)
+    }
+
+    /// A change that didn't reach the catalog: said in the panel, in the system's red, until a
+    /// later change saves.
+    private func saveErrorRow(_ message: String) -> some View {
+        Label(message, systemImage: "exclamationmark.triangle.fill")
+            .font(.system(size: 10, weight: .medium))
+            .foregroundStyle(Color(nsColor: .systemRed))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .accessibilityLabel(message)
     }
 
     private var deletedRow: some View {

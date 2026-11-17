@@ -1394,8 +1394,8 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 **Evidence:** [Docs/Reviews/Architecture-Review-2026-11-16.md](Docs/Reviews/Architecture-Review-2026-11-16.md), source review of `main` `c146785`, revised after Rosh's source check on PR #155 (head `90abdd8`). Source only: no timing or memory measurement; sizes are pixel payloads and counts are source counts.
 
 **Work order (every finding stays in it; Rosh, Nov 16, 2026: "order and skipping are different"):**
-1. **AT-077 memory (PR #157, in progress):** M1 (full-size images and session let go at Fit, leaving Develop, memory pressure; Core Image cache budget), with R1 (one ONNX model host: shared setup, unload when idle or under pressure, the runtime's working memory), M2 (Core Image contexts made per call: HDR decodes, splash), M3 (thumbnail cache byte limit, done in #157) and whatever the real-RAW memory profile shows holds the 16 GB. C1 (model lock held through inference, Remove waits on main, status strings race) is fixed in the same host work.
-2. **E1:** silent `try?` catalog writes (Generative Fill, Match Look, notes) report their error.
+1. **AT-077 memory (PR #157 merged 773b113; M2 in PR #158 merged e4906ec):** M1 (full-size images and session let go at Fit, leaving Develop, memory pressure; Core Image cache budget), with R1 (one ONNX model host: shared setup, unload when idle or under pressure, the runtime's working memory), M2 (Core Image contexts made per call: HDR decodes, splash), M3 (thumbnail cache byte limit, done in #157) and whatever the real-RAW memory profile shows holds the 16 GB. C1 (model lock held through inference, Remove waits on main, status strings race) is fixed in the same host work.
+2. **E1 (Claude, branch `claude/project-thread-fiqvpk`, in progress):** silent `try?` catalog writes (Generative Fill, Match Look, notes) report their error. Siblings fixed too: Cull's import-path cull write and note pins. Match Look's Same Look no longer matches a photo from neutral when its settings can't be read.
 3. **P1:** measure history save time, then a background save; a history format change only if the numbers call for it.
 4. **P2 + R3:** batch edits in one transaction, one path for edits to photos not open; measure the Grid observation cost.
 5. **D1:** one tool state, Lens Blur Refine nested.
@@ -1440,6 +1440,8 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 **Status:** Proposed / discuss. **Owner:** unassigned. **Found:** Mac check 6 of PR #157 (Nov 16, 2026, Z f NEF, zoomed in at full size).
 
 **Why:** with six Blur areas drawn, each full-size Blur Amount change took 2.3 to 3.0 s, against 0.13 to 0.30 s without areas. A drag should stay smooth (AGENTS.md "GPU and live rendering").
+
+**Also found (Mac check of PR #158, Nov 17, 2026, on main):** sometimes the full-size render for one edit with Refine areas never arrives (after drawing Blur area 3, and after an Amount change with areas; 2 of 6 runs), so the zoomed view stays stale until the next edit. Likely the same slow path: a long full-size render whose follow-up is dropped. Fix both together.
 
 **Scope:** profile `LensBlur.withAreas` (the fill pyramid, `drawnOnce` read-back at full size) for an Amount change, where the areas haven't changed and their stages could be reused; measure with Frame Diagnostics before and after.
 

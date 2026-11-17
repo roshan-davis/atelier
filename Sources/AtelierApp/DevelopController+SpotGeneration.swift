@@ -89,14 +89,20 @@ extension DevelopController {
             updateSpot(id, step: step) { $0.patch = patch }
             return
         }
-        guard var saved = try? catalog.developSettings(for: photo),
-              saved.spots.contains(where: { $0.id == id && $0.generative }) else { return }
-        var history = (try? catalog.developHistory(for: photo)) ?? DevelopHistory()
-        let previous = saved
-        guard let index = saved.spots.firstIndex(where: { $0.id == id }) else { return }
-        saved.spots[index].patch = patch
-        history.record(step, settings: saved, previous: previous)
-        try? catalog.saveDevelop(saved, history: history, for: photo)
+        do {
+            var saved = try catalog.developSettings(for: photo)
+            // The spot was removed or changed back from Generative since: nothing to put it on.
+            guard let index = saved.spots.firstIndex(where: { $0.id == id && $0.generative }) else { return }
+            var history = try catalog.developHistory(for: photo)
+            let previous = saved
+            saved.spots[index].patch = patch
+            history.record(step, settings: saved, previous: previous)
+            try catalog.saveDevelop(saved, history: history, for: photo)
+        } catch {
+            // AT-076 E1: the fill finished after another photo opened; if it can't be saved to
+            // its own photo, say so instead of dropping it.
+            reportError("Couldn't save the Generative Fill to the photo it was made for: \(error.localizedDescription)")
+        }
     }
 
     /// A spot's points or size changed: its generated fill no longer fits, so a new one is made
