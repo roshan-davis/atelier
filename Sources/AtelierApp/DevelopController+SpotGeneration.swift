@@ -49,14 +49,14 @@ extension DevelopController {
                 try Task.checkCancellation()
                 let patch = try await runner.generateFill(input, seed: seed, settings: ai, progress: report)
                 try Task.checkCancellation()
-                await MainActor.run {
+                await MainActor.run { [weak self] in
                     guard !Task.isCancelled else { return }
                     self?.finishFill(patch, for: id, on: assetID)
                 }
             } catch {
                 // A cancelled job was already cleared, and a new one may have taken its place.
                 guard !Task.isCancelled, !(error is CancellationError) else { return }
-                await MainActor.run {
+                await MainActor.run { [weak self] in
                     self?.endFill(id)
                     self?.spotGenerationError = "Generative AI: \(error.localizedDescription)"
                 }

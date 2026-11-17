@@ -113,8 +113,9 @@ struct KeyboardSettings: View {
         recording = action
         highlighted = action
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            MainActor.assumeIsolated {
-                guard let action = recording else { return event }
+            // NSEvent isn't Sendable, so the main-actor part says only whether to keep it.
+            let keep = MainActor.assumeIsolated { () -> Bool in
+                guard let action = recording else { return true }
                 switch event.keyCode {
                 case 53:  // Escape cancels
                     break
@@ -123,14 +124,15 @@ struct KeyboardSettings: View {
                 default:
                     guard let combo = KeyBindings.combo(from: event) else {
                         NSSound.beep()
-                        return nil
+                        return false
                     }
                     KeyBindings.set(combo.stored, for: action)
                 }
                 stopRecording()
                 revision += 1
-                return nil
+                return false
             }
+            return keep ? event : nil
         }
     }
 

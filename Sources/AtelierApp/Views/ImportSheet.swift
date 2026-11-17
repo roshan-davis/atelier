@@ -577,7 +577,8 @@ private struct SourceThumbnail: View {
 }
 
 private enum SourceThumbnailCache {
-    static let shared: NSCache<NSURL, NSImage> = {
+    /// NSCache is thread-safe.
+    nonisolated(unsafe) static let shared: NSCache<NSURL, NSImage> = {
         let cache = NSCache<NSURL, NSImage>()
         cache.countLimit = 2000
         return cache

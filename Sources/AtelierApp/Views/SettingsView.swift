@@ -529,19 +529,25 @@ struct GeneralSettings: View {
     private static func measure(_ folder: URL?) async -> String {
         guard let folder else { return "None" }
         return await Task.detached(priority: .utility) {
-            var total: Int64 = 0
-            var count = 0
-            let keys: [URLResourceKey] = [.fileSizeKey]
-            if let enumerator = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: keys) {
-                for case let url as URL in enumerator {
-                    if let size = try? url.resourceValues(forKeys: Set(keys)).fileSize {
-                        total += Int64(size)
-                        count += 1
-                    }
-                }
-            }
+            let (total, count) = Self.folderSize(folder)
             return "\(ByteCountFormatter.string(fromByteCount: total, countStyle: .file)) in \(count) files"
         }.value
+    }
+
+    /// The bytes and number of files under `folder`. Synchronous, as a directory enumerator is.
+    nonisolated private static func folderSize(_ folder: URL) -> (Int64, Int) {
+        var total: Int64 = 0
+        var count = 0
+        let keys: [URLResourceKey] = [.fileSizeKey]
+        if let enumerator = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: keys) {
+            for case let url as URL in enumerator {
+                if let size = try? url.resourceValues(forKeys: Set(keys)).fileSize {
+                    total += Int64(size)
+                    count += 1
+                }
+            }
+        }
+        return (total, count)
     }
 }
 

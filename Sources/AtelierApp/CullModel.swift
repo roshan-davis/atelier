@@ -191,7 +191,7 @@ final class CullModel: ObservableObject, Identifiable {
                 let files = Importer.collectFiles(from: sources)
                 // A RAW and its JPEG are one frame: culled as the RAW, the decision applies to both.
                 let pairs = FilePairs.pairs(files)
-                await MainActor.run { self?.found = pairs.count }
+                await MainActor.run { [weak self] in self?.found = pairs.count }
                 // Capture times, a few files at a time, reporting as each batch is done.
                 var times = [Date?](repeating: nil, count: pairs.count)
                 let batch = 24
@@ -205,7 +205,7 @@ final class CullModel: ObservableObject, Identifiable {
                     }
                     for offset in 0..<(end - start) { times[start + offset] = slice[offset] }
                     slice.deallocate()
-                    await MainActor.run { self?.read = end }
+                    await MainActor.run { [weak self] in self?.read = end }
                 }
                 let photos = pairs.enumerated().map { index, pair in
                     CullPhoto(id: index, url: pair.primary, assetID: nil, name: pair.primary.lastPathComponent,
@@ -214,7 +214,7 @@ final class CullModel: ObservableObject, Identifiable {
                 }
                 let ordered = CullModel.ordered(photos)
                 guard !Task.isCancelled else { return }
-                await MainActor.run { self?.loaded(ordered) }
+                await MainActor.run { [weak self] in self?.loaded(ordered) }
             }
         case .photos(let ids, _):
             let photos = ids.enumerated().compactMap { index, id -> CullPhoto? in
@@ -260,7 +260,7 @@ final class CullModel: ObservableObject, Identifiable {
                 for await (id, signals) in group {
                     if Task.isCancelled { return }
                     let thumbnail = signals.thumbnail.map { NSImage(cgImage: $0, size: .zero) }
-                    await MainActor.run {
+                    await MainActor.run { [weak self] in
                         guard let self else { return }
                         self.photos[id].signals = signals
                         self.photos[id].thumbnail = thumbnail
@@ -272,9 +272,9 @@ final class CullModel: ObservableObject, Identifiable {
                 }
             }
             // Each photo against the next, in parallel: lining shots up for a zoom is the slow part.
-            let signals = await MainActor.run { self?.photos.map(\.signals) } ?? []
+            let signals = await MainActor.run { [weak self] in self?.photos.map(\.signals) } ?? []
             guard !Task.isCancelled, signals.count > 1 else {
-                await MainActor.run { self?.analysisFinished([:]) }
+                await MainActor.run { [weak self] in self?.analysisFinished([:]) }
                 return
             }
             let results = UnsafeMutableBufferPointer<CullComparison>.allocate(capacity: signals.count - 1)
@@ -286,7 +286,7 @@ final class CullModel: ObservableObject, Identifiable {
             var neighbors: [Int: CullComparison] = [:]
             for index in results.indices { neighbors[index] = results[index] }
             results.deallocate()
-            await MainActor.run { self?.analysisFinished(neighbors) }
+            await MainActor.run { [weak self] in self?.analysisFinished(neighbors) }
         }
     }
 
@@ -406,7 +406,7 @@ final class CullModel: ObservableObject, Identifiable {
                 }
                 for await (id, signals) in group {
                     if Task.isCancelled { return }
-                    await MainActor.run {
+                    await MainActor.run { [weak self] in
                         guard let self else { return }
                         self.photos[id].signals = signals
                         if let progress = self.advancedProgress { self.advancedProgress = (progress.done + 1, progress.total) }
@@ -416,7 +416,7 @@ final class CullModel: ObservableObject, Identifiable {
                     }
                 }
             }
-            await MainActor.run {
+            await MainActor.run { [weak self] in
                 guard let self, !Task.isCancelled else { return }
                 self.advancedTask = nil
                 self.advancedProgress = nil
@@ -525,7 +525,7 @@ final class CullModel: ObservableObject, Identifiable {
         largeTask = Task.detached(priority: .userInitiated) { [weak self] in
             let size = Culling.pixelSize(at: url)
             let image = Culling.image(at: url, maxPixel: 1800).map { NSImage(cgImage: $0, size: .zero) }
-            await MainActor.run {
+            await MainActor.run { [weak self] in
                 guard let self, !Task.isCancelled, self.focused == id else { return }
                 self.largeImage = image
                 self.pixelSize = size
@@ -543,7 +543,7 @@ final class CullModel: ObservableObject, Identifiable {
         let side = pixelSize.map { Int(max($0.width, $0.height)) } ?? 12000
         fullTask = Task.detached(priority: .userInitiated) { [weak self] in
             let image = Culling.image(at: url, maxPixel: max(side, 1800)).map { NSImage(cgImage: $0, size: .zero) }
-            await MainActor.run {
+            await MainActor.run { [weak self] in
                 guard let self, !Task.isCancelled, self.focused == id else { return }
                 self.fullImage = image
             }

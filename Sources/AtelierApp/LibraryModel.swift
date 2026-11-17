@@ -989,12 +989,13 @@ final class LibraryModel: ObservableObject {
     private func installInputMonitor() {
         inputMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseDown, .leftMouseUp]) { [weak self] event in
             guard let self else { return event }
-            return MainActor.assumeIsolated {
+            // NSEvent isn't Sendable, so the main-actor part says only whether to keep it.
+            let keep = MainActor.assumeIsolated { () -> Bool in
                 switch event.type {
                 case .keyDown:
                     let handled = self.handleKey(event)
                     self.lastKeyWasTab = !handled && event.keyCode == 48
-                    return handled ? nil : event
+                    return !handled
                 case .leftMouseDown where event.window === self.mainWindow:
                     self.lastClick = event.locationInWindow
                     self.chosenTextField = nil
@@ -1014,8 +1015,9 @@ final class LibraryModel: ObservableObject {
                 default:
                     break
                 }
-                return event
+                return true
             }
+            return keep ? event : nil
         }
     }
 

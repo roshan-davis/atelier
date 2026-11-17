@@ -731,7 +731,7 @@ struct HistogramGraph: View, Equatable {
         .accessibilityHidden(true)
     }
 
-    static func == (lhs: HistogramGraph, rhs: HistogramGraph) -> Bool {
+    nonisolated static func == (lhs: HistogramGraph, rhs: HistogramGraph) -> Bool {
         lhs.highlight == rhs.highlight && lhs.sink === rhs.sink
             && (lhs.sink != nil || lhs.histogram == rhs.histogram)
     }

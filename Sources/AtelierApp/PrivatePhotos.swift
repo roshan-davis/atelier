@@ -12,8 +12,9 @@ import LocalAuthentication
 final class PrivatePhotos {
     private weak var model: LibraryModel?
     private var lastActivity = Date()
-    private var activityMonitor: Any?
-    private var idleTimer: Timer?
+    // Also read by deinit, which runs once nothing else holds the object.
+    nonisolated(unsafe) private var activityMonitor: Any?
+    nonisolated(unsafe) private var idleTimer: Timer?
     private let observers = NotificationObservers()
     private var asking = false
 

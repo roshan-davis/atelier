@@ -2,7 +2,7 @@
 import PackageDescription
 
 /// Swift 6 language mode (full data-race checking), turned on module by module (AT-076 C2):
-/// the agent modules, HDRCore and Core first; the app follows once its reports are fixed.
+/// every module but the test targets.
 let swift6: [SwiftSetting] = [.swiftLanguageMode(.v6)]
 
 let package = Package(
@@ -58,7 +58,8 @@ let package = Package(
             name: "AtelierApp",
             dependencies: ["AtelierCore", "AtelierHDRCore", "AgentActions", "AtelierActions", "AgentMCP",
                            .product(name: "GRDB", package: "GRDB.swift")],
-            resources: [.process("Resources"), .copy("Help")]
+            resources: [.process("Resources"), .copy("Help")],
+            swiftSettings: swift6
         ),
         .testTarget(
             name: "AtelierAppTests",
