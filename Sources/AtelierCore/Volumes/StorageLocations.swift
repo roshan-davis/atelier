@@ -304,3 +304,50 @@ extension Catalog {
         }
     }
 }
+
+// MARK: - Sidebar
+
+extension StorageLocation {
+    /// Whether the folder at `path` (relative to the volume root) is this location's folder or
+    /// inside it. Never a sibling: "PortfolioOld" is not in "Portfolio".
+    public func contains(folderPath path: String, onVolume volumeId: Int64) -> Bool {
+        guard self.volumeId == volumeId else { return false }
+        return rootPath.isEmpty || path == rootPath || path.hasPrefix(rootPath + "/")
+    }
+}
+
+/// The sidebar's Locations section (AT-079a): one row per location, each with the folders it holds.
+public struct SidebarLocation: Identifiable, Hashable, Sendable {
+    public var info: StorageLocationInfo
+    /// The folder at the location's own root, when the catalog has one: selecting the row selects it.
+    /// Nil for a whole-volume location (the row selects the volume) or a folder nothing was imported from.
+    public var rootFolder: Folder?
+    /// Folders inside the location, excluding `rootFolder` and any folder a more specific location holds.
+    public var folders: [Folder]
+
+    public var id: Int64 { info.id }
+
+    /// Groups `folders` under `locations`. A folder goes under the most specific location that holds
+    /// it, so a drive and a folder on it never list the same folder twice. Locations keep their order.
+    public static func make(locations: [StorageLocationInfo], folders: [Folder]) -> [SidebarLocation] {
+        var rows = locations.map { SidebarLocation(info: $0, rootFolder: nil, folders: []) }
+        for folder in folders {
+            var best: Int?
+            for (index, row) in rows.enumerated()
+            where row.info.location.contains(folderPath: folder.relativePath, onVolume: folder.volumeId) {
+                if let current = best, rows[current].info.location.rootPath.count >= row.info.location.rootPath.count {
+                    continue
+                }
+                best = index
+            }
+            guard let best else { continue }
+            let root = rows[best].info.location.rootPath
+            if !root.isEmpty, folder.relativePath == root {
+                rows[best].rootFolder = folder
+            } else {
+                rows[best].folders.append(folder)
+            }
+        }
+        return rows
+    }
+}

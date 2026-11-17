@@ -95,15 +95,18 @@ struct SidebarView: View {
         }
     }
 
-    /// Locations (AT-079a): the volumes photos are on, named and set up in Settings > Storage.
+    /// Locations (AT-079a): the places set up in Settings > Storage, each with the folders it holds.
+    /// A share added but never connected has a row too; a folder location is named for itself.
     @ViewBuilder private var volumesSection: some View {
         Section("Locations") {
-            ForEach(model.sidebar.volumes) { volume in
-                if let volumeID = volume.id {
+            ForEach(model.sidebar.locationRows) { row in
+                if row.folders.isEmpty {
+                    locationLabel(row)
+                } else {
                     DisclosureGroup {
-                        ForEach(model.sidebar.folders.filter { $0.volumeId == volumeID }) { folder in
+                        ForEach(row.folders) { folder in
                             if let folderID = folder.id {
-                                Label(folder.displayName, systemImage: "folder")
+                                Label(folderName(folder, in: row), systemImage: "folder")
                                     .lineLimit(1)
                                     .truncationMode(.head)
                                     .help(folder.displayName)
@@ -111,17 +114,33 @@ struct SidebarView: View {
                             }
                         }
                     } label: {
-                        let location = model.rootLocation(for: volume)
-                        VolumeLabel(volume: volume, location: location, connect: location.flatMap { info in
-                            model.canConnect(info.id) ? { _ = model.actions.run(AtelierAction.connectLocation,
-                                                                                 LocationParameters(location: info.id)) } : nil
-                        })
-                        .tag(SidebarItem.volume(volumeID))
-                        .contextMenu { locationMenu(location) }
+                        locationLabel(row)
                     }
                 }
             }
         }
+    }
+
+    /// A row selects its whole volume, or its own folder for a folder location; a location with
+    /// nothing imported yet isn't selectable.
+    @ViewBuilder private func locationLabel(_ row: SidebarLocation) -> some View {
+        let info = row.info
+        let label = LocationLabel(info: info, connect: model.canConnect(info.id) ? {
+            _ = model.actions.run(AtelierAction.connectLocation, LocationParameters(location: info.id))
+        } : nil)
+        .contextMenu { locationMenu(info) }
+        if let item = row.sidebarItem {
+            label.tag(item)
+        } else {
+            label
+        }
+    }
+
+    /// A folder's path below its location: "2026" under Portfolio, not "Portfolio/2026".
+    private func folderName(_ folder: Folder, in row: SidebarLocation) -> String {
+        let root = row.info.location.rootPath
+        guard !root.isEmpty, folder.relativePath.hasPrefix(root + "/") else { return folder.displayName }
+        return String(folder.relativePath.dropFirst(root.count + 1))
     }
 
     @ViewBuilder private func locationMenu(_ location: StorageLocationInfo?) -> some View {
@@ -296,21 +315,20 @@ private struct CountedName: View {
     }
 }
 
-private struct VolumeLabel: View {
-    let volume: Volume
-    let location: StorageLocationInfo?
+private struct LocationLabel: View {
+    let info: StorageLocationInfo
     /// Set for an offline share that can be connected: a small Connect button on the row.
     let connect: (() -> Void)?
 
     var body: some View {
         Label {
             HStack(spacing: 6) {
-                Text(location?.location.name ?? volume.name)
+                Text(info.location.name)
                     .lineLimit(1)
                 Circle()
-                    .fill(volume.isOnline ? Color.green : Color.secondary.opacity(0.5))
+                    .fill(StorageIcons.dotColor(for: info.status))
                     .frame(width: 7, height: 7)
-                    .help(volume.isOnline ? "Connected" : "Offline: browsing previews only")
+                    .help(help)
                 if let connect {
                     Spacer(minLength: 4)
                     Button("Connect", action: connect)
@@ -318,11 +336,19 @@ private struct VolumeLabel: View {
                         .controlSize(.small)
                         .font(.caption)
                         .fixedSize()
-                        .help("Connect \(location?.location.name ?? volume.name)")
+                        .help("Connect \(info.location.name)")
                 }
             }
         } icon: {
-            Image(systemName: StorageIcons.symbol(for: location?.location.kind ?? (volume.kind == .nas ? .networkShare : .drive)))
+            Image(systemName: StorageIcons.symbol(for: info.location.kind))
+        }
+    }
+
+    private var help: String {
+        switch info.status {
+        case .connected: return "Connected"
+        case .offline: return "Offline: browsing previews only"
+        case .notConnectedYet: return "Not connected yet"
         }
     }
 }

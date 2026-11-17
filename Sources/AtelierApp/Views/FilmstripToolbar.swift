@@ -180,7 +180,9 @@ extension LibraryModel {
     var sourceTitle: String {
         switch sidebarSelection ?? .all {
         case .all: return "All Photographs"
-        case .volume(let id): return sidebar.volumes.first { $0.id == id }?.name ?? "Volume"
+        case .volume(let id):
+            return sidebar.volumes.first { $0.id == id }.flatMap(rootLocation(for:))?.location.name
+                ?? sidebar.volumes.first { $0.id == id }?.name ?? "Volume"
         case .folder(let id):
             guard let folder = sidebar.folders.first(where: { $0.id == id }) else { return "Folder" }
             return folder.relativePath.isEmpty ? "/" : (folder.relativePath as NSString).lastPathComponent
@@ -239,27 +241,30 @@ extension LibraryModel {
             }
         }
 
-        if !sidebar.volumes.isEmpty {
+        // Each location (Settings > Storage) with the folders it holds, as the sidebar lists them.
+        let rows = sidebar.locationRows.filter { $0.sidebarItem != nil }
+        if !rows.isEmpty {
             menu.addItem(.separator())
             menu.addItem(.sectionHeader(title: "Folders"))
-            for volume in sidebar.volumes {
-                guard let volumeID = volume.id else { continue }
+            for row in rows {
+                guard let whole = row.sidebarItem else { continue }
+                let name = row.info.location.name
                 let folders = NSMenu()
                 folders.autoenablesItems = false
-                folders.addItem(item("All Photos on \(volume.name)", .volume(volumeID)))
-                folders.addItem(.separator())
-                for folder in sidebar.folders where folder.volumeId == volumeID {
+                folders.addItem(item("All Photos in \(name)", whole))
+                if !row.folders.isEmpty { folders.addItem(.separator()) }
+                for folder in row.folders {
                     if let id = folder.id { folders.addItem(item(folder.displayName, .folder(id))) }
                 }
-                let entry = NSMenuItem(title: volume.isOnline ? volume.name : "\(volume.name) (offline)",
+                let entry = NSMenuItem(title: row.info.status == .connected ? name : "\(name) (offline)",
                                        action: nil, keyEquivalent: "")
-                entry.image = NSImage(systemSymbolName: "externaldrive", accessibilityDescription: nil)
-                // A check on the drive when the source is it or one of its folders.
-                switch current {
-                case .volume(let id) where id == volumeID: entry.state = .on
-                case .folder(let id) where sidebar.folders.contains(where: { $0.id == id && $0.volumeId == volumeID }):
+                entry.image = NSImage(systemSymbolName: StorageIcons.symbol(for: row.info.location.kind),
+                                      accessibilityDescription: nil)
+                // A check on the location when the source is it, a dash when it is one of its folders.
+                if current == whole {
+                    entry.state = .on
+                } else if case .folder(let id) = current, row.folders.contains(where: { $0.id == id }) {
                     entry.state = .mixed
-                default: break
                 }
                 entry.submenu = folders
                 menu.addItem(entry)

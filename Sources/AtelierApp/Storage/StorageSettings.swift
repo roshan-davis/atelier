@@ -22,6 +22,15 @@ enum StorageIcons {
         case .objectStorage: return SettingsPalette.amber
         }
     }
+
+    /// The status dot in Settings > Storage and the sidebar.
+    static func dotColor(for status: StorageLocationStatus) -> Color {
+        switch status {
+        case .connected: return .green
+        case .offline: return Color.secondary.opacity(0.5)
+        case .notConnectedYet: return .orange
+        }
+    }
 }
 
 /// A white symbol on the kind's pastel tile, as the Settings sidebar draws its panes.
@@ -69,9 +78,9 @@ struct StorageSettings: View {
                     }
                 }
                 HStack(spacing: 6) {
-                    Button { adding = true } label: { Image(systemName: "plus") }
+                    Button { adding = true } label: { Image(systemName: "plus").frame(width: 14, height: 14) }
                         .help("Add Location…")
-                    Button { removing = selected } label: { Image(systemName: "minus") }
+                    Button { removing = selected } label: { Image(systemName: "minus").frame(width: 14, height: 14) }
                         .disabled(selected == nil)
                         .help("Remove Location…")
                     Spacer()
@@ -191,7 +200,7 @@ struct StorageLocationRow: View {
             Spacer(minLength: 8)
             VStack(alignment: .trailing, spacing: 2) {
                 HStack(spacing: 5) {
-                    Circle().fill(dotColor).frame(width: 7, height: 7)
+                    Circle().fill(StorageIcons.dotColor(for: info.status)).frame(width: 7, height: 7)
                     Text(info.status.word).font(.callout)
                 }
                 .fixedSize()
@@ -207,14 +216,6 @@ struct StorageLocationRow: View {
             .fill(isSelected ? Color.accentColor.opacity(0.14) : Color.clear))
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
-    }
-
-    private var dotColor: Color {
-        switch info.status {
-        case .connected: return .green
-        case .offline: return Color.secondary.opacity(0.5)
-        case .notConnectedYet: return .orange
-        }
     }
 }
 

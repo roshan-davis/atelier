@@ -58,6 +58,8 @@ struct SidebarData: Equatable, Sendable {
     /// Settings > Storage's locations (AT-079a), with status and photo counts.
     var locations: [StorageLocationInfo] = []
     var folders: [Folder] = []
+    /// The sidebar's Locations rows: each location with the folders it holds (`SidebarLocation.make`).
+    var locationRows: [SidebarLocation] { SidebarLocation.make(locations: locations, folders: folders) }
     var collections: [PhotoCollection] = []
     var imports: [ImportGroupSummary] = []
     var totalCount = 0
