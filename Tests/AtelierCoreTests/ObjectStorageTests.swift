@@ -129,7 +129,7 @@ final class ObjectStorageTests: XCTestCase {
         XCTAssertEqual(names, ["catalog-2026-11-17T140000.sqlite", "catalog-2026-11-17T150000.sqlite", "notes.txt"])
         // A backup is a database that opens.
         let queue = try DatabaseQueue(path: destination.folder.appendingPathComponent(names[1]).path)
-        let tables = try queue.read { try Int.fetchOne($0, sql: "SELECT count(*) FROM sqlite_master WHERE type = 'table'") } ?? 0
+        let tables = try await queue.read { try Int.fetchOne($0, sql: "SELECT count(*) FROM sqlite_master WHERE type = 'table'") } ?? 0
         XCTAssertGreaterThan(tables, 0)
     }
 
