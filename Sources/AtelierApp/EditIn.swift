@@ -156,7 +156,7 @@ extension LibraryModel {
         let ids = targetIDs
         guard !ids.isEmpty else { return }
         let catalog = self.catalog
-        let importer = Importer(catalog: catalog, previews: nil, scheduler: previewScheduler)
+        let host = ProcessorHost(catalog: catalog, importer: Importer(catalog: catalog, previews: nil, scheduler: previewScheduler))
         status = ids.count == 1 ? "Preparing the photo for \(editor.name)…" : "Preparing \(ids.count) photos for \(editor.name)…"
         Task.detached {
             var opened: [(Int64, URL)] = []
@@ -168,34 +168,24 @@ extension LibraryModel {
                         opened.append((id, url))
                         continue
                     }
-                    guard let original = try catalog.fileURL(for: id) else {
-                        throw ExportError("The original is offline. Connect its drive and try again.")
-                    }
+                    let original = try host.original(of: id)
                     var settings = ExportSettings(destination: DerivedFiles.folder(for: original))
                     settings.format = editor.format.exportFormat
                     settings.quality = 0.95
                     settings.colorSpace = editor.colorSpace
                     settings.metadata = .all
                     let base = original.deletingPathExtension().lastPathComponent + "-Edit"
-                    let file = try Exporter(catalog: catalog).export(id, settings: settings, baseName: base,
-                                                                     develop: editor.applyDevelop)
-                    let editID = try importer.addStacked(file, on: id, kind: .externalEdit, name: editor.name)
-                    opened.append((editID, file))
+                    let file = try host.renderInput(of: id, settings: settings, baseName: base, develop: editor.applyDevelop)
+                    let edit = try host.registerResult(file, on: id, kind: .externalEdit, name: editor.name)
+                    opened.append((edit.assetID, file))
                 } catch {
                     let name = (try? catalog.detail(for: id))?.asset.filename ?? "Photo"
                     failures.append(Problem(name: name, reason: error.localizedDescription))
                 }
             }
             await MainActor.run {
-                for (id, url) in opened {
-                    self.previewScheduler.request(.thumbnail, for: id, source: url, urgent: true)
-                    self.previewScheduler.request(.preview, for: id, source: url)
-                    self.editWatcher.watch(id, at: url)
-                }
-                if let first = opened.first?.0 {
-                    self.selection = Set(opened.map(\.0))
-                    self.focusedID = first
-                }
+                self.showProcessorResults(opened.map { ProcessorResult(assetID: $0.0, url: $0.1) })
+                for (id, url) in opened { self.editWatcher.watch(id, at: url) }
                 // Snapshot runs need the derivative and stack, while Preview owns its own windows.
                 if LayoutSnapshots.outputFolder == nil {
                     let configuration = NSWorkspace.OpenConfiguration()
@@ -241,5 +231,19 @@ extension LibraryModel {
             ExternalEditorStore.save(editors)
         }
         editIn(editor)
+    }
+}
+
+extension LibraryModel {
+    /// What every Processor's results do once catalogued (Edit In, AI recipes): build their
+    /// previews first, and select them, the first in focus.
+    func showProcessorResults(_ results: [ProcessorResult]) {
+        for result in results {
+            previewScheduler.request(.thumbnail, for: result.assetID, source: result.url, urgent: true)
+            previewScheduler.request(.preview, for: result.assetID, source: result.url)
+        }
+        guard let first = results.first else { return }
+        selection = Set(results.map(\.assetID))
+        focusedID = first.assetID
     }
 }

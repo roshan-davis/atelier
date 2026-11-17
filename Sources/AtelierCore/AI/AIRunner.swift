@@ -43,22 +43,10 @@ public struct AIRequest: Sendable {
     }
 }
 
-/// What a run is doing, for the AI tool's progress line.
-public struct AIProgress: Sendable, Equatable {
-    public var phase: String
-    /// How far ComfyUI has got generating, 0...1, when it reports it.
-    public var fraction: Double?
-
-    public init(_ phase: String, fraction: Double? = nil) {
-        self.phase = phase
-        self.fraction = fraction
-    }
-}
-
-public struct AIResult: Sendable {
-    public var assetID: Int64
-    public var url: URL
-}
+/// What a run is doing, for the AI tool's progress line (the Processor host's progress).
+public typealias AIProgress = ProcessorProgress
+/// The result, stacked on the original (the Processor host's result).
+public typealias AIResult = ProcessorResult
 
 /// Runs an AI recipe on a photo: renders it as developed, sends ComfyUI what the recipe needs,
 /// blends the result back so only the masked area changes, and catalogs the outcome as a new
@@ -66,18 +54,18 @@ public struct AIResult: Sendable {
 public final class AIRunner: Sendable {
     let catalog: Catalog
     let client: ComfyClient
+    let host: ProcessorHost
 
     public init(catalog: Catalog, client: ComfyClient) {
         self.catalog = catalog
         self.client = client
+        host = ProcessorHost(catalog: catalog)
     }
 
     public func run(_ request: AIRequest, on assetID: Int64, settings: AISettings,
                     progress report: @escaping @Sendable (AIProgress) -> Void = { _ in }) async throws -> AIResult {
         let progress = { @Sendable (phase: String) in report(AIProgress(phase)) }
-        guard let original = try catalog.fileURL(for: assetID), FileManager.default.fileExists(atPath: original.path) else {
-            throw AIError("The original is offline. Connect its drive and try again.")
-        }
+        let original = try host.original(of: assetID)
         let recipe = request.recipe
         let prompt = request.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         if recipe == .replaceBackground, prompt.isEmpty { throw AIError("Describe the new background first.") }
@@ -93,7 +81,7 @@ public final class AIRunner: Sendable {
         render.format = .tiff
         render.colorSpace = .sRGB
         render.metadata = .all
-        let baseURL = try Exporter(catalog: catalog).export(assetID, settings: render)
+        let baseURL = try host.renderInput(of: assetID, settings: render)
         guard let base = AIImaging.image(at: baseURL) else { throw AIError("The photo could not be rendered.") }
         let baseSize = CGSize(width: base.width, height: base.height)
 
@@ -183,9 +171,7 @@ public final class AIRunner: Sendable {
         ]
         let json = (try? JSONSerialization.data(withJSONObject: provenance, options: [.sortedKeys]))
             .flatMap { String(data: $0, encoding: .utf8) }
-        let id = try Importer(catalog: catalog, previews: nil)
-            .addStacked(target, on: assetID, kind: .ai, name: recipe.title, provenance: json)
-        return AIResult(assetID: id, url: target)
+        return try host.registerResult(target, on: assetID, kind: .ai, name: recipe.title, provenance: json)
     }
 
     /// Queues `workflow` in ComfyUI, reports how far it has got, and returns the last image it

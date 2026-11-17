@@ -123,10 +123,7 @@ final class AIController: ObservableObject {
                     self.finish()
                     self.strokes = []
                     self.serverStatus = .connected(self.serverVersion ?? "connected")
-                    model.previewScheduler.request(.thumbnail, for: result.assetID, source: result.url, urgent: true)
-                    model.previewScheduler.request(.preview, for: result.assetID, source: result.url)
-                    model.selection = [result.assetID]
-                    model.focusedID = result.assetID
+                    model.showProcessorResults([result])
                     model.status = "\(recipe.title) finished. The result is stacked next to the original."
                 }
             } catch is CancellationError {

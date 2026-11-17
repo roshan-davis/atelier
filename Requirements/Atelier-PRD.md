@@ -526,7 +526,7 @@ Sidecars without history restore one current state, labeled “Recovered from XM
 
 ## External editor integration
 
-Every outside tool, whether a desktop app or an AI model, plugs in through one **Processor** contract: accept one or more ordered, typed inputs (rendered images or read-only original copies) plus parameters, and return validated image files or hand off an interactive session to a desktop app. The catalog records every source relationship independently of visual stacking. Existing single-photo Edit In and AI behavior is preserved; grouped HDR inputs are a planned extension, not an implemented capability.
+Every outside tool, whether a desktop app or an AI model, plugs in through one **Processor** contract: accept one or more ordered, typed inputs (rendered images or read-only original copies) plus parameters, and return validated image files or hand off an interactive session to a desktop app. The catalog records every source relationship independently of visual stacking. Existing single-photo Edit In and AI behavior is preserved; grouped HDR inputs are a planned extension, not an implemented capability. Today Edit In and the AI recipes share one Processor host in Core: it renders the input, reports the offline original the same way, and catalogs each result stacked on its source with how it was made; a Processor protocol for recipes and plugins comes with its first second user.
 
 ### Edit In (interactive apps)
 
