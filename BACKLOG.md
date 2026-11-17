@@ -1474,3 +1474,21 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 **Scope:** In the existing Cull view, compare the suggested keeper and the next-ranked frame from the same group under the active Pick By setting. Enable Compare for groups with at least two frames. Reuse the shared photo viewport so zooming or panning either preview updates both.
 
 **Acceptance:** In both pre-import Cull and Show Cull Group, open Compare on a group with at least two frames. Zoom to 100% on a face and pan in either pane. Both panes follow at the same magnification and relative image position. Return to the single-photo view and verify that reviewing the pair preserved the current keep/drop choices. On a single-frame group, Compare is unavailable.
+
+## AT-079 — Storage you configure: network shares, cloud drive folders, S3 backups
+
+**Status:** Approved / ready (design). Rosh chose on November 17, 2026: network shares and cloud drive folders for photos first, S3-compatible object storage for backups only. Each slice below is its own PR; none started. **Owner/chat:** Claude (project thread "Design user-configured cloud storage"), branch `claude/project-thread-zg6mj5` for this docs PR. **Design:** PRD "Storage locations and offline photos"; [design doc](https://claude.ai/artifact/U5zSxEd3JnQDkA1y6H5mqJ). **Dependencies:** AT-011 NAS measurement before AT-079c; AT-009 for AT-079d; AT-006 for what backups include.
+
+**Why:** Rosh: "we are not providing cloud, but we can configure any cloud", and megham is an option Rosh adds, not a default. Today volumes appear only when mounted in Finder, a NAS is named in the PRD's goals, backups go only to the catalog package, and remote originals are re-read over the network.
+
+**Slices (in order):**
+
+1. **AT-079a Locations and Settings > Storage.** `Volume` grows into Storage Location (one GRDB migration; existing volumes keep id and name; nothing seeded). Storage pane list and detail, Add Location for drives and network shares (Bonjour `_smb._tcp` discovery, NetFS connect with macOS's sign-in sheet, Finder's Keychain item), Connect when Atelier opens, sidebar Locations with Connect/Disconnect. Registry actions for connect and status; add/edit/remove hidden from agents (credentials). Help page.
+2. **AT-079b Cloud drive folders.** Provider folders under `~/Library/CloudStorage` and iCloud Drive, File Provider domain identity, security-scoped bookmarks, the "not downloaded" state and badge, download on open with progress and Cancel, download size in Import.
+3. **AT-079c Cache of remote originals** (NAS-2 of the Nov 9 NAS review): read once into `~/Library/Caches`, bounded by bytes, Keep on This Mac, Free Up Space, cache size and Clear Cache.
+4. **AT-079d Smart previews** for offline editing (AT-009's smart-preview part; white balance and exposure must be applied outside CIRAWFilter).
+5. **AT-079e Backups to a location:** catalog backups on quit/daily/weekly to any backup location, S3-compatible client (SigV4 in URLSession, streamed multipart, Test Connection, Keychain), copy-import second copy.
+
+**Acceptance (per slice, on a Mac):** a fresh catalog has no location; adding megham by Bonjour and by address gives one location; an old catalog's volumes show as locations with photos still linked; offline and not-downloaded photos browse and edit from smart previews and write XMP on reconnect; no credential appears in the catalog, backups, logs or the MCP catalog; first open of a NAS RAW timed with and without the cache; peak memory during a 10 GB backup upload stays flat.
+
+**Open:** whether megham is used over Wi-Fi or Ethernet (sets the default cache size); whether location backups also include presets and Settings (AT-006).
