@@ -2,7 +2,6 @@ import CoreGraphics
 import Foundation
 import os
 import ImageIO
-import OnnxRuntimeBindings
 import UniformTypeIdentifiers
 
 /// Fine Edges: BiRefNet (Zheng Peng et al., MIT License) redraws the edges of Select Subject,
