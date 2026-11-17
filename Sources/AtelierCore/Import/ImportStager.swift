@@ -179,18 +179,16 @@ public final class ImportStager: @unchecked Sendable {
 
     /// Stops starting files and waits for those under way, so everything done is ready to use.
     public func stop() async {
-        lock.lock()
-        stopping = true
-        let task = self.task
-        lock.unlock()
+        let task = lock.withLock {
+            stopping = true
+            return self.task
+        }
         await task?.value
     }
 
     /// Waits for every file to be done, for tests.
     func waitUntilDone() async {
-        lock.lock()
-        let task = self.task
-        lock.unlock()
+        let task = lock.withLock { self.task }
         await task?.value
     }
 

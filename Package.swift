@@ -2,7 +2,7 @@
 import PackageDescription
 
 /// Swift 6 language mode (full data-race checking), turned on module by module (AT-076 C2):
-/// the agent modules and HDRCore first, then Core and the app once their reports are fixed.
+/// the agent modules, HDRCore and Core first; the app follows once its reports are fixed.
 let swift6: [SwiftSetting] = [.swiftLanguageMode(.v6)]
 
 let package = Package(
@@ -52,7 +52,7 @@ let package = Package(
             // Optimized in Debug too, like AtelierHDRCore: Match Look, histograms, color cubes
             // and camera matching run per-pixel Swift loops that are many times slower unoptimized,
             // and the app is run from Xcode in Debug.
-            swiftSettings: [.unsafeFlags(["-O"], .when(configuration: .debug))]
+            swiftSettings: swift6 + [.unsafeFlags(["-O"], .when(configuration: .debug))]
         ),
         .executableTarget(
             name: "AtelierApp",

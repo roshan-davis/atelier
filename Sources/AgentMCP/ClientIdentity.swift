@@ -102,7 +102,7 @@ public enum ClientIdentity {
         #if os(macOS)
         var buffer = [CChar](repeating: 0, count: 4096)
         guard proc_pidpath(pid, &buffer, UInt32(buffer.count)) > 0 else { return nil }
-        return String(cString: buffer)
+        return String(decoding: buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
         #elseif os(Linux)
         return try? FileManager.default.destinationOfSymbolicLink(atPath: "/proc/\(pid)/exe")
         #else

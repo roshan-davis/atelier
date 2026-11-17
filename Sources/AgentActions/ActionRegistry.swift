@@ -5,7 +5,7 @@ import Foundation
 /// person runs it, or named explicitly by the caller (the right-click menu, an agent).
 @MainActor
 public final class ActionRegistry<Context: AnyObject, TargetID: Hashable> {
-    public typealias Resolver = @MainActor (Context, TargetKind) -> [TargetID]
+    public typealias Resolver = @MainActor @Sendable (Context, TargetKind) -> [TargetID]
 
     public let catalog: ActionCatalog
     private weak var context: Context?
@@ -17,11 +17,11 @@ public final class ActionRegistry<Context: AnyObject, TargetID: Hashable> {
 
     private struct Handler {
         let targets: TargetKind?
-        let perform: @MainActor (Context, Any, [TargetID]) -> Bool
+        let perform: @MainActor @Sendable (Context, Any, [TargetID]) -> Bool
         let decode: (Data) throws -> Any
-        let enabled: @MainActor (Context) -> Bool
-        let isOn: (@MainActor (Context) -> Bool)?
-        let shortcutWhen: (@MainActor (Context) -> Bool)?
+        let enabled: @MainActor @Sendable (Context) -> Bool
+        let isOn: (@MainActor @Sendable (Context) -> Bool)?
+        let shortcutWhen: (@MainActor @Sendable (Context) -> Bool)?
     }
 
     public init(catalog: ActionCatalog, context: Context, resolveTargets: @escaping Resolver) {
@@ -34,10 +34,10 @@ public final class ActionRegistry<Context: AnyObject, TargetID: Hashable> {
 
     /// Binds a handler that always applies.
     public func bind<P>(_ action: Action<P>,
-                        enabled: @escaping @MainActor (Context) -> Bool = { _ in true },
-                        isOn: (@MainActor (Context) -> Bool)? = nil,
-                        shortcutWhen: (@MainActor (Context) -> Bool)? = nil,
-                        run: @escaping @MainActor (Context, P, [TargetID]) -> Void) {
+                        enabled: @escaping @MainActor @Sendable (Context) -> Bool = { _ in true },
+                        isOn: (@MainActor @Sendable (Context) -> Bool)? = nil,
+                        shortcutWhen: (@MainActor @Sendable (Context) -> Bool)? = nil,
+                        run: @escaping @MainActor @Sendable (Context, P, [TargetID]) -> Void) {
         bindChecked(action, enabled: enabled, isOn: isOn, shortcutWhen: shortcutWhen) { context, parameters, targets in
             run(context, parameters, targets)
             return true
@@ -47,10 +47,10 @@ public final class ActionRegistry<Context: AnyObject, TargetID: Hashable> {
     /// Binds a handler that reports whether it applied (a key that does nothing in this view
     /// returns false, so the key press goes on to the next responder).
     public func bindChecked<P>(_ action: Action<P>,
-                               enabled: @escaping @MainActor (Context) -> Bool = { _ in true },
-                               isOn: (@MainActor (Context) -> Bool)? = nil,
-                               shortcutWhen: (@MainActor (Context) -> Bool)? = nil,
-                               run: @escaping @MainActor (Context, P, [TargetID]) -> Bool) {
+                               enabled: @escaping @MainActor @Sendable (Context) -> Bool = { _ in true },
+                               isOn: (@MainActor @Sendable (Context) -> Bool)? = nil,
+                               shortcutWhen: (@MainActor @Sendable (Context) -> Bool)? = nil,
+                               run: @escaping @MainActor @Sendable (Context, P, [TargetID]) -> Bool) {
         let id = action.id
         if catalog.descriptor(id) != action.descriptor {
             problems.append("\(id): bound but not in the \(catalog.app) catalog")

@@ -323,9 +323,14 @@ public enum HDRToneMapper {
             for index in 0..<count { body(index) }
             return
         }
-        DispatchQueue.concurrentPerform(iterations: bands) { band in
-            let start = count * band / bands, end = count * (band + 1) / bands
-            for index in start..<end { body(index) }
+        // concurrentPerform returns only when every band is done, and each index goes to one
+        // band, so callers writing disjoint rows of their own buffers don't race.
+        withoutActuallyEscaping(body) { body in
+            nonisolated(unsafe) let body = body
+            DispatchQueue.concurrentPerform(iterations: bands) { band in
+                let start = count * band / bands, end = count * (band + 1) / bands
+                for index in start..<end { body(index) }
+            }
         }
     }
 }
