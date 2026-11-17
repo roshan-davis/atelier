@@ -534,28 +534,19 @@ final class MatchLookModel: ObservableObject, Identifiable {
         guard !others.isEmpty else { return }
         switch applyMode {
         case .same:
-            // AT-076 E1: a photo whose settings can't be read is skipped (matching it from neutral
-            // would replace its edits), and one that can't be saved is counted, not dropped.
-            var failure: Error?
-            var failed = 0
-            for id in others {
-                do {
-                    let current = try library.catalog.developSettings(for: id)
-                    let settings = match.applied(to: current, strength: strength)
-                    try library.catalog.saveDevelopSettings(settings, for: id, step: step)
-                    library.develop.refreshPreviews(for: id, settings: settings)
-                } catch {
-                    failure = failure ?? error
-                    failed += 1
-                }
-            }
+            // One transaction for the other photos (AT-076 P2): each is matched on top of its own
+            // saved settings, read in the same transaction, and if one can't be saved none is
+            // (AT-076 E1: said in the status line, not dropped).
             let reference = referenceName ?? "the reference"
-            if let failure {
-                let matched = targets.count - failed
-                library.status = "Matched \(matched) photo\(matched == 1 ? "" : "s") to \(reference); "
-                    + "\(failed) could not be saved: \(failure.localizedDescription)"
-            } else {
+            do {
+                let saved = try library.catalog.updateDevelop(others, step: step) { _, current in
+                    match.applied(to: current, strength: strength)
+                }
+                for (id, settings) in saved { library.develop.refreshPreviews(for: id, settings: settings) }
                 library.status = "Matched \(targets.count) photos to \(reference)"
+            } catch {
+                library.status = "Matched \(firstPhotoChanged ? "this photo" : "no photos") to \(reference); "
+                    + "the other \(others.count) could not be saved: \(error.localizedDescription)"
             }
         case .each:
             library.matchEach(others, target: fittedTarget, options: options, strength: strength, step: step,
@@ -676,10 +667,14 @@ extension LibraryModel {
                         self.develop.flushSave()
                         guard self.develop.settings == found.1 else { return false }
                     }
-                    guard (try? self.catalog.developSettings(for: id)) == found.1 else { return false }
-                    guard settings != found.1 else { return true }
+                    guard settings != found.1 else { return (try? self.catalog.developSettings(for: id)) == found.1 }
+                    // Saved only if the photo's settings are still the ones it was fitted from,
+                    // checked in the same transaction as the write (AT-076 P2).
                     do {
-                        try self.catalog.saveDevelopSettings(settings, for: id, step: step)
+                        let written = try self.catalog.updateDevelop([id], step: step) { _, current in
+                            current == found.1 ? settings : nil
+                        }
+                        guard written[id] != nil else { return false }
                     } catch {
                         return false
                     }

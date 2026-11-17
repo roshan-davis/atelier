@@ -52,7 +52,7 @@ final class BatchEditTimingTests: XCTestCase {
 
         for count in [10, 50, 200] {
             var preset = DevelopSettings.neutral
-            preset.contrast = Double(count)
+            preset.contrast = Double(count) / 4
             preset.shadows = 20
             commits.reset()
             gridRuns.reset()
@@ -61,7 +61,7 @@ final class BatchEditTimingTests: XCTestCase {
             let ms = Int((Date().timeIntervalSince(began) * 1000).rounded())
             try await Task.sleep(for: .seconds(1))
             print("BATCHBENCH photos=\(count) ms=\(ms) commits=\(commits.value) grid_query_runs=\(gridRuns.value)")
-            XCTAssertEqual(try catalog.developSettings(for: ids[count - 1]).contrast, Double(count))
+            XCTAssertEqual(try catalog.developSettings(for: ids[count - 1]).contrast, Double(count) / 4)
         }
     }
 

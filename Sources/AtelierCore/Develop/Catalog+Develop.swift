@@ -121,14 +121,45 @@ extension Catalog {
 
     /// Saves settings and adds a history step named `step` (paste, presets, sync).
     public func saveDevelopSettings(_ settings: DevelopSettings, for assetID: Int64, step: String = "Edit") throws {
-        var history = try developHistory(for: assetID)
-        let previous = try developSettings(for: assetID)
-        history.record(step, settings: settings, previous: previous)
-        try saveDevelop(settings, history: history, for: assetID)
+        try updateDevelop([assetID], step: step) { _, _ in settings }
     }
 
     /// Copies the settings of one photo onto others (paste settings, sync).
     public func applyDevelopSettings(_ settings: DevelopSettings, to assetIDs: [Int64], step: String = "Paste Settings") throws {
-        for id in assetIDs { try saveDevelopSettings(settings, for: id, step: step) }
+        try updateDevelop(assetIDs, step: step) { _, _ in settings }
+    }
+
+    /// The one path for changing the saved settings of photos that aren't open in Develop
+    /// (Sync, Paste and presets on a selection, Match Look, a Generative Fill that finishes after
+    /// its photo was left; AT-076 P2 and R3). `change` gets each photo's saved settings and
+    /// returns its new ones, or nil to leave it as it is. Each changed photo gets one history step
+    /// named `step`. The whole batch is one transaction: it reads, changes and writes every photo
+    /// together, so the Library sees one change, nothing else can write in between, and if any
+    /// photo fails nothing is saved. Returns the new settings of the photos it wrote.
+    @discardableResult
+    public func updateDevelop(_ assetIDs: [Int64], step: String,
+                              _ change: (Int64, DevelopSettings) throws -> DevelopSettings?) throws -> [Int64: DevelopSettings] {
+        try writer.write { db in
+            var saved: [Int64: DevelopSettings] = [:]
+            for id in assetIDs where saved[id] == nil {
+                let versionID = try Self.masterVersionID(db, assetID: id, create: false)
+                let record = try versionID.flatMap { try DevelopSettingsRecord.fetchOne(db, key: $0) }
+                let previous = try record.map { try DevelopSettings.decoded(from: $0.json) } ?? .neutral
+                guard let settings = try change(id, previous) else { continue }
+                var history = record.map { DevelopHistory.decoded(from: $0.historyJson) } ?? DevelopHistory()
+                history.record(step, settings: settings, previous: previous)
+                try Self.writeDevelop(db, settings, history: history, for: id)
+                saved[id] = settings
+            }
+            return saved
+        }
+    }
+
+    static func writeDevelop(_ db: Database, _ settings: DevelopSettings, history: DevelopHistory,
+                             for assetID: Int64) throws {
+        guard let versionID = try masterVersionID(db, assetID: assetID, create: true) else { return }
+        try DevelopSettingsRecord(versionId: versionID, schemaVersion: settings.schemaVersion, json: try settings.encoded(),
+                                  historyJson: try history.encoded(), updatedAt: Date()).save(db)
+        try AssetMetadata.filter(key: assetID).updateAll(db, Column("xmpDirty").set(to: true))
     }
 }
