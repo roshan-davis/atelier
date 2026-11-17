@@ -1,6 +1,6 @@
 # Photo Catalog & Editor PRD
 
-Oct 25, 2026 · Rosh · Revised Oct 26, 2026 (UX principles and import flow; import entries; Phase 1 before Phase 0; before/after compare views; export dialog; panels, zoom and right-click menus; Tone Curve, HSL / Color and Color Grading panels; editable point curve, panel below the toolbar, slider rows; Settings window, custom keys, resizable panel; themes)
+Oct 25, 2026 · Rosh · Revised Oct 26, 2026 (Nov 17, 2026: storage locations the user configures; UX principles and import flow; import entries; Phase 1 before Phase 0; before/after compare views; export dialog; panels, zoom and right-click menus; Tone Curve, HSL / Color and Color Grading panels; editable point curve, panel below the toolbar, slider rows; Settings window, custom keys, resizable panel; themes)
 
 Live doc with diagrams: https://claude.ai/artifact/1T8xvdGuJTcGPTHStzDJvn
 
@@ -12,7 +12,7 @@ Atelier (working name) is a native macOS photo catalog and non-destructive RAW e
 
 **Goals**
 
-1. Catalog 100k+ images across local drives and the megham NAS, either in place or copied into a managed library.
+1. Catalog 100k+ images across local drives and the network shares and cloud drive folders the user adds (for example a NAS), either in place or copied into a managed library. Atelier provides no storage of its own and sets none up by default (see Storage locations).
 2. Non-destructive develop module at Lightroom Classic parity for everyday work: RAW decode, tone, color, HSL, curves, local masks, presets.
 3. Round-trip any photo to any external editor (Photoshop, Affinity, Pixelmator Pro, GIMP, Krita) and re-import the result as a stacked version.
 4. Run AI edits through pluggable local backends (ComfyUI, Core ML, MLX) with a model registry that tracks license and allowed use.
@@ -20,14 +20,14 @@ Atelier (working name) is a native macOS photo catalog and non-destructive RAW e
 
 **Non-goals**
 
-- Cloud sync, multi-user catalogs or mobile apps in v1.
+- Cloud sync, multi-user catalogs or mobile apps in v1. This means no Atelier cloud service and no syncing the catalog between Macs; using storage the user configures (network shares, cloud drive folders, S3-compatible backups) is in scope (Nov 17, 2026).
 - Training or fine-tuning models inside the app.
 - Video editing (video files are cataloged and previewed only).
 - Windows or Linux support.
 
 ## Target user and use cases
 
-One user: a photographer and watercolor artist running an art business, editing on an Apple Silicon Mac, with originals split between local drives and a NAS. Every use case below must work fully offline except NAS access.
+One user: a photographer and watercolor artist running an art business, editing on an Apple Silicon Mac, with originals split between local drives and a NAS. Every use case below must work fully offline except reaching network and cloud storage locations.
 
 | # | Use case | Flow | Priority |
 | --- | --- | --- | --- |
@@ -40,7 +40,7 @@ One user: a photographer and watercolor artist running an art business, editing 
 | U7 | Batch AI | Run an AI recipe (for example, denoise then upscale) over a collection in a queue | P1 |
 | U8 | Find anything | Search by keyword, EXIF, location, color, or natural language ("red barn in fog") | P1 |
 | U9 | Publish to the website | Export preset: long edge 2048 px, sRGB, watermark, stripped GPS, WebP and JPEG | P0 |
-| U10 | Work while the NAS is off | Browse, rate and edit smart previews; changes apply when the NAS reconnects | P1 |
+| U10 | Work while the NAS or a cloud folder is unavailable | Browse, rate and edit smart previews; changes apply when the location reconnects | P1 |
 
 ## User experience principles
 
@@ -384,12 +384,64 @@ The catalog never modifies an original file. Every photo is a database record po
 - Search: filter bar on any metadata field, combined with AND/OR. Full-text over keywords, titles and captions.
 - Duplicate detection by content hash (exact) and perceptual hash (near-duplicates).
 
-### NAS and offline volumes
+### Storage locations and offline photos
 
-- Each volume shows online or offline in the sidebar. Offline photos stay browsable through previews.
-- Ratings, keywords and develop edits on offline photos are stored in the catalog and synced to XMP when the volume returns.
-- Edits that need the original (export, Edit In, AI on full resolution) queue until the volume is online, or run on the smart preview if the user chooses.
-- Missing-file finder: relink by hash when files move outside the app.
+Decided Nov 17, 2026 (Rosh: "we are not providing cloud, but we can configure any cloud"; chose network shares and cloud drive folders first, S3-compatible for backups). BACKLOG AT-079.
+
+- **Nothing by default.** Atelier runs no cloud service. The user adds **Storage Locations** they already have in Settings > Storage, and ticks what each is used for: Photos, Backups, Exports. A NAS such as megham is a location the user adds; it is never seeded. Every volume already in a catalog becomes a location with the same id and name (one migration), so existing links keep working.
+- **Kinds:**
+
+  | Kind | Examples | Photos | Backups | Exports |
+  | --- | --- | --- | --- | --- |
+  | This Mac or a drive | internal or external SSD | yes | yes | yes |
+  | Network share | NAS over SMB, WebDAV, NFS (mounted by macOS through NetFS) | yes | yes | yes |
+  | Cloud drive folder | iCloud Drive, Dropbox, Google Drive, OneDrive, Box, Synology Drive, synced by the provider's own Mac app | yes | yes (finished files only) | yes |
+  | Object storage | S3-compatible: Backblaze B2, Cloudflare R2, Amazon S3, Wasabi, MinIO | no | yes | later |
+
+  Left out: photo services (Google Photos, iCloud Photos, Flickr; publishing stays with Export), SFTP/FTP, signing in to Dropbox or Google Drive through their web APIs (their own apps sync better), AFP.
+- **What lives where:** the catalog, thumbnails, 2560 px previews and smart previews always stay on this Mac (SQLite over a share or inside a syncing folder can corrupt). Originals, XMP sidecars, Edit In and AI results live in any photo location. Catalog backups go to the package (last 10) and to the chosen backup location. A copy import can copy to any photo location and keep a second copy in a backup location; the local staging folder still does the single read and hash.
+- **Identity:** drives by volume UUID; shares by server and share with credentials stripped (`net:` key), also matched by server name so `megham.local` and its IP are one location; cloud drive folders by File Provider domain plus the path inside it (they sit on the Mac's own disk under `~/Library/CloudStorage` or `~/Library/Mobile Documents`), so a new sign-in or a new Mac relinks.
+- **A location never moves existing photos' paths (Codex review, Nov 17, 2026).** A location is a named place on a volume: the volume (identity and mount, as above) plus the location's root folder relative to that volume's root. Photos keep their folder paths relative to the **volume** root, as today; a location's root only decides what the Locations list and Import show. So adding `/Volumes/Photos/Portfolio` as a location, when `Portfolio/2026` is already cataloged on that volume, joins the existing volume record and leaves `Portfolio/2026` resolving where it did, never `Portfolio/Portfolio/2026`. Stored paths are never rebased. The migration makes one location per existing volume with its root at the volume root. A cloud drive folder's volume root is its File Provider domain root; a share's is the share's mount point, wherever it is mounted.
+- **Four states per remote photo**, shown by the grid's orange offline badge with the reason on hover:
+
+  | State | Browse, rate, keyword | Develop | Export, Edit In, AI |
+  | --- | --- | --- | --- |
+  | Available (online or cached) | yes | full quality | yes |
+  | Not downloaded (cloud placeholder) | from previews | from the smart preview, else downloads on open with progress | downloads first, with progress and Cancel |
+  | Offline (share not connected, no internet) | from previews | from the smart preview, else a Connect button | queued until it is back, or run on the smart preview if the user chooses (the queue is BACKLOG AT-009: it survives a restart and each job can be cancelled) |
+  | Missing | from previews | from the smart preview | Find Missing Photo… (relink by hash, across locations) |
+
+  Ratings, keywords and edits made offline are saved in the catalog at once and written to XMP when the location returns, subject to the conflict rule below.
+- **XMP conflicts on reconnect (Codex review, Nov 17, 2026; as Lightroom Classic's "metadata was changed externally").** For each sidecar Atelier records what it last read or wrote: size, modification date and a hash of the file. The record is one of three states (Codex review, Nov 17, 2026): **present** (size, date, hash), **known absent** (Atelier looked and there was no sidecar) or **unknown** (never looked, for example a photo cataloged before this change). Before writing a pending change it reads the sidecar on disk and compares:
+
+  | Last known | On disk now | Atelier |
+  | --- | --- | --- |
+  | present | the same | writes |
+  | present | different | conflict |
+  | present | gone | conflict ("Sidecar removed by another app"); never recreated silently |
+  | known absent | still none | writes (creates it) |
+  | known absent | one appeared | conflict |
+  | unknown | none | writes (creates it) |
+  | unknown | one exists | conflict (Atelier can't tell whose it is) |
+  | any | can't be read (permissions, I/O error, location dropped mid-check) | holds the change and tries again later; the status bar says so; nothing is written |
+
+  The record is updated after every read and write, so after an update only photos with changes waiting can meet "unknown". On a conflict: Atelier does not write; the catalog keeps Atelier's values, the photo gets the metadata-conflict badge (bottom right, with "Changed by another app since Atelier last saved it" on hover), and one status-bar line counts them ("12 sidecars on megham changed outside Atelier"). The user decides per photo or selection with **Metadata > Read Metadata from File** (the file wins) or **Metadata > Save Metadata to File** (Atelier wins); nothing is merged field by field. The same check runs before every XMP write, online or not.
+- **Never download by accident:** listing a cloud folder reads names and sizes only; an import or open that needs bytes says how much first ("Import 412 photos · 11.6 GB will be downloaded").
+- **Cache of remote originals:** a referenced original on a share or cloud folder is read over the network once, start to end, into `~/Library/Caches` and opened from there. On disk only, a size the user sets (default 20 GB, at most a quarter of free space), oldest-opened let go first.
+  - **Fresh or not (Codex review, Nov 17, 2026):** each cached file records the source's size and modification date and is checked against the catalog's content hash when it is stored. Whenever the source is reachable, Atelier compares size and modification date (one metadata read, no download) before using the cached copy; if they differ, the original is read again; an unpinned cached copy is dropped, while a copy kept with Keep on This Mac is retained untouched while the source is read and checked. If the new file's hash differs from the catalog's the photo is marked "changed since import" and a kept copy stays available for the choice under When the original changed; if the hash matches (only the date changed), the kept copy is simply refreshed (the same state the missing-file finder uses). When the source can't be reached, the cached copy is used at full quality, because it matches the hash cataloged at import, and the user is told it couldn't be checked: Develop's status line says "Using the copy on this Mac from Nov 17; megham is offline, so changes there can't be checked", and Export, Edit In and AI results from it record that in their job details.
+  - **When the original changed (Codex review, Nov 17, 2026):** the command that found it stops for that photo and asks; nothing silently uses either file. Develop shows a banner over the photo ("NZ6_9144.NEF changed on megham since it was imported"). Export, Edit In and AI show one sheet listing every changed photo in the run, while the others carry on, with the choices **Use the New File** (the catalog takes the new file's hash, previews are made again, edits stay), **Use the Kept Copy** (only for a photo kept with Keep on This Mac: runs from the copy on this Mac and keeps the photo marked) and **Skip**. An unpinned cached copy is dropped as soon as the change is found; a kept copy stays, set aside as the previous version, until the user picks Use the New File (it is replaced by the new file, still kept) or Free Up Space.
+  - **Keep on This Mac** (right-click a folder, import or collection) downloads those originals and pins them. Pinned files are never let go to stay within the cache size and don't count toward it; they have their own total, shown in Settings > Storage > Cache. Keep on This Mac shows the download size first and refuses, with the space needed, if it would leave less than 10% of the disk free. **Free Up Space** unpins and lets them go. **Clear Cache** removes only unpinned files and has an "Also remove kept photos (N GB)" checkbox, unticked when it opens.
+- **Never feel the network on the photo being worked on (Rosh, Nov 17, 2026).** A photo on a share or in a cloud folder opens, steps and edits as fast as a local one: its preview shows at once, Develop's sliders run on the proxy (under 50 ms) while the original arrives in the background, and the full-quality image swaps in when ready, never a spinner or blank image over the photo. The originals of the photos before and after it are fetched ahead. Losing the network mid-edit never freezes Atelier. Transfers yield bandwidth to the photo being opened. BACKLOG AT-079 makes this, with memory limits, part of every slice's definition of done.
+- **Network and memory:** one sequential read per file, two at a time on a share and one per cloud provider, never many small reads over the network. Transfers stream file to file in fixed chunks (S3 multipart parts of 16 MB, at most two in flight). Mounting, listing, status and connection checks run off the main thread with progress and Cancel; status is checked on mount/unmount notices and when a folder opens, never by polling.
+- **Credentials:** only in the macOS Keychain. Shares use the same item Finder saves ("Remember this password"), so a share already saved in Finder connects with no prompt; otherwise macOS's own sign-in sheet appears. S3 keys are one Keychain item "Atelier: <location>". Cloud drive folders need none; Atelier keeps a security-scoped bookmark to the picked folder. Never in the catalog, its backups, presets, XMP, logs or diagnostics. Removing a location offers to delete its Keychain item.
+- **Agents (MCP):** see each location's name, kind, status and free space (`reads`); connect one and start a backup (ask first, `writesFiles`). Adding, editing and removing locations are hidden from agents because they carry credentials; agents never see passwords, keys, addresses or bookmarks.
+- **Settings > Storage** (Photos group, pastel tile), laid out like System Settings > Internet Accounts:
+  1. **Locations:** one row each with its icon (drive, server, the provider's folder icon, bucket), bold name, grey second line ("Network share · megham.local/Photos"), use tags, a status dot with one word (Connected, Offline, Signed Out, Not Set Up) and a free-space bar for drives and shares; **+** and **−** below. With none, one line ("Add a NAS, a cloud drive folder or a bucket to keep photos and backups there") and **Add Location…**.
+  2. **Backups:** "Back up the catalog to" (None or a backup location), When (Every Quit, Daily, Weekly), Keep (10), **Back Up Now**, last backup time and size or its error in red.
+  3. **Cache:** size pop-up (5, 10, 20, 50 GB, Custom), space used, **Clear Cache**.
+- **Add Location…** is one sheet of fixed size in three steps: (1) four tiles, *Drive or Folder on This Mac*, *Network Share (NAS)*, *Cloud Drive Folder*, *Object Storage (S3)*; (2) the place, starting from what Atelier finds: Bonjour-discovered servers then their shares, plus Connect to Server… (as Finder's ⌘K); the provider apps installed on this Mac then a folder inside one; for S3 a Service pop-up that fills the endpoint, then Bucket, Folder, Access Key, Secret Key and **Test Connection** with an inline tick or plain reason; the Open panel for a drive; (3) Name (prefilled as real text), Photos / Backups / Exports (as the kind allows), "Connect when Atelier opens" (shares), "Make smart previews for photos here" (on for network and cloud). Clicking a location shows the same choices plus Show in Finder, photo count, Keychain status with **Sign In Again…**, Connect or Disconnect, and **Remove Location…** (one-line confirmation; its photos stay in the catalog as offline; `DeleteFeedback.remove`).
+- **Elsewhere:** the sidebar's Volumes become **Locations** with the same icons and status, right-click Connect, Disconnect, Keep on This Mac, Free Up Space, Show in Finder, Storage Settings…, and a Connect button on an offline share's row. Import lists photo locations as sources and Copy destinations and shows download size; Export lists export locations above Choose Folder…; the splash and status bar name any offline location ("· megham offline"). Atelier Help gets a Storage page.
+- Missing-file finder: relink by hash when files move outside the app, across locations.
 
 ## Develop module
 
@@ -487,6 +539,7 @@ Atelier > Settings… (⌘,) is one window (900 × 660 pt), laid out like macOS 
 - **Import:** default for new imports (leave files or copy into the library folder) and the library folder. The Import dialog starts from these. "Show RAW+JPEG pairs as one photo" (on by default; see RAW+JPEG pairs).
 - **Develop:** what a double-click or Z zooms to (50%, 100%, 200%, 400%), the zoom on moving to another photo (open at Fit or Fill, return to its last zoom, or keep the zoom), solo mode, and the histogram clipping warnings.
 - **Export:** default export folder and whether to show exports in Finder.
+- **Storage** (Photos group, AT-079): storage locations, catalog backups to a location, and the cache of remote originals; see Storage locations and offline photos.
 - **Edit In:** the external editors and what each is sent (see External editor integration).
 - **AI:** the ComfyUI server, models, generation size and workflows (see AI processing).
 - **Metadata:** automatically write ratings, flags, labels, keywords, title, caption and current Atelier Develop settings/masks to XMP sidecars as they change.
@@ -672,7 +725,7 @@ The catalog is one SQLite database (WAL mode) in a `.atelier` package on the loc
 
 | Entity | Key fields | Notes |
 | --- | --- | --- |
-| Volume | id, uuid, name, kind (local, NAS), last seen, online | Matched by volume UUID, not mount path |
+| Volume (Storage Location) | id, identity key, name, kind (local, network share, cloud folder, object storage), uses (photos, backups, exports), root or endpoint, Keychain item reference, bookmark, last seen, online | Matched by volume UUID, share address or File Provider domain, not mount path; credentials never stored here |
 | Folder | id, volume id, relative path | Mirrors disk |
 | Asset | id, folder id, filename, content hash, perceptual hash, capture time, camera, lens, dimensions | One per original file |
 | Version | id, asset id, kind (develop, virtual copy, external edit, AI), parent version id, file path (if rendered), created at | Forms the stack |
@@ -686,7 +739,7 @@ The catalog is one SQLite database (WAL mode) in a `.atelier` package on the loc
 | Model | id, processor id, name, version, license, allowed use, paths | The model registry |
 | Job | id, version id, recipe JSON, model id, seed, status, timings, error | Also the provenance record |
 
-Backups: the catalog is snapshotted on quit (keep the last 10) and can be copied to the NAS. XMP sidecars are the recovery path if the catalog is lost.
+Backups: the catalog is snapshotted on quit (keep the last 10) and, when the user chooses one, copied to a backup location (any Storage Location with Backups ticked, including S3-compatible storage) on quit, daily or weekly. XMP sidecars are the recovery path if the catalog is lost.
 
 ## Non-functional requirements
 
@@ -701,7 +754,7 @@ Targets assume an M4 Mac and a catalog of 100k photos. They are starting targets
 | Saves | A change that can't be saved to the catalog says so; it never looks saved. Develop shows "Could not save"; a Generative Fill that finishes after another photo opened says so if it can't be saved to its photo; Match Look's status line counts photos that couldn't be saved, and skips a photo whose settings can't be read rather than matching it from neutral; Cull says when an imported cull couldn't be saved; the Notes panel shows a red line under its header until a later change saves (AT-076 E1). A batch edit (Sync, Paste or a preset on a selection, Reset, Match Look's Same Look) saves every photo in one step: all of them or, if one fails, none, with each photo changed on top of its own saved settings (AT-076 P2) |
 | AI jobs | Run in a separate process; a crash or out-of-memory never takes down the app or corrupts the catalog |
 | Data safety | Originals are read-only; catalog writes are transactional; hash-verified copies on import |
-| Privacy | No network calls except NAS, user-configured backends and update checks; no telemetry. Agents connect only through the local helper and a private socket (no network listener); previews and location are off for agents by default, and private photos are never shown to them |
+| Privacy | No network calls except storage locations the user adds (only while they are used), user-configured backends and update checks; no telemetry. Agents connect only through the local helper and a private socket (no network listener); previews and location are off for agents by default, and private photos are never shown to them |
 | Sandboxing | App Sandbox with security-scoped bookmarks for each volume and folder the user grants. The agent socket lives in the app's Application Support folder; a sandboxed build needs it in an app group container the helper (signed with the same team) can reach |
 | Accessibility | Full keyboard workflow for culling; VoiceOver labels on all controls |
 | Compatibility | macOS 15 and later. Apple Silicon is the main target: performance targets above are measured there. Intel Macs that run macOS 15 are supported through x86_64 and universal Release builds (decided Nov 6, 2026; see Compatibility: Apple Silicon and Intel below) |

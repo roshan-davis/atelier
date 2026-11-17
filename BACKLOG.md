@@ -124,6 +124,8 @@ Evidence baseline, October 30, 2026:
 
 **Evidence:** review §4/8: cached browsing and metadata exist; Develop/export/AI require originals; durable AI queue and smart-preview editing are incomplete. **Scope to discuss:** explicit offline availability, reconnect and deferred work behavior.
 
+**Owns the offline job queue for AT-079 (Codex review of PR #178, Nov 17, 2026):** Export, Edit In and AI jobs whose original is on an offline or not-downloaded location wait in one queue stored in the catalog. Semantics to agree: a queued job survives quitting and relaunching; each job and the whole queue can be cancelled, and a cancelled job leaves no partial output; when the location returns the job runs once (no duplicate output), or asks if its photo's settings changed since it was queued; a job the user chose to run on the smart preview says so in its details. AT-079 slices don't build this queue; until it exists, those commands say the location is offline and offer Connect.
+
 **Acceptance to agree:** offline browse/rate/reconnect tests, missing-preview/original errors, queue cancellation/restart semantics and no silent loss or duplicate output. Measure NAS behavior with AT-011.
 
 ## AT-010 — Color, film and grain visual acceptance
@@ -1476,3 +1478,39 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 **Scope:** In the existing Cull view, compare the suggested keeper and the next-ranked frame from the same group under the active Pick By setting. Enable Compare for groups with at least two frames. Reuse the shared photo viewport so zooming or panning either preview updates both.
 
 **Acceptance:** In both pre-import Cull and Show Cull Group, open Compare on a group with at least two frames. Zoom to 100% on a face and pan in either pane. Both panes follow at the same magnification and relative image position. Return to the single-photo view and verify that reviewing the pair preserved the current keep/drop choices. On a single-frame group, Compare is unavailable.
+
+## AT-079 — Storage you configure: network shares, cloud drive folders, S3 backups
+
+**Status:** Approved / ready (design). Rosh chose on November 17, 2026: network shares and cloud drive folders for photos first, S3-compatible object storage for backups only. Each slice below is its own PR; none started. **Owner/chat:** Claude (project thread "Design user-configured cloud storage"), branch `claude/project-thread-zg6mj5` for this docs PR. **Design:** PRD "Storage locations and offline photos"; [design doc](https://claude.ai/artifact/U5zSxEd3JnQDkA1y6H5mqJ). **Dependencies:** AT-011 NAS measurement before AT-079c; AT-009 for AT-079d; AT-006 for what backups include.
+
+**Why:** Rosh: "we are not providing cloud, but we can configure any cloud", and megham is an option Rosh adds, not a default. Today volumes appear only when mounted in Finder, a NAS is named in the PRD's goals, backups go only to the catalog package, and remote originals are re-read over the network.
+
+**Slices (in order):**
+
+1. **AT-079a Locations and Settings > Storage.** `Volume` grows into Storage Location (one GRDB migration; existing volumes keep id and name; nothing seeded). Storage pane list and detail, Add Location for drives and network shares (Bonjour `_smb._tcp` discovery, NetFS connect with macOS's sign-in sheet, Finder's Keychain item), Connect when Atelier opens, sidebar Locations with Connect/Disconnect. Registry actions for connect and status; add/edit/remove hidden from agents (credentials). Help page.
+2. **AT-079b Cloud drive folders.** Provider folders under `~/Library/CloudStorage` and iCloud Drive, File Provider domain identity, security-scoped bookmarks, the "not downloaded" state and badge, download on open with progress and Cancel, download size in Import.
+3. **AT-079c Cache of remote originals** (NAS-2 of the Nov 9 NAS review): read once into `~/Library/Caches`, bounded by bytes, Keep on This Mac, Free Up Space, cache size and Clear Cache.
+4. **AT-079d Smart previews** for offline editing (AT-009's smart-preview part; white balance and exposure must be applied outside CIRAWFilter).
+5. **AT-079e Backups to a location:** catalog backups on quit/daily/weekly to any backup location, S3-compatible client (SigV4 in URLSession, streamed multipart, Test Connection, Keychain), copy-import second copy.
+
+**Definition of done for every slice (Rosh, Nov 17, 2026: performance, memory and never feeling the cloud's lag on the photo being worked on).** A slice isn't done until each line below is measured on a Mac, with numbers in its PR (before and after, same photo, same Mac, plus an 8 GB Mac or Codex's 8 GB run where possible). A miss is a bug, even when the feature works.
+
+- **The working photo never waits on the network.** With the original on megham (Wi-Fi and Ethernet), in a cloud folder, and with the location dropped mid-edit: moving to a photo shows its preview at once (PRD target: Loupe under 300 ms from the preview cache); Develop slider changes stay under 50 ms on the proxy, the same as a local photo; Frame Diagnostics shows no dropped-frame regression against the same photo stored locally. No spinner or blank image covers the photo while its original arrives; the full-quality image swaps in when ready.
+- **Ahead of you, not in your way.** The originals of the photos before and after the current one are fetched in the background (bounded, at the network limits above), so stepping through a shoot on the NAS feels local after the first photo. Downloads, uploads, backups and status checks never run on the main thread, and pause their bandwidth for the photo being opened.
+- **No hangs.** No main-thread stall over 100 ms (Instruments Hangs or `os_signpost`) while connecting, disconnecting, listing a large cloud folder (10,000 files), downloading or backing up. Pulling the network cable or sleeping the NAS mid-edit never freezes Atelier; the photo stays editable from its preview or smart preview and the status bar says what happened.
+- **Memory.** Transfers stream in fixed chunks: `RenderMemory.footprint()` and the peak during a 10 GB backup and a 500-photo cloud import rise by no more than the transfer buffers (about 64 MB) over the same work on local files. The originals cache lives on disk, never in memory. Everything let go when its task ends, per AGENTS.md > Memory.
+- **Disk and network.** The cache stays within its size; each remote file is read over the network once per change; no small random reads over the network (count bytes read per open).
+- **User experience.** Every wait over half a second shows progress and Cancel where it happens (Import footer, status bar, the photo's badge); every error says what to do in one line (Connect, Sign In Again, free space). Layout snapshots for the Storage pane, Add Location steps and the new badges, reviewed before handoff.
+
+**Acceptance, per slice, on a Mac (each slice verified on its own; none waits for smart previews):**
+
+- **a:** a fresh catalog has no location. Adding megham by Bonjour and by address gives one location. An old catalog's volumes show as locations with every photo still opening. Adding a subfolder of an already-cataloged volume (for example `/Volumes/Photos/Portfolio` when `Portfolio/2026` is cataloged) leaves those photos opening from the same files. Reconnecting the share under a different mount path (`/Volumes/Photos-1`) keeps them linked. No credential appears in the catalog, its backups, logs or the MCP catalog.
+- **b:** a cloud placeholder lists without downloading; Import shows the download size; opening one downloads with progress and Cancel; signing in again relinks by domain.
+- **c:** first open of a NAS RAW timed with and without the cache. A cached original changed at the source is read again when reachable; with the source offline the cached copy is used and the "couldn't be checked" note shows. Keep on This Mac survives Clear Cache unless its checkbox is ticked and refuses when the disk would fall under 10% free. XMP conflicts: edit a rating offline in Atelier, change the same sidecar in another app, reconnect: Atelier doesn't overwrite it, badges the photo, and Read Metadata from File / Save Metadata to File each resolve it. Deletion: with a sidecar Atelier last saw present and a change waiting, delete the sidecar in Finder and reconnect: Atelier doesn't recreate it and badges the photo; an unreadable sidecar holds the write. Changed original: keep a photo on this Mac, replace the original at the source, then Export it at full size: the sheet asks, Use the Kept Copy exports the old pixels, Use the New File exports the new ones and re-makes previews, Skip exports nothing for it while the rest of the batch finishes.
+- **d:** offline and not-downloaded photos edit from smart previews; edits write to XMP on reconnect under the conflict rule.
+- **e:** a catalog backup reaches a share, a cloud folder and an S3 bucket; Test Connection reports a wrong key plainly; peak memory during a 10 GB upload stays flat.
+- Offline Export, Edit In and AI jobs are accepted under AT-009, not here.
+
+**Codex review (PR #178, Nov 17, 2026) addressed in the PRD:** location roots never rebase stored paths; cache freshness and Keep on This Mac pinning; XMP conflicts on reconnect; the offline job queue assigned to AT-009. Follow-up review: sidecar states present / known absent / unknown (a removed sidecar is a conflict, an unreadable one holds the write); what Export, Edit In, AI and Develop do when an original changed, and when a kept copy may go.
+
+**Open:** whether megham is used over Wi-Fi or Ethernet (sets the default cache size); whether location backups also include presets and Settings (AT-006).
