@@ -269,8 +269,9 @@ final class LibraryModel: ObservableObject {
         observeSidebar()
         installInputMonitor()
         observeMounts()
-        // Settings > Import > "Show RAW+JPEG pairs as one photo".
-        observers.observe(UserDefaults.didChangeNotification) { [weak self] _ in
+        // Settings > Import > "Show RAW+JPEG pairs as one photo" (only that setting, not every
+        // defaults write).
+        observers.observe(FilePairs.groupingChanged) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self, self.filter.groupsRawPairs != FilePairs.isGrouping else { return }
                 self.filter.groupsRawPairs = FilePairs.isGrouping
@@ -280,7 +281,7 @@ final class LibraryModel: ObservableObject {
             Task { @MainActor in self?.previewsChanged() }
         }
         develop.onSettingsSaved = { [weak self] id in
-            if UserDefaults.standard.bool(forKey: "xmp.autoWrite") { self?.autoWriteXMP([id]) }
+            if UserDefaults.standard.value(Preferences.xmpAutoWrite) { self?.autoWriteXMP([id]) }
         }
         develop.onLensBlurModeChanged = { [weak self] open in
             guard let self, self.isLensBlurOpen != open else { return }
@@ -705,7 +706,7 @@ final class LibraryModel: ObservableObject {
         do {
             try edit(catalog)
             reloadDetail()
-            if UserDefaults.standard.bool(forKey: "xmp.autoWrite") { autoWriteXMP(ids) }
+            if UserDefaults.standard.value(Preferences.xmpAutoWrite) { autoWriteXMP(ids) }
             return true
         } catch {
             status = error.localizedDescription
@@ -719,7 +720,7 @@ final class LibraryModel: ObservableObject {
         do {
             try edit(catalog)
             reloadDetail()
-            if UserDefaults.standard.bool(forKey: "xmp.autoWrite") { autoWriteXMP(pairTargetIDs) }
+            if UserDefaults.standard.value(Preferences.xmpAutoWrite) { autoWriteXMP(pairTargetIDs) }
             return true
         } catch {
             status = error.localizedDescription
@@ -827,7 +828,7 @@ final class LibraryModel: ObservableObject {
                     }
                     self.sidebarSelection = .importGroup(groupID)
                 }
-                if UserDefaults.standard.bool(forKey: "xmp.autoWrite") {
+                if UserDefaults.standard.value(Preferences.xmpAutoWrite) {
                     self.autoWriteXMP(result.developedAssetIDs)
                 }
                 then?(result)

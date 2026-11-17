@@ -427,7 +427,7 @@ private struct ThemeCard: View {
 
 struct GeneralSettings: View {
     @EnvironmentObject private var model: LibraryModel
-    @AppStorage("backups.keep") private var backupsToKeep = 10
+    @AppStorage(Preferences.backupsToKeep) private var backupsToKeep: Int
     @AppStorage(Splash.showKey) private var showSplash = true
     @AppStorage(DeleteFeedback.enabledKey) private var deleteEffects = true
     @AppStorage(PrivatePhotos.hideAfterKey) private var hidePrivateAfter = PrivatePhotos.defaultHideAfter
@@ -548,10 +548,8 @@ struct GeneralSettings: View {
 // MARK: - Import
 
 struct ImportSettings: View {
-    @AppStorage("import.copy") private var copyFiles = false
-    @AppStorage("import.destination") private var destinationPath = FileManager.default
-        .urls(for: .picturesDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("Atelier Library").path
+    @AppStorage(Preferences.importCopies) private var copyFiles: Bool
+    @AppStorage(Preferences.importDestination) private var destinationPath: String
     @AppStorage(FilePairs.groupKey) private var groupPairs = true
 
     var body: some View {
@@ -579,6 +577,7 @@ struct ImportSettings: View {
             }
             SettingsSection("RAW+JPEG") {
                 Toggle("Show RAW+JPEG pairs as one photo", isOn: $groupPairs)
+                    .onChange(of: groupPairs) { NotificationCenter.default.post(name: FilePairs.groupingChanged, object: nil) }
             } footer: {
                 Text("When a folder has DSC_0001.NEF and DSC_0001.JPG (or HEIC, TIFF), only the RAW is shown, marked RAW+JPG. Ratings, flags, labels, keywords, collections and import entries apply to both; editing and export use the RAW. Turn this off to see every file as its own photo. Culling always treats a pair as one shot.")
                     .font(.caption)
@@ -592,11 +591,11 @@ struct ImportSettings: View {
 // MARK: - Develop
 
 private struct DevelopSettingsTab: View {
-    @AppStorage("zoom.clickPercent") private var clickPercent = 100.0
+    @AppStorage(Preferences.clickZoomPercent) private var clickPercent: Double
     @AppStorage(LibraryModel.ZoomOnPhotoChange.key) private var onPhotoChange = LibraryModel.ZoomOnPhotoChange.reset.rawValue
     @AppStorage(LibraryModel.ZoomOnPhotoChange.resetLevelKey) private var resetLevel = "fit"
-    @AppStorage("develop.showClipping") private var showClipping = true
-    @AppStorage("develop.soloMode") private var soloMode = false
+    @AppStorage(Preferences.showClipping) private var showClipping: Bool
+    @AppStorage(Preferences.soloMode) private var soloMode: Bool
 
     var body: some View {
         Form {
@@ -632,10 +631,8 @@ private struct DevelopSettingsTab: View {
 // MARK: - Export
 
 private struct ExportSettingsTab: View {
-    @AppStorage("export.destination") private var destinationPath = FileManager.default
-        .urls(for: .picturesDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("Atelier Exports").path
-    @AppStorage("export.reveal") private var reveal = true
+    @AppStorage(Preferences.exportDestination) private var destinationPath: String
+    @AppStorage(Preferences.exportReveals) private var reveal: Bool
 
     var body: some View {
         Form {
@@ -755,10 +752,10 @@ private struct EditorRows: View {
 
 /// Where ComfyUI runs and which models the AI recipes use.
 struct AISettingsTab: View {
-    @AppStorage("ai.server") private var server = AISettings.defaultServer.absoluteString
-    @AppStorage("ai.editModel") private var editModel = ""
-    @AppStorage("ai.upscaleModel") private var upscaleModel = ""
-    @AppStorage("ai.generationSize") private var generationSize = 1024
+    @AppStorage(Preferences.aiServer) private var server: String
+    @AppStorage(Preferences.aiEditModel) private var editModel: String
+    @AppStorage(Preferences.aiUpscaleModel) private var upscaleModel: String
+    @AppStorage(Preferences.aiGenerationSize) private var generationSize: Int
     @State private var status: String?
     @State private var connected = false
     @State private var editModels: [String] = []
@@ -946,7 +943,7 @@ private struct MaskingModelsSection: View {
 // MARK: - Metadata
 
 struct MetadataSettings: View {
-    @AppStorage("xmp.autoWrite") private var autoWrite = false
+    @AppStorage(Preferences.xmpAutoWrite) private var autoWrite: Bool
 
     var body: some View {
         Form {

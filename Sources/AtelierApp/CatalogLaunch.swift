@@ -59,7 +59,7 @@ final class CatalogLaunch: ObservableObject {
             // The native smoke test boots with a seeded catalog and uses real controls from here.
             let environment = ProcessInfo.processInfo.environment
             if environment["ATELIER_UI_SMOKE"] == "1", environment["ATELIER_CATALOG_PATH"] != nil {
-                UserDefaults.standard.set("basic", forKey: "develop.expandedPanels")
+                UserDefaults.standard.set("basic", for: Preferences.expandedPanels)
                 await LayoutSnapshots.importSamplePhoto(
                     into: library, at: opening.packageURL.deletingLastPathComponent().appendingPathComponent("smoke.jpg")
                 )

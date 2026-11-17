@@ -256,7 +256,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             model?.rememberCurrentPhotoZoom()
             model?.saveSession()
             model?.agents.stop(quitting: true)
-            let keep = UserDefaults.standard.object(forKey: "backups.keep") as? Int ?? 10
+            let keep = UserDefaults.standard.value(Preferences.backupsToKeep)
             try? model?.catalog.snapshot(keep: max(1, keep))
         }
     }

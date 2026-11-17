@@ -1,5 +1,6 @@
 import CoreML
 import Foundation
+import os
 
 /// A Core ML model built into the app (a `.mlpackage` in AtelierCore's `Models` resources). It is
 /// compiled once into Caches/Atelier/Models (a fraction of a second) and loaded on first use, from
@@ -49,7 +50,7 @@ public final class BundledModel: @unchecked Sendable {
             loaded = try load()
         } catch {
             loadFailure = "\(error)"
-            NSLog("Atelier: built-in model %@ didn't load: %@", name, "\(error)")
+            Log.models.error("Built-in model \(self.name, privacy: .public) didn't load: \(String(describing: error), privacy: .public)")
         }
         return loaded
     }

@@ -6,8 +6,8 @@ import SwiftUI
 /// Zoom for loupe and develop. 100% shows one pixel of the full-size photo per screen pixel.
 enum ZoomLevel: Hashable {
     static var clickZoomPercent: Double {
-        let value = UserDefaults.standard.double(forKey: "zoom.clickPercent")
-        return value > 0 ? value : 100
+        let value = UserDefaults.standard.value(Preferences.clickZoomPercent)
+        return value > 0 ? value : Preferences.clickZoomPercent.defaultValue
     }
 
     case fit, fill

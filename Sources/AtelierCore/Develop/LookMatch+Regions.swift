@@ -711,7 +711,7 @@ extension LookMatcher {
         guard !isCancelled() else { return nil }
         lastMatchRenders = renders
         let seconds = Date().timeIntervalSince(started)
-        Logger(subsystem: "Atelier", category: "Match Look").info(
+        Log.matchLook.info(
             "Match: \(renders) renders, \(emulator?.tries ?? 0) stand-in tries in \(seconds, format: .fixed(precision: 2)) s at \(plain.width)×\(plain.height); stand-in off by \(offBy, format: .fixed(precision: 4))")
         var match = LookMatch(base: base, matched: current, asShotTemperature: asShot, notices: notices)
         match.subjectFitParameters = options.subjectFitParameters

@@ -1,5 +1,6 @@
 import CoreImage
 import Foundation
+import os
 import OnnxRuntimeBindings
 
 /// Detail > Noise Reduction > AI Denoise (AT-067): PMRID (Wang et al., "Practical Deep Raw Image
@@ -188,13 +189,12 @@ public enum AIDenoise {
                 let (residual, coreML) = try AIDenoise.make(url: url, profileCorrections: profileCorrections, context: context)
                 residuals.setObject(residual, forKey: key as NSString, cost: residual.bytes)
                 let seconds = Date().timeIntervalSince(started)
-                NSLog("Atelier: AI Denoise found %@'s noise in %.1f s (%@)", url.lastPathComponent, seconds,
-                      coreML ? "Core ML" : "CPU")
+                Log.models.notice("AI Denoise found \(url.lastPathComponent, privacy: .public)'s noise in \(seconds, format: .fixed(precision: 1)) s (\(coreML ? "Core ML" : "CPU", privacy: .public))")
                 set(.done(seconds: seconds, coreML: coreML), for: url)
                 return residual
             } catch {
                 let reason = error.localizedDescription
-                NSLog("Atelier: AI Denoise failed on %@: %@", url.lastPathComponent, reason)
+                Log.models.error("AI Denoise failed on \(url.lastPathComponent, privacy: .public): \(reason, privacy: .public)")
                 lock.lock()
                 failed.setObject(Boxed(reason), forKey: key as NSString)
                 lock.unlock()

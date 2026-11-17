@@ -1,6 +1,7 @@
 import CoreGraphics
 import CoreImage
 import Foundation
+import os
 import OnnxRuntimeBindings
 
 /// Depth Range masks (AT-068): how far away each part of the photo is, from Depth Anything V2
@@ -214,7 +215,7 @@ public enum DepthMap {
                          disparity: raw)
         } catch {
             failure = error.localizedDescription
-            NSLog("Atelier: Depth Range failed: %@", "\(error)")
+            Log.models.error("Depth Range failed: \(String(describing: error), privacy: .public)")
             return nil
         }
     }

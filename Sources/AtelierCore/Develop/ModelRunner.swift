@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import os
 import OnnxRuntimeBindings
 
 /// Runs Atelier's ONNX models (Fine Edges, Depth, AI Denoise) in a helper process, the standard
@@ -124,7 +125,7 @@ public final class ModelRunner: @unchecked Sendable {
                     let status = running.stop()
                     helper = nil
                     if attempt == 0, status.wasIdleExit { continue }
-                    NSLog("Atelier: %@'s helper stopped (%@)", name, status.description)
+                    Log.models.error("\(self.name, privacy: .public)'s helper stopped (\(status.description, privacy: .public))")
                     throw Failure(status.killed
                         ? "this Mac ran out of memory for it (macOS stopped the model)"
                         : "the model stopped unexpectedly (\(status.description))")
@@ -151,7 +152,7 @@ public final class ModelRunner: @unchecked Sendable {
     private func scheduleIdleQuit() {
         let item = DispatchWorkItem { [weak self] in
             guard let self else { return }
-            NSLog("Atelier: %@'s helper quit after %.0f s idle", self.name, Self.idleSeconds)
+            Log.models.notice("\(self.name, privacy: .public)'s helper quit after \(Self.idleSeconds, format: .fixed(precision: 0)) s idle")
             self.stop()
         }
         idle = item
@@ -309,8 +310,7 @@ public final class ModelRunner: @unchecked Sendable {
                 loaded = (key, made, attempt.coreML != nil)
                 return (made, attempt.coreML != nil)
             } catch {
-                NSLog("Atelier: %@ (optimization %@, %@) failed to load: %@", (request.modelPath as NSString).lastPathComponent,
-                      attempt.level, attempt.coreML == nil ? "CPU" : "Core ML", "\(error)")
+                Log.models.error("\((request.modelPath as NSString).lastPathComponent, privacy: .public) (optimization \(attempt.level, privacy: .public), \(attempt.coreML == nil ? "CPU" : "Core ML", privacy: .public)) failed to load: \(String(describing: error), privacy: .public)")
                 lastError = error
             }
         }

@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import os
 import ImageIO
 import OnnxRuntimeBindings
 import UniformTypeIdentifiers
@@ -293,12 +294,12 @@ public enum FineEdges {
                 failure = nil
                 lastRun = line
             }
-            NSLog("Atelier: %@", line)
+            Log.models.notice("\(line, privacy: .public)")
             return chances
         } catch {
             let reason = error.localizedDescription
             lock.withLock { failure = reason }
-            NSLog("Atelier: Fine Edges failed: %@", "\(error)")
+            Log.models.error("Fine Edges failed: \(String(describing: error), privacy: .public)")
             return nil
         }
     }
