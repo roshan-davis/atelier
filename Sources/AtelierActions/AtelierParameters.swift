@@ -85,6 +85,13 @@ public struct CollectionParameters: ActionParameters, Hashable {
     public static let fieldNotes = ["collection": FieldNote("A collection's id.")]
 }
 
+public struct LocationParameters: ActionParameters, Hashable {
+    public var location: Int64
+    public init(location: Int64) { self.location = location }
+    public static let example = LocationParameters(location: 1)
+    public static let fieldNotes = ["location": FieldNote("A storage location's id (Settings > Storage).")]
+}
+
 public struct EditorParameters: ActionParameters, Hashable {
     public var editor: String
     public init(editor: String) { self.editor = editor }

@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Storage locations · Atelier Help</title>
+<link rel="stylesheet" href="assets/help.css">
+<script src="assets/toc.js" defer></script>
+<script src="assets/help.js" defer></script>
+<style>
+  .pane { border: 1px solid rgba(127,127,127,.3); border-radius: 10px; padding: 12px; max-width: 560px;
+          background: rgba(127,127,127,.06); font: 13px -apple-system, BlinkMacSystemFont, sans-serif; }
+  .pane .sec { font-weight: 600; font-size: 12px; opacity: .7; margin: 2px 4px 6px; }
+  .pane .row { display: flex; align-items: center; gap: 10px; padding: 6px; border-radius: 6px; }
+  .pane .row.sel { background: rgba(10,132,255,.14); }
+  .pane .tile { width: 28px; height: 28px; border-radius: 7px; color: #fff; display: grid; place-items: center; font-size: 14px; flex: none; }
+  .pane .name { font-weight: 600; }
+  .pane .sub { font-size: 11px; opacity: .6; }
+  .pane .bar { height: 4px; width: 160px; border-radius: 2px; background: rgba(127,127,127,.25); margin-top: 4px; }
+  .pane .bar i { display: block; height: 100%; border-radius: 2px; background: #0a84ff; }
+  .pane .right { margin-left: auto; text-align: right; }
+  .pane .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; vertical-align: 1px; }
+  .pane .pm { display: flex; gap: 6px; margin: 8px 4px 0; }
+  .pane .pm span { border: 1px solid rgba(127,127,127,.4); border-radius: 5px; padding: 0 8px; font-size: 13px; }
+</style>
+</head>
+<body>
+<main class="page">
+
+<div class="eyebrow">Library</div>
+<h1>Storage locations</h1>
+<p class="lede">Atelier has no cloud of its own. You add the places you already keep photos (a NAS, an external drive, a folder) in <span class="path">Atelier › Settings… › Storage</span>, and Atelier uses them. Nothing is set up until you add it.</p>
+
+<figure>
+  <div class="pane" aria-label="A drawn Storage pane">
+    <div class="sec">Locations</div>
+    <div class="row sel"><span class="tile" style="background:#78a3d1">▤</span>
+      <div><div class="name">megham</div><div class="sub">Network share · megham.local/Photos</div><div class="bar"><i style="width:62%"></i></div></div>
+      <div class="right"><div><span class="dot" style="background:#34c759"></span>Connected</div><div class="sub">12,408 photos</div></div></div>
+    <div class="row"><span class="tile" style="background:#8f97a3">▭</span>
+      <div><div class="name">Portfolio</div><div class="sub">Drive · Photos SSD/Portfolio</div></div>
+      <div class="right"><div><span class="dot" style="background:#9a9a9a"></span>Offline</div><div class="sub">1,920 photos</div></div></div>
+    <div class="pm"><span>+</span><span>−</span></div>
+  </div>
+  <figcaption><b>Settings › Storage:</b> each location with where it is, whether it is connected, how many photos it holds and how full it is. Click one to see its details below the list.</figcaption>
+</figure>
+
+<div class="chips"><a href="#add">Add a location</a><a href="#nas">A NAS</a><a href="#details">Details</a><a href="#offline">Offline</a><a href="#where">What stays on this Mac</a><a href="#remove">Remove</a></div>
+
+<h2 id="add">Add a location</h2>
+<ol class="steps">
+  <li>Open <span class="path">Atelier › Settings… › Storage</span> and click <span class="path">+</span>.</li>
+  <li>Choose <b>Network Share (NAS)</b> or <b>Drive or Folder on This Mac</b>, then <span class="path">Continue</span>.</li>
+  <li>Pick the place: a server found on your network, an address such as <code>smb://megham.local/Photos</code>, or a drive or folder in the Open panel.</li>
+  <li>Check the name (it starts as the share's or folder's name) and click <span class="path">Add Location</span>.</li>
+</ol>
+<p>You can add only a folder on a drive, for example <b>Photos SSD/Portfolio</b>. Photos Atelier already has from that drive stay exactly where they are; a location never moves or renames anything.</p>
+<p>Cloud drive folders (iCloud Drive, Dropbox, Google Drive, OneDrive) and S3-compatible backups come in later updates.</p>
+
+<h2 id="nas">A NAS</h2>
+<ul>
+  <li>Servers that share over SMB on your network are listed by name. Double-click one, or select it and click <span class="path">Connect</span>.</li>
+  <li>macOS asks for the user name and password the first time, in its own window, and keeps them in your Keychain. If you saved the password in Finder before (<i>Remember this password in my keychain</i>), nothing is asked. Atelier never stores a password itself.</li>
+  <li><b>Connect when Atelier opens</b> (on by default for a share) connects it at launch, quietly, with the Keychain's password. If the NAS is off, Atelier opens as usual and the status bar says it is offline.</li>
+</ul>
+
+<h2 id="details">Details</h2>
+<dl class="defs">
+  <dt>Name</dt><dd>What the sidebar's <b>Locations</b> and the Storage pane call it. Press Return to keep a new name.</dd>
+  <dt>Where</dt><dd>The folder on this Mac while it is connected.</dd>
+  <dt>Connect · Disconnect</dt><dd>Mount or unmount a share. Also in the sidebar: right-click the location under <b>Locations</b>, or click the small <span class="path">Connect</span> button on an offline share's row.</dd>
+  <dt>Show in Finder</dt><dd>Opens the location's folder.</dd>
+</dl>
+
+<h2 id="offline">When a location is offline</h2>
+<p>Its photos stay in the grid from their previews, with the offline mark, and you can still rate, flag and keyword them. <span class="path">Library › Refresh Volumes</span> (<kbd>⌘R</kbd>) checks again after you connect it some other way.</p>
+
+<h2 id="where">What stays on this Mac</h2>
+<p>The catalog and every preview always stay on this Mac, whatever locations you add, so browsing never waits on the network and a sync app can never damage the catalog.</p>
+
+<h2 id="remove">Remove a location</h2>
+<p>Select it and click <span class="path">−</span>, or <span class="path">Remove Location…</span> in its details. Its photos stay in the catalog (offline while the drive isn't there), and nothing on the location is changed.</p>
+
+<p class="see-also">See also: <a href="import.html">Import photos</a> · <a href="library.html#volumes">Drives and the NAS</a> · <a href="settings.html#storage">Settings</a></p>
+</main>
+</body>
+</html>

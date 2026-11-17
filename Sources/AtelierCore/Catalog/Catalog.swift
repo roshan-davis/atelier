@@ -163,6 +163,7 @@ public final class Catalog: Sendable {
         registerProcessorMigration(&migrator)
         registerPrivateMigration(&migrator)
         registerNotesMigration(&migrator)
+        registerStorageLocationMigration(&migrator)
         return migrator
     }
 }

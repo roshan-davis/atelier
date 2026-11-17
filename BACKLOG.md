@@ -1489,7 +1489,7 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 
 ## AT-079 — Storage you configure: network shares, cloud drive folders, S3 backups
 
-**Status:** Approved / ready (design). Rosh chose on November 17, 2026: network shares and cloud drive folders for photos first, S3-compatible object storage for backups only. Each slice below is its own PR; none started. **Owner/chat:** Claude (project thread "Design user-configured cloud storage"), branch `claude/project-thread-zg6mj5` for this docs PR. **Design:** PRD "Storage locations and offline photos"; [design doc](https://claude.ai/artifact/U5zSxEd3JnQDkA1y6H5mqJ). **Dependencies:** AT-011 NAS measurement before AT-079c; AT-009 for AT-079d; AT-006 for what backups include.
+**Status:** Approved / ready (design). Rosh chose on November 17, 2026: network shares and cloud drive folders for photos first, S3-compatible object storage for backups only. Each slice below is its own PR. AT-079a in progress (Claude, this thread, branch `claude/at079a-storage-locations`); b to e not started. **Owner/chat:** Claude (project thread "Design user-configured cloud storage"), branch `claude/project-thread-zg6mj5` for this docs PR. **Design:** PRD "Storage locations and offline photos"; [design doc](https://claude.ai/artifact/U5zSxEd3JnQDkA1y6H5mqJ). **Dependencies:** AT-011 NAS measurement before AT-079c; AT-009 for AT-079d; AT-006 for what backups include.
 
 **Why:** Rosh: "we are not providing cloud, but we can configure any cloud", and megham is an option Rosh adds, not a default. Today volumes appear only when mounted in Finder, a NAS is named in the PRD's goals, backups go only to the catalog package, and remote originals are re-read over the network.
 

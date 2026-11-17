@@ -103,6 +103,18 @@ public enum AtelierAction {
         summary: "Checks which drives are connected and retries photos that couldn't be read.",
         kind: .reads, shortcut: KeyShortcut("r"))
 
+    public static let connectLocation = Action<LocationParameters>(
+        "library.connectLocation", "Connect", place: "Sidebar > Locations > right-click > Connect, Settings > Storage",
+        summary: "Connects a network share added in Settings > Storage. macOS asks for the password only if the Keychain has none.",
+        kind: .writesFiles)
+    public static let disconnectLocation = Action<LocationParameters>(
+        "library.disconnectLocation", "Disconnect", place: "Sidebar > Locations > right-click > Disconnect, Settings > Storage",
+        summary: "Disconnects a network share. Its photos stay in the catalog, offline, browsable from previews.",
+        kind: .writesFiles)
+    public static let showLocationInFinder = Action<LocationParameters>(
+        "library.showLocationInFinder", "Show in Finder", place: "Sidebar > Locations > right-click > Show in Finder, Settings > Storage",
+        summary: "Shows a connected storage location's folder in Finder.", kind: .opensApp)
+
     // MARK: Photo
 
     public static let createVirtualCopy = Action<NoParameters>(
@@ -290,6 +302,7 @@ public enum AtelierAction {
         zoomTo100.descriptor, toggleZoom.descriptor, setZoom.descriptor, showFilmstrip.descriptor,
         showNotes.descriptor, privatePhotos.descriptor, grid.descriptor, loupe.descriptor, develop.descriptor,
         cullImport.descriptor, writeXMP.descriptor, writeAllXMP.descriptor, refreshVolumes.descriptor,
+        connectLocation.descriptor, disconnectLocation.descriptor, showLocationInFinder.descriptor,
         createVirtualCopy.descriptor, removeVirtualCopy.descriptor, removePhoto.descriptor,
         addNote.descriptor, showCullGroup.descriptor, hdr.descriptor, lensBlur.descriptor, editIn.descriptor, editInOther.descriptor,
         matchLook.descriptor, ai.descriptor, showInFinder.descriptor, setRating.descriptor,

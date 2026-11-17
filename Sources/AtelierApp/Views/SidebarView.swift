@@ -1,8 +1,10 @@
+import AtelierActions
 import AtelierCore
 import SwiftUI
 
 struct SidebarView: View {
     @EnvironmentObject private var model: LibraryModel
+    @Environment(\.openSettings) private var openSettings
     @State private var askingForName = false
     @State private var newName = ""
     @State private var renaming: RenameTarget?
@@ -93,8 +95,9 @@ struct SidebarView: View {
         }
     }
 
+    /// Locations (AT-079a): the volumes photos are on, named and set up in Settings > Storage.
     @ViewBuilder private var volumesSection: some View {
-        Section("Volumes") {
+        Section("Locations") {
             ForEach(model.sidebar.volumes) { volume in
                 if let volumeID = volume.id {
                     DisclosureGroup {
@@ -108,11 +111,36 @@ struct SidebarView: View {
                             }
                         }
                     } label: {
-                        VolumeLabel(volume: volume)
-                            .tag(SidebarItem.volume(volumeID))
+                        let location = model.rootLocation(for: volume)
+                        VolumeLabel(volume: volume, location: location, connect: location.flatMap { info in
+                            model.canConnect(info.id) ? { _ = model.actions.run(AtelierAction.connectLocation,
+                                                                                 LocationParameters(location: info.id)) } : nil
+                        })
+                        .tag(SidebarItem.volume(volumeID))
+                        .contextMenu { locationMenu(location) }
                     }
                 }
             }
+        }
+    }
+
+    @ViewBuilder private func locationMenu(_ location: StorageLocationInfo?) -> some View {
+        if let location {
+            let parameters = LocationParameters(location: location.id)
+            if location.location.serverAddress != nil {
+                model.actions.button(AtelierAction.connectLocation, parameters)
+                    .disabled(!model.canConnect(location.id))
+                model.actions.button(AtelierAction.disconnectLocation, parameters)
+                    .disabled(!model.canDisconnect(location.id))
+            }
+            model.actions.button(AtelierAction.showLocationInFinder, parameters)
+                .disabled(location.status != .connected)
+            Divider()
+        }
+        // not an action: opens the person's Settings window on its Storage pane.
+        Button("Storage Settings…") {
+            UserDefaults.standard.set(SettingsPane.storage.rawValue, forKey: SettingsPane.defaultsKey)
+            openSettings()
         }
     }
 
@@ -270,18 +298,31 @@ private struct CountedName: View {
 
 private struct VolumeLabel: View {
     let volume: Volume
+    let location: StorageLocationInfo?
+    /// Set for an offline share that can be connected: a small Connect button on the row.
+    let connect: (() -> Void)?
 
     var body: some View {
         Label {
             HStack(spacing: 6) {
-                Text(volume.name)
+                Text(location?.location.name ?? volume.name)
+                    .lineLimit(1)
                 Circle()
                     .fill(volume.isOnline ? Color.green : Color.secondary.opacity(0.5))
                     .frame(width: 7, height: 7)
-                    .help(volume.isOnline ? "Online" : "Offline: browsing previews only")
+                    .help(volume.isOnline ? "Connected" : "Offline: browsing previews only")
+                if let connect {
+                    Spacer(minLength: 4)
+                    Button("Connect", action: connect)
+                        .buttonStyle(.borderless)
+                        .controlSize(.small)
+                        .font(.caption)
+                        .fixedSize()
+                        .help("Connect \(location?.location.name ?? volume.name)")
+                }
             }
         } icon: {
-            Image(systemName: volume.kind == .nas ? "server.rack" : "externaldrive")
+            Image(systemName: StorageIcons.symbol(for: location?.location.kind ?? (volume.kind == .nas ? .networkShare : .drive)))
         }
     }
 }

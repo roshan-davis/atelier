@@ -55,6 +55,8 @@ struct Problem: Hashable {
 
 struct SidebarData: Equatable, Sendable {
     var volumes: [Volume] = []
+    /// Settings > Storage's locations (AT-079a), with status and photo counts.
+    var locations: [StorageLocationInfo] = []
     var folders: [Folder] = []
     var collections: [PhotoCollection] = []
     var imports: [ImportGroupSummary] = []
@@ -269,6 +271,7 @@ final class LibraryModel: ObservableObject {
         observeSidebar()
         installInputMonitor()
         observeMounts()
+        connectLocationsAtLaunch()
         // Settings > Import > "Show RAW+JPEG pairs as one photo" (only that setting, not every
         // defaults write).
         observers.observe(FilePairs.groupingChanged) { [weak self] _ in
@@ -341,6 +344,7 @@ final class LibraryModel: ObservableObject {
         let observation = ValueObservation.tracking { db in
             SidebarData(
                 volumes: try Volume.order(Column("name")).fetchAll(db),
+                locations: try Catalog.fetchStorageLocations(db),
                 folders: try Catalog.fetchFolders(db, privacy: privacy),
                 collections: try Catalog.fetchCollections(db, privacy: privacy),
                 imports: try Catalog.fetchImportGroupSummaries(db, groupingRawPairs: pairs, privacy: privacy),
