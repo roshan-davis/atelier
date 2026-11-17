@@ -12,6 +12,14 @@ final class RenderMemoryTests: XCTestCase {
         XCTAssertEqual(RenderMemory.budget(physicalMemory: 48 * gigabyte), 2 * Int(gigabyte), "never above 2 GB")
     }
 
+    func testFineEdgesWarnsOnlyWhereMemoryIsShort() {
+        let gigabyte: UInt64 = 1_073_741_824
+        XCTAssertNotNil(FineEdges.Model.fast.memoryWarning(physicalMemory: 16 * gigabyte))
+        XCTAssertNil(FineEdges.Model.fast.memoryWarning(physicalMemory: 32 * gigabyte))
+        XCTAssertNotNil(FineEdges.Model.hairDetail.memoryWarning(physicalMemory: 32 * gigabyte))
+        XCTAssertNil(FineEdges.Model.hairDetail.memoryWarning(physicalMemory: 48 * gigabyte))
+    }
+
     func testStageSizeIsItsPixelsInHalfFloats() {
         let stage = CIImage(color: .red).cropped(to: CGRect(x: 0, y: 0, width: 100, height: 50))
         XCTAssertEqual(RenderMemory.estimatedBytes(of: stage), 100 * 50 * 8)

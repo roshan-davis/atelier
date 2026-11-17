@@ -52,6 +52,25 @@ public enum FineEdges {
             }
         }
 
+        /// About how much memory one run takes, in its helper process (`ModelRunner`), in GB:
+        /// the network's own working memory at its fixed input size, measured on a 48 GB Mac
+        /// (Mac checks 4 to 6 of PR #157: Fast peaked at 13 to 19 GB, Hair Detail at 30 to 46 GB).
+        public var memoryNeededGB: Int {
+            switch self {
+            case .fast: return 18
+            case .hairDetail: return 40
+            }
+        }
+
+        /// A note for Settings when this Mac has less memory than a run takes, else nil. Rosh
+        /// (Nov 16, 2026): every Mac is offered both models, with a warning where memory is short.
+        public func memoryWarning(physicalMemory: UInt64 = ProcessInfo.processInfo.physicalMemory) -> String? {
+            let installedGB = Int((Double(physicalMemory) / 1_073_741_824).rounded())
+            guard installedGB < memoryNeededGB else { return nil }
+            return "Needs about \(memoryNeededGB) GB of memory while it runs; this Mac has \(installedGB) GB, "
+                + "so it may run slowly, and if memory runs out it stops with a message."
+        }
+
         /// About how much is downloaded, for the buttons.
         public var downloadSize: String {
             switch self {
