@@ -97,6 +97,10 @@ final class AgentServer: ObservableObject {
 
     /// Closes the socket and every connection (turning access off, quitting). A chat app that
     /// docked Atelier's window is told first when Atelier quits.
+    // The socket's accept thread holds its server until `stop()`, so an agent server let go of
+    // closes it here (AT-076 M4).
+    deinit { server?.stop() }
+
     func stop(quitting: Bool = false) {
         if quitting { dock.quitting() }
         server?.stop()

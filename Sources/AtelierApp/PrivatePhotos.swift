@@ -14,7 +14,7 @@ final class PrivatePhotos {
     private var lastActivity = Date()
     private var activityMonitor: Any?
     private var idleTimer: Timer?
-    private var observers: [(NotificationCenter, NSObjectProtocol)] = []
+    private let observers = NotificationObservers()
     private var asking = false
 
     /// Minutes without using Atelier before private photos hide again; 0 never.
@@ -24,6 +24,13 @@ final class PrivatePhotos {
 
     nonisolated static var hideAfterMinutes: Int {
         UserDefaults.standard.object(forKey: hideAfterKey) as? Int ?? defaultHideAfter
+    }
+
+    // The repeating timer and the event monitor outlive their owner unless taken down
+    // (AT-076 M4); the observers go with `observers`.
+    deinit {
+        if let activityMonitor { NSEvent.removeMonitor(activityMonitor) }
+        idleTimer?.invalidate()
     }
 
     init(model: LibraryModel) {
@@ -141,13 +148,12 @@ final class PrivatePhotos {
     }
 
     private func observe(_ center: NotificationCenter, _ name: Notification.Name, _ action: @escaping @MainActor (PrivatePhotos) -> Void) {
-        let token = center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+        observers.observe(name, center: center) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
                 action(self)
             }
         }
-        observers.append((center, token))
     }
 
     private func stopWatching() {
@@ -155,8 +161,7 @@ final class PrivatePhotos {
         activityMonitor = nil
         idleTimer?.invalidate()
         idleTimer = nil
-        for (center, token) in observers { center.removeObserver(token) }
-        observers = []
+        observers.removeAll()
     }
 
     private func checkIdle() {
