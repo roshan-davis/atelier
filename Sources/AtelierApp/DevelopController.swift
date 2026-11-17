@@ -157,11 +157,9 @@ final class DevelopController: ObservableObject {
             pickerMessage = nil
             targetDrag = nil
             guard picker != nil else { return }
-            isCropping = false
-            isAIOpen = false
-            isMasking = false
-            isGuiding = false
-            isRemoving = false
+            // A picker works on the plain photo: tools close, but Lens Blur stays open (its focus
+            // picker is one of them), leaving only its Refine.
+            if isLensBlurring { switchTool(to: .lensBlur(refining: false)) } else { switchTool(to: nil) }
             showingBefore = false
             compareMode = .off
         }
@@ -177,11 +175,9 @@ final class DevelopController: ObservableObject {
     /// Save cancels: the photo goes back to how it was when the mode opened, history included
     /// (Rosh, Nov 16, 2026: "I am cancelling that, right?"). Opening another photo leaves it.
     /// See DevelopController+LensBlurMode.
-    @Published var isLensBlurring = false {
-        didSet {
-            guard isLensBlurring != oldValue else { return }
-            lensBlurModeChanged()
-        }
+    var isLensBlurring: Bool {
+        get { tool?.isLensBlur ?? false }
+        set { setTool(.lensBlur(refining: false), open: newValue) }
     }
     /// Save is rendering the Lens Blur photo.
     @Published var lensBlurSaving = false
@@ -328,22 +324,60 @@ final class DevelopController: ObservableObject {
 
     /// The crop tool is open: the photo renders whole and turned, but not straightened, under the
     /// crop frame; the crop view turns it by the angle so straightening is instant.
-    @Published var isCropping = false {
-        didSet {
-            guard isCropping != oldValue else { return }
-            if isCropping {
-                isLensBlurring = false
-                showingBefore = false
-                isAIOpen = false
-                isMasking = false
-                isGuiding = false
-                isRemoving = false
-                picker = nil
-            } else {
-                showCropOfWholeImage()
-            }
-            scheduleRender()
+    /// The tool open over the photo, if any (AT-076 D1). Changed only through `switchTool(to:)`.
+    @Published private(set) var tool: DevelopTool?
+
+    var isCropping: Bool {
+        get { tool == .crop }
+        set { setTool(.crop, open: newValue) }
+    }
+
+    /// Opens `kind`, or closes it if it is the one open (closing Lens Blur closes its Refine too).
+    private func setTool(_ kind: DevelopTool, open: Bool) {
+        if open {
+            switchTool(to: kind)
+        } else if tool?.root == kind.root {
+            switchTool(to: nil)
         }
+    }
+
+    /// Moves from the open tool to `new`: what closing the old one and opening the new one take,
+    /// in one place, so a new tool is one more case here rather than an edit to every other tool.
+    func switchTool(to new: DevelopTool?) {
+        let old = tool
+        guard new != old else { return }
+        tool = new
+        // Closing.
+        if old == .crop { showCropOfWholeImage() }
+        if old?.masks == true, new?.masks != true {
+            maskTool = nil
+            if maskScope == .lensBlur {
+                // Leaving Lens Blur's Refine: Masking opens on its own masks next time.
+                maskScope = .look
+                selectedMaskID = nil
+                selectedComponentID = nil
+            }
+        }
+        if old == .remove {
+            selectedSpotID = nil
+            visualizesSpots = false
+        }
+        if (old == .guidedUpright) != (new == .guidedUpright) { selectedGuide = nil }
+        // The AI tool works on the plain photo, without the clipping overlay.
+        if (old == .ai) != (new == .ai), showShadowClipping || showHighlightClipping { clippingOverlayChanged() }
+        // Lens Blur opening or closing (closing puts the photo back as it was before Lens Blur,
+        // so before another tool opens on it).
+        if (old?.isLensBlur ?? false) != (new?.isLensBlur ?? false) { lensBlurModeChanged() }
+        // Opening.
+        if let new, new.root != old?.root || (new.masks && old?.masks != true) {
+            picker = nil
+            showingBefore = false
+            // The crop tool keeps a compare view as it was.
+            if new != .crop { compareMode = .off }
+        }
+        if new?.masks == true, old?.masks != true, selectedMaskID == nil { selectedMaskID = editedMasks.last?.id }
+        let redraws: Set<DevelopTool> = [.crop, .masking, .guidedUpright, .lensBlur(refining: true)]
+        if old.map(redraws.contains) == true || new.map(redraws.contains) == true { scheduleRender() }
     }
 
     private static let cropContext = CIContext()
@@ -367,90 +401,40 @@ final class DevelopController: ObservableObject {
     }
 
     /// The AI tool is open: the photo shows under the AI brush and the AI panel replaces Crop.
-    @Published var isAIOpen = false {
-        didSet {
-            guard isAIOpen != oldValue else { return }
-            // The AI tool works on the plain photo, without the clipping overlay.
-            if showShadowClipping || showHighlightClipping { clippingOverlayChanged() }
-            guard isAIOpen else { return }
-            isLensBlurring = false
-            isCropping = false
-            isMasking = false
-            isGuiding = false
-            isRemoving = false
-            picker = nil
-            showingBefore = false
-            compareMode = .off
+    var isAIOpen: Bool {
+        get { tool == .ai }
+        set { setTool(.ai, open: newValue) }
+    }
+
+    /// The Masking tool is open: the photo shows under the mask pins and the Masks panel. Inside
+    /// Lens Blur this is its Refine (`maskScope == .lensBlur`), and Lens Blur stays open.
+    var isMasking: Bool {
+        get { tool == .masking || tool == .lensBlur(refining: true) }
+        set {
+            if newValue {
+                switchTool(to: isLensBlurring && maskScope == .lensBlur ? .lensBlur(refining: true) : .masking)
+            } else if tool == .lensBlur(refining: true) {
+                switchTool(to: .lensBlur(refining: false))
+            } else if tool == .masking {
+                switchTool(to: nil)
+            }
         }
     }
 
-    /// The Masking tool is open: the photo shows under the mask pins and the Masks panel.
-    @Published var isMasking = false {
-        didSet {
-            guard isMasking != oldValue else { return }
-            if isMasking {
-                // Lens Blur's own Refine opens inside its mode; Masking leaves it.
-                if maskScope == .look { isLensBlurring = false }
-                isCropping = false
-                isAIOpen = false
-                isGuiding = false
-                isRemoving = false
-                picker = nil
-                showingBefore = false
-                compareMode = .off
-                if selectedMaskID == nil { selectedMaskID = editedMasks.last?.id }
-            } else {
-                maskTool = nil
-                if maskScope == .lensBlur {
-                    // Leaving Lens Blur's Refine: Masking opens on its own masks next time.
-                    maskScope = .look
-                    selectedMaskID = nil
-                    selectedComponentID = nil
-                }
-            }
-            scheduleRender()
-        }
-    }
     /// Guided Upright is open: the guides are drawn on the photo as edited, crop included.
-    @Published var isGuiding = false {
-        didSet {
-            guard isGuiding != oldValue else { return }
-            if isGuiding {
-                isLensBlurring = false
-                picker = nil
-                isCropping = false
-                isAIOpen = false
-                isMasking = false
-                isRemoving = false
-                showingBefore = false
-                compareMode = .off
-            }
-            selectedGuide = nil
-            scheduleRender()
-        }
+    var isGuiding: Bool {
+        get { tool == .guidedUpright }
+        set { setTool(.guidedUpright, open: newValue) }
     }
 
     /// The Remove tool is open (Q, AT-066): Content-Aware, Heal and Clone spots are drawn and
     /// edited on the photo, and the Remove panel shows under the tool strip. See
     /// DevelopController+Spots.
-    @Published var isRemoving = false {
-        didSet {
-            guard isRemoving != oldValue else { return }
-            if isRemoving {
-                isLensBlurring = false
-                isCropping = false
-                isAIOpen = false
-                isMasking = false
-                isGuiding = false
-                picker = nil
-                showingBefore = false
-                compareMode = .off
-            } else {
-                selectedSpotID = nil
-                visualizesSpots = false
-            }
-        }
+    var isRemoving: Bool {
+        get { tool == .remove }
+        set { setTool(.remove, open: newValue) }
     }
+
     /// The spot selected on the photo (its outlines drawn solid; Delete removes it).
     @Published var selectedSpotID: UUID?
     /// Generative AI (AT-066 step 4): new Content-Aware spots are filled by the Remove Object
