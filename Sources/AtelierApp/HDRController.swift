@@ -59,6 +59,10 @@ final class HDRController: ObservableObject {
     /// Save, project and output IDs. Never written to disk; the catalog checks results against it.
     private var request: ProcessorDocument?
     private var openTask: Task<Void, Never>?
+    /// The original's SHA-256, found in the background while the photo already shows (AT-076
+    /// P4: on a NAS the whole file is read for it). Save waits for it: the project is made only
+    /// from the exact source that was opened.
+    private var sourceHash: Task<String, Error>?
     private var saveTask: Task<Void, Never>?
     private var renderTask: Task<Void, Never>?
     private var renderRevision = 0
@@ -138,15 +142,22 @@ final class HDRController: ObservableObject {
 
     /// A new session reads the original; the project and its source copy are made on first Save.
     private func openOriginal(_ id: Int64, catalog: Catalog) async throws {
-        let loaded = try await Task.detached { () -> (ProcessorDocument, HDRImage, CGImage, CGSize) in
+        let source = try await Task.detached { () -> URL in
             guard let source = try catalog.fileURL(for: id) else {
                 throw ExportError("The original is offline. Reconnect its drive to open it in HDR.")
             }
-            let hash = try FileHasher.sha256(of: source)
-            try Task.checkCancellation()
+            return source
+        }.value
+        try Task.checkCancellation()
+        guard assetID == id else { return }
+        // The hash reads the whole file alongside the decode; the photo doesn't wait for it.
+        let hash = Task.detached(priority: .utility) { try FileHasher.sha256(of: source) }
+        sourceHash = hash
+        let loaded = try await Task.detached { () -> (ProcessorDocument, HDRImage, CGImage, CGSize) in
             let stem = source.deletingPathExtension().lastPathComponent + "-HDR-" + UUID().uuidString.prefix(8)
             let projectURL = DerivedFiles.folder(for: source).appendingPathComponent(stem).appendingPathExtension("atelierhdr")
-            let request = ProcessorDocument(sourceAssetID: id, sourceURL: source, sourceHash: hash, projectURL: projectURL)
+            // The hash is filled in once found (`save` waits for it).
+            let request = ProcessorDocument(sourceAssetID: id, sourceURL: source, sourceHash: "", projectURL: projectURL)
             let io = HDRImageIO(), image = try io.decode(source, longEdge: 1600)
             try Task.checkCancellation()
             return (request, image, try io.preview(image), try HDRImageIO.dimensions(source))
@@ -221,6 +232,7 @@ final class HDRController: ObservableObject {
         openTask?.cancel(); openTask = nil
         renderTask?.cancel(); renderTask = nil
         renderRevision += 1
+        sourceHash?.cancel(); sourceHash = nil
         assetID = nil; resultAssetID = nil; request = nil; store = nil; sourceURL = nil
         input = nil; detailInput = nil; detailLoading = false; previewCache.reset(); inputToken += 1
         photoFeed.sink.invalidate()
@@ -481,10 +493,19 @@ final class HDRController: ObservableObject {
             destination = url.pathExtension == "atelierhdr" ? url : url.appendingPathExtension("atelierhdr")
         }
         let snapshot = settings, store = self.store, catalog = model.catalog, opened = assetID
-        busy = true; model.status = "Saving HDR: rendering the full-resolution TIFF…"
+        let pendingHash = request.sourceHash.isEmpty ? sourceHash : nil
+        busy = true
+        model.status = pendingHash == nil ? "Saving HDR: rendering the full-resolution TIFF…"
+            : "Saving HDR: checking the original, then rendering the full-resolution TIFF…"
         saveTask = Task {
             var newlyCreated: HDRProjectStore?
+            var request = request
             do {
+                if let pendingHash {
+                    request.sourceHash = try await pendingHash.value
+                    try Task.checkCancellation()
+                    if assetID == opened, self.request?.jobID == request.jobID { self.request?.sourceHash = request.sourceHash }
+                }
                 let active: HDRProjectStore
                 if let destination {
                     if let store { active = try await store.fork(to: destination) }
