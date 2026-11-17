@@ -34,7 +34,7 @@ final class NoteSaveErrorTests: XCTestCase {
         let saved = try XCTUnwrap(try catalog.notes(for: id).first)
 
         // The catalog refuses every change to notes (as a full disk or a locked file would).
-        try catalog.writer.write { db in
+        try await catalog.writer.write { db in
             try db.execute(sql: "CREATE TRIGGER refuseNoteUpdate BEFORE UPDATE ON note BEGIN SELECT RAISE(ABORT, 'refused'); END")
             try db.execute(sql: "CREATE TRIGGER refuseNoteDelete BEFORE DELETE ON note BEGIN SELECT RAISE(ABORT, 'refused'); END")
         }
@@ -51,7 +51,7 @@ final class NoteSaveErrorTests: XCTestCase {
         XCTAssertNil(notes.recentlyDeleted, "a delete that didn't happen offers no Undo")
         XCTAssertEqual(try catalog.notes(for: id).count, 1)
 
-        try catalog.writer.write { db in
+        try await catalog.writer.write { db in
             try db.execute(sql: "DROP TRIGGER refuseNoteUpdate")
             try db.execute(sql: "DROP TRIGGER refuseNoteDelete")
         }
