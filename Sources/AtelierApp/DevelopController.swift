@@ -746,7 +746,7 @@ final class DevelopController: ObservableObject {
     private static let prefetchQueue = DispatchQueue(label: "atelier.develop.prefetch", qos: .utility)
     /// How long the photo must go without a render (an edit, a drag) before its neighbours are
     /// decoded, so they never share the CPU and GPU with your edits.
-    private static let prefetchDelay: TimeInterval = 0.8
+    nonisolated private static let prefetchDelay: TimeInterval = 0.8
     /// When a render was last asked for, readable from the preload queue.
     private let lastRenderRequest = LockedValue(Date.distantPast)
     /// For the timing log (`DevelopTimingLog`): when the open photo was opened, how many RAW
@@ -2515,7 +2515,7 @@ final class DevelopController: ObservableObject {
     /// the drain applies whichever request it takes with the first caller's closure.
     private nonisolated static func measure(_ request: DevelopMeasureRequest, job: LatestJob<DevelopMeasureRequest>,
                                             on queue: DispatchQueue, sink: HistogramSink, openGeneration: LockedValue<Int>,
-                                            apply: @escaping (DevelopMeasureRequest, Histogram?, ColorScope?, Int) -> Void) {
+                                            apply: @escaping @Sendable (DevelopMeasureRequest, Histogram?, ColorScope?, Int) -> Void) {
         // Not for an earlier open, and never in place of a waiting request that outranks it (the
         // render's count must not be replaced by the preview that arrived late).
         guard job.submit(request, if: { new, pending in

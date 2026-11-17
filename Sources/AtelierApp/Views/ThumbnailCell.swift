@@ -128,7 +128,7 @@ struct ThumbnailBadges: View {
     }
 
     /// Below this height or width (the Filmstrip dragged to its smallest) only the essentials show.
-    static let compactSize: CGFloat = 64
+    nonisolated static let compactSize: CGFloat = 64
 
     private var density: Density { Density(size: size) }
 

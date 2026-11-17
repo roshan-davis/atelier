@@ -64,6 +64,7 @@ struct IconSegmentedControl<Value: Hashable>: NSViewRepresentable {
 }
 
 /// Kept outside the generic control so its action method is a plain Objective-C selector.
+@MainActor
 final class IconSegmentedCoordinator: NSObject {
     var select: ((Int) -> Void)?
 

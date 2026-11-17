@@ -198,7 +198,8 @@ final class CullModel: ObservableObject, Identifiable {
                 for start in stride(from: 0, to: pairs.count, by: batch) {
                     if Task.isCancelled { return }
                     let end = min(start + batch, pairs.count)
-                    let slice = UnsafeMutableBufferPointer<Date?>.allocate(capacity: end - start)
+                    // Each photo's time goes to its own slot.
+                    nonisolated(unsafe) let slice = UnsafeMutableBufferPointer<Date?>.allocate(capacity: end - start)
                     slice.initialize(repeating: nil)
                     DispatchQueue.concurrentPerform(iterations: end - start) { offset in
                         slice[offset] = MetadataReader.read(pairs[start + offset].primary).captureTime
@@ -277,7 +278,8 @@ final class CullModel: ObservableObject, Identifiable {
                 await MainActor.run { [weak self] in self?.analysisFinished([:]) }
                 return
             }
-            let results = UnsafeMutableBufferPointer<CullComparison>.allocate(capacity: signals.count - 1)
+            // Each pair's comparison goes to its own slot.
+            nonisolated(unsafe) let results = UnsafeMutableBufferPointer<CullComparison>.allocate(capacity: signals.count - 1)
             results.initialize(repeating: CullComparison())
             DispatchQueue.concurrentPerform(iterations: signals.count - 1) { index in
                 guard let a = signals[index], let b = signals[index + 1] else { return }

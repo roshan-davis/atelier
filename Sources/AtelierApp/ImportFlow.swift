@@ -95,7 +95,7 @@ final class ImportFlow: ObservableObject {
                 let bytes = files.reduce(Int64(0)) {
                     $0 + Int64((try? $1.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
                 }
-                await MainActor.run {
+                await MainActor.run { [weak self] in
                     guard let self, let index = self.sources.firstIndex(where: { $0.url == url }) else { return }
                     self.sources[index].photos = photos
                     self.sources[index].fileCount = files.count

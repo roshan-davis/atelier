@@ -1071,7 +1071,7 @@ private struct ShortcutGroup: View {
     }
 }
 
-private func chooseFolder(message: String, start: String) -> String? {
+@MainActor private func chooseFolder(message: String, start: String) -> String? {
     let panel = NSOpenPanel()
     panel.canChooseDirectories = true
     panel.canChooseFiles = false

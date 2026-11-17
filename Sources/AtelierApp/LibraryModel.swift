@@ -799,7 +799,7 @@ final class LibraryModel: ObservableObject {
     /// entry is selected when every file is cataloged, and thumbnails are made after that.
     /// A `stager` hands over what it copied ahead while the user culled.
     func runImport(sources: [URL], options: ImportOptions, stager: ImportStager? = nil,
-                   then: ((ImportProgress) -> Void)? = nil) {
+                   then: (@MainActor @Sendable (ImportProgress) -> Void)? = nil) {
         let importer = Importer(catalog: catalog, previews: nil, scheduler: previewScheduler)
         let copying: Bool
         if case .copy = options.mode { copying = true } else { copying = false }

@@ -22,7 +22,7 @@ struct CullList: View {
     /// Each row's frame in the list's content.
     @State private var rowFrames: [Int: CGRect] = [:]
 
-    private static let space = "cullList"
+    nonisolated private static let space = "cullList"
     private static let padding = 16.0
 
     /// The width inside the list's padding, which every row and card fits.
