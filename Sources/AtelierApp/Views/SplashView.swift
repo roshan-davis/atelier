@@ -50,8 +50,11 @@ struct SplashImage {
         let scale = 240 / max(input.extent.width, input.extent.height)
         let small = input.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
         let blurred = small.clampedToExtent().applyingGaussianBlur(sigma: 10).cropped(to: small.extent)
-        return CIContext().createCGImage(blurred, from: small.extent)
+        return blurContext.createCGImage(blurred, from: small.extent)
     }
+
+    /// Made once and reused, as Apple advises for Core Image contexts (AT-076 M2).
+    private static let blurContext = CIContext()
 }
 
 /// The splash: the photo on top at 16:10 with nothing drawn over it, and a dark strip below

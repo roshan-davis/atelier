@@ -1415,7 +1415,7 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 
 ## AT-077 — Lens Blur and Develop let go of memory (no more 16 GB)
 
-**Status:** Built, awaiting Mac check and Rosh's acceptance. **Owner:** Claude (project thread "Stop Lens Blur hogging memory"). **Branch:** `claude/project-thread-fiqvpk`. **Dependencies:** AT-076 M1 (this is its first part).
+**Status:** Merged in PR #157 (773b113, Nov 16, 2026) on Rosh's standing instruction after Mac checks 2-7; Rosh's own acceptance in the app pending. M2 (Core Image contexts made per call) follows in its own small PR. **Owner:** Claude (project thread "Stop Lens Blur hogging memory"). **Branch:** `claude/project-thread-fiqvpk`. **Dependencies:** AT-076 M1 (this is its first part).
 
 **Why (Rosh, Nov 16, 2026):** after some Lens Blur work Atelier used 16 GB and the 48 GB Mac froze and had to restart. "Holding back too long and not releasing is a memory leak." "Our app has to perform on any M processor with nice performance without hogging memory."
 

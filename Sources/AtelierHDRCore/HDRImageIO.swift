@@ -5,9 +5,13 @@ import ImageIO
 /// Apple decoder and profiled TIFF boundary, kept outside the pure pixel engine.
 public final class HDRImageIO {
     public static let linear = CGColorSpace(name: CGColorSpace.extendedLinearSRGB)!
-    private let context = CIContext(options: [.workingColorSpace: linear,
-                                              .workingFormat: CIFormat.RGBAf,
-                                              .cacheIntermediates: false])
+    /// One context for every decoder (AT-076 M2): Apple's guidance is to make a Core Image
+    /// context once and reuse it (it is thread-safe); each `HDRImageIO()` (one per HDR decode)
+    /// used to make its own, with its own Metal resources.
+    private static let sharedContext = CIContext(options: [.workingColorSpace: linear,
+                                                           .workingFormat: CIFormat.RGBAf,
+                                                           .cacheIntermediates: false])
+    private var context: CIContext { Self.sharedContext }
     public init() {}
 
     public static func dimensions(_ url: URL) throws -> CGSize {
