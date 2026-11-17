@@ -178,6 +178,9 @@ final class LibraryModel: ObservableObject {
     /// Photos the open export dialog will export, in grid order.
     @Published private(set) var exportIDs: [Int64] = []
     @Published var exportProgress: ImportStatus?
+    /// An original being downloaded from a cloud drive folder (AT-079b), and that download.
+    @Published var downloadProgress: ImportStatus?
+    var cloudDownload: (assetID: Int64, download: CloudDownload)?
     /// The Match Look dialog, while open, and Match each photo's progress in the status bar.
     @Published var matchLook: MatchLookModel?
     @Published var matchProgress: ImportStatus?
@@ -274,6 +277,9 @@ final class LibraryModel: ObservableObject {
         installInputMonitor()
         observeMounts()
         connectLocationsAtLaunch()
+        develop.downloadOriginal = { [weak self] id, url in
+            await self?.downloadOriginal(id, at: url) ?? .cancelled
+        }
         // Settings > Import > "Show RAW+JPEG pairs as one photo" (only that setting, not every
         // defaults write).
         observers.observe(FilePairs.groupingChanged) { [weak self] _ in

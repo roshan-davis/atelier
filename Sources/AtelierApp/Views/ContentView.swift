@@ -303,8 +303,11 @@ private struct StatusBar: View {
             if let progress = model.agentProgress {
                 ProgressItem(progress: progress) { model.agentJob?.cancel() }
             }
+            if let progress = model.downloadProgress {
+                ProgressItem(progress: progress) { model.cancelCloudDownload() }
+            }
             if model.importProgress == nil, model.exportProgress == nil, model.matchProgress == nil,
-               model.agentProgress == nil,
+               model.agentProgress == nil, model.downloadProgress == nil,
                let status = model.status {
                 Text(status).lineLimit(1)
                 if !model.problems.isEmpty {

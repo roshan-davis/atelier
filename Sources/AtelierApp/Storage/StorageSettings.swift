@@ -201,7 +201,7 @@ struct StorageLocationRow: View {
             VStack(alignment: .trailing, spacing: 2) {
                 HStack(spacing: 5) {
                     Circle().fill(StorageIcons.dotColor(for: info.status)).frame(width: 7, height: 7)
-                    Text(info.status.word).font(.callout)
+                    Text(info.statusWord).font(.callout)
                 }
                 .fixedSize()
                 Text(info.photoCount == 1 ? "1 photo" : "\(info.photoCount.formatted()) photos")

@@ -680,6 +680,9 @@ final class DevelopController: ObservableObject {
 
     let catalog: Catalog
     private let previews: PreviewCache
+    /// Brings an original in a cloud drive folder to this Mac before it decodes (AT-079b), with the
+    /// status bar's progress and Cancel; set by `LibraryModel`.
+    var downloadOriginal: (@MainActor (Int64, URL) async -> CloudOriginalResult)?
     private var session: DevelopSession?
     private var rendering = false
     /// Proxy renders, latest-wins; see `submitRender`.
@@ -1010,10 +1013,33 @@ final class DevelopController: ObservableObject {
                 }
             }
         }
+        // In a cloud drive folder and not downloaded yet (AT-079b): the preview stays up and stays
+        // browsable while the provider downloads it, then the proxy decodes as usual. Reading the
+        // placeholder directly would hold the decode queue for the whole download.
+        var begin = start
+        if let downloadOriginal, CloudFiles.needsDownload(url) {
+            begin = { [weak self] in
+                guard openGeneration.value == generation else { return }
+                Task { @MainActor in
+                    let result = await downloadOriginal(assetID, url)
+                    guard let self, self.assetID == assetID, openGeneration.value == generation else { return }
+                    switch result {
+                    case .ready:
+                        start()
+                    case .cancelled:
+                        self.isLoading = false
+                        self.errorMessage = "The original is still in the cloud. Open the photo again to download it."
+                    case .failed(let message):
+                        self.isLoading = false
+                        self.errorMessage = message
+                    }
+                }
+            }
+        }
         if rushing {
-            DispatchQueue.main.asyncAfter(deadline: .now() + Self.openRest, execute: start)
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.openRest, execute: begin)
         } else {
-            start()
+            begin()
         }
     }
 
@@ -2474,7 +2500,9 @@ final class DevelopController: ObservableObject {
         let decodesRunning = self.decodesRunning
         let lastRenderRequest = self.lastRenderRequest
         for id in neighbours where prefetched[id] == nil && !prefetching.contains(id) {
-            guard let url = try? catalog.fileURL(for: id) else { continue }
+            // Not a placeholder in a cloud drive folder (AT-079b): reading it would download it
+            // unasked and hold a decode slot for the whole transfer.
+            guard let url = try? catalog.fileURL(for: id), !CloudFiles.needsDownload(url) else { continue }
             let settings = (try? catalog.developSettings(for: id)) ?? .neutral
             let sourceVersion = sourceVersions[id, default: 0]
             prefetching.insert(id)

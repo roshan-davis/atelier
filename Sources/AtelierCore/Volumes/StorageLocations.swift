@@ -20,6 +20,17 @@ public enum StorageLocationKind: String, Codable, Sendable, CaseIterable, Databa
     case objectStorage
 }
 
+extension StorageLocationKind {
+    /// The kind a volume's own location gets: drive, network share or cloud drive folder.
+    public init(_ volume: VolumeKind) {
+        switch volume {
+        case .local: self = .drive
+        case .nas: self = .networkShare
+        case .cloud: self = .cloudFolder
+        }
+    }
+}
+
 public struct StorageLocation: Codable, Identifiable, Hashable, Sendable, FetchableRecord, MutablePersistableRecord {
     public static let databaseTableName = "storageLocation"
 
@@ -95,6 +106,12 @@ public struct StorageLocationInfo: Identifiable, Hashable, Sendable {
     public var status: StorageLocationStatus {
         guard let volume else { return .notConnectedYet }
         return volume.isOnline ? .connected : .offline
+    }
+
+    /// The word beside the status dot. A cloud drive folder whose provider folder is gone (the app
+    /// signed out or removed) is "Signed Out" rather than "Offline".
+    public var statusWord: String {
+        location.kind == .cloudFolder && status == .offline ? "Signed Out" : status.word
     }
 
     /// The grey second line: "Network share · megham.local/Photos", "Drive · Photos SSD/Portfolio".
@@ -183,7 +200,7 @@ extension Catalog {
         if volume.identityKey.hasPrefix("net:") {
             address = ServerAddress.normalized(String(volume.identityKey.dropFirst(4)))
         }
-        return StorageLocation(name: volume.name, kind: volume.kind == .nas ? .networkShare : .drive,
+        return StorageLocation(name: volume.name, kind: StorageLocationKind(volume.kind),
                                volumeId: volume.id, serverAddress: address)
     }
 
@@ -244,7 +261,7 @@ extension Catalog {
     public func addStorageLocation(folder: URL, on mounted: MountedVolume, name: String? = nil,
                                    kind: StorageLocationKind? = nil, connectAtLaunch: Bool = false) throws -> StorageLocation {
         let root = VolumeIdentity.relativePath(of: folder, inVolumeAt: mounted.rootURL)
-        let resolvedKind = kind ?? (mounted.kind == .nas ? .networkShare : .drive)
+        let resolvedKind = kind ?? StorageLocationKind(mounted.kind)
         return try writer.write { db in
             var volume = try Volume.filter(Column("identityKey") == mounted.identityKey).fetchOne(db)
                 ?? Volume(id: nil, identityKey: mounted.identityKey, name: mounted.name, kind: mounted.kind,
