@@ -219,13 +219,16 @@ final class SmartPreviewSpikeTests: XCTestCase {
         }
 
         /// The RAW's linear Rec. 2020 pixels, small, without tone curve or boosts.
-        let linear = CGColorSpace(name: CGColorSpace.linearITUR_2020)!
+        // Core Image's working space: what linearSpaceFilter sees (round 8 fitted in Rec. 2020 and
+        // red stayed off).
+        let linear = CGColorSpace(name: CGColorSpace.extendedLinearSRGB)!
         func linearPixels(_ url: URL, temperature: Double, tint: Double) -> [Float]? {
             guard let filter = CIRAWFilter(imageURL: url) else { return nil }
             let native = max(filter.nativeSize.width, filter.nativeSize.height)
             filter.scaleFactor = Float(384 / native)
             filter.boostAmount = 0
             filter.boostShadowAmount = 0
+            filter.isGamutMappingEnabled = false
             if filter.isLocalToneMapSupported { filter.localToneMapAmount = 0 }
             filter.neutralTemperature = Float(temperature)
             filter.neutralTint = Float(tint)
@@ -271,13 +274,21 @@ final class SmartPreviewSpikeTests: XCTestCase {
             return product
         }
 
+        func cameraModel(_ url: URL) -> String {
+            let properties = CGImageSourceCreateWithURL(url as CFURL, nil).flatMap { CGImageSourceCopyPropertiesAtIndex($0, 0, nil) as? [CFString: Any] }
+            return (properties?[kCGImagePropertyTIFFDictionary] as? [CFString: Any])?[kCGImagePropertyTIFFModel] as? String ?? "?"
+        }
+        func modelReference(_ url: URL) -> URL {
+            let model = cameraModel(url)
+            return raws.first { cameraModel($0) == model } ?? url
+        }
+        for raw in raws { print("SMARTPREVIEW camera \(raw.lastPathComponent): \(cameraModel(raw))") }
+
         for raw in raws {
             let base = raw.deletingPathExtension().lastPathComponent
-            for (name, encoding, balanced) in [("lossless", SmartPreviewDNG.Encoding.lossless16, false),
-                                               ("lossy90", .lossyJPEG(quality: 0.9), false),
-                                               ("lossy90b", .lossyJPEG(quality: 0.9), true),
-                                               ("lossy75b", .lossyJPEG(quality: 0.75), true),
-                                               ("lossy90b+matrix", .lossyJPEG(quality: 0.9), true)] {
+            for (name, encoding, balanced) in [("lossy90b", SmartPreviewDNG.Encoding.lossyJPEG(quality: 0.9), true),
+                                               ("lossy90b+matrix", .lossyJPEG(quality: 0.9), true),
+                                               ("lossy90b+model", .lossyJPEG(quality: 0.9), true)] {
                 let dng = out.appendingPathComponent("\(base)-\(name).dng")
                 let started = Date()
                 let shot = try SmartPreviewDNG.make(from: raw, to: dng, encoding: encoding, balancedCamera: balanced, context: context)
@@ -296,9 +307,22 @@ final class SmartPreviewSpikeTests: XCTestCase {
                                                              ("tint+30", shot.temperature, shot.tint + 30, 0),
                                                              ("+1 EV", shot.temperature, shot.tint, 1), ("-1 EV", shot.temperature, shot.tint, -1)] {
                     var matrix: [Double]?
-                    if name.hasSuffix("+matrix"), temperature != shot.temperature || tint != shot.tint {
+                    if name.contains("+"), temperature != shot.temperature || tint != shot.tint {
                         let started = Date()
-                        matrix = whiteMatrix(raw, from: shot, to: temperature, tint)
+                        if name.hasSuffix("+model") {
+                            // Per camera model: both matrices from the model's first photo, against a
+                            // fixed 5000 K reference, so no RAW is needed when the original is offline.
+                            let first = modelReference(raw)
+                            let reference = (temperature: 5000.0, tint: 0.0)
+                            if let toTarget = whiteMatrix(first, from: reference, to: temperature, tint),
+                               let toShot = whiteMatrix(first, from: reference, to: shot.temperature, shot.tint),
+                               let back = inverse3(toShot) {
+                                matrix = multiply3(toTarget, back)
+                            }
+                            print("SMARTPREVIEW \(base) \(name) \(label): from \(first.lastPathComponent)")
+                        } else {
+                            matrix = whiteMatrix(raw, from: shot, to: temperature, tint)
+                        }
                         print("SMARTPREVIEW \(base) \(name) \(label): matrix \(matrix?.map { String(format: "%.3f", $0) }.joined(separator: " ") ?? "nil") in \(Int(Date().timeIntervalSince(started) * 1000)) ms")
                     }
                     guard let original = render(raw, temperature: temperature, tint: tint, exposure: exposure, edge: 2560),
@@ -321,4 +345,32 @@ final class SmartPreviewSpikeTests: XCTestCase {
             }
         }
     }
+}
+
+/// 3×3 row-major helpers, written out so the type checker finishes.
+private func multiply3(_ a: [Double], _ b: [Double]) -> [Double] {
+    var out = [Double](repeating: 0, count: 9)
+    for row in 0..<3 {
+        for column in 0..<3 {
+            var sum = 0.0
+            for j in 0..<3 { sum += a[row * 3 + j] * b[j * 3 + column] }
+            out[row * 3 + column] = sum
+        }
+    }
+    return out
+}
+
+private func inverse3(_ m: [Double]) -> [Double]? {
+    let c00: Double = m[4] * m[8] - m[5] * m[7]
+    let c01: Double = m[2] * m[7] - m[1] * m[8]
+    let c02: Double = m[1] * m[5] - m[2] * m[4]
+    let c10: Double = m[5] * m[6] - m[3] * m[8]
+    let c11: Double = m[0] * m[8] - m[2] * m[6]
+    let c12: Double = m[2] * m[3] - m[0] * m[5]
+    let c20: Double = m[3] * m[7] - m[4] * m[6]
+    let c21: Double = m[1] * m[6] - m[0] * m[7]
+    let c22: Double = m[0] * m[4] - m[1] * m[3]
+    let det: Double = m[0] * c00 + m[1] * c10 + m[2] * c20
+    guard abs(det) > 1e-12 else { return nil }
+    return [c00, c01, c02, c10, c11, c12, c20, c21, c22].map { $0 / det }
 }
