@@ -99,7 +99,15 @@ final class HDRToneMapperSpeedTests: XCTestCase {
         guard let renderer = HDRPreviewRenderer.shared else {
             throw XCTSkip("The HDR preview kernel didn't build on this Mac.")
         }
-        let image = try sample(), io = HDRImageIO()
+        let image = try sample()
+        for settings in gpuSettingsToTry {
+            XCTAssertLessThanOrEqual(try worstGPUDifference(image, settings, renderer), 2, "\(settings)")
+        }
+    }
+
+    /// Every setting the CPU and GPU paths must agree on, each away from its default in at least
+    /// one case (AT-076 D4).
+    private var gpuSettingsToTry: [HDRSettings] {
         var regions = HDRSettings(); regions.shadows = 0.8; regions.highlights = -0.6
         var fusion = regions; fusion.method = .virtualExposureFusion; fusion.shadows = -0.5
         var blend = regions; blend.method = .fusion; blend.fusionSpacing = 1.5
@@ -107,15 +115,60 @@ final class HDRToneMapperSpeedTests: XCTestCase {
         var cool = blend; cool.temperature = -0.7; cool.saturation = 0.6
         var noBright = blend; noBright.fusionUsesBrighter = false
         var noDark = blend; noDark.fusionUsesDarker = false; noDark.fusionSpacing = 3
-        for settings in settingsToTry + [regions, fusion, blend, tinted, cool, noBright, noDark] {
-            let analysis = try HDRToneMapper.analyze(image, exposure: settings.exposure)
-            let source = try XCTUnwrap(renderer.source(image, analysis: analysis))
-            let frame = try XCTUnwrap(renderer.image(source, settings: settings))
-            let gpu = try bytes(try XCTUnwrap(renderer.cgImage(frame)))
-            let cpu = try bytes(try io.preview(try HDRToneMapper.render(image, settings: settings)))
-            XCTAssertEqual(gpu.count, cpu.count)
-            let worst = zip(gpu, cpu).map { abs(Int($0) - Int($1)) }.max() ?? 0
-            XCTAssertLessThanOrEqual(worst, 2, "\(settings)")
+        return settingsToTry + [regions, fusion, blend, tinted, cool, noBright, noDark]
+    }
+
+    /// The largest 8-bit difference between the GPU preview and the CPU render of `image`.
+    private func worstGPUDifference(_ image: HDRImage, _ settings: HDRSettings,
+                                    _ renderer: HDRPreviewRenderer) throws -> Int {
+        let analysis = try HDRToneMapper.analyze(image, exposure: settings.exposure)
+        let source = try XCTUnwrap(renderer.source(image, analysis: analysis))
+        let frame = try XCTUnwrap(renderer.image(source, settings: settings))
+        let gpu = try bytes(try XCTUnwrap(renderer.cgImage(frame)))
+        let cpu = try bytes(try HDRImageIO().preview(try HDRToneMapper.render(image, settings: settings)))
+        XCTAssertEqual(gpu.count, cpu.count)
+        return zip(gpu, cpu).map { abs(Int($0) - Int($1)) }.max() ?? 0
+    }
+
+    /// A setting added to `HDRSettings` must be tried on both paths: the GPU kernel repeats the
+    /// CPU tone mapper's arithmetic, so a new control the kernel doesn't follow would make the
+    /// preview and the saved file differ (AT-076 D4).
+    func testParityCasesTryEverySetting() throws {
+        let defaults = Dictionary(uniqueKeysWithValues: Mirror(reflecting: HDRSettings()).children.map {
+            ($0.label ?? "", String(describing: $0.value))
+        })
+        var tried = Set<String>()
+        for settings in gpuSettingsToTry {
+            for child in Mirror(reflecting: settings).children
+            where String(describing: child.value) != defaults[child.label ?? ""] {
+                tried.insert(child.label ?? "")
+            }
+        }
+        XCTAssertEqual(Set(defaults.keys).subtracting(tried), [],
+                       "add a case to gpuSettingsToTry for each new HDR setting")
+    }
+
+    /// The same comparison on real photos at the 1600 px proxy a slider drag shows. Opt-in:
+    /// `ATELIER_SAMPLE_RAWS=/folder/of/raws swift test --filter HDRToneMapperSpeedTests`.
+    func testGPUPreviewMatchesTheCPURendererOnRealPhotos() throws {
+        guard let folder = ProcessInfo.processInfo.environment["ATELIER_SAMPLE_RAWS"] else {
+            throw XCTSkip("Set ATELIER_SAMPLE_RAWS to compare on real photos.")
+        }
+        guard let renderer = HDRPreviewRenderer.shared else {
+            throw XCTSkip("The HDR preview kernel didn't build on this Mac.")
+        }
+        let raws = try FileManager.default.contentsOfDirectory(at: URL(fileURLWithPath: folder), includingPropertiesForKeys: nil)
+            .filter { ["nef", "dng", "cr3", "arw", "raf"].contains($0.pathExtension.lowercased()) }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+            .prefix(3)
+        XCTAssertFalse(raws.isEmpty, "no RAWs in \(folder)")
+        for url in raws {
+            let image = try HDRImageIO().decode(url, longEdge: 1600)
+            for settings in gpuSettingsToTry {
+                let worst = try worstGPUDifference(image, settings, renderer)
+                print("HDRPARITY \(url.lastPathComponent) worst=\(worst) \(settings.method) tone=\(settings.toneEnabled)")
+                XCTAssertLessThanOrEqual(worst, 2, "\(url.lastPathComponent): \(settings)")
+            }
         }
     }
 
