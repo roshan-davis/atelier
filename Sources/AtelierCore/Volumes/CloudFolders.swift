@@ -75,6 +75,14 @@ public enum CloudFiles {
         return isDataless(url)
     }
 
+    /// The grid's per-row check: one `lstat`, a few microseconds. File Provider placeholders
+    /// (iCloud Drive, Dropbox, Google Drive, OneDrive) are dataless files, so this agrees with
+    /// `needsDownload` (checked on a real iCloud Drive placeholder in PR #182's Mac check), but
+    /// skips the ubiquity lookup, about 0.6 ms a file — 6 s for 10,000 photos on every refresh.
+    public static func isPlaceholder(atPath path: String) -> Bool {
+        isDataless(URL(fileURLWithPath: path))
+    }
+
     static func isDataless(_ url: URL) -> Bool {
         #if canImport(Darwin)
         var info = stat()

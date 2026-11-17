@@ -53,6 +53,8 @@ final class CloudFolderTests: XCTestCase {
         let catalog = try Catalog()
         let dropbox = try XCTUnwrap(CloudFolders.providers(home: home).first { $0.name == "Dropbox" })
         let folder = dropbox.rootURL.appendingPathComponent("Shoots", isDirectory: true)
+        // A folder picked in Add Location exists; a missing one would not resolve /var → /private/var.
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let location = try catalog.addStorageLocation(folder: folder, on: dropbox)
         XCTAssertEqual(location.kind, .cloudFolder)
         XCTAssertEqual(location.rootPath, "Shoots")

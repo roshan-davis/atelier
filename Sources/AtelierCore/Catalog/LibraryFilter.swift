@@ -234,7 +234,7 @@ extension Catalog {
         // file's flags on this Mac's disk (no download, no network); local photos skip it.
         for index in rows.indices {
             if let path = rows[index].cloudPath {
-                rows[index].notDownloaded = CloudFiles.needsDownload(URL(fileURLWithPath: path))
+                rows[index].notDownloaded = CloudFiles.isPlaceholder(atPath: path)
             }
         }
         return rows
