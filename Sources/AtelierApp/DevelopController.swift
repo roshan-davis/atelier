@@ -591,11 +591,17 @@ final class DevelopController: ObservableObject {
     @Published var wantsFullResolution = false {
         didSet {
             if wantsFullResolution, !oldValue {
+                fullRelease?.cancel()
+                fullRelease = nil
                 scheduleFullRender()
                 scheduleFullBeforeRender()
+            } else if !wantsFullResolution, oldValue {
+                scheduleFullRelease()
             }
         }
     }
+    /// Lets go of the full-size images a moment after the view goes back to Fit (AT-077).
+    private var fullRelease: DispatchWorkItem?
     @Published private(set) var fullImage: NSImage?
     private var fullImageSettings: DevelopSettings?
     /// Something the full-size image was made without has arrived in the background
@@ -813,6 +819,12 @@ final class DevelopController: ObservableObject {
                                                                   queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.scheduleRender() }
         }
+        // macOS says memory is low: Core Image's cache is already cleared (`RenderMemory`); let go
+        // of the full-size images too unless the photo is zoomed in (AT-077).
+        memoryPressureObserver = NotificationCenter.default.addObserver(forName: RenderMemory.pressure, object: nil,
+                                                                        queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.releaseFullResolution(because: "memory pressure") }
+        }
         // And AI Denoise's noise picture (until then the photo shows Apple's noise reduction).
         aiDenoiseObservers = [
             NotificationCenter.default.addObserver(forName: AIDenoise.ready, object: nil, queue: .main) { [weak self] _ in
@@ -826,6 +838,7 @@ final class DevelopController: ObservableObject {
     }
 
     private var fineEdgesObserver: NSObjectProtocol?
+    private var memoryPressureObserver: NSObjectProtocol?
     private var workObservers: [NSObjectProtocol] = []
     private var depthObserver: NSObjectProtocol?
     private var spotFillObserver: NSObjectProtocol?
@@ -905,7 +918,14 @@ final class DevelopController: ObservableObject {
         fullImageIsStale = false
         fullBeforeImage = nil
         fullBeforeSettings = nil
+        let heldFullSize = fullSession != nil
         fullSession = nil
+        fullRelease?.cancel()
+        fullRelease = nil
+        // The last photo's full-size stages in Core Image's cache (step 1, Lens Blur, depth) are
+        // of no use now (AT-077). Only after a full-size session: stepping through photos at Fit
+        // keeps the neighbours' cached step 1, and the budget bounds those anyway.
+        if heldFullSize { RenderMemory.shared.releaseAllSoon(because: "another photo opened") }
         sourceURL = nil
         errorMessage = nil
         showingBefore = false
@@ -2634,6 +2654,39 @@ final class DevelopController: ObservableObject {
         wantsFullResolution && (compareMode == .off || (firstRenderDone && beforeRequest.value == nil))
     }
 
+    /// Back at Fit: the full-size images and session go after a few seconds (zooming in again
+    /// within that keeps them), so a photo looked at closely once doesn't hold hundreds of MB
+    /// until another photo opens (AT-077).
+    private func scheduleFullRelease() {
+        fullRelease?.cancel()
+        let item = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated { self?.releaseFullResolution(because: "back to Fit") }
+        }
+        fullRelease = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: item)
+    }
+
+    /// Drops the full-size images and session now, unless the view is zoomed in (then nothing
+    /// changes). Also on leaving Develop and on memory pressure.
+    func releaseFullResolution(because reason: String) {
+        fullRelease?.cancel()
+        fullRelease = nil
+        guard !wantsFullResolution else { return }
+        let held = fullImage != nil || fullBeforeImage != nil || fullSession != nil
+        fullImage = nil
+        fullImageSettings = nil
+        fullImageIsStale = false
+        fullBeforeImage = nil
+        fullBeforeSettings = nil
+        fullSession = nil
+        fullNeedsRender = false
+        fullBeforeNeedsRender = false
+        if held {
+            RenderMemory.shared.clear(because: reason)
+            DevelopTimingLog.shared.log(assetID, "full size let go (\(reason))")
+        }
+    }
+
     /// Full-resolution render for zoomed views, after the proxy settles. Latest wins. Not while
     /// the mask overlay shows: the photo is then the proxy with the red tint (`displayImage`), so
     /// a full-size render would never be seen, and on a heavy photo (Lens Blur with Focus areas)
@@ -2668,7 +2721,8 @@ final class DevelopController: ObservableObject {
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     self.fullRendering = false
-                    guard self.assetID == assetID, let session else { return }
+                    // Back at Fit meanwhile: the full size was let go (`releaseFullResolution`).
+                    guard self.assetID == assetID, self.wantsFullResolution, let session else { return }
                     self.fullSession = session
                     session.rendersLensBlur = self.isLensBlurring
                     // Rendered before the Lens Blur mode opened or closed: render again.
@@ -2714,7 +2768,7 @@ final class DevelopController: ObservableObject {
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     self.fullBeforeRendering = false
-                    guard self.assetID == assetID, let session else { return }
+                    guard self.assetID == assetID, self.wantsFullResolution, let session else { return }
                     if self.fullSession == nil { self.fullSession = session }
                     if let cgImage {
                         self.fullBeforeImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
@@ -3094,6 +3148,12 @@ extension DevelopController {
             lensBlurWork = nil
         }
         beforeImage = nil
+        // Closing lets go of every Lens Blur result Core Image kept (AT-077: they used to pile up
+        // until the Mac ran out of memory). The photo on screen was put back above; the next
+        // render decodes step 1 again in the background.
+        // The depth and Fine Edges models are unloaded too: their runs' working memory is several
+        // GB (Mac check of PR #157).
+        if !isLensBlurring { RenderMemory.shared.releaseAllSoon(because: "Lens Blur closed") }
         scheduleRender()
         onLensBlurModeChanged?(isLensBlurring)
     }

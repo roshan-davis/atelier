@@ -133,6 +133,10 @@ final class LibraryModel: ObservableObject {
                 develop.flushSave()
                 // Leaving Develop cancels the Lens Blur mode; only Save keeps its changes.
                 develop.isLensBlurring = false
+                // And lets go of the full-size images (AT-077); coming back zoomed in renders them again.
+                develop.wantsFullResolution = false
+                develop.releaseFullResolution(because: "left Develop")
+                RenderMemory.shared.releaseAllSoon(because: "left Develop")
             }
             if mode == .hdr {
                 if oldValue != .hdr { hdrReturnMode = oldValue }
@@ -280,6 +284,9 @@ final class LibraryModel: ObservableObject {
         ai.model = self
         editWatcher.onChange = { [weak self] id in self?.editedFileChanged(id) }
         agents.startIfEnabled()
+        // Clears Core Image's cache and lets Develop drop its full-size images when macOS warns
+        // that memory is low (AT-077).
+        RenderMemory.shared.watchMemoryPressure()
         // Folder events can be missed on network shares; coming back from the editor checks too.
         NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil,
                                                queue: .main) { [weak self] _ in

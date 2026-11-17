@@ -1393,9 +1393,55 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 
 **Evidence:** [Docs/Reviews/Architecture-Review-2026-11-16.md](Docs/Reviews/Architecture-Review-2026-11-16.md), source review of `main` `c146785`, revised after Rosh's source check on PR #155 (head `90abdd8`). Source only: no timing or memory measurement; sizes are pixel payloads and counts are source counts.
 
-**Order agreed in review:** (1) C1: Fine Edges/Depth hold their lock through inference and main-actor Remove waits on it; `failure`/`lastRun`/`isWorking` read on main without the lock (High, S narrow). Then E1: silent `try?` catalog writes in Generative Fill, Match Look and notes (Medium, S per path). (2) Measure in parallel on the same heavy edits: M1 full-size images/session kept until the next open, no memory-pressure handling (High on large RAWs, plausible); P1 history of up to 500 full settings copies encoded and written on main (High if timings confirm; background save M, format change M–L). (3) P2: one transaction per photo in Sync/presets/Match Look, partial completion, non-atomic read-write (Medium, S–M); measure observation cost. (4) D1: one tool state with Lens Blur Refine nested (Medium, M). Others (R1, M2, D2, C2, P3, P4, D4, E2-E4, B1-B3) as listed in the review.
+**Work order (every finding stays in it; Rosh, Nov 16, 2026: "order and skipping are different"):**
+1. **AT-077 memory (PR #157, in progress):** M1 (full-size images and session let go at Fit, leaving Develop, memory pressure; Core Image cache budget), with R1 (one ONNX model host: shared setup, unload when idle or under pressure, the runtime's working memory), M2 (Core Image contexts made per call: HDR decodes, splash), M3 (thumbnail cache byte limit, done in #157) and whatever the real-RAW memory profile shows holds the 16 GB. C1 (model lock held through inference, Remove waits on main, status strings race) is fixed in the same host work.
+2. **E1:** silent `try?` catalog writes (Generative Fill, Match Look, notes) report their error.
+3. **P1:** measure history save time, then a background save; a history format change only if the numbers call for it.
+4. **P2 + R3:** batch edits in one transaction, one path for edits to photos not open; measure the Grid observation cost.
+5. **D1:** one tool state, Lens Blur Refine nested.
+6. **M4 + lifecycle (one small PR):** bounded ShootingInfo, AI Denoise status/failure maps, preview failures, per-session subject/matte maps; observer tokens kept and removed; MCP socket stop, observation cancel and Private Photos teardown on owner teardown.
+7. **P4:** HDR shows the photo first, hashes in the background, Save waits on the hash.
+8. **P3:** Export with two photos in flight, after measuring throughput and peak memory.
+9. **D4:** HDR GPU/CPU parity test (full-size GPU Save separately, later).
+10. **R2:** one download state for Depth and Fine Edges, UIs unchanged.
+11. **E2:** typed keys for shared settings, narrow the global defaults observer; **E3:** `os.Logger` for render, catalog, models, agents.
+12. **B2:** snapshot/smoke hooks behind a compilation condition (check release packaging and the UI harness together); **E4:** Core `Develop` subfolders (mechanical).
+13. **D3:** first Processor adapter for Edit In and ComfyUI (with AT-008).
+14. **P5 + D2:** split DevelopController along concrete ownership problems, `@Observable` where Frame Diagnostics shows view updates cost time.
+15. **C2 + C3:** Swift 6 mode per module (AgentActions, AgentMCP, AtelierActions, HDRCore, Core, app); write down concrete scheduling problems before any rule.
+16. **B1:** a separate models target, once R1's host gives Core an interface to call. **B3:** keep Debug `-O` until measured; revisit when the per-pixel loops move to the GPU.
 
 **Scope to agree:** one item per PR, with measurements before and after where marked "measure first". No broad rewrite is approved by this entry.
+
+## AT-077 — Lens Blur and Develop let go of memory (no more 16 GB)
+
+**Status:** Built, awaiting Mac check and Rosh's acceptance. **Owner:** Claude (project thread "Stop Lens Blur hogging memory"). **Branch:** `claude/project-thread-fiqvpk`. **Dependencies:** AT-076 M1 (this is its first part).
+
+**Why (Rosh, Nov 16, 2026):** after some Lens Blur work Atelier used 16 GB and the 48 GB Mac froze and had to restart. "Holding back too long and not releasing is a memory leak." "Our app has to perform on any M processor with nice performance without hogging memory."
+
+**Cause (source, to be confirmed by the memory test):** each Lens Blur result (one per slider tick or stroke, about 190 MB at full size on a Zf file) and each new step 1 was kept in Core Image's cache with `insertingIntermediate(cache: true)`. Atelier kept only the last two references, but nothing ever told Core Image to let the older ones go: not on closing Lens Blur, not at Fit, not on leaving Develop, not under memory pressure. The full-size images and session also stayed until another photo opened.
+
+**Scope:** `RenderMemory` (AtelierCore): every kept stage (step 1, Lens Blur, depth map, Select Sky, AI Denoise's full decode) goes through `kept(_:)`, which counts its pixels and clears Core Image's cache before the kept stages pass a budget (a sixteenth of the Mac's memory, 768 MB to 2 GB). Cleared too when Lens Blur closes, when a photo opens after a full-size one, three seconds after returning to Fit (with the full-size images and session, `DevelopController.releaseFullResolution`), on leaving Develop, and on macOS memory warnings (`watchMemoryPressure`, which also drops the full-size images). Grid thumbnails get a byte limit (a 32nd of memory, at most 512 MB). PRD Non-functional requirements: new Memory row.
+
+**Mac check 2 (04787bf vs main 893d91b, `testMemoryAcrossALensBlurSession`, Z f NEF 6048×4032, 48 GB Mac, PR comment 6932629526):** after closing the photo 1.4 GB (fix) vs 8.7 GB (main), but the peak while editing was the same, 20.9 vs 20.8 GB. Core Image's cache was only 537 MB of it. Select Subject with Fine Edges (Fast) added about 8 GB (6.3 to 14.6 GB), held by ONNX Runtime's CPU arena until the model was unloaded (10.0 to 1.4 GB); 21 Amount edits at full size added 3.8 GB within the old 4 GB budget.
+
+**Mac checks 3-5:** fix 2 (in-process unload when idle, smaller cache budget, abf7191) cut what's held while editing from 15.8 to 3.8 GB with drags unchanged, but the peak stayed 20.5 GB: one Fine Edges run itself needs it. Fine Edges alone (check 4, one process per setting): Fast at 1024 px adds about 18 GB and keeps 13 GB afterwards; Hair Detail at 2048 px adds 35-46 GB. No Objective-C session option moved it; ONNX Runtime's Python API (check 5, `Scripts/models/onnx_memory_probe.py`) at its best (memory patterns off, which the Objective-C API can't set) still needs 13.3 GB (Fast) and 30.3 GB (Hair Detail). Core ML can't load either model (Fast: atrous Conv "Required param 'pad' is missing"; Hair Detail: "unexpected type 'ios18.real_div'").
+
+**Design (Rosh, Nov 16: "a standard and efficient design only"):** Apple's standard patterns, no runtime tuning. (1) Bounded caches let go when a task ends and on macOS memory warnings (`RenderMemory`, above). (2) The ONNX models (Fine Edges, Depth, AI Denoise) run in helper processes (`ModelRunner`, AtelierCore): Atelier's own executable started with `--atelier-model-runner`, one helper per model, started on first use, quit 30 s after its last run, when Lens Blur closes, when another photo opens after a full-size one, on leaving Develop and on memory warnings. When a helper quits macOS gets all its memory back, and if a run needs more than the Mac has, macOS stops the helper, not Atelier, and the tool says so. A separate XPC service bundle isn't used because Atelier runs from Xcode as a Swift package executable, which can't embed one; the same executable as helper works both there and in the built app. This replaces fix 2's in-process unloading (`OnnxHost`, removed) and the model locks held through a run (AT-076 C1). (3) Which Fine Edges model a Mac is offered, given its run's memory, is Rosh's decision (asked Nov 16).
+
+**Not changed:** the per-frame clipping copy and the tone stages' coefficients (`LocalContrast.stage`) still use Core Image's cache directly (they are replaced every frame and counting them would clear step 1 during drags); they are let go by the clears above. HDR's own context, C1 (the model lock held through a run) and the other AT-076 items. ONNX Runtime's Objective-C API can't turn the CPU arena off, so a run's own peak stays.
+
+**Mac check 6 (06508ec, PR comment 6934173259):** with the helper processes, Atelier's own peak in the Z f Lens Blur session is 7.4 GB (was 20.5 GB; main 20.8 GB), 1.0 GB back at Fit, 0.7 GB with the photo closed. The Fine Edges helper peaks at about 13 GB while it runs and quits 30 s after its last run; Depth's peaks at 2.2 GB. Killing the Fine Edges helper mid-run leaves Atelier running with a message, and the next run starts a new helper. Lens Blur timings unchanged apart from helper start-up (Lens Blur open 735 vs 605 ms, Refine Select Subject 229 vs 180 ms). Full-precision model files don't lower the run's memory (Fast 18.3 vs 18.8 GB, Hair Detail 38 vs 30 GB), so the memory is the network's at its fixed input size.
+
+**Validation:** Swift unbuilt (cloud). `RenderMemoryTests` (budget, clearing; opt-in `ATELIER_MEMORY_TESTS=1` full-size test: 40 Lens Blur edits at 24 MP, peak growth must stay under the budget + 1.5 GB). Needs a Mac build, the memory test before (main) and after, Frame Diagnostics on a Lens Blur and a Basic drag (no regression), and Rosh's acceptance.
+
+## AT-078 — Lens Blur: Amount drags with Blur areas take seconds per frame
+
+**Status:** Proposed / discuss. **Owner:** unassigned. **Found:** Mac check 6 of PR #157 (Nov 16, 2026, Z f NEF, zoomed in at full size).
+
+**Why:** with six Blur areas drawn, each full-size Blur Amount change took 2.3 to 3.0 s, against 0.13 to 0.30 s without areas. A drag should stay smooth (AGENTS.md "GPU and live rendering").
+
+**Scope:** profile `LensBlur.withAreas` (the fill pyramid, `drawnOnce` read-back at full size) for an Amount change, where the areas haven't changed and their stages could be reused; measure with Frame Diagnostics before and after.
 
 ## AT-071 — Cull: compare the suggested keeper and runner-up with linked zoom
 

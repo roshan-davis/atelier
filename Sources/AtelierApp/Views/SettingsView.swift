@@ -888,6 +888,9 @@ private struct MaskingModelsSection: View {
                 } label: {
                     Text("Fine Edges: \(model.name)")
                     Text(model.detail)
+                    if let warning = model.memoryWarning() {
+                        Label(warning, systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
+                    }
                 }
             }
             LabeledContent {
