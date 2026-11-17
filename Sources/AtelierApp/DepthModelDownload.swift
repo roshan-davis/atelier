@@ -2,22 +2,19 @@ import AtelierCore
 import SwiftUI
 
 /// The depth model's download, shared by the Depth Range settings and Settings > AI, so both
-/// show the same progress and either can start or remove it (as `FineEdgesDownload` does for
-/// Fine Edges).
-@MainActor
-final class DepthModelDownload: ObservableObject {
+/// show the same progress and either can start or remove it. The download itself is
+/// `ModelDownloadState`'s, as Fine Edges' is.
+final class DepthModelDownload: ModelDownloadState<DepthModel> {
+    /// The one shared download; don't make another.
     static let shared = DepthModelDownload()
 
     @Published private(set) var installed = DepthMap.isInstalled
-    /// 0...1 while downloading.
-    @Published private(set) var progress: Double?
-    @Published private(set) var error: String?
     /// Why the model last failed to run, from `DepthMap`.
     @Published private(set) var runFailure: String?
-    private var task: Task<Void, Never>?
     private var observer: NSObjectProtocol?
 
-    private init() {
+    override init() {
+        super.init()
         observer = NotificationCenter.default.addObserver(forName: DepthMap.ready, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.installed = DepthMap.isInstalled
@@ -27,43 +24,18 @@ final class DepthModelDownload: ObservableObject {
     }
 
     func download() {
-        guard task == nil, !installed else { return }
-        error = nil
-        progress = 0
-        task = Task {
-            do {
-                try await DepthMap.install { value in
-                    Task { @MainActor in
-                        if DepthModelDownload.shared.progress != nil { DepthModelDownload.shared.progress = value }
-                    }
-                }
-                installed = DepthMap.isInstalled
-            } catch {
-                // Cancel already cleared the state, and a new download may have started since.
-                if Task.isCancelled { return }
-                self.error = error.localizedDescription
-            }
-            progress = nil
-            task = nil
-        }
-    }
-
-    func cancel() {
-        task?.cancel()
-        task = nil
-        progress = nil
+        guard !installed else { return }
+        startDownload(.depthAnythingV2Small, install: { try await DepthMap.install(progress: $0) },
+                      finished: { [weak self] in self?.installed = DepthMap.isInstalled })
     }
 
     func remove() {
-        do {
-            try DepthMap.remove()
-            installed = DepthMap.isInstalled
-            DeleteFeedback.play(.remove)
-        } catch {
-            self.error = error.localizedDescription
-        }
+        remove({ try DepthMap.remove() }, finished: { installed = DepthMap.isInstalled })
     }
 }
+
+/// The depth models Atelier can download: one today.
+enum DepthModel: Hashable, Sendable { case depthAnythingV2Small }
 
 /// Shows `content` (the Depth Range, Select Sky or Lens Blur controls) once the depth model is
 /// downloaded; before that, what it needs and a Download button, then a progress bar.
@@ -80,12 +52,8 @@ struct DepthModelGate<Content: View>: View {
                         .font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
                 }
             } else if let progress = download.progress {
-                HStack {
-                    ProgressView(value: progress)
-                    Text("\(Int((progress * 100).rounded()))%").font(.caption).monospacedDigit().foregroundStyle(.secondary)
-                    Button("Cancel") { download.cancel() }.controlSize(.small)
-                }
-                .help("Downloading the depth model (\(DepthMap.downloadSize))")
+                ModelDownloadProgress(progress: progress, help: "Downloading the depth model (\(DepthMap.downloadSize))",
+                                      cancel: download.cancel)
             } else {
                 Text("Depth Range, Select Sky and Lens Blur find how far away each part of the photo is with a depth model (\(DepthMap.modelName), Apache 2.0 license). Download it once; it then runs on this Mac.")
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
