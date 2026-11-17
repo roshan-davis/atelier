@@ -577,7 +577,8 @@ private struct SourceThumbnail: View {
 }
 
 private enum SourceThumbnailCache {
-    static let shared: NSCache<NSURL, NSImage> = {
+    /// NSCache is thread-safe.
+    nonisolated(unsafe) static let shared: NSCache<NSURL, NSImage> = {
         let cache = NSCache<NSURL, NSImage>()
         cache.countLimit = 2000
         return cache
@@ -721,10 +722,10 @@ private struct ImportWallGrid: View {
     let size: CGSize
     @State private var position = ScrollPosition(edge: .top)
 
-    private static let spacing = 6.0
-    private static let padding = 12.0
+    nonisolated private static let spacing = 6.0
+    nonisolated private static let padding = 12.0
     /// The tile width aimed for; tiles stretch a little to fill the width.
-    private static let target = 128.0
+    nonisolated private static let target = 128.0
 
     var body: some View {
         let layout = Layout(width: Double(size.width), count: photos.count)

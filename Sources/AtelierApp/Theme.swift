@@ -82,7 +82,7 @@ enum Theme: String, CaseIterable, Identifiable {
     }
 
     /// Sets the appearance for every window, Settings included.
-    func apply() {
+    @MainActor func apply() {
         NSApp.appearance = appearanceName.flatMap(NSAppearance.init(named:))
     }
 }

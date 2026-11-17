@@ -482,11 +482,13 @@ struct CullView: View {
 
 /// The Cull view's keys, from a key-down monitor on its own window, so they work without
 /// clicking into the view first.
+@MainActor
 final class CullKeyMonitor {
     weak var window: NSWindow?
-    private var monitor: Any?
+    // Also read by deinit, which runs once nothing else holds the object.
+    nonisolated(unsafe) private var monitor: Any?
 
-    func start(_ handle: @escaping (NSEvent) -> Bool) {
+    func start(_ handle: @escaping @MainActor (NSEvent) -> Bool) {
         stop()
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let window = self?.window, event.window === window, window.attachedSheet == nil,
@@ -502,7 +504,9 @@ final class CullKeyMonitor {
         monitor = nil
     }
 
-    deinit { stop() }
+    deinit {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+    }
 }
 
 /// One thumbnail: a check when kept, dimmed when dropped, a star on the suggested keeper.

@@ -1269,7 +1269,9 @@ final class SpaceKeyMonitor: ObservableObject {
         guard monitor == nil else { return }
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { [weak self] event in
             guard let self else { return event }
-            return MainActor.assumeIsolated { self.handle(event) }
+            // NSEvent isn't Sendable, so the main-actor part says only whether to keep it.
+            let keep = MainActor.assumeIsolated { self.handle(event) }
+            return keep ? event : nil
         }
     }
 
@@ -1279,10 +1281,11 @@ final class SpaceKeyMonitor: ObservableObject {
         spaceDown = false
     }
 
-    private func handle(_ event: NSEvent) -> NSEvent? {
+    /// Whether the event goes on to the window (false: Space was taken here).
+    private func handle(_ event: NSEvent) -> Bool {
         guard event.keyCode == 49, !(event.window?.firstResponder is NSText),
-              event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { return event }
+              event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { return true }
         spaceDown = event.type == .keyDown
-        return nil
+        return false
     }
 }

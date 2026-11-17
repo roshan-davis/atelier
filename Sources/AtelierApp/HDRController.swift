@@ -519,7 +519,7 @@ final class HDRController: ObservableObject {
                 }
                 // Runs on the project's own actor, off the main thread; Cancel (Esc) reaches it
                 // because it is awaited in this task rather than a detached one.
-                let manifest = try await active.save(settings: snapshot, cancellation: { try Task.checkCancellation() })
+                let manifest = try await active.save(settings: snapshot, cancellation: { @Sendable in try Task.checkCancellation() })
                 // Save As New is a new session: the earlier project and TIFF stay as they were.
                 var publication = request
                 if destination != nil { publication.jobID = UUID() }

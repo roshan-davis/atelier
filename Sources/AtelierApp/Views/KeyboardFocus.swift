@@ -236,11 +236,11 @@ private struct KeyboardFocusAreaKey: EnvironmentKey {
 }
 
 private struct TakeKeyboardFocusKey: EnvironmentKey {
-    static let defaultValue: (() -> Void)? = nil
+    static var defaultValue: (() -> Void)? { nil }
 }
 
 private struct KeyboardScrollKey: EnvironmentKey {
-    static let defaultValue: ScrollViewProxy? = nil
+    static var defaultValue: ScrollViewProxy? { nil }
 }
 
 extension EnvironmentValues {
