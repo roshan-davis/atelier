@@ -114,6 +114,16 @@ public enum AtelierAction {
     public static let showLocationInFinder = Action<LocationParameters>(
         "library.showLocationInFinder", "Show in Finder", place: "Sidebar > Locations > right-click > Show in Finder, Settings > Storage",
         summary: "Shows a connected storage location's folder in Finder.", kind: .opensApp)
+    public static let keepOnThisMac = Action<KeepParameters>(
+        "library.keepOnThisMac", "Keep on This Mac…",
+        place: "Sidebar > right-click a folder, import, collection or network share > Keep on This Mac…",
+        summary: "Shows how much would be read, then reads the originals of a place's photos on network shares into the cache of originals and keeps them there, so they open at full quality with the share offline. Refused when it would leave less than 10% of the disk free.",
+        kind: .writesFiles)
+    public static let freeUpSpace = Action<KeepParameters>(
+        "library.freeUpSpace", "Free Up Space",
+        place: "Sidebar > right-click a folder, import, collection or network share > Free Up Space",
+        summary: "Removes the copies kept on this Mac for a place's photos. The originals stay on the share and are read again when opened.",
+        kind: .writesFiles)
 
     // MARK: Photo
 
@@ -303,6 +313,7 @@ public enum AtelierAction {
         showNotes.descriptor, privatePhotos.descriptor, grid.descriptor, loupe.descriptor, develop.descriptor,
         cullImport.descriptor, writeXMP.descriptor, writeAllXMP.descriptor, refreshVolumes.descriptor,
         connectLocation.descriptor, disconnectLocation.descriptor, showLocationInFinder.descriptor,
+        keepOnThisMac.descriptor, freeUpSpace.descriptor,
         createVirtualCopy.descriptor, removeVirtualCopy.descriptor, removePhoto.descriptor,
         addNote.descriptor, showCullGroup.descriptor, hdr.descriptor, lensBlur.descriptor, editIn.descriptor, editInOther.descriptor,
         matchLook.descriptor, ai.descriptor, showInFinder.descriptor, setRating.descriptor,

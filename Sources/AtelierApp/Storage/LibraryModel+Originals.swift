@@ -30,7 +30,9 @@ extension LibraryModel {
     /// Whether `prepareOriginal` has work to do before Develop decodes. In-memory only: no file or
     /// network access on the main thread, except a cloud file's flags on this Mac's disk.
     func originalNeedsPreparing(_ assetID: Int64, url: URL?) -> Bool {
-        if let url, originals?.readyCopy(for: assetID) == url { return false }
+        // A copy in the cache was checked this session (`readableURL` hands out only those).
+        if let url, let originals,
+           url.deletingLastPathComponent().standardizedFileURL.path == originals.root.standardizedFileURL.path { return false }
         guard let kind = volumeKind(of: assetID) else { return false }
         switch kind {
         case .local: return false
@@ -63,7 +65,9 @@ extension LibraryModel {
     // MARK: Network share → cache
 
     private func readIntoCache(_ detail: AssetDetail, originals: OriginalCache) async -> OriginalPrep {
-        guard let assetID = detail.asset.id else { return .offline }
+        // Filed under the master's id, so a virtual copy never stores the same file twice.
+        guard let assetID = detail.asset.virtualCopyOf ?? detail.asset.id else { return .offline }
+        originals.inUse = assetID
         let source = detail.fileURL
         let hash = detail.asset.contentHash
         let place = locationName(for: detail.volume)
@@ -127,6 +131,7 @@ extension LibraryModel {
                 guard !Task.isCancelled else { return }
                 guard let detail = try? catalog.detail(for: id), let volumeId = detail.volume.id,
                       shareVolumes.contains(volumeId), let source = detail.fileURL else { continue }
+                let id = detail.asset.virtualCopyOf ?? id
                 let hash = detail.asset.contentHash
                 if (try? originals.copy(for: id, contentHash: hash, source: OriginalCache.SourceInfo(source))) != nil { continue }
                 _ = try? originals.store(id, from: source, contentHash: hash, readAhead: true, shouldPause: { paused.value })

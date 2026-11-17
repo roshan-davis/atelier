@@ -178,6 +178,13 @@ public final class OriginalCache: @unchecked Sendable {
         try index.read { db in try Entry.fetchOne(db, key: assetID) }
     }
 
+    /// The copies of many photos in one read (Keep on This Mac's plan, Free Up Space).
+    public func entries(for assetIDs: [Int64]) throws -> [Int64: Entry] {
+        try index.read { db in
+            Dictionary(uniqueKeysWithValues: try Entry.filter(keys: assetIDs).fetchAll(db).map { ($0.assetId, $0) })
+        }
+    }
+
     /// The copy checked or stored this session, without any file or network access. Readers that
     /// can't wait (a render that is already running) use it; `copy(for:…)` is what checks.
     public func readyCopy(for assetID: Int64) -> URL? {
@@ -307,8 +314,13 @@ extension Catalog {
     /// The file to read a photo from: its copy on this Mac when one was checked this session
     /// (AT-079c), else the original where it is. Readers that open the original for other apps
     /// (Edit In, Show in Finder) use `fileURL(for:)` instead.
+    /// A virtual copy reads its master's copy (the cache files a photo under `originalID(for:)`).
     public func readableURL(for assetID: Int64, cache: OriginalCache?) throws -> URL? {
-        if let copy = cache?.readyCopy(for: assetID) { return copy }
+        if let cache {
+            if let copy = cache.readyCopy(for: assetID) { return copy }
+            let original = try originalID(for: assetID)
+            if original != assetID, let copy = cache.readyCopy(for: original) { return copy }
+        }
         return try fileURL(for: assetID)
     }
 }

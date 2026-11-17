@@ -48,7 +48,7 @@
   <figcaption><b>Settings › Storage:</b> each location with where it is, whether it is connected, how many photos it holds and how full it is. Click one to see its details below the list.</figcaption>
 </figure>
 
-<div class="chips"><a href="#add">Add a location</a><a href="#nas">A NAS</a><a href="#cloud">Cloud drive folders</a><a href="#details">Details</a><a href="#cache">Cache of originals</a><a href="#offline">Offline</a><a href="#where">What stays on this Mac</a><a href="#remove">Remove</a></div>
+<div class="chips"><a href="#add">Add a location</a><a href="#nas">A NAS</a><a href="#cloud">Cloud drive folders</a><a href="#details">Details</a><a href="#cache">Cache of originals</a><a href="#keep">Keep on This Mac</a><a href="#offline">Offline</a><a href="#where">What stays on this Mac</a><a href="#remove">Remove</a></div>
 
 <h2 id="add">Add a location</h2>
 <ol class="steps">
@@ -90,8 +90,18 @@
 <ul>
   <li>Before using a copy, Atelier checks the original's size and date on the share (no download). If the file changed there, it is read again; if its contents differ from what was imported, Atelier says so and doesn't use either file.</li>
   <li>When the share is off, a photo with a copy on this Mac still opens in Develop at full quality, and the status bar says <i>Using the copy on this Mac from Nov 17; megham is offline, so changes there can't be checked.</i></li>
-  <li>Set its size in <span class="path">Atelier › Settings… › Storage › Cache of Originals</span> (20 GB to start; it never takes more than a quarter of the free space). The copies opened longest ago go first. <span class="path">Clear Cache…</span> removes them; the originals are never touched.</li>
+  <li>Set its size in <span class="path">Atelier › Settings… › Storage › Cache of Originals</span> (20 GB to start; it never takes more than a quarter of the free space). The copies opened longest ago go first. <span class="path">Clear Cache…</span> removes them; the originals are never touched. Photos you <a href="#keep">keep on this Mac</a> stay unless you also tick <span class="path">Also remove kept photos</span> in that alert (it starts unticked).</li>
   <li>Photos in a cloud drive folder aren't copied: the cloud drive's own download is their copy on this Mac.</li>
+</ul>
+
+<h2 id="keep">Keep on This Mac</h2>
+<p>Going somewhere without the NAS? Right-click a folder, an import, a collection or a network share in the sidebar, then choose <span class="path">Keep on This Mac…</span>; Atelier first says how much it will read ("Keep 412 photos from “Trip” on this Mac? 11.6 GB will be read from megham, in the background."), then reads the originals one at a time into the <a href="#cache">cache of originals</a>, with progress and <span class="path">Cancel</span> in the status bar. Photos already in the cache are kept at once without reading them again, and the photo you're editing always reads first.</p>
+<ul>
+  <li>Kept photos open in Develop at full quality while the share is off, and they're never let go to keep the cache within its size (they don't count toward it). Settings › Storage shows their total as <i>plus 11.6 GB kept</i>.</li>
+  <li>Atelier always leaves at least 10% of this Mac's disk free. If keeping would leave less, it says how much space to free first and reads nothing.</li>
+  <li><span class="path">Cancel</span> stops reading; the photos already read stay kept.</li>
+  <li><span class="path">Free Up Space</span> on the same menu removes the kept copies. The originals stay on the share and are read again when you open them.</li>
+  <li>Only photos on a network share are kept. For a cloud drive folder, use the cloud drive's own <i>Keep Downloaded</i> or <i>Make available offline</i> in Finder.</li>
 </ul>
 
 <h2 id="offline">When a location is offline</h2>

@@ -180,6 +180,7 @@ struct ContentView: View {
             DeleteImportSheet(deletion: deletion)
                 .environmentObject(model)
         }
+        .modifier(KeepDialogs())
         .sheet(isPresented: $model.showingShortcuts) {
             ShortcutsSheet()
         }
@@ -306,8 +307,11 @@ private struct StatusBar: View {
             if let progress = model.downloadProgress {
                 ProgressItem(progress: progress) { model.cancelOriginalTransfer() }
             }
+            if let progress = model.keepProgress {
+                ProgressItem(progress: progress) { model.cancelKeep() }
+            }
             if model.importProgress == nil, model.exportProgress == nil, model.matchProgress == nil,
-               model.agentProgress == nil, model.downloadProgress == nil,
+               model.agentProgress == nil, model.downloadProgress == nil, model.keepProgress == nil,
                let status = model.status {
                 Text(status).lineLimit(1)
                 if !model.problems.isEmpty {
@@ -432,5 +436,33 @@ struct WindowAccessor: NSViewRepresentable {
             let window = self.window
             DispatchQueue.main.async { [onWindow] in onWindow?(window) }
         }
+    }
+}
+
+/// Keep on This Mac's size question, or its refusal when the read wouldn't leave 10% of the disk
+/// free (AT-079c).
+private struct KeepDialogs: ViewModifier {
+    @EnvironmentObject private var model: LibraryModel
+
+    func body(content: Content) -> some View {
+        let request = model.keepRequest
+        content
+            .confirmationDialog(request?.title ?? "", isPresented: binding(fits: true), titleVisibility: .visible,
+                                presenting: request) { request in
+                Button("Keep on This Mac") { model.keep(request) }
+                Button("Cancel", role: .cancel) { model.keepRequest = nil }
+            } message: { request in
+                Text(request.message)
+            }
+            .alert("Not enough space on this Mac", isPresented: binding(fits: false), presenting: request) { _ in
+                Button("OK", role: .cancel) { model.keepRequest = nil }
+            } message: { request in
+                Text(request.shortMessage)
+            }
+    }
+
+    private func binding(fits: Bool) -> Binding<Bool> {
+        Binding(get: { model.keepRequest.map { $0.plan.fits == fits } ?? false },
+                set: { if !$0 { model.keepRequest = nil } })
     }
 }

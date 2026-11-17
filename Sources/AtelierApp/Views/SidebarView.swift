@@ -82,6 +82,7 @@ struct SidebarView: View {
                 model.beginImport(into: entry.id)
             }
             Button("Cull…") { model.beginCull(importGroup: entry.id) }
+            keepItems(.importEntry, entry.id)
             Divider()
             if entry.isPrivate {
                 Button("Make Not Private") { model.setPrivate(false, importGroup: entry.id) }
@@ -106,11 +107,7 @@ struct SidebarView: View {
                     DisclosureGroup {
                         ForEach(row.folders) { folder in
                             if let folderID = folder.id {
-                                Label(folderName(folder, in: row), systemImage: "folder")
-                                    .lineLimit(1)
-                                    .truncationMode(.head)
-                                    .help(folder.displayName)
-                                    .tag(SidebarItem.folder(folderID))
+                                folderRow(folder, id: folderID, in: row)
                             }
                         }
                     } label: {
@@ -154,12 +151,41 @@ struct SidebarView: View {
             }
             model.actions.button(AtelierAction.showLocationInFinder, parameters)
                 .disabled(location.status != .connected)
+            keepItems(.location, location.id)
             Divider()
         }
         // not an action: opens the person's Settings window on its Storage pane.
         Button("Storage Settings…") {
             UserDefaults.standard.set(SettingsPane.storage.rawValue, forKey: SettingsPane.defaultsKey)
             openSettings()
+        }
+    }
+
+    /// Keep on This Mac… and Free Up Space (AT-079c), for places that hold photos on a share.
+    @ViewBuilder private func keepItems(_ place: KeepPlaceChoice, _ id: Int64) -> some View {
+        let parameters = KeepParameters(place: place, id: id)
+        if model.canKeep(LibraryModel.keepPlace(parameters)) {
+            Divider()
+            model.actions.button(AtelierAction.keepOnThisMac, parameters)
+            model.actions.button(AtelierAction.freeUpSpace, parameters)
+        }
+    }
+
+    /// A folder's row; on a share it has Keep on This Mac… and Free Up Space on right-click.
+    @ViewBuilder private func folderRow(_ folder: Folder, id: Int64, in row: SidebarLocation) -> some View {
+        let label = Label(folderName(folder, in: row), systemImage: "folder")
+            .lineLimit(1)
+            .truncationMode(.head)
+            .help(folder.displayName)
+            .tag(SidebarItem.folder(id))
+        if model.canKeep(.folder(id)) {
+            let parameters = KeepParameters(place: .folder, id: id)
+            label.contextMenu {
+                model.actions.button(AtelierAction.keepOnThisMac, parameters)
+                model.actions.button(AtelierAction.freeUpSpace, parameters)
+            }
+        } else {
+            label
         }
     }
 
@@ -199,6 +225,7 @@ struct SidebarView: View {
         .tag(SidebarItem.collection(id))
         .contextMenu {
             Button("Rename…") { startRename(.collection(id), current: collection.name) }
+            if !collection.isSet { keepItems(.collection, id) }
             Divider()
             if collection.isPrivate {
                 Button("Make Not Private") { model.setPrivate(false, collection: id) }

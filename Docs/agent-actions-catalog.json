@@ -715,6 +715,40 @@
     },
     {
       "exposed": true,
+      "id": "library.freeUpSpace",
+      "kind": "writesFiles",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "description": "Its id.",
+            "type": "integer"
+          },
+          "place": {
+            "description": "A sidebar folder, import entry, collection or storage location.",
+            "enum": [
+              "folder",
+              "importEntry",
+              "collection",
+              "location"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "place",
+          "id"
+        ],
+        "type": "object"
+      },
+      "place": "Sidebar > right-click a folder, import, collection or network share > Free Up Space",
+      "summary": "Removes the copies kept on this Mac for a place's photos. The originals stay on the share and are read again when opened.",
+      "tier": "asksFirst",
+      "title": "Free Up Space",
+      "version": 1
+    },
+    {
+      "exposed": true,
       "id": "library.grid",
       "kind": "view",
       "parameters": {
@@ -728,6 +762,40 @@
       "summary": "Shows the photos as a grid.",
       "tier": "runs",
       "title": "Grid",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "library.keepOnThisMac",
+      "kind": "writesFiles",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "description": "Its id.",
+            "type": "integer"
+          },
+          "place": {
+            "description": "A sidebar folder, import entry, collection or storage location.",
+            "enum": [
+              "folder",
+              "importEntry",
+              "collection",
+              "location"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "place",
+          "id"
+        ],
+        "type": "object"
+      },
+      "place": "Sidebar > right-click a folder, import, collection or network share > Keep on This Mac…",
+      "summary": "Shows how much would be read, then reads the originals of a place's photos on network shares into the cache of originals and keeps them there, so they open at full quality with the share offline. Refused when it would leave less than 10% of the disk free.",
+      "tier": "asksFirst",
+      "title": "Keep on This Mac…",
       "version": 1
     },
     {

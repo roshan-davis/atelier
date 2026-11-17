@@ -291,7 +291,6 @@ private struct OriginalCacheSection: View {
     let cache: OriginalCache
     @State private var limit: Int64 = OriginalCache.defaultLimit
     @State private var usage: OriginalCache.Usage?
-    @State private var clearing = false
 
     private static let sizes: [Int64] = [5, 10, 20, 50, 100, 200].map { $0 * 1_000_000_000 }
 
@@ -312,19 +311,13 @@ private struct OriginalCacheSection: View {
             }
             HStack {
                 Spacer()
-                Button("Clear Cache…") { clearing = true }
-                    .disabled((usage?.cachedCount ?? 0) == 0)
+                Button("Clear Cache…") { askToClear() }
+                    .disabled((usage?.cachedCount ?? 0) == 0 && (usage?.keptCount ?? 0) == 0)
             }
         } footer: {
-            Text("Photos on a network share are read once into this Mac's Caches folder and opened from there, so editing never waits on the network. The oldest-opened copies go first; the cache never takes more than a quarter of the free space.")
+            Text("Photos on a network share are read once into this Mac's Caches folder and opened from there, so editing never waits on the network. The oldest-opened copies go first; the cache never takes more than a quarter of the free space. Photos kept with Keep on This Mac (right-click a folder, import or collection) stay until you choose Free Up Space and don't count toward the size.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-        }
-        .confirmationDialog("Clear the cache of originals?", isPresented: $clearing) {
-            Button("Clear Cache", role: .destructive) { clear() }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("The originals stay where they are; Atelier reads them again when you open them.")
         }
         .task {
             limit = cache.limitBytes
@@ -347,10 +340,39 @@ private struct OriginalCacheSection: View {
         usage = await Task.detached(priority: .utility) { try? cache.usage() }.value
     }
 
-    private func clear() {
-        let open = model.mode == .develop ? model.develop.assetID : nil
+    /// Clear Cache…: an alert with "Also remove kept photos (N GB)", unticked when it opens (PRD).
+    /// An NSAlert, because its checkbox (the suppression button) is the Mac's own place for one.
+    private func askToClear() {
+        let alert = NSAlert()
+        alert.messageText = "Clear the cache of originals?"
+        alert.informativeText = "The originals stay where they are; Atelier reads them again when you open them."
+        alert.addButton(withTitle: "Clear Cache")
+        alert.addButton(withTitle: "Cancel")
+        alert.buttons.first?.hasDestructiveAction = true
+        if let usage, usage.keptCount > 0 {
+            alert.showsSuppressionButton = true
+            alert.suppressionButton?.title = "Also remove kept photos ("
+                + ByteCountFormatter.string(fromByteCount: usage.keptBytes, countStyle: .file) + ")"
+            alert.suppressionButton?.state = .off
+        }
+        let answer = { (response: NSApplication.ModalResponse) in
+            guard response == .alertFirstButtonReturn else { return }
+            clear(includingKept: alert.suppressionButton?.state == .on)
+        }
+        if let window = NSApp.keyWindow {
+            alert.beginSheetModal(for: window, completionHandler: answer)
+        } else {
+            answer(alert.runModal())
+        }
+    }
+
+    private func clear(includingKept: Bool) {
+        let open = model.mode == .develop ? model.develop.assetID.flatMap { try? model.catalog.originalID(for: $0) } : nil
+        if includingKept { model.cancelKeep() }
         Task {
-            let cleared = await Task.detached(priority: .userInitiated) { (try? cache.clear(sparing: open)) != nil }.value
+            let cleared = await Task.detached(priority: .userInitiated) {
+                (try? cache.clear(includingKept: includingKept, sparing: open)) != nil
+            }.value
             if cleared { DeleteFeedback.play(.remove) }
             await loadUsage()
         }
