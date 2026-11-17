@@ -120,6 +120,9 @@ final class DevelopController: ObservableObject {
     /// (Rosh, Nov 9, 2026).
     @Published private(set) var showsStandIn = false
     @Published private(set) var errorMessage: String?
+    /// The open photo's original changed on its share since import (AT-079c part 3): the banner
+    /// over the photo with Use the New File and Use the Kept Copy.
+    @Published var originalChanged: OriginalChangedError?
     @Published private(set) var asShotTemperature: Double = 5500
     /// The camera's tint, which the stored Tint is relative to; shown added, as Lightroom does.
     @Published private(set) var asShotTint: Double = 0
@@ -904,6 +907,7 @@ final class DevelopController: ObservableObject {
         if heldFullSize { RenderMemory.shared.releaseAllSoon(because: "another photo opened") }
         sourceURL = nil
         errorMessage = nil
+        originalChanged = nil
         showingBefore = false
         isCropping = false
         isGuiding = false
@@ -992,6 +996,9 @@ final class DevelopController: ObservableObject {
                 case .failed(let message):
                     self.isLoading = false
                     self.errorMessage = message
+                case .changed(let change):
+                    self.isLoading = false
+                    self.originalChanged = change
                 }
             }
             return

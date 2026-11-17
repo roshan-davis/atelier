@@ -31,7 +31,7 @@ extension DevelopController {
         spotGenerations[id] = AIProgress("Rendering the photo")
         let settings = self.settings
         let ai = AIController.settings
-        let runner = AIRunner(catalog: catalog, client: ComfyClient(baseURL: ai.server))
+        let runner = AIRunner(catalog: catalog, client: ComfyClient(baseURL: ai.server), originals: originals)
         let seed = UInt32.random(in: 0...UInt32.max)
         let report: @Sendable (AIProgress) -> Void = { [weak self] progress in
             Task { @MainActor in

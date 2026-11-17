@@ -32,10 +32,14 @@ public struct ProcessorResult: Sendable, Equatable {
 public struct ProcessorHost: Sendable {
     let catalog: Catalog
     let importer: Importer
+    /// The cache of originals (AT-079c): a photo on a share is rendered from its checked copy, and
+    /// one whose original changed since import throws `OriginalChangedError`.
+    let originals: OriginalCache?
 
-    public init(catalog: Catalog, importer: Importer? = nil) {
+    public init(catalog: Catalog, importer: Importer? = nil, originals: OriginalCache? = nil) {
         self.catalog = catalog
         self.importer = importer ?? Importer(catalog: catalog, previews: nil)
+        self.originals = originals
     }
 
     /// The source photo's original, or the error every processor shows when it's offline.
@@ -51,7 +55,7 @@ public struct ProcessorHost: Sendable {
     public func renderInput(of assetID: Int64, settings: ExportSettings, baseName: String? = nil,
                             develop: Bool = true) throws -> URL {
         _ = try original(of: assetID)
-        return try Exporter(catalog: catalog).export(assetID, settings: settings, baseName: baseName, develop: develop)
+        return try Exporter(catalog: catalog, originals: originals).export(assetID, settings: settings, baseName: baseName, develop: develop)
     }
 
     /// Catalogs `file` where it is and stacks it on the source photo as `kind`, named `name`,

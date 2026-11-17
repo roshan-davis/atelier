@@ -118,6 +118,11 @@ public struct ExportFailure: Sendable, Hashable {
 public struct ExportResult: Sendable {
     public var exported: [URL] = []
     public var failures: [ExportFailure] = []
+    /// Photos whose original changed on its share since import (AT-079c): not exported, for the
+    /// When the original changed sheet.
+    public var changed: [OriginalChangedError] = []
+    /// Job notes: photos exported from a copy on this Mac that couldn't be checked (share offline).
+    public var notes: [String] = []
 }
 
 /// Renders photos with their develop settings at full quality and writes them to a folder.
@@ -162,16 +167,16 @@ public final class Exporter: Sendable {
             return result
         }
         // Up to `photosInFlight` photos at once; results keep the photos' order.
-        var outcomes = [Result<URL, Error>?](repeating: nil, count: assetIDs.count)
+        var outcomes = [Result<(URL, String?), Error>?](repeating: nil, count: assetIDs.count)
         var finished = 0
-        await withTaskGroup(of: (Int, Result<URL, Error>).self) { group in
+        await withTaskGroup(of: (Int, Result<(URL, String?), Error>).self) { group in
             var next = 0
             func startNext() {
                 guard next < assetIDs.count, !Task.isCancelled else { return }
                 let index = next, id = assetIDs[index]
                 next += 1
                 group.addTask {
-                    (index, Result { try autoreleasepool { try self.export(id, settings: settings) } })
+                    (index, Result { try autoreleasepool { try self.exportNoting(id, settings: settings) } })
                 }
             }
             for _ in 0..<photosInFlight { startNext() }
@@ -186,7 +191,10 @@ public final class Exporter: Sendable {
         }
         for (id, outcome) in zip(assetIDs, outcomes) {
             switch outcome {
-            case .success(let url): result.exported.append(url)
+            case .success(let (url, note)):
+                result.exported.append(url)
+                if let note { result.notes.append(note) }
+            case .failure(let error as OriginalChangedError): result.changed.append(error)
             case .failure(let error): result.failures.append(ExportFailure(filename: filename(id), reason: error.localizedDescription))
             case nil: break  // cancelled before it started
             }
@@ -206,11 +214,25 @@ public final class Exporter: Sendable {
     /// (see `DevelopSession.rendersLensBlur`).
     public func export(_ assetID: Int64, settings: ExportSettings, baseName: String? = nil,
                        develop applyDevelop: Bool = true, lensBlur: Bool = false) throws -> URL {
+        try exportNoting(assetID, settings: settings, baseName: baseName, develop: applyDevelop, lensBlur: lensBlur).0
+    }
+
+    /// `export`, plus the job note when it rendered from a copy on this Mac that couldn't be
+    /// checked against its share. A photo on a share is read through the cache of originals
+    /// (`Catalog.checkedSource`): once over the network, hash checked; a changed original throws
+    /// `OriginalChangedError`.
+    public func exportNoting(_ assetID: Int64, settings: ExportSettings, baseName: String? = nil,
+                             develop applyDevelop: Bool = true, lensBlur: Bool = false) throws -> (URL, String?) {
         guard let detail = try catalog.detail(for: assetID) else { throw ExportError("The photo is no longer in the catalog.") }
-        guard let source = originals?.readyCopy(for: assetID) ?? detail.fileURL,
-              FileManager.default.fileExists(atPath: source.path) else {
+        let checked: CheckedSource
+        do {
+            checked = try catalog.checkedSource(for: assetID, cache: originals)
+        } catch let error as OriginalChangedError {
+            throw error
+        } catch is CocoaError {
             throw ExportError("The original is offline. Connect its drive and export again.")
         }
+        let source = checked.url
         let develop = applyDevelop ? try catalog.developSettings(for: assetID) : .neutral
         // A crop keeps only part of the photo, so decode larger to still reach the long edge.
         var decodeEdge = settings.longEdge
@@ -275,7 +297,7 @@ public final class Exporter: Sendable {
             try? FileManager.default.removeItem(at: target)
             throw ExportError("The file could not be written.")
         }
-        return target
+        return (target, checked.note(filename: detail.asset.filename))
     }
 
     /// `uniqueURL`, created empty at once so a photo exported alongside can't take the same name.

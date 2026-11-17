@@ -48,7 +48,7 @@
   <figcaption><b>Settings › Storage:</b> each location with where it is, whether it is connected, how many photos it holds and how full it is. Click one to see its details below the list.</figcaption>
 </figure>
 
-<div class="chips"><a href="#add">Add a location</a><a href="#nas">A NAS</a><a href="#cloud">Cloud drive folders</a><a href="#details">Details</a><a href="#cache">Cache of originals</a><a href="#keep">Keep on This Mac</a><a href="#offline">Offline</a><a href="#where">What stays on this Mac</a><a href="#remove">Remove</a></div>
+<div class="chips"><a href="#add">Add a location</a><a href="#nas">A NAS</a><a href="#cloud">Cloud drive folders</a><a href="#details">Details</a><a href="#cache">Cache of originals</a><a href="#keep">Keep on This Mac</a><a href="#changed">When the original changed</a><a href="#offline">Offline</a><a href="#where">What stays on this Mac</a><a href="#remove">Remove</a></div>
 
 <h2 id="add">Add a location</h2>
 <ol class="steps">
@@ -88,7 +88,7 @@
 <h2 id="cache">Cache of originals</h2>
 <p>When you open a photo from a network share in Develop, Atelier reads its original once, start to end, into a folder on this Mac, and edits from that copy, so sliders, zooming in and Export never wait on the network. The first time, the status bar shows <span class="path">Reading DSC_1.NEF · 48 MB from megham…</span> with a progress bar and <span class="path">Cancel</span>; the photo's preview stays on screen meanwhile. The photos just before and after it are read in the background, so stepping through a shoot on the NAS feels local after the first one.</p>
 <ul>
-  <li>Before using a copy, Atelier checks the original's size and date on the share (no download). If the file changed there, it is read again; if its contents differ from what was imported, Atelier says so and doesn't use either file.</li>
+  <li>Before using a copy, Atelier checks the original's size and date on the share (no download). If the file changed there, it is read again; if its contents differ from what was imported, Atelier stops and asks (see <a href="#changed">When the original changed</a>).</li>
   <li>When the share is off, a photo with a copy on this Mac still opens in Develop at full quality, and the status bar says <i>Using the copy on this Mac from Nov 17; megham is offline, so changes there can't be checked.</i></li>
   <li>Set its size in <span class="path">Atelier › Settings… › Storage › Cache of Originals</span> (20 GB to start; it never takes more than a quarter of the free space). The copies opened longest ago go first. <span class="path">Clear Cache…</span> removes them; the originals are never touched. Photos you <a href="#keep">keep on this Mac</a> stay unless you also tick <span class="path">Also remove kept photos</span> in that alert (it starts unticked).</li>
   <li>Photos in a cloud drive folder aren't copied: the cloud drive's own download is their copy on this Mac.</li>
@@ -103,6 +103,17 @@
   <li><span class="path">Free Up Space</span> on the same menu removes the kept copies. The originals stay on the share and are read again when you open them.</li>
   <li>Only photos on a network share are kept. For a cloud drive folder, use the cloud drive's own <i>Keep Downloaded</i> or <i>Make available offline</i> in Finder.</li>
 </ul>
+
+<h2 id="changed">When the original changed</h2>
+<p>If a photo's file on the share isn't the one you imported (another app saved over it, or a camera card was copied again), Atelier never quietly uses either file. It stops for that photo and asks:</p>
+<ul>
+  <li><b>In Develop</b>, a banner over the photo says <i>NZ6_9144.NEF changed on megham since it was imported</i>, with <span class="path">Use the New File</span> and, for a photo you kept with <a href="#keep">Keep on This Mac</a>, <span class="path">Use the Kept Copy</span>. The preview stays on screen meanwhile.</li>
+  <li><b>Export and Edit In</b> carry on with the other photos, then show one sheet listing the changed ones. Pick <span class="path">Use the New File</span>, <span class="path">Use the Kept Copy</span> or <span class="path">Skip</span> for each, and <span class="path">Continue</span> runs the export (or Edit In) on the ones you let through. <span class="path">Skip All</span> leaves them.</li>
+  <li><span class="path">Use the New File</span> reads the new file once, with progress and <span class="path">Cancel</span> in the status bar; the catalog takes it from then on, the previews are made again, and your edits stay. A kept photo stays kept, now with the new file.</li>
+  <li><span class="path">Use the Kept Copy</span> works from the copy on this Mac from before the change, for this session; the photo still counts as changed, so Atelier asks again next time.</li>
+  <li>AI recipes run on the photo open in Develop, so its banner is where you choose.</li>
+</ul>
+<p>When the share is offline, an export from a copy on this Mac still runs at full quality, and <span class="path">Show Problems</span> in the status bar lists <i>Export notes</i> naming each photo whose copy couldn't be checked against the share.</p>
 
 <h2 id="offline">When a location is offline</h2>
 <p>Its photos stay in the grid from their previews, with the offline mark, and you can still rate, flag and keyword them. One with a copy in the <a href="#cache">cache of originals</a> also opens in Develop. <span class="path">Library › Refresh Volumes</span> (<kbd>⌘R</kbd>) checks again after you connect it some other way.</p>

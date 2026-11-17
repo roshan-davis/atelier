@@ -156,11 +156,13 @@ extension LibraryModel {
         let ids = targetIDs
         guard !ids.isEmpty else { return }
         let catalog = self.catalog
-        let host = ProcessorHost(catalog: catalog, importer: Importer(catalog: catalog, previews: nil, scheduler: previewScheduler))
+        let host = ProcessorHost(catalog: catalog, importer: Importer(catalog: catalog, previews: nil, scheduler: previewScheduler),
+                                 originals: originals)
         status = ids.count == 1 ? "Preparing the photo for \(editor.name)…" : "Preparing \(ids.count) photos for \(editor.name)…"
         Task.detached {
             var opened: [(Int64, URL)] = []
             var failures: [Problem] = []
+            var changed: [OriginalChangedError] = []
             for id in ids {
                 do {
                     if let derivation = try catalog.derivation(of: id), derivation.kind == .externalEdit,
@@ -178,11 +180,14 @@ extension LibraryModel {
                     let file = try host.renderInput(of: id, settings: settings, baseName: base, develop: editor.applyDevelop)
                     let edit = try host.registerResult(file, on: id, kind: .externalEdit, name: editor.name)
                     opened.append((edit.assetID, file))
+                } catch let change as OriginalChangedError {
+                    changed.append(change)
                 } catch {
                     let name = (try? catalog.detail(for: id))?.asset.filename ?? "Photo"
                     failures.append(Problem(name: name, reason: error.localizedDescription))
                 }
             }
+            let stopped = changed
             await MainActor.run {
                 self.showProcessorResults(opened.map { ProcessorResult(assetID: $0.0, url: $0.1) })
                 for (id, url) in opened { self.editWatcher.watch(id, at: url) }
@@ -200,6 +205,9 @@ extension LibraryModel {
                 if !failures.isEmpty {
                     self.problems = failures
                     self.problemsTitle = "These photos could not be sent to \(editor.name)"
+                }
+                self.reviewChangedOriginals(stopped, command: "Edit In \(editor.name)") { ids in
+                    self.withTargets(ids) { self.editIn(editor) }
                 }
             }
         }

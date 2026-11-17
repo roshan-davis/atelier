@@ -181,6 +181,10 @@ struct ContentView: View {
                 .environmentObject(model)
         }
         .modifier(KeepDialogs())
+        .sheet(item: $model.changedOriginals) { review in
+            ChangedOriginalsSheet(review: review)
+                .environmentObject(model)
+        }
         .sheet(isPresented: $model.showingShortcuts) {
             ShortcutsSheet()
         }

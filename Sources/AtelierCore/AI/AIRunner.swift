@@ -56,10 +56,10 @@ public final class AIRunner: Sendable {
     let client: ComfyClient
     let host: ProcessorHost
 
-    public init(catalog: Catalog, client: ComfyClient) {
+    public init(catalog: Catalog, client: ComfyClient, originals: OriginalCache? = nil) {
         self.catalog = catalog
         self.client = client
-        host = ProcessorHost(catalog: catalog)
+        host = ProcessorHost(catalog: catalog, originals: originals)
     }
 
     public func run(_ request: AIRequest, on assetID: Int64, settings: AISettings,

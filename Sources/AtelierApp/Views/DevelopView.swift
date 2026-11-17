@@ -77,6 +77,11 @@ struct DevelopImageView: View {
                         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 6))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
+                if let change = develop.originalChanged {
+                    OriginalChangedBanner(change: change)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                        .padding(12)
+                }
                 if develop.showingBefore {
                     Badge(text: "Before").padding(14)
                 } else if develop.isLensBlurring {

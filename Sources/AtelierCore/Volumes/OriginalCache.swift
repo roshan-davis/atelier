@@ -215,6 +215,22 @@ public final class OriginalCache: @unchecked Sendable {
         return Copy(url: url, checked: source != nil, storedAt: entry.storedAt)
     }
 
+    /// A copy kept with Keep on This Mac that still matches the catalog's hash (from before the
+    /// original changed), without any network access.
+    public func keptCopyExists(for assetID: Int64, contentHash: String) -> Bool {
+        guard let entry = try? entry(for: assetID), entry.pinned, entry.contentHash == contentHash else { return false }
+        return FileManager.default.fileExists(atPath: root.appendingPathComponent(entry.file).path)
+    }
+
+    /// Use the Kept Copy (AT-079c): the kept copy is what readers use for the rest of this session,
+    /// whatever the share now has. Nil when there is none.
+    public func useKeptCopy(for assetID: Int64, contentHash: String) -> URL? {
+        guard keptCopyExists(for: assetID, contentHash: contentHash), let entry = try? entry(for: assetID) else { return nil }
+        let url = root.appendingPathComponent(entry.file)
+        lock.withLock { ready[assetID] = url }
+        return url
+    }
+
     // MARK: Storing
 
     /// Reads `source` once, start to end, into the cache, hashing as it reads. The copy is kept only
