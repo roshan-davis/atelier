@@ -68,7 +68,7 @@ public final class DisplaySurfaces: @unchecked Sendable {
 
     static func make(width: Int, height: Int, colorSpace: CGColorSpace?) -> IOSurface? {
         guard width > 0, height > 0 else { return nil }
-        let properties: [IOSurfacePropertyKey: Any] = [
+        let properties: [IOSurfacePropertyKey: any Sendable] = [
             .width: width,
             .height: height,
             .bytesPerElement: 4,

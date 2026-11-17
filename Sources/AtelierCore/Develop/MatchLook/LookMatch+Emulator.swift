@@ -127,7 +127,8 @@ final class LookEmulator {
         // Every pixel is independent, so the rows are shared out over the cores.
         let chunks = 16
         out.withUnsafeMutableBufferPointer { buffer in
-            let pixels = buffer
+            // Each chunk writes only its own pixels.
+            nonisolated(unsafe) let pixels = buffer
             DispatchQueue.concurrentPerform(iterations: chunks) { chunk in
                 for i in (count * chunk / chunks)..<(count * (chunk + 1) / chunks) {
                     var c = SIMD3<Float>(stage[i * 3], stage[i * 3 + 1], stage[i * 3 + 2])
@@ -229,7 +230,8 @@ final class LookEmulator {
         let n = Self.cubeSize
         var values = [SIMD3<Float>](repeating: .zero, count: n * n * n)
         values.withUnsafeMutableBufferPointer { buffer in
-            let output = buffer
+            // Each blue slice writes only its own nodes.
+            nonisolated(unsafe) let output = buffer
             DispatchQueue.concurrentPerform(iterations: n) { b in
                 for g in 0..<n {
                     for r in 0..<n {
