@@ -109,8 +109,8 @@ final class ExportTests: XCTestCase {
     }
 
     func testOnePhotoAtATimeOnAnEightGigabyteMac() {
-        XCTAssertEqual(Exporter.photosInFlight(physicalMemory: 8 * 1_073_741_824), 1)
-        XCTAssertEqual(Exporter.photosInFlight(physicalMemory: 16 * 1_073_741_824), 2)
+        XCTAssertEqual(Exporter.defaultPhotosInFlight(physicalMemory: 8 * 1_073_741_824), 1)
+        XCTAssertEqual(Exporter.defaultPhotosInFlight(physicalMemory: 16 * 1_073_741_824), 2)
     }
 
     func testOfflineOriginalIsReported() async throws {

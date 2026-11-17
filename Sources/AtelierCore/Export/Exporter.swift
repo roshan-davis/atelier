@@ -132,11 +132,11 @@ public final class Exporter: Sendable {
 
     public convenience init(catalog: Catalog, renderer: DevelopRenderer = .shared) {
         self.init(catalog: catalog, renderer: renderer,
-                  photosInFlight: Self.photosInFlight(physicalMemory: ProcessInfo.processInfo.physicalMemory))
+                  photosInFlight: Self.defaultPhotosInFlight(physicalMemory: ProcessInfo.processInfo.physicalMemory))
     }
 
     /// Two photos at once, one on an 8 GB Mac: two full-size 16-bit TIFFs peak at about 4 GB.
-    static func photosInFlight(physicalMemory: UInt64) -> Int {
+    static func defaultPhotosInFlight(physicalMemory: UInt64) -> Int {
         physicalMemory > 8 * 1_073_741_824 ? 2 : 1
     }
 
