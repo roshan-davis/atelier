@@ -224,7 +224,7 @@ public final class OriginalCache: @unchecked Sendable {
         guard let info = SourceInfo(source) else { throw CocoaError(.fileReadNoSuchFile, userInfo: [NSFilePathErrorKey: source.path]) }
         let ext = source.pathExtension.isEmpty ? "" : "." + source.pathExtension.lowercased()
         let partial = root.appendingPathComponent("partial/\(assetID)-\(UUID().uuidString)\(ext)")
-        let fd = open(partial.path, O_WRONLY | O_CREAT | O_EXCL, 0o644)
+        let fd = Darwin.open(partial.path, O_WRONLY | O_CREAT | O_EXCL, 0o644)
         guard fd >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
         let hash: String
         do {
