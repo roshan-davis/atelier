@@ -1,7 +1,6 @@
 import CoreImage
 import Foundation
 import os
-import OnnxRuntimeBindings
 
 /// Detail > Noise Reduction > AI Denoise (AT-067): PMRID (Wang et al., "Practical Deep Raw Image
 /// Denoising on Mobile Devices", ECCV 2020; megvii-research/PMRID, Apache License 2.0), a 4 MB

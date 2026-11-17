@@ -2,7 +2,6 @@ import CoreGraphics
 import CoreImage
 import Foundation
 import os
-import OnnxRuntimeBindings
 
 /// Depth Range masks (AT-068): how far away each part of the photo is, from Depth Anything V2
 /// Small (Lihe Yang et al., 2024, Apache 2.0), an optional 50 MB download in Settings > AI or
