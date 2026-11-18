@@ -1204,6 +1204,12 @@ enum LayoutSnapshots {
             try catalog.addStorageLocation(folder: dropbox.rootURL.appendingPathComponent("Shoots"), on: dropbox,
                                            name: "Dropbox Shoots")
             try catalog.addStorageLocation(folder: googleDrive.rootURL, on: googleDrive)
+            // A bucket for backups, with made-up keys kept in memory (never the Keychain here).
+            try catalog.addObjectStorageLocation(
+                name: "B2 Backups",
+                bucket: S3Bucket(endpoint: URL(string: "https://s3.us-west-004.backblazeb2.com")!, region: "us-west-004",
+                                 bucket: "rosh-atelier", prefix: "Mac"),
+                credentials: S3Credentials(accessKey: "snapshot", secretKey: "snapshot"), secrets: MemorySecrets())
             try await catalog.writer.write { db in
                 try db.execute(sql: "UPDATE volume SET isOnline = 0 WHERE identityKey IN ('uuid:SNAPSHOT-SSD', 'cloud:GoogleDrive-rosh@example.com')")
                 var pending = StorageLocation(name: "Studio Mac", kind: .networkShare, volumeId: nil,
@@ -1213,13 +1219,13 @@ enum LayoutSnapshots {
         } catch {
             print("SNAPSHOT: storage sample locations failed: \(error)")
         }
-        for _ in 0..<20 where model.sidebar.locations.count < 5 { try? await Task.sleep(for: .milliseconds(250)) }
+        for _ in 0..<20 where model.sidebar.locations.count < 6 { try? await Task.sleep(for: .milliseconds(250)) }
         print("SNAPSHOT: storage locations \(model.sidebar.locations.map { "\($0.location.name) \($0.statusWord) \($0.detailLine) photos=\($0.photoCount)" })")
         for theme in [Theme.light, .graphite] {
             UserDefaults.standard.set(theme.rawValue, forKey: Theme.defaultsKey)
             theme.apply()
             await capture(AnyView(StorageSettings().environmentObject(model).frame(width: 640)),
-                          size: CGSize(width: 640, height: 1020),
+                          size: CGSize(width: 640, height: 1700),
                           to: folder.appendingPathComponent("settings-storage-\(theme.rawValue).png"))
         }
         UserDefaults.standard.set(Theme.light.rawValue, forKey: Theme.defaultsKey)
@@ -1243,6 +1249,7 @@ enum LayoutSnapshots {
             ("5-cloud-name", AddLocationSheet(step: .name, kind: .cloudFolder,
                                               place: .init(mounted: dropbox, folder: dropbox.rootURL.appendingPathComponent("Shoots")),
                                               name: "Shoots", added: { _ in })),
+            ("6-s3", AddLocationSheet(step: .place, kind: .objectStorage, s3: S3Form.snapshotSample, added: { _ in })),
         ]
         for (name, sheet) in steps {
             await capture(AnyView(sheet.environmentObject(model)), size: AddLocationSheet.size,

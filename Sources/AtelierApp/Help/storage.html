@@ -29,7 +29,7 @@
 
 <div class="eyebrow">Library</div>
 <h1>Storage locations</h1>
-<p class="lede">Atelier has no cloud of its own. You add the places you already keep photos (a NAS, an external drive, a folder, a cloud drive folder such as Dropbox) in <span class="path">Atelier › Settings… › Storage</span>, and Atelier uses them. Nothing is set up until you add it.</p>
+<p class="lede">Atelier has no cloud of its own. You add the places you already keep photos (a NAS, an external drive, a folder, a cloud drive folder such as Dropbox) and a bucket for catalog backups if you like, in <span class="path">Atelier › Settings… › Storage</span>, and Atelier uses them. Nothing is set up until you add it.</p>
 
 <figure>
   <div class="pane" aria-label="A drawn Storage pane">
@@ -48,17 +48,17 @@
   <figcaption><b>Settings › Storage:</b> each location with where it is, whether it is connected, how many photos it holds and how full it is. Click one to see its details below the list.</figcaption>
 </figure>
 
-<div class="chips"><a href="#add">Add a location</a><a href="#nas">A NAS</a><a href="#cloud">Cloud drive folders</a><a href="#details">Details</a><a href="#cache">Cache of originals</a><a href="#keep">Keep on This Mac</a><a href="#changed">When the original changed</a><a href="#offline">Offline</a><a href="#where">What stays on this Mac</a><a href="#remove">Remove</a></div>
+<div class="chips"><a href="#add">Add a location</a><a href="#nas">A NAS</a><a href="#cloud">Cloud drive folders</a><a href="#details">Details</a><a href="#cache">Cache of originals</a><a href="#keep">Keep on This Mac</a><a href="#changed">When the original changed</a><a href="#smart">Smart previews</a><a href="#offline">Offline</a><a href="#backups">Back up the catalog</a><a href="#s3">Object storage (S3)</a><a href="#where">What stays on this Mac</a><a href="#remove">Remove</a></div>
 
 <h2 id="add">Add a location</h2>
 <ol class="steps">
   <li>Open <span class="path">Atelier › Settings… › Storage</span> and click <span class="path">+</span>.</li>
-  <li>Choose <b>Drive or Folder on This Mac</b>, <b>Network Share (NAS)</b> or <b>Cloud Drive Folder</b>, then <span class="path">Continue</span>.</li>
+  <li>Choose <b>Drive or Folder on This Mac</b>, <b>Network Share (NAS)</b>, <b>Cloud Drive Folder</b> or <b>Object Storage (S3)</b> (for backups, see <a href="#s3">below</a>), then <span class="path">Continue</span>.</li>
   <li>Pick the place: a drive or folder in the Open panel, a server found on your network or an address such as <code>smb://megham.local/Photos</code>, or a cloud drive found on this Mac.</li>
   <li>Check the name (it starts as the share's or folder's name) and click <span class="path">Add Location</span>.</li>
 </ol>
 <p>You can add only a folder on a drive, for example <b>Photos SSD/Portfolio</b>. Photos Atelier already has from that drive stay exactly where they are; a location never moves or renames anything.</p>
-<p>Backups to S3-compatible storage (Backblaze B2, Cloudflare R2, Amazon S3, MinIO) come in a later update.</p>
+
 
 <h2 id="nas">A NAS</h2>
 <ul>
@@ -130,6 +130,27 @@
 
 <h2 id="offline">When a location is offline</h2>
 <p>Its photos stay in the grid from their previews, with the offline mark, and you can still rate, flag and keyword them. One with a copy in the <a href="#cache">cache of originals</a> or a <a href="#smart">smart preview</a> also opens in Develop. <span class="path">Library › Refresh Volumes</span> (<kbd>⌘R</kbd>) checks again after you connect it some other way.</p>
+
+<h2 id="backups">Back up the catalog</h2>
+<p>Atelier keeps the last few copies of the catalog inside it each time it quits (<span class="path">Settings › General</span>). To keep copies somewhere else as well, choose a location in <span class="path">Settings › Storage › Backups</span>:</p>
+<ul>
+  <li><b>Back up the catalog to:</b> any location: a drive, your NAS, a cloud drive folder or a bucket. Backups go to its <i>Atelier Backups</i> folder, one file per backup, such as <code>catalog-2026-11-17T213000.sqlite</code> (the time is UTC).</li>
+  <li><b>When:</b> every time Atelier quits, once a day or once a week, at quit. A small window shows the progress; <span class="path">Skip This Time</span> quits at once.</li>
+  <li><b>Keep:</b> how many backups stay there. The oldest are removed; nothing else in the folder is touched.</li>
+  <li><span class="path">Back Up Now</span>, or <span class="path">File › Back Up Catalog</span>, makes one straight away, in the background with progress and <span class="path">Cancel</span> in the status bar. The last backup's time and size, or what went wrong, show under the choices.</li>
+</ul>
+<p>To restore a backup, quit Atelier and copy it over <code>catalog.sqlite</code> inside the catalog (right-click the catalog in Finder › <span class="path">Show Package Contents</span>). Photos and previews aren't in the catalog backup: back the photos up with your drives.</p>
+
+<h2 id="s3">Object storage (S3)</h2>
+<p>A bucket on Amazon S3, Backblaze B2, Cloudflare R2, Wasabi or MinIO can hold catalog backups. Photos stay on drives, shares and cloud drive folders.</p>
+<ol class="steps">
+  <li>In <span class="path">Settings › Storage</span> click <span class="path">+</span>, choose <b>Object Storage (S3)</b> and <span class="path">Continue</span>.</li>
+  <li>Choose the <b>Service</b>. Atelier fills the endpoint from the region; for Cloudflare R2 type your account's endpoint, for MinIO its address, such as <code>http://localhost:9000</code>.</li>
+  <li>Enter the <b>Bucket</b>, an optional <b>Folder</b> inside it, and the <b>Access Key</b> and <b>Secret Key</b>. Use keys that can only reach this bucket.</li>
+  <li>Click <span class="path">Test Connection</span> (or <span class="path">Continue</span>, which tests first). A tick means Atelier can list the bucket; otherwise it says what's wrong, such as a secret key that doesn't match or a bucket in another region.</li>
+  <li>Check the name and click <span class="path">Add Location</span>. The first bucket you add becomes the backup location.</li>
+</ol>
+<p>The keys are kept in your Keychain as <i>Atelier: &lt;name&gt;</i>, never in the catalog, its backups or anything a chat app can see. In the bucket's details, <span class="path">Test Connection</span> checks it again and <span class="path">Sign In Again…</span> replaces the keys. Removing the bucket removes its keys from the Keychain; the backups in it stay.</p>
 
 <h2 id="where">What stays on this Mac</h2>
 <p>The catalog, every preview and the smart previews always stay on this Mac (smart previews inside the catalog, in its <i>Smart Previews</i> folder), whatever locations you add, so browsing never waits on the network and a sync app can never damage the catalog.</p>

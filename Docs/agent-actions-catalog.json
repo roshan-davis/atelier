@@ -498,6 +498,22 @@
     },
     {
       "exposed": true,
+      "id": "file.backUpCatalog",
+      "kind": "writesFiles",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "File > Back Up Catalog",
+      "summary": "Copies the catalog to the backup location chosen in Settings > Storage > Backups (a folder or an S3-compatible bucket) and keeps the newest backups there, in the background with progress and Cancel.",
+      "tier": "asksFirst",
+      "title": "Back Up Catalog",
+      "version": 1
+    },
+    {
+      "exposed": true,
       "id": "file.export",
       "kind": "writesFiles",
       "parameters": {

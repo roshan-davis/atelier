@@ -98,6 +98,11 @@ public enum AtelierAction {
         "library.writeAllXMP", "Write All Unsaved XMP", place: "Library > Write All Unsaved XMP",
         summary: "Writes XMP sidecars for every photo with unsaved changes.",
         kind: .writesFiles, shortcut: KeyShortcut("s", [.command, .option]))
+    public static let backUpCatalog = Action<NoParameters>(
+        "file.backUpCatalog", "Back Up Catalog",
+        place: "File > Back Up Catalog",
+        summary: "Copies the catalog to the backup location chosen in Settings > Storage > Backups (a folder or an S3-compatible bucket) and keeps the newest backups there, in the background with progress and Cancel.",
+        kind: .writesFiles)
     public static let buildSmartPreviews = Action<NoParameters>(
         "library.buildSmartPreviews", "Build Smart Previews",
         place: "Library > Previews > Build Smart Previews",
@@ -321,7 +326,7 @@ public enum AtelierAction {
         undo.descriptor, redo.descriptor, zoomIn.descriptor, zoomOut.descriptor, zoomToFit.descriptor,
         zoomTo100.descriptor, toggleZoom.descriptor, setZoom.descriptor, showFilmstrip.descriptor,
         showNotes.descriptor, privatePhotos.descriptor, grid.descriptor, loupe.descriptor, develop.descriptor,
-        cullImport.descriptor, writeXMP.descriptor, writeAllXMP.descriptor, buildSmartPreviews.descriptor, discardSmartPreviews.descriptor, refreshVolumes.descriptor,
+        cullImport.descriptor, writeXMP.descriptor, writeAllXMP.descriptor, backUpCatalog.descriptor, buildSmartPreviews.descriptor, discardSmartPreviews.descriptor, refreshVolumes.descriptor,
         connectLocation.descriptor, disconnectLocation.descriptor, showLocationInFinder.descriptor,
         keepOnThisMac.descriptor, freeUpSpace.descriptor,
         createVirtualCopy.descriptor, removeVirtualCopy.descriptor, removePhoto.descriptor,

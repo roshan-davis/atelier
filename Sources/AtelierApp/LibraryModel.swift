@@ -59,7 +59,10 @@ struct SidebarData: Equatable, Sendable {
     var locations: [StorageLocationInfo] = []
     var folders: [Folder] = []
     /// The sidebar's Locations rows: each location with the folders it holds (`SidebarLocation.make`).
-    var locationRows: [SidebarLocation] { SidebarLocation.make(locations: locations, folders: folders) }
+    /// Buckets hold backups, not photos, so they're only in Settings > Storage.
+    var locationRows: [SidebarLocation] {
+        SidebarLocation.make(locations: locations.filter { $0.location.kind != .objectStorage }, folders: folders)
+    }
     var collections: [PhotoCollection] = []
     var imports: [ImportGroupSummary] = []
     var totalCount = 0
@@ -198,6 +201,11 @@ final class LibraryModel: ObservableObject {
     var smartPreviewJob: Task<Void, Never>?
     /// Photos waiting for the run going now (from imports while it runs).
     var pendingSmartPreviews: [Int64] = []
+    /// Catalog backup to the backup location (AT-079e): the status bar's progress, the job, and
+    /// the last result for Settings > Storage > Backups.
+    @Published var backupProgress: ImportStatus?
+    var backupJob: Task<Void, Never>?
+    @Published var lastBackup: CatalogBackupRecord? = CatalogBackupRecord.load()
     /// When the original changed (AT-079c part 3): the sheet for Export and Edit In, and Use the
     /// New File's read.
     @Published var changedOriginals: ChangedOriginalsReview?

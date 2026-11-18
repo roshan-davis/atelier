@@ -166,6 +166,7 @@ public final class Catalog: Sendable {
         registerStorageLocationMigration(&migrator)
         registerOriginalChangeMigration(&migrator)
         registerSmartPreviewLocationMigration(&migrator)
+        registerObjectStorageMigration(&migrator)
         return migrator
     }
 }

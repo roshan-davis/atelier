@@ -99,6 +99,8 @@ private struct ReadyLibraryCommands: Commands {
                 actions.button(AtelierAction.importPhotos)
                 actions.button(AtelierAction.export)
                 Divider()
+                actions.button(AtelierAction.backUpCatalog)
+                Divider()
                 // ⌘S saves in HDR mode; elsewhere it stays Library > Write XMP for Selection.
                 actions.button(AtelierAction.saveHDR)
                 actions.button(AtelierAction.saveHDRAsNew)
@@ -251,12 +253,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         true
     }
 
-    /// Unsaved HDR changes are asked about before quitting, as in any Mac editor.
+    /// Unsaved HDR changes are asked about before quitting, as in any Mac editor; then a due
+    /// catalog backup runs, with Skip.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         MainActor.assumeIsolated {
             guard let model else { return .terminateNow }
-            let now = model.shouldTerminateWithHDR { quit in sender.reply(toApplicationShouldTerminate: quit) }
-            return now ? .terminateNow : .terminateLater
+            // Then the catalog backup to the backup location, when one is due (AT-079e).
+            let now = model.shouldTerminateWithHDR { quit in
+                guard quit, model.backUpBeforeQuitting(done: { sender.reply(toApplicationShouldTerminate: true) }) else {
+                    sender.reply(toApplicationShouldTerminate: quit)
+                    return
+                }
+            }
+            guard now else { return .terminateLater }
+            return model.backUpBeforeQuitting(done: { sender.reply(toApplicationShouldTerminate: true) }) ? .terminateLater : .terminateNow
         }
     }
 

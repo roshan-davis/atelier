@@ -111,7 +111,9 @@ public struct StorageLocationInfo: Identifiable, Hashable, Sendable {
     /// The word beside the status dot. A cloud drive folder whose provider folder is gone (the app
     /// signed out or removed) is "Signed Out" rather than "Offline".
     public var statusWord: String {
-        location.kind == .cloudFolder && status == .offline ? "Signed Out" : status.word
+        // A bucket is reached on demand; it has no connection to show ("Ready" once added).
+        if location.kind == .objectStorage { return "Ready" }
+        return location.kind == .cloudFolder && status == .offline ? "Signed Out" : status.word
     }
 
     /// The grey second line: "Network share · megham.local/Photos", "Drive · Photos SSD/Portfolio".
@@ -280,7 +282,7 @@ extension Catalog {
             let address = mounted.serverAddress
             // A share added by address before it was ever mounted is the same location.
             if let key = address.flatMap(ServerAddress.matchKey), root.isEmpty,
-               var pending = try StorageLocation.filter(Column("volumeId") == nil).fetchAll(db)
+               var pending = try StorageLocation.filter(Column("volumeId") == nil && Column("kind") != StorageLocationKind.objectStorage.rawValue).fetchAll(db)
                 .first(where: { $0.serverAddress.flatMap(ServerAddress.matchKey) == key }) {
                 pending.volumeId = volume.id
                 try pending.update(db)
@@ -311,7 +313,9 @@ extension Catalog {
     /// Links share locations added by address to the volume once it is mounted, and adds the
     /// volume's record if the catalog has none yet. Called from `refreshVolumes`.
     static func linkPendingLocations(_ mounted: [MountedVolume], _ db: Database) throws {
-        let pending = try StorageLocation.filter(Column("volumeId") == nil && Column("serverAddress") != nil).fetchAll(db)
+        // Object storage has an endpoint, never a volume.
+        let pending = try StorageLocation.filter(Column("volumeId") == nil && Column("serverAddress") != nil
+                                                 && Column("kind") != StorageLocationKind.objectStorage.rawValue).fetchAll(db)
         guard !pending.isEmpty else { return }
         for volume in mounted {
             guard let key = volume.serverAddress.flatMap(ServerAddress.matchKey) else { continue }
