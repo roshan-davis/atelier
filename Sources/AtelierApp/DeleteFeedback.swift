@@ -18,6 +18,8 @@ enum DeleteFeedback {
     static let enabledKey = "feedback.deleteEffects"
 
     static func play(_ kind: Kind) {
+        // No app (tests run headless): no sound and no puff, which would also crash on NSApp.
+        guard NSApp != nil else { return }
         guard UserDefaults.standard.object(forKey: enabledKey) as? Bool ?? true else { return }
         playSound(kind)
         showPoof()

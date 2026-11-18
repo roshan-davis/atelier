@@ -136,6 +136,8 @@ private struct AgentsSettingsForm: View {
                     .foregroundStyle(.secondary)
             }
 
+            PhoneSettingsSection(phone: server.phone)
+
             SettingsSection("Connect an App") {
                 LabeledContent("Helper") {
                     if let url = AgentHelper.url, AgentHelper.isBuilt {

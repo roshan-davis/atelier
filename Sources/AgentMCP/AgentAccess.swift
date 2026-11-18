@@ -66,15 +66,19 @@ public struct AgentClient: Hashable, Sendable {
     public var requestedProfile: AgentProfile?
     /// What the client called itself in `initialize` (unchecked, shown for information).
     public var clientInfo: String?
+    /// A paired phone over the HTTP listener (AT-050f), not a helper on this Mac: nobody may be at
+    /// the Mac, so the app must never raise a sheet for it.
+    public var isRemote: Bool
 
     public init(id: String, name: String, path: String? = nil, pid: Int32, requestedProfile: AgentProfile? = nil,
-                clientInfo: String? = nil) {
+                clientInfo: String? = nil, isRemote: Bool = false) {
         self.id = id
         self.name = name
         self.path = path
         self.pid = pid
         self.requestedProfile = requestedProfile
         self.clientInfo = clientInfo
+        self.isRemote = isRemote
     }
 }
 

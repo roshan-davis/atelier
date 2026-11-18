@@ -48,6 +48,10 @@ final class AgentServer: ObservableObject {
     /// Docking beside a chat app (AT-050h, Agents/AgentDocking.swift).
     private(set) lazy var dock = AgentDock(server: self)
     private var server: MCPSocketServer?
+    /// The host the socket and the phone listener share (one set of tools, one log).
+    private(set) var host: AtelierMCPHost?
+    /// Paired phones over Tailscale (AT-050f, Agents/AgentPhone.swift).
+    private(set) lazy var phone = AgentPhone(server: self)
     /// One approval question per client at a time, however many requests are waiting on it.
     private var questions: [String: Task<AgentProfile?, Never>] = [:]
 
@@ -84,8 +88,10 @@ final class AgentServer: ObservableObject {
         do {
             try socket.start()
             server = socket
+            self.host = host
             isRunning = true
             problem = nil
+            phone.refresh()
         } catch is MCPSocketServer.InUse {
             problem = "Another copy of Atelier is already connected to chat apps. Quit it, then turn agents off and on here."
             isRunning = false
@@ -105,9 +111,11 @@ final class AgentServer: ObservableObject {
         if quitting { dock.quitting() }
         server?.stop()
         server = nil
+        host = nil
         isRunning = false
         problem = nil
         connected = []
+        phone.refresh()
     }
 
     // MARK: Grants
@@ -151,6 +159,8 @@ final class AgentServer: ObservableObject {
         guard AgentSettings.isEnabled else {
             return .denied("Agents are turned off in \(Self.appName) > Settings… > Agents.")
         }
+        // A paired phone has its own grant and is never asked about at the Mac (nobody may be there).
+        if client.isRemote { return phone.authorization(for: client) }
         if let grant = grants.grant(for: client.id) {
             return grant.authorization(for: client, appName: Self.appName)
         }

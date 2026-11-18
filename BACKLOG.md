@@ -918,10 +918,17 @@ Findings: about 15–25% faster on most sliders, 25–35% on HSL and Color Gradi
 
 ### AT-050f — Optional reach: HTTP over Tailscale, App Intents, prompts (A5)
 
-**Status:** Proposed / discuss (Rosh decides remote access). **Owner/chat/branch/PR:** unassigned. **Depends on:** AT-050e.
+**Status:** Phone listener and pairing approved and in review (Rosh, Nov 18, 2026: handed over Docent's "Phone access for Atelier and Easel" doc, "read it implement it, test it in background silently and merge it if all good"); App Intents and prompts still Proposed. **Owner:** Claude (Cl). **Chat:** [Build iPhone app MCP support](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKLNEaxKo5QWA4SQXZgn9RNn). **Branch:** `claude/project-thread-7nvc8x`. **Depends on:** AT-050b..d (built); not on AT-050e (its Allows will follow the phone rule below). Docent's side: DO-017; Easel builds the same contract from the shared module.
 
-**Scope candidates:**
-- A Streamable HTTP listener (off by default, loopback or tailnet, token), with request keys so retries don't run twice.
+**Phone listener (built, needs Mac build and Rosh's test with Docent on iPhone):** the shared contract in `Docs/Atelier-Agent-Actions.md`, "From a phone". MCP over Streamable HTTP at `/mcp`, off by default (Settings > Agents > Phone), port 47801; binds 127.0.0.1 and the Tailscale address only (never 0.0.0.0, Wi-Fi or Ethernet), stays off without one, follows it as interfaces change; Pair a Phone… QR code for 5 minutes; per-device token kept as a SHA-256 hash; 401 (no detail) and 401 `revoked`; per-device profile and This app asks for me; Revoke at once; a phone never raises a Mac sheet. Shared code in `Sources/AgentMCP` (`MCPHTTPEndpoint`, `MCPHTTPServer`, `TailnetAddresses`, `PhonePairing`, `TokenHash`), app side in `Agents/AgentPhone.swift` and `Views/PhoneSettings.swift`.
+
+**Validation so far:** `PhoneHTTPTests` (23) and the rest of the shared tests (129 in all) pass on Linux, Swift 6.1, including a real socket on 127.0.0.1. Mac (Rosh's M4 Pro, macOS 26.0.1, Swift 6.2.4, background `swift build --build-tests` and targeted `swift test` at 38ca8c1): build OK; `AgentPhoneTests` 4/4 (read, change, undo end to end through Atelier's host; no Mac sheet for a phone; revoked), `PhoneHTTPTests` 23/23, MCP/grant/agent suites green; the only failure, `AgentEditToolsTests.testMasksAddAndCombine` ("mask 1" vs "Mask 1"), fails the same on main 71a4480.
+
+**Acceptance:** Docent on iPhone pairs by QR, lists, rates and undoes over Tailscale; curl against the Wi-Fi address is refused; Revoke stops the phone at once.
+
+**Left out:** request keys so a retried call doesn't run twice; Keychain storage (the hash is in Atelier's settings: a hash of 32 random bytes can't be turned back into the token, and the Keychain would ask for access on unsigned builds).
+
+**Scope candidates (not started):**
 - App Intents for Shortcuts from the same registry.
 - MCP prompts ("Cull this import", "Export the picks for the website", "Match these to a reference").
 - A claude.ai connector would need public HTTPS with OAuth and is not planned.
