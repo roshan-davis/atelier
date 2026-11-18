@@ -14,11 +14,12 @@ public struct PairedDevice: Codable, Hashable, Sendable, Identifiable {
     public var lastUsed: Date?
     public var profile: AgentProfile
     /// The phone's own Allow card is the only approval: the app never asks at the Mac for it.
-    /// Off: a call that would need the Mac's Allow fails at once.
+    /// Off: a call that would need the Mac's Allow fails at once. On for a new phone (as Easel):
+    /// Docent shows its own Allow card, and nobody may be at the Mac.
     public var asksForMe: Bool
 
     public init(id: String = UUID().uuidString, name: String, tokenHash: String, pairedAt: Date = Date(),
-                lastUsed: Date? = nil, profile: AgentProfile, asksForMe: Bool = false) {
+                lastUsed: Date? = nil, profile: AgentProfile, asksForMe: Bool = true) {
         self.id = id
         self.name = name
         self.tokenHash = tokenHash
@@ -36,7 +37,7 @@ public struct PairedDevice: Codable, Hashable, Sendable, Identifiable {
         pairedAt = try container.decode(Date.self, forKey: .pairedAt)
         lastUsed = try container.decodeIfPresent(Date.self, forKey: .lastUsed)
         profile = try container.decodeIfPresent(AgentProfile.self, forKey: .profile) ?? .look
-        asksForMe = try container.decodeIfPresent(Bool.self, forKey: .asksForMe) ?? false
+        asksForMe = try container.decodeIfPresent(Bool.self, forKey: .asksForMe) ?? true
     }
 
     static let clientPrefix = "phone#"
@@ -54,10 +55,10 @@ public struct PairedDevice: Codable, Hashable, Sendable, Identifiable {
         AgentClient(id: clientID, name: name, pid: 0, clientInfo: name, isRemote: true)
     }
 
-    /// A readable name from `clientInfo.name`: trimmed, at most 60 characters.
+    /// A readable name from `clientInfo.name`: trimmed, at most 80 characters (as Easel).
     public static func name(fromClientInfo raw: String?) -> String {
         let trimmed = (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines.union(.controlCharacters))
-        return trimmed.isEmpty ? "Phone" : String(trimmed.prefix(60))
+        return trimmed.isEmpty ? "Phone" : String(trimmed.prefix(80))
     }
 }
 

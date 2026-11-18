@@ -127,6 +127,8 @@ final class PhoneHTTPTests: XCTestCase {
         let session = try XCTUnwrap(reply.headers[MCPHTTPEndpoint.sessionHeader])
         XCTAssertEqual(store.devices.map(\.name), ["Docent on iPhoneRo"])
         XCTAssertEqual(store.devices.first?.profile, .edit)
+        // A new phone's own Allow card is its approval (as Easel): nobody may be at the Mac.
+        XCTAssertEqual(store.devices.first?.asksForMe, true)
         XCTAssertNil(store.pendingPairing(now: start))
         let result = try XCTUnwrap(json(reply)?["result"])
         XCTAssertEqual(result["serverInfo"]?["name"], .string("sketch"))
@@ -253,8 +255,13 @@ final class PhoneHTTPTests: XCTestCase {
         // Without the session header, or with one that ended: 400 and 404.
         let missing = await post(#"{"jsonrpc":"2.0","id":2,"method":"ping"}"#, token: code.token)
         XCTAssertEqual(missing.status, 400)
+        // The same bodies as Easel's listener, so Docent reads both apps alike.
+        XCTAssertEqual(JSONValue(parsing: missing.body)?["error"]?["message"], .string("Missing Mcp-Session-Id: send initialize first"))
+        XCTAssertEqual(JSONValue(parsing: missing.body)?["id"], .int(2))
         let unknown = await post(#"{"jsonrpc":"2.0","id":2,"method":"ping"}"#, token: code.token, session: UUID().uuidString)
         XCTAssertEqual(unknown.status, 404)
+        XCTAssertEqual(JSONValue(parsing: unknown.body)?["error"]?["code"], .int(-32001))
+        XCTAssertEqual(JSONValue(parsing: unknown.body)?["error"]?["message"], .string("Session not found"))
         // GET (no server-sent stream) and other paths.
         let get = await endpoint.respond(to: HTTPRequest(method: "GET", path: "/mcp",
                                                          headers: ["Authorization": "Bearer \(code.token)"]), now: start)

@@ -198,7 +198,7 @@ public final class MCPHTTPEndpoint: @unchecked Sendable {
         case .revoked:
             let id = message?["id"] ?? .null
             return .json(401, MCPSession.error(id: id, code: -32001, message: "revoked").compactText,
-                         headers: ["WWW-Authenticate": "Bearer error=\"invalid_token\""])
+                         headers: ["WWW-Authenticate": "Bearer"])
         case .pairing:
             // The code pairs only through its first initialize.
             guard message?["method"]?.stringValue == "initialize",
@@ -215,13 +215,13 @@ public final class MCPHTTPEndpoint: @unchecked Sendable {
         sweep(now)
 
         if request.method == "DELETE" {
-            guard let id = request.headers[Self.sessionHeader.lowercased()] else { return HTTPResponse(status: 400) }
+            guard let id = request.headers[Self.sessionHeader.lowercased()] else { return Self.missingSession(.null) }
             let entry: Entry? = lock.withLock {
                 guard let entry = sessions[id], entry.deviceID == device.id else { return nil }
                 sessions[id] = nil
                 return entry
             }
-            guard let entry else { return HTTPResponse(status: 404) }
+            guard let entry else { return Self.sessionNotFound(.null) }
             await entry.session.close()
             return HTTPResponse(status: 200)
         }
@@ -233,8 +233,7 @@ public final class MCPHTTPEndpoint: @unchecked Sendable {
             return await initialize(request, device: device, now: now)
         }
         guard let id = request.headers[Self.sessionHeader.lowercased()] else {
-            return .json(400, MCPSession.error(id: message["id"] ?? .null, code: -32600,
-                                               message: "Send initialize first, then the \(Self.sessionHeader) header it returns.").compactText)
+            return Self.missingSession(message["id"] ?? .null)
         }
         let entry: Entry? = lock.withLock {
             guard let entry = sessions[id], entry.deviceID == device.id else { return nil }
@@ -242,7 +241,7 @@ public final class MCPHTTPEndpoint: @unchecked Sendable {
             return entry
         }
         // 404: the session ended (idle, revoked, the app restarted); the phone initializes again.
-        guard let entry else { return HTTPResponse(status: 404) }
+        guard let entry else { return Self.sessionNotFound(message["id"] ?? .null) }
         let reply = await entry.gate.run { await entry.session.handle(request.body) }
         guard let reply else { return HTTPResponse(status: 202) }
         return .json(200, reply, headers: [Self.sessionHeader: id])
@@ -274,6 +273,15 @@ public final class MCPHTTPEndpoint: @unchecked Sendable {
     }
 
     static let unauthorized = HTTPResponse(status: 401, headers: ["WWW-Authenticate": "Bearer"])
+
+    // The same bodies as Easel's listener, so one phone client reads both apps alike.
+    static func missingSession(_ id: JSONValue) -> HTTPResponse {
+        .json(400, MCPSession.error(id: id, code: -32600, message: "Missing \(sessionHeader): send initialize first").compactText)
+    }
+
+    static func sessionNotFound(_ id: JSONValue) -> HTTPResponse {
+        .json(404, MCPSession.error(id: id, code: -32001, message: "Session not found").compactText)
+    }
 
     static func bearer(_ header: String?) -> String? {
         guard let header else { return nil }
