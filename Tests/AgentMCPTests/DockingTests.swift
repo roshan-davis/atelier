@@ -104,6 +104,25 @@ final class DockingTests: XCTestCase {
         }
     }
 
+    /// A setting that adds or removes tools tells the client to list them again (MCP
+    /// notifications/tools/list_changed), but only after initialize and with a way back.
+    func testToolsChangedIsAdvertisedAndSentAfterInitialize() async {
+        let host = SketchDockingHost()
+        let outbox = Outbox()
+        let live = session(host, docent, outbox)
+        XCTAssertFalse(live.toolsChanged(), "nothing before initialize")
+        let reply = await send(live, "initialize", #"{"protocolVersion":"2025-06-18"}"#)
+        XCTAssertEqual(reply?["result"]?["capabilities"]?["tools"]?["listChanged"], .bool(true))
+        XCTAssertTrue(live.toolsChanged())
+        XCTAssertEqual(outbox.methods, [MCPSession.toolsListChanged])
+
+        // Without a way back the session can't send it, so it doesn't promise it.
+        let answersOnly = MCPSession(client: docent, host: host)
+        let plain = await send(answersOnly, "initialize", #"{"protocolVersion":"2025-06-18"}"#)
+        XCTAssertEqual(plain?["result"]?["capabilities"]?["tools"]?["listChanged"], .bool(false))
+        XCTAssertFalse(answersOnly.toolsChanged())
+    }
+
     func testDockingMethodsAreNeverTools() async {
         let host = SketchDockingHost()
         let outbox = Outbox()

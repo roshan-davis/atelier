@@ -192,8 +192,8 @@ public enum AtelierAgentTools {
 
     public static let show = MCPTool(
         name: "show", title: "Show photos",
-        description: "Selects photos in Atelier and puts the first in front, optionally switching to Grid, Loupe or Develop, "
-            + "so the person sees what you found. Changes only what's on screen.",
+        description: "Selects photos in Atelier's own window and puts the first in front, optionally switching to Grid, Loupe "
+            + "or Develop. Changes only Atelier's window; it doesn't show the photo in a chat (use get_preview for that).",
         inputSchema: ParameterSchema.of(ShowParameters.self).json, readOnly: false, idempotent: true)
 
     public static let setMetadata = MCPTool(

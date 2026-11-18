@@ -160,6 +160,25 @@ public final class MCPSession: @unchecked Sendable {
 
     private var docking: DockingCoordinator? { (host as? MCPDockingHost)?.docking }
 
+    /// Set once `initialize` is answered: only then may the session send notifications.
+    private let initializedLock = NSLock()
+    private var answeredInitialize = false
+
+    /// Tells the client its tool list may have changed (`notifications/tools/list_changed`), so it
+    /// lists the tools again: the app calls it when a setting adds or removes a tool. Sent only
+    /// after `initialize` and only with a way back; returns whether it was sent.
+    @discardableResult
+    public func toolsChanged() -> Bool {
+        guard let output, initializedLock.withLock({ answeredInitialize }) else { return false }
+        // Straight to the output (it sends whole lines under its own lock), not through the
+        // docking channel, which belongs to the session's own task.
+        let line = JSONValue.object(["jsonrpc": .string("2.0"), "method": .string(Self.toolsListChanged),
+                                     "params": .object([:])]).compactText
+        return output(line)
+    }
+
+    public static let toolsListChanged = "notifications/tools/list_changed"
+
     private var channel: MCPChannel {
         if let openChannel { return openChannel }
         let channel = MCPChannel(client: client, output: output)
@@ -216,7 +235,8 @@ public final class MCPSession: @unchecked Sendable {
                 return Self.error(id: id, code: -32001, message: reason)
             }
             let info = host.serverInfo
-            var capabilities: [String: JSONValue] = ["tools": .object(["listChanged": .bool(false)])]
+            // With a way back, the session says when its tools change (toolsChanged()).
+            var capabilities: [String: JSONValue] = ["tools": .object(["listChanged": .bool(output != nil)])]
             if host is MCPResourceHost {
                 capabilities["resources"] = .object(["listChanged": .bool(false)])
             }
@@ -227,6 +247,7 @@ public final class MCPSession: @unchecked Sendable {
             if docking != nil, output != nil {
                 capabilities["experimental"] = .object(["docking": DockingProtocol.capability])
             }
+            initializedLock.withLock { answeredInitialize = true }
             return Self.result(id: id, .object([
                 "protocolVersion": .string(version),
                 "capabilities": .object(capabilities),

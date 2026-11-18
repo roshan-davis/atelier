@@ -104,6 +104,8 @@ private struct AgentsSettingsForm: View {
                 status
                 DockStatus(dock: server.dock)
                 Toggle("Let agents see photo previews", isOn: $previews)
+                    // get_preview comes and goes: connected chat apps list the tools again.
+                    .onChange(of: previews) { _, _ in server.toolsChanged() }
                 Toggle("Include location in photo details", isOn: $location)
                 Picker("Ask before one change touches more than", selection: $confirmAbove) {
                     ForEach([10, 25, 50, 100, 250, 500], id: \.self) { count in
