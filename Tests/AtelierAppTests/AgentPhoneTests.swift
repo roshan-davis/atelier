@@ -102,7 +102,9 @@ final class AgentPhoneTests: XCTestCase {
         for device in store.devices { store.revoke(id: device.id) }
         addTeardownBlock { @MainActor in for device in store.devices { store.revoke(id: device.id) } }
         let host = AtelierMCPHost(server: agents, tools: AgentLookTools(catalog: library.catalog, previews: library.previews),
-                                  docking: agents.dock.coordinator)
+                                  docking: agents.dock.coordinator,
+                                  // No skills: these tests are about pairing.
+                                  skills: AtelierSkills.Snapshot(skills: []))
         let endpoint = MCPHTTPEndpoint(host: host, devices: store, pairingProfile: { .edit })
         let code = store.startPairing()
         return (endpoint, code.token)

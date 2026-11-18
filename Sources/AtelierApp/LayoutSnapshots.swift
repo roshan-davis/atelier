@@ -1,6 +1,9 @@
 import AppKit
 import ImageIO
 import AtelierCore
+import StudioMarkdownEditor
+import StudioSkills
+import StudioSkillsUI
 import SwiftUI
 
 #if DEBUG
@@ -79,6 +82,7 @@ enum LayoutSnapshots {
             if only.contains("lens-blur") { await snapshotLensBlurMode(model: model, into: folder) }
             if only.contains("hdr") { await snapshotHDR(model: model, into: folder) }
             if only.contains("storage") { await snapshotStorage(model: model, into: folder) }
+            if only.contains("skills") { await snapshotSkills(into: folder) }
             fflush(stdout)
             exit(0)
         }
@@ -191,6 +195,7 @@ enum LayoutSnapshots {
         await capture(AnyView(GeneralSettings().environmentObject(model).frame(width: 640)), size: CGSize(width: 640, height: 780),
                       to: folder.appendingPathComponent("settings-general.png"))
         await snapshotSettingsWindow(model: model, into: folder)
+        await snapshotSkills(into: folder)
         await snapshotStorage(model: model, into: folder)
         await snapshotExport(model: model, into: folder)
         // The splash with each built-in image, and with none.
@@ -274,6 +279,57 @@ enum LayoutSnapshots {
             UserDefaults.standard.set(pane.rawValue, forKey: SettingsPane.defaultsKey)
             await capture(AnyView(SettingsView().environmentObject(model)), size: SettingsView.size,
                           to: folder.appendingPathComponent("settings-window-\(pane.rawValue)-\(theme.rawValue).png"))
+        }
+    }
+
+    /// Settings > Agents > Skills (SL-002c), empty and with skills (one switched off, one with a
+    /// command Atelier no longer has), and Edit Skill on that skill with its warning. The skills
+    /// live in a throwaway folder under the snapshot fixtures, never the person's.
+    static func snapshotSkills(into folder: URL) async {
+        let savedTheme = UserDefaults.standard.object(forKey: Theme.defaultsKey)
+        defer {
+            if let savedTheme { UserDefaults.standard.set(savedTheme, forKey: Theme.defaultsKey) }
+            else { UserDefaults.standard.removeObject(forKey: Theme.defaultsKey) }
+            Theme.current.apply()
+        }
+        let root = fixtures(in: folder).appendingPathComponent("skills", isDirectory: true)
+        try? FileManager.default.removeItem(at: root)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let empty = AgentSkills(folder: root.appendingPathComponent("empty", isDirectory: true))
+        let filled = AgentSkills(folder: root.appendingPathComponent("filled", isDirectory: true))
+        let cull = Skill(
+            name: "cull-import", title: "Cull a new import", description: "Groups bursts, picks the sharpest of each and rates the keepers.",
+            instructions: """
+                1. Group the photos with [cull_groups](tool:cull_groups).
+                2. In each group, [Set Flag](action:photo.setFlag) Pick on the sharpest; reject the rest.
+                3. [Set Rating](action:photo.setRating) 3 stars on the keepers in {{collection}}.
+                4. [Add Stars](action:photo.addStars) to the best one.
+
+                Ask me before rejecting more than half. How to judge sharpness: [sharpness](sharpness.md).
+                """,
+            files: [.init(name: "sharpness.md", text: "# Judging sharpness\n\nZoom to 100% on the eyes.")],
+            arguments: [.init(name: "collection", description: "Which collection to rate.", required: false)])
+        let share = Skill(name: "share-shop", title: "Share to the shop", description: "Exports the picks at 2048 px for the shop.",
+                          instructions: "[Export…](action:file.export) the picks.", isEnabled: false)
+        let warm = Skill(name: "warm-portraits", title: "Warm up portraits",
+                         description: "Adds a touch of warmth and lifts shadows on portraits.",
+                         instructions: "Use [adjust](tool:adjust) with temp +300 and shadows +15.")
+        for skill in [cull, share, warm] { try? filled.store.save(skill) }
+        for theme in [Theme.light, .graphite] {
+            UserDefaults.standard.set(theme.rawValue, forKey: Theme.defaultsKey)
+            theme.apply()
+            for (name, skills) in [("empty", empty), ("list", filled)] {
+                let view = Form { SkillsSettingsSection(skills: skills) }.formStyle(.grouped).frame(width: 600, height: 420)
+                await capture(AnyView(view), size: CGSize(width: 600, height: 420),
+                              to: folder.appendingPathComponent("settings-skills-\(name)-\(theme.rawValue).png"))
+            }
+            let model = EditSkillModel(skill: filled.store.skill(named: cull.name) ?? cull, catalog: filled.catalog,
+                                       takenNames: Set(filled.store.skills.map(\.name)))
+            let editor = EditSkillView(model: model, onCancel: {}, onSave: { _, _ in })
+                .markdownEditorStyle(.atelier(theme))
+                .environment(\.theme, theme)
+            await capture(AnyView(editor), size: EditSkillWindow.defaultSize,
+                          to: folder.appendingPathComponent("edit-skill-\(theme.rawValue).png"))
         }
     }
 

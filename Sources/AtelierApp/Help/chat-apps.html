@@ -33,6 +33,7 @@
 <dl class="defs">
   <dt>Access</dt><dd><b>Allow chat apps to use Atelier</b> (on; turning it off disconnects every app), <b>Let agents see photo previews</b> (off) and <b>Include location in photo details</b> (off).</dd>
   <dt>Apps</dt><dd>Every app that has connected, with a green dot while it's connected and a menu of what it may do. Changing it reconnects the app; − forgets the app, so Atelier asks again. Apps started from Terminal are listed as Terminal.</dd>
+  <dt>Skills</dt><dd>Workflows you write for chat apps, with Atelier's commands in them. See <a href="#skills">Skills</a>.</dd>
   <dt>Connect an App</dt><dd>The helper's path with <b>Copy</b>. Choose an app in <b>Setup for</b> and click <b>Copy Setup</b>; the line under it says where to paste.</dd>
   <dt>Activity</dt><dd>What each app did, newest first. Select lines and click the copy button, or right-click for Copy and Copy All, to paste into a bug report.</dd>
 </dl>
@@ -144,6 +145,32 @@ args = []</code></pre>
   </li>
 </ol>
 <p>Each call from the phone shows in <b>Activity</b>, and edits in each photo's History, under the phone's name.</p>
+
+<h2 id="skills">Skills</h2>
+<p>A skill teaches chat apps a workflow in Atelier, such as "Cull a new import": a few steps in plain words, with Atelier's commands named in them. Write it once in <span class="path">Atelier › Settings… › Agents › Skills</span>; after that, ask any chat app for the workflow in your own words ("cull yesterday's import") and the model reads the skill first, or pick it in Docent by typing <kbd>/</kbd>. A skill doesn't change what an app may do: an app allowed <b>Look</b> still can't rate photos, and the skill tells the model so, so it can tell you.</p>
+<figure>
+  <div class="pins pinned" style="max-width:560px">
+  <div class="panel" style="background:#323232">
+    <div class="pb" style="gap:9px">
+      <div class="row" data-pin="1" data-pin-side="right"><span class="switch"></span><span style="flex:1"><b>Cull a new import</b> <span class="muted">5 actions · 2 files</span><br><span class="muted">Groups bursts, picks the sharpest of each and rates the keepers.</span><br><span style="color:#ff9f0a">1 reference needs attention</span></span><span style="color:#ff9f0a">⚠ 1</span></div>
+      <div class="row"><span class="switch off"></span><span style="flex:1"><span class="muted">Share to the shop</span> <span class="muted">1 action</span><br><span class="muted">Exports the picks at 2048 px for the shop.</span></span></div>
+      <div class="row" data-pin="2" data-pin-side="right"><span class="btn">+</span><span class="btn">−</span><span class="btn">⋯</span><span class="muted" style="flex:1"></span></div>
+    </div>
+  </div>
+  </div>
+</figure>
+<ol class="legend">
+  <li>Each skill with its switch, title, how many commands and files it has, and its description. A skill that's off isn't sent to any app. An orange triangle means a reference needs attention: a command Atelier renamed or removed, or a link to a file that isn't there. Double-click a skill, or select it and press <kbd>Return</kbd>, to open it in <b>Edit Skill</b>.</li>
+  <li><b>+</b> starts a new skill, <b>−</b> moves the selected one to the Trash, and <b>⋯</b> has <b>Duplicate</b>, <b>Import Skill…</b> (a skill's folder or its <code>SKILL.md</code>; it arrives switched off and opens in Edit Skill), <b>Export Skill…</b> and <b>Show in Finder</b>.</li>
+</ol>
+<h3 id="edit-skill">Edit Skill</h3>
+<p>Edit Skill opens in its own window. At the top are the <b>Title</b>, the <b>Name</b> apps use (click it to change it), the <b>Description</b> (the model reads it to decide when the skill fits, so say what it does and when), and <b>Arguments</b>: things the app asks you for when you pick the skill, written <code>{{name}}</code> in the steps. On the left are the skill's files: <code>SKILL.md</code> holds the steps, and <b>+</b> adds notes the steps can link to, such as <code>sharpness.md</code>, which the model reads only when it needs them. Double-click a file to rename it; links to it follow.</p>
+<dl class="defs">
+  <dt><kbd>/</kbd></dt><dd>Inserts a command or tool: type a few letters of its name ("rat" for Set Rating) and press <kbd>Return</kbd> or <kbd>Tab</kbd>. The list shows Tools first, then each menu, with where the command is in Atelier and a badge: <b>Undo</b> for a change you can undo, <b>Asks first</b> for one Atelier asks you about. <kbd>↑</kbd> <kbd>↓</kbd> move, <kbd>Esc</kbd> closes the list and leaves the <kbd>/</kbd>.</dd>
+  <dt>The status line</dt><dd>How many commands the skill names, and its warnings. Click a warning to go to it; a renamed command offers <b>Replace with…</b>, and a command whose options changed since you wrote the skill offers <b>Mark as Reviewed</b>.</dd>
+  <dt><kbd>⌘S</kbd> or <kbd>⌘Return</kbd></dt><dd>Saves and closes. <b>Cancel</b> or <kbd>Esc</kbd> closes without saving; closing the window with changes asks <b>Save</b>, <b>Don't Save</b> or <b>Cancel</b>.</dd>
+</dl>
+<p>Skills are kept in <code>~/Library/Application Support/Atelier/Skills</code>, one folder each, so you can also edit them in another editor; Atelier picks up the change. A skill is sent to the model the chat app uses, like anything you type in a chat: with Ollama nothing leaves this Mac. Each time an app reads a skill, <b>Activity</b> shows it ("Read the skill cull-import").</p>
 
 <h2 id="models">Which model</h2>
 <ul>

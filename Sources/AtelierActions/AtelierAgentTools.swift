@@ -230,5 +230,6 @@ public enum AtelierAgentTools {
         setMetadata.name: .of(SetMetadataParameters.self),
         organize.name: .of(OrganizeParameters.self),
         undoChange.name: .of(UndoChangeParameters.self),
+        getSkill.name: .of(GetSkillParameters.self),
     ].merging(developParameterSchemas) { $1 }
 }
