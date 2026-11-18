@@ -35,8 +35,8 @@ struct AgentLookTools: Sendable {
 
     static let getContext = MCPTool(
         name: "get_context", title: "What's on screen",
-        description: "What Atelier shows now: the mode (grid, loupe, develop, hdr), the photo in front, the selected photo ids, "
-            + "the sidebar source and the filter. Start here when the person says \"this photo\" or \"these\".",
+        description: "What Atelier shows now: the mode (grid, loupe, develop, hdr), the photo in front and its file name, "
+            + "the selected photo ids (the first few with file names), the sidebar source and the filter. Start here when the person says \"this photo\" or \"these\".",
         readOnly: true, idempotent: true)
 
     static let searchPhotos = MCPTool(
@@ -72,7 +72,8 @@ struct AgentLookTools: Sendable {
 
     static let getPreview = MCPTool(
         name: "get_preview", title: "Look at a photo",
-        description: "The photo as Atelier shows it (with its edits), as a JPEG up to 1024 pixels, so you can see it.",
+        description: "The photo as Atelier shows it (with its edits), as a JPEG up to 1024 pixels. You see it, and chat apps "
+            + "that show images (like Docent) show it to the person in the chat, so use it when they ask to see a photo.",
         inputSchema: objectSchema([
             "id": property("integer", "The photo id."),
             "max_size": .object(["type": .string("integer"), "minimum": .int(256), "maximum": .int(1024),
@@ -128,6 +129,13 @@ struct AgentLookTools: Sendable {
         } catch {
             return .error("Atelier couldn't read the catalog: \(error.localizedDescription)")
         }
+    }
+
+    /// get_preview's caption, the result's text next to the image.
+    static func previewCaption(id: Int64, filename: String?, maxSize: Int) -> JSONValue {
+        var members: [String: JSONValue] = ["id": .int(Int(id)), "max_size": .int(maxSize)]
+        if let filename { members["filename"] = .string(filename) }
+        return .object(members)
     }
 
     static let previewsOff = "Atelier doesn't let agents see photos. The person can turn on \"Let agents see photo previews\" "
@@ -261,7 +269,9 @@ struct AgentLookTools: Sendable {
         guard let data = Self.jpeg(from: url, maxPixels: size) else {
             throw ArgumentProblem("Atelier couldn't read the preview of photo \(id).")
         }
-        return .image(data, mimeType: "image/jpeg", caption: .object(["id": .int(Int(id)), "max_size": .int(size)]))
+        // The file name lets the model name what it shows, instead of guessing from an earlier list.
+        let filename = try catalog.detail(for: id)?.asset.filename
+        return .image(data, mimeType: "image/jpeg", caption: Self.previewCaption(id: id, filename: filename, maxSize: size))
     }
 
     /// Thumbnails for the photo carousel, as data URLs. A private or unknown photo is left out,

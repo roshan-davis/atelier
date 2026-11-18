@@ -236,15 +236,37 @@ final class AgentServer: ObservableObject {
         let candidates = Array(model.selection.prefix(500)) + (model.focusedID.map { [$0] } ?? [])
         let hidden = (try? model.catalog.privatePhotoIDs(among: candidates)) ?? Set(candidates)
         var members: [String: JSONValue] = ["mode": .string(modeName)]
-        if let focused = model.focusedID, !hidden.contains(focused) { members["photo_in_front"] = .int(Int(focused)) }
         let selected = model.selection.filter { !hidden.contains($0) }.sorted()
+        // File names, so the model names the photo in front instead of guessing one from an earlier list.
+        let named = Array(selected.prefix(Self.namedSelectionCount))
+        let focused = model.focusedID.flatMap { hidden.contains($0) ? nil : $0 }
+        let names = filenames(model, (focused.map { [$0] } ?? []) + named)
+        if let focused {
+            members["photo_in_front"] = .int(Int(focused))
+            members["photo_in_front_filename"] = AgentLookTools.text(names[focused])
+        }
         members["selected_ids"] = .array(selected.prefix(200).map { .int(Int($0)) })
+        members["selected_photos"] = .array(named.map { id -> JSONValue in
+            .object(["id": .int(Int(id)), "filename": AgentLookTools.text(names[id])])
+        })
         members["selected_count"] = .int(selected.count)
         members["source"] = source(model)
         members["filter"] = .array(model.filter.summary.map { .string($0) })
         members["sort"] = .string(model.filter.sort.agentName)
         if model.filter.privacy == .hidden { members["photos_shown"] = .int(model.rows.count) }
         return .json(.object(members))
+    }
+
+    /// How many selected photos get_context names (the rest are only ids).
+    static let namedSelectionCount = 5
+
+    /// The file names of a few photos (at most namedSelectionCount + 1), from the catalog.
+    private func filenames(_ model: LibraryModel, _ ids: [Int64]) -> [Int64: String] {
+        var names: [Int64: String] = [:]
+        for id in Set(ids) {
+            if let filename = try? model.catalog.detail(for: id)?.asset.filename { names[id] = filename }
+        }
+        return names
     }
 
     private func source(_ model: LibraryModel) -> JSONValue {
@@ -316,7 +338,16 @@ final class AtelierMCPHost: MCPDockingHost, MCPResourceHost, @unchecked Sendable
         MCPServerInfo(
             name: "atelier", title: "Atelier",
             version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1",
-            instructions: """
+            instructions: Self.instructions(previews: AgentSettings.options.previews))
+    }
+
+    /// The server's instructions. Chat apps that show images show get_preview's JPEG to the
+    /// person; models read `show` as doing that unless told otherwise.
+    static func instructions(previews: Bool) -> String {
+        let seeing = previews
+            ? "When the person asks to see a photo in the chat, call get_preview; show only changes Atelier's window."
+            : "Photo previews are off in Atelier > Settings > Agents, so you can't show photos; say so."
+        return """
                 Atelier is a Lightroom-style photo catalog and editor on this Mac. Use get_context to see what the \
                 person is looking at, search_photos and get_photo to answer questions about the library, and \
                 command_list to see the menu commands. With the Organize profile, show selects photos in Atelier, \
@@ -328,8 +359,8 @@ final class AtelierMCPHost: MCPDockingHost, MCPResourceHost, @unchecked Sendable
                 command_run also runs Develop commands; each is one step in the photo's Develop history. command_batch \
                 runs several of these changes in one call; with atomic: true they are all or nothing, with one Undo. Each change returns a change id; undo_change undoes your own change while it \
                 is still the latest on those photos. Name photos by id when you can. Private photos are never shown \
-                to agents, and nothing an agent calls deletes anything.
-                """)
+                to agents, and nothing an agent calls deletes anything. \(seeing)
+                """
     }
 
     func authorize(_ client: AgentClient) async -> AgentAuthorization {

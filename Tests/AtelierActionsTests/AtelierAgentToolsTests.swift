@@ -15,6 +15,12 @@ final class AtelierAgentToolsTests: XCTestCase {
         for tool in AtelierAgentTools.organizeTools { XCTAssertFalse(tool.readOnly, tool.name) }
     }
 
+    /// Models read "so the person sees what you found" as showing the photo in the chat.
+    func testShowSaysItOnlyChangesAteliersWindow() {
+        XCTAssertTrue(AtelierAgentTools.show.description.contains("Changes only Atelier's window"))
+        XCTAssertTrue(AtelierAgentTools.show.description.contains("it doesn't show the photo in a chat (use get_preview for that)"))
+    }
+
     func testSetMetadataSchemaUsesSnakeCaseAndChoices() {
         let properties = AtelierAgentTools.setMetadata.inputSchema["properties"]
         XCTAssertNotNil(properties?["add_keywords"])
