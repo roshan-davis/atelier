@@ -9,6 +9,8 @@ import AppKit
 enum AgentApproval {
     /// The profile to grant, or nil for Don't Allow.
     static func ask(_ client: AgentClient) -> AgentProfile? {
+        // A phone is allowed by pairing it; nobody may be at the Mac to answer a sheet.
+        guard !client.isRemote else { return nil }
         let alert = NSAlert()
         alert.alertStyle = .informational
         alert.messageText = "Allow “\(client.name)” to use Atelier?"

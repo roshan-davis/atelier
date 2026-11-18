@@ -384,9 +384,14 @@ extension AgentServer {
         // In an atomic batch, asking counts the whole batch's photos, and asks once.
         let batch = batchRun?.atomic == true ? batchRun : nil
         let counted = batch.map { $0.photos.union(affected).count } ?? affected.count
-        if limit > 0, counted > limit, batch?.confirmed != true {
+        if limit > 0, counted > limit, batch?.confirmed != true, client.isRemote {
+            // A phone: its own Allow card is the only approval, or the call fails at once; the Mac
+            // never raises a sheet for it (nobody may be there, so the call would hang).
+            guard phone.asksForMe(client) else { return .error(AgentPhone.needsAllowAtMac(client)) }
+            batch?.confirmed = true
+        } else if limit > 0, counted > limit, batch?.confirmed != true {
             let looked = try states(kind, affected, model)
-            guard AgentConfirm.ask(client: client.name, title: batch?.label ?? title, count: counted) else {
+            guard AgentConfirm.ask(client: client, title: batch?.label ?? title, count: counted) else {
                 return .error("The person said no in Atelier: \(batch?.label ?? title) for \(Self.count(counted)) wasn't made.")
             }
             batch?.confirmed = true
@@ -551,7 +556,10 @@ extension ColorLabel {
 /// photos than Settings > Agents allows without asking.
 @MainActor
 enum AgentConfirm {
-    static func ask(client: String, title: String, count: Int) -> Bool {
+    static func ask(client agent: AgentClient, title: String, count: Int) -> Bool {
+        // Never for a phone: `write` answers those itself.
+        guard !agent.isRemote else { return false }
+        let client = agent.name
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = "Let “\(client)” change \(AgentServer.count(count))?"

@@ -17,7 +17,7 @@
 
 <div class="note"><p><span class="label">What chat apps can do.</span> With <b>Look</b>, chat apps read: search photos, look at their details, Develop settings and cull groups, and list the menu commands. With <b>Organize</b> they can also select photos in Atelier, rate, flag, label, add keywords, add <a href="notes.html#chat-apps">notes</a> and add to collections, each with Undo (see <a href="settings.html#agent-changes">When an app changes photos</a>). With <b>Edit</b> they can also edit in Develop: set or nudge sliders, run Auto, apply presets, sync and reset settings, crop and straighten, add masks and match a look, each a step in the photo's History with Undo (see <a href="settings.html#agent-develop">When an app edits in Develop</a>). They can also send several changes in one go, all or nothing with one Undo (see <a href="settings.html#agent-batch">Several changes at once</a>). In chat apps that show app views, such as Docent, found photos appear as a strip of cards (see <a href="settings.html#agent-photos">Photos in the chat</a>). Exporting from a chat comes in a later version; every menu command is already built so it can reach chat apps without extra work.</p></div>
 
-<div class="chips"><a href="#how">How it works</a><a href="#opencode">OpenCode</a><a href="#cherry">Cherry Studio</a><a href="#ollama">Ollama (ollmcp)</a><a href="#lmstudio">LM Studio</a><a href="#openwebui">Open WebUI</a><a href="#claude-desktop">Claude Desktop</a><a href="#claude-code">Claude Code</a><a href="#codex">Codex</a><a href="#models">Which model</a><a href="#privacy">Privacy</a><a href="#trouble">If it doesn't work</a></div>
+<div class="chips"><a href="#how">How it works</a><a href="#opencode">OpenCode</a><a href="#cherry">Cherry Studio</a><a href="#ollama">Ollama (ollmcp)</a><a href="#lmstudio">LM Studio</a><a href="#openwebui">Open WebUI</a><a href="#claude-desktop">Claude Desktop</a><a href="#claude-code">Claude Code</a><a href="#codex">Codex</a><a href="#phone">From your iPhone</a><a href="#models">Which model</a><a href="#privacy">Privacy</a><a href="#trouble">If it doesn't work</a></div>
 
 <h2 id="how">How it works</h2>
 <p>Every chat app below starts the same small helper, which is inside Atelier, with no arguments:</p>
@@ -85,9 +85,9 @@ ollmcp                                  # then pick qwen3.6 or gemma4 and chat</
 </ol>
 
 <h2 id="openwebui">Open WebUI</h2>
-<p>Open WebUI connects to MCP servers over the network (Streamable HTTP, v0.6.31 and later), not to a helper it starts itself. Until Atelier has its own network listener (planned, AT-050f), put the helper behind <code>mcpo</code>, which serves it to Open WebUI as a tool server:</p>
+<p>Open WebUI connects to MCP servers over the network (Streamable HTTP, v0.6.31 and later), not to a helper it starts itself. Atelier's own network listener takes only paired phones (see <a href="#phone">From your iPhone</a>), so put the helper behind <code>mcpo</code>, which serves it to Open WebUI as a tool server:</p>
 <pre><code>uvx mcpo --port 8000 --api-key "pick-a-secret" -- /Applications/Atelier.app/Contents/MacOS/atelier-mcp</code></pre>
-<p>Then add <code>http://localhost:8000</code> in Open WebUI as an OpenAPI tool server, with the same key. Leave the Terminal window open while you chat. Once Atelier's listener ships, add it under <span class="path">Admin Settings › External Tools › +</span> with Type <b>MCP (Streamable HTTP)</b> instead.</p>
+<p>Then add <code>http://localhost:8000</code> in Open WebUI as an OpenAPI tool server, with the same key. Leave the Terminal window open while you chat.</p>
 
 <h2 id="claude-desktop">Claude Desktop</h2>
 <ol class="steps">
@@ -115,6 +115,35 @@ claude mcp get atelier</code></pre>
 command = "/Applications/Atelier.app/Contents/MacOS/atelier-mcp"
 args = []</code></pre>
 <p>To turn it off without deleting it, add <code>enabled = false</code>. The Codex desktop app reads the same file.</p>
+
+<h2 id="phone">From your iPhone</h2>
+<p>Docent on your iPhone can work with the Atelier open on your Mac: search and rate photos, look at them, edit and undo, with the same tools and the same approval cards as Docent on the Mac. The phone connects straight to Atelier over <b>Tailscale</b>, your private network between your own devices, so nothing is opened to Wi-Fi or the internet. Install Tailscale on the iPhone and sign in with the same account as the Mac. The Mac must be awake with Atelier open.</p>
+<figure>
+  <div class="pins pinned" style="max-width:560px">
+  <div class="panel" style="background:#323232">
+    <div class="pb" style="gap:9px">
+      <div class="row" data-pin="1" data-pin-side="right"><span style="flex:1">Let a paired phone use Atelier over Tailscale</span><span class="switch"></span></div>
+      <div class="row" data-pin="2" data-pin-side="right"><span style="color:#30d158">✓</span><span class="muted" style="flex:1">Ready for phones at roshs-mac.tail1234.ts.net, port 47801.</span></div>
+      <div class="row"><span style="flex:1">Port</span><span style="background:#1e1e1e;border:0.5px solid #555;border-radius:4px;padding:1px 6px;font-size:12px;width:48px;text-align:right">47801</span></div>
+      <div class="row" data-pin="3" data-pin-side="right"><span style="flex:1">Pair a phone</span><span class="btn">Pair a Phone…</span></div>
+      <div class="row" data-pin="4" data-pin-side="right"><span style="flex:1">Docent on iPhoneRo<br><span class="muted">Paired Nov 18, 2026 · Last used 2 minutes ago</span></span><span class="popup" style="flex:none;width:64px">Edit</span><span class="check"><i class="on"></i>This app asks for me</span><span class="btn">Revoke</span></div>
+    </div>
+  </div>
+  </div>
+</figure>
+<ol class="legend">
+  <li>Turn it on in <span class="path">Atelier › Settings… › Agents › Phone</span>. It's off until you do. If your Mac's firewall asks whether Atelier may accept incoming connections, click <b>Allow</b>.</li>
+  <li>Where the phone finds Atelier: your Mac's Tailscale name. Atelier listens only on the Tailscale address (never on Wi-Fi or Ethernet). Without Tailscale running it says <i>Turn on Tailscale on this Mac to pair a phone</i>, and starts again by itself when Tailscale connects.</li>
+  <li><b>Pair a Phone…</b> shows a QR code on the Mac's screen for 5 minutes. In Docent on the iPhone, choose <span class="path">Settings › Servers › Add › Scan Pairing Code</span> and point the camera at it. The code works once; when it expires, click <b>New Code</b>.</li>
+  <li>Each paired phone, with when it paired and was last used:
+    <ul>
+      <li>What it may do: <b>Look</b>, <b>Organize</b>, <b>Edit</b> or <b>Everything</b>. A new phone gets what Docent on the Mac may do (Edit if Docent hasn't connected here). Pairing the same phone again keeps its access and replaces its key.</li>
+      <li><b>This app asks for me</b>: Atelier never asks anything on the Mac for a phone, because you may not be there. With this on, the phone's own Allow card is the only approval, for example for a change to more photos than <b>Ask before one change touches more than</b> allows. With it off, those changes fail on the phone straight away, saying where to turn this on.</li>
+      <li><b>Revoke</b> stops the phone at once, even mid-conversation. The phone says Atelier no longer accepts it; pair it again to bring it back.</li>
+    </ul>
+  </li>
+</ol>
+<p>Each call from the phone shows in <b>Activity</b>, and edits in each photo's History, under the phone's name.</p>
 
 <h2 id="models">Which model</h2>
 <ul>

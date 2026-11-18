@@ -317,7 +317,7 @@ ollmcp                                  # then pick qwen3.6 or gemma4 and chat
 Open WebUI connects only to MCP servers over HTTP (Streamable HTTP, v0.6.31 and later), not to a local command. Two ways:
 
 - **Now:** run the helper behind `mcpo`, which serves its tools as an OpenAPI server: `uvx mcpo --port 8000 --api-key "pick-a-secret" -- /Applications/Atelier.app/Contents/MacOS/atelier-mcp`. Then add `http://localhost:8000` in Open WebUI as an **OpenAPI** tool server (not as an MCP server), with the same key.
-- **Later (AT-050f):** Atelier's own HTTP listener, under Admin Settings > External Tools > + > MCP (Streamable HTTP).
+- **Not through the phone listener:** AT-050f's HTTP listener takes only paired phones (a QR pairing code, the tailnet only), so Open WebUI stays on `mcpo`.
 
 ### Claude Desktop, Claude Code and Codex
 
@@ -371,11 +371,30 @@ Docent (Rosh's own MCP chat app) docks the app it's working with on its right (A
 - **Atelier's side** (`Sources/AtelierApp/Agents/AgentDocking.swift`, layout rule `DockLayout` in AtelierCore): `front` is the main window. Atelier docks at 520 points or more (the photo keeps 480); narrower, the left panel collapses first, then the right one, and they come back as soon as they fit, including after undocking where the window stays narrow. Only a drag or resize by hand counts as moved; Atelier's own layout passes don't. Settings > Agents shows the docked app with Undock (sent as `moved`, `user`). Atelier never sends `docking/minWidth` today: its minimum is the same in every mode.
 - **Left out:** docking apps that don't speak the protocol (Docent's own later item, through Accessibility), and full screen.
 
+## From a phone
+
+Docent on iPhone reaches the Atelier open on the Mac directly (AT-050f, Nov 18, 2026, from Docent's handoff "Phone access for Atelier and Easel", Docent's DO-017). The contract is shared with Easel and lives in the shared module, so Easel adopts it unchanged; change it only by agreement across Docent, Atelier and Easel.
+
+| Piece | Where | What it does |
+| --- | --- | --- |
+| `MCPHTTPEndpoint` | `Sources/AgentMCP/MCPHTTPEndpoint.swift` | Streamable HTTP at `/mcp`: bearer token, pairing, `Mcp-Session-Id` sessions (4 per device, closed after an hour idle), one JSON reply per POST, 202 for notifications, DELETE ends a session, 405 for GET (no server-sent stream: nothing needs to reach the phone unasked), 403 for any `Origin` header. Socket-free, so all of it is tested without a network. |
+| `MCPHTTPServer` | `Sources/AgentMCP/MCPHTTPServer.swift` | One listening socket per allowed address, refused before binding for anything but 127.0.0.1 and tailnet addresses; one short thread per request, `Connection: close`, 16 at once, 30 s read timeout, 16 KB headers and 4 MB bodies at most. |
+| `TailnetAddresses` | `Sources/AgentMCP/TailnetAddresses.swift` | 100.64.0.0/10 and fd7a:115c:a1e0::/48; the bind list (none without a tailnet address); the MagicDNS name by reverse lookup. |
+| `PhoneDeviceStore`, `PairingCode`, `TokenHash` | `Sources/AgentMCP/PhonePairing.swift`, `TokenHash.swift` | Paired devices as SHA-256 hashes (constant-time compare), the one pairing code on screen (memory only, 5 minutes), the last 50 revoked hashes so their phones hear `revoked`. |
+| `AgentPhone`, Settings > Agents > Phone | `Sources/AtelierApp/Agents/AgentPhone.swift`, `Views/PhoneSettings.swift` | Turning it on, the port (47801), following the tailnet address (path monitor plus a 30 s check), Pair a Phone… with the QR code and countdown, the paired phones with profile, This app asks for me and Revoke. |
+
+- **Pairing.** The QR payload is `{"v":1,"app":"Atelier","url":"http://<magicdns-name>:47801/mcp","token":"<base64url, 32 random bytes>","expires":"<ISO 8601>"}`. The first `initialize` bearing the token before `expires` records the device, named from `clientInfo.name`; the token is that device's credential from then on. The same name paired again replaces the token and keeps the grant. An unused code expires.
+- **Errors.** No, unknown or expired token: `401`, no body. Revoked: `401` with the JSON-RPC error message `revoked`. A session that ended (idle, revoked, Atelier restarted): `404`, and the phone sends `initialize` again.
+- **Approvals.** A phone runs as an `AgentClient` with `isRemote`; Atelier never shows its first-connection sheet or "Let … change N photos?" for one (both refuse remote clients themselves, as a second guard). Each phone has its own profile and **This app asks for me**: on, the phone's own Allow is the only approval for a change that would ask at the Mac; off, that change fails at once with a message saying where to turn it on. AT-050e's export, Edit In and AI Allows follow the same rule when they arrive.
+- **Images.** `get_preview` (1024 px at most) and `get_thumbnails` (320 px) already return `data:` images, inside the contract's caps (512 and 2048 px).
+- **Check it from the Mac:** with the listener on and a code on screen, `curl -s -X POST http://<magicdns-name>:47801/mcp -H 'Authorization: Bearer <token>' -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl test","version":"0"}}}'` pairs "curl test"; without the token it's `401`; against the Wi-Fi address the connection is refused.
+- **Left out:** request keys for retried calls (a retried change runs twice; Docent sends each approved call once), App Intents and MCP prompts (the rest of AT-050f).
+
 ## Privacy and reach
 
 - **Local by default.** The stdio helper and Unix socket never touch the network. Atelier makes no outgoing calls for this.
 - **The model decides where data goes.** With Ollama, nothing leaves the Mac. With Claude Desktop or Codex, whatever a tool returns goes to that provider as part of the chat, under Rosh's own subscription. That's not a paid API Atelier calls, but it does leave the Mac. So previews and GPS are off by default, and Settings shows which clients are connected.
-- **From other devices (later, opt-in).** Atelier also serves Streamable HTTP. It listens on 127.0.0.1, or on the Tailscale address when remote access is turned on, and requires a token. The Mac must be awake with Atelier open.
+- **From a paired phone (AT-050f, opt-in).** Atelier also serves Streamable HTTP, off by default, on 127.0.0.1 and the Tailscale address only, with a per-device token from a QR pairing code. See [From a phone](#from-a-phone). The Mac must be awake with Atelier open.
 - **claude.ai connectors** connect from Anthropic's servers, so they'd need a public HTTPS address with OAuth sign-in (for example Tailscale Funnel). Leave that out unless Rosh asks for it.
 
 A new pane, Atelier > Settings… > Agents (under Editors & AI), would hold these switches and an activity log:
