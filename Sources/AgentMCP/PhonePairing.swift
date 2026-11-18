@@ -3,7 +3,7 @@ import Foundation
 
 /// A phone paired with the app over the tailnet (AT-050f; the shared contract in
 /// Docs/Atelier-Agent-Actions.md, "From a phone"). Its own grant: the profile it may use and
-/// whether its own Allow card is the only approval ("This app asks for me").
+/// whether its own Allow card is the only approval ("Asks you itself").
 public struct PairedDevice: Codable, Hashable, Sendable, Identifiable {
     public var id: String
     /// From the pairing `initialize`'s `clientInfo`: "Docent on iPhoneRo".
@@ -202,7 +202,7 @@ public final class PhoneDeviceStore: @unchecked Sendable {
         }
     }
 
-    /// Changes a device's grant (profile, "This app asks for me").
+    /// Changes a device's grant (profile, "Asks you itself").
     public func update(id: String, _ change: (inout PairedDevice) -> Void) {
         lock.withLock {
             var state = load()

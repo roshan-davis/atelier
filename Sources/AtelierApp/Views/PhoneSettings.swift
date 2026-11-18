@@ -14,7 +14,7 @@ struct PhoneSettingsSection: View {
 
     var body: some View {
         SettingsSection("Phone") {
-            Toggle("Let a paired phone use Atelier over Tailscale", isOn: Binding(
+            Toggle("Allow a paired phone to use Atelier", isOn: Binding(
                 get: { enabled },
                 set: { phone.setEnabled($0) }))
             status
@@ -42,7 +42,7 @@ struct PhoneSettingsSection: View {
                                revoke: { phone.revoke(device.id) })
             }
         } footer: {
-            Text("A phone on your tailnet (Docent on iPhone) works with the Atelier open on this Mac: the same tools as a chat app here. Atelier listens only on this Mac's Tailscale address, never on Wi-Fi or Ethernet, and each phone has its own key from its pairing code. A paired phone is never asked about on this Mac. With This app asks for me on, the phone's own Allow is the only approval for changes that would ask here; with it off, those changes fail on the phone at once. Revoke stops a phone straight away. The Mac must be awake with Atelier open.")
+            Text("A phone on your tailnet (Docent on iPhone) works with the Atelier open on this Mac: the same tools as a chat app here. Atelier listens only on this Mac's Tailscale address, never on Wi-Fi or Ethernet, and each phone has its own key from its pairing code. A paired phone is never asked about on this Mac. With Asks you itself on, the phone's own Allow is the only approval for changes that would ask here; with it off, those changes fail on the phone at once. Revoke stops a phone straight away. The Mac must be awake with Atelier open.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -106,7 +106,7 @@ private struct PhoneDeviceRow: View {
                 .labelsHidden()
                 .fixedSize()
                 .help(device.profile.summary)
-                Toggle("This app asks for me", isOn: Binding(get: { device.asksForMe }, set: { setAsksForMe($0) }))
+                Toggle("Asks you itself", isOn: Binding(get: { device.asksForMe }, set: { setAsksForMe($0) }))
                     .toggleStyle(.checkbox)
                     .help("The phone's own Allow is the only approval for changes that would ask on this Mac.")
                 Button("Revoke", role: .destructive, action: revoke)
