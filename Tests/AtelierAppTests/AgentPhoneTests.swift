@@ -29,7 +29,8 @@ final class AgentPhoneTests: XCTestCase {
         let found = try await call(endpoint, token, session, "search_photos", [:])
         XCTAssertEqual(found["total"], .int(1))
         let photo = try XCTUnwrap(found["photos"]?.arrayValue?.first)
-        for key in ["id", "filename", "rating", "flag", "label"] { XCTAssertNotNil(photo[key], key) }
+        // "label" appears only when the photo has a color label, as over the helper.
+        for key in ["id", "filename", "rating", "flag"] { XCTAssertNotNil(photo[key], key) }
 
         let changed = try await call(endpoint, token, session, "set_metadata",
                                      ["ids": .array([.int(Int(ids[0]))]), "rating": .int(4)])
