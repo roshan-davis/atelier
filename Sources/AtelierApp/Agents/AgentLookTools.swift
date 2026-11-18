@@ -36,7 +36,8 @@ struct AgentLookTools: Sendable {
     static let getContext = MCPTool(
         name: "get_context", title: "What's on screen",
         description: "What Atelier shows now: the mode (grid, loupe, develop, hdr), the photo in front and its file name, "
-            + "the selected photo ids (the first few with file names), the sidebar source and the filter. Start here when the person says \"this photo\" or \"these\".",
+            + "the selected photo ids (the first few with file names), the sidebar source, the filter, and whether photo "
+            + "previews are on (get_preview). Start here when the person says \"this photo\" or \"these\".",
         readOnly: true, idempotent: true)
 
     static let searchPhotos = MCPTool(

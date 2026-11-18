@@ -128,10 +128,10 @@ For Gemma or Qwen, start with Organize or Edit.
 
 | Area | Tool | What it does | Tier |
 | --- | --- | --- | --- |
-| Context | `get_context` | Mode, photo on screen and its file name, selection (the first few with file names), active filter, import or collection | Reads |
+| Context | `get_context` | Mode, photo on screen and its file name, selection (the first few with file names), active filter, import or collection, whether photo previews are on | Reads |
 | | `search_photos` | Filter by rating, flag, label, keyword, date, camera, lens, import, collection, folder, edited or not | Reads |
 | | `get_photo` | Metadata, shooting info, develop summary, stack and virtual copies (location left out unless allowed) | Reads |
-| | `get_preview` | A rendered JPEG up to 1024 px with its file name: the model sees it, and chat apps that show images (Docent) show it to the person; the server's instructions point "show it here in the chat" at it (off by default) | Reads |
+| | `get_preview` | A rendered JPEG up to 1024 px with its file name: the model sees it, and chat apps that show images (Docent) show it to the person; the server's instructions point "show it here in the chat" at it (off by default; turning it on or off sends `notifications/tools/list_changed`) | Reads |
 | | `list_items` | Imports, collections, presets, export presets, editors, AI recipes, built-in Match Look studies | Reads |
 | Library | `show` | Select photos and switch to Grid, Loupe or Develop, in Atelier's own window only (not in the chat) | Undoable |
 | | `set_metadata` | Rating, flag, label, keywords, title, caption | Undoable |

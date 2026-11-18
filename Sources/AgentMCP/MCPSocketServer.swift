@@ -19,6 +19,7 @@ public final class MCPSocketServer: @unchecked Sendable {
     private let lock = NSLock()
     private var listener: Int32 = -1
     private var connections: [Int32: AgentClient] = [:]
+    private var sessions: [Int32: MCPSession] = [:]
     private var running = false
     /// Called with a client when it connects and when it goes (for the activity log).
     public var onConnect: (@Sendable (AgentClient) -> Void)?
@@ -82,6 +83,13 @@ public final class MCPSocketServer: @unchecked Sendable {
 
     public var connectedClients: [AgentClient] { lock.withLock { Array(connections.values) } }
 
+    /// Tells every connected client that its tool list may have changed (a setting added or
+    /// removed a tool), so chat apps that follow the spec list the tools again.
+    public func toolsChanged() {
+        let open = lock.withLock { Array(sessions.values) }
+        for session in open { session.toolsChanged() }
+    }
+
     private func acceptLoop() {
         while true {
             let fd: Int32 = lock.withLock { running ? listener : -1 }
@@ -130,6 +138,7 @@ public final class MCPSocketServer: @unchecked Sendable {
             writeLock.withLock { UnixSocket.write(fd, Data((line + "\n").utf8)) }
         }
         let session = MCPSession(client: client, host: host, output: send)
+        lock.withLock { sessions[fd] = session }
         let (lines, continuation) = AsyncStream<Data>.makeStream()
         let done = DispatchSemaphore(value: 0)
         Task.detached {
@@ -147,7 +156,10 @@ public final class MCPSocketServer: @unchecked Sendable {
         }
         continuation.finish()
         done.wait()
-        lock.withLock { connections[fd] = nil }
+        lock.withLock {
+            connections[fd] = nil
+            sessions[fd] = nil
+        }
         close(fd)
         onDisconnect?(session.client)
     }

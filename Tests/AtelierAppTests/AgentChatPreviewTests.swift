@@ -16,13 +16,11 @@ final class AgentChatPreviewTests: XCTestCase {
         XCTAssertTrue(AgentLookTools.getContext.description.contains("file name"))
     }
 
-    func testInstructionsFollowThePreviewsSwitch() {
-        let on = AtelierMCPHost.instructions(previews: true)
-        XCTAssertTrue(on.hasSuffix("When the person asks to see a photo in the chat, call get_preview; "
-            + "show only changes Atelier's window."), on)
-        let off = AtelierMCPHost.instructions(previews: false)
-        XCTAssertTrue(off.hasSuffix("Photo previews are off in Atelier > Settings > Agents, so you can't show photos; say so."), off)
-        XCTAssertFalse(off.contains("call get_preview"))
+    /// Instructions are read once at initialize, so they don't follow the previews switch;
+    /// get_context does.
+    func testInstructionsPointAtGetPreviewWhateverTheSwitch() {
+        XCTAssertTrue(AtelierMCPHost.instructions.hasSuffix("When the person asks to see a photo in the chat, "
+            + "call get_preview if it's offered; show only changes Atelier's window."), AtelierMCPHost.instructions)
     }
 
     func testPreviewCaptionNamesTheFile() {
@@ -30,6 +28,21 @@ final class AgentChatPreviewTests: XCTestCase {
                        .object(["id": .int(3864), "filename": .string("RHN_2683.NEF"), "max_size": .int(1024)]))
         XCTAssertEqual(AgentLookTools.previewCaption(id: 1, filename: nil, maxSize: 512),
                        .object(["id": .int(1), "max_size": .int(512)]))
+    }
+
+    @MainActor
+    func testContextSaysWhenPreviewsAreOff() async throws {
+        let saved = UserDefaults.standard.object(forKey: AgentSettings.previewsKey)
+        addTeardownBlock { UserDefaults.standard.set(saved, forKey: AgentSettings.previewsKey) }
+        let (library, _) = try await makeLibrary(["landscape"])
+        for previews in [false, true] {
+            UserDefaults.standard.set(previews, forKey: AgentSettings.previewsKey)
+            let result = try XCTUnwrap(library.agents.callOnMain("get_context", [:], client: client, profile: .look))
+            let context = try XCTUnwrap(result.structured)
+            XCTAssertEqual(context["previews"], .bool(previews))
+            XCTAssertEqual(context["previews_note"], previews ? nil
+                : .string("Photo previews are off in Atelier > Settings > Agents, so photos can't be shown in the chat."))
+        }
     }
 
     @MainActor
@@ -42,6 +55,8 @@ final class AgentChatPreviewTests: XCTestCase {
         let context = try XCTUnwrap(result.structured)
         XCTAssertEqual(context["photo_in_front"], .int(Int(ids[1])))
         XCTAssertEqual(context["photo_in_front_filename"], .string("portrait.jpg"))
+        XCTAssertEqual(context["previews"], .bool(AgentSettings.options.previews))
+        XCTAssertEqual(context["previews_note"] == nil, AgentSettings.options.previews)
         XCTAssertEqual(context["selected_photos"], .array(ids.sorted().map { id in
             .object(["id": .int(Int(id)), "filename": .string(id == ids[0] ? "landscape.jpg" : "portrait.jpg")])
         }))
