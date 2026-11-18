@@ -1541,3 +1541,10 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 **Codex review (PR #178, Nov 17, 2026) addressed in the PRD:** location roots never rebase stored paths; cache freshness and Keep on This Mac pinning; XMP conflicts on reconnect; the offline job queue assigned to AT-009. Follow-up review: sidecar states present / known absent / unknown (a removed sidecar is a conflict, an unreadable one holds the write); what Export, Edit In, AI and Develop do when an original changed, and when a kept copy may go.
 
 **Open:** whether megham is used over Wi-Fi or Ethernet (sets the default cache size); whether location backups also include presets and Settings (AT-006).
+
+## AT-082 — README: landing-page visuals and current features
+
+**Status:** In review. **Decision:** Rosh, Nov 18, 2026 ("update the read me with more updated info with one or more beautiful landing page UI there, and all the relevant info already there"). **Owner:** Claude (Cl). **Chat:** [Refresh README with landing page visuals](https://claude.ai/code/project/chan_01Y9ueFJEbKyPqWn7CWQ5SGK?thread=cmsg_01Y9ueFJEbKyPqWn7CWQ5SGKTmh9WTnTtF75WDDzKTmr74). **Branch:** `claude/project-thread-8657lu`. **Depends on:** nothing.
+- Four drawn pictures in `Docs/readme/` (hero, Develop tools, storage, chat apps), made by `Scripts/readme/make_readme_images.py` from HTML pages in `Scripts/readme/` with the app's Graphite colors, Help's before/after pictures and the splash photos. They are illustrations, not screenshots of a running build; the README says so.
+- README brought up to date with main at `bfced31`: storage locations and backups (AT-079), photo notes (AT-058), Cull Pick By (AT-059), Remove (AT-066), AI Denoise (AT-067), new masks (AT-068), Calibration (AT-069), Lens Blur (AT-072 to AT-074), phone pairing and "show me this photo" (AT-050f, AT-081); "Not built yet" updated. Nothing else removed.
+- **Deferred:** swap the drawn pictures for real screenshots of a current build once a Mac run can make them (layout snapshots in `.build/ui-checks` date from Nov 9 and use flat test fixtures).
