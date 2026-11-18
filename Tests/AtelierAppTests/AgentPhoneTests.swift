@@ -47,7 +47,7 @@ final class AgentPhoneTests: XCTestCase {
     }
 
     /// Above Settings > Agents' limit a Mac client gets the Allow sheet; a phone never does: it
-    /// fails at once without This app asks for me, and runs on the phone's own Allow with it.
+    /// fails at once with This app asks for me off, and runs on the phone's own Allow with it.
     @MainActor
     func testAPhoneCallNeverRaisesAMacAllowSheet() async throws {
         let saved = UserDefaults.standard.object(forKey: AgentSettings.confirmAboveKey)
@@ -56,6 +56,9 @@ final class AgentPhoneTests: XCTestCase {
         let (library, ids) = try await makeLibrary(["landscape", "portrait"])
         let (endpoint, token) = try await pairedEndpoint(library)
         let session = try await initialize(endpoint, token)
+        let device = try XCTUnwrap(library.agents.phone.store.devices.first)
+        XCTAssertTrue(device.asksForMe, "a new phone asks for itself")
+        library.agents.phone.setAsksForMe(false, for: device.id)
         let arguments: [String: JSONValue] = ["ids": .array(ids.map { .int(Int($0)) }), "flag": .string("picked")]
 
         let started = Date()
@@ -65,7 +68,6 @@ final class AgentPhoneTests: XCTestCase {
         let message = refused["content"]?.arrayValue?.first?["text"]?.stringValue ?? ""
         XCTAssertTrue(message.contains("Allow Docent on iPhoneRo to ask for you in Atelier > Settings… > Agents"), message)
 
-        let device = try XCTUnwrap(library.agents.phone.store.devices.first)
         library.agents.phone.setAsksForMe(true, for: device.id)
         let allowed = try await call(endpoint, token, session, "set_metadata", arguments)
         XCTAssertEqual(allowed["photos"], .int(2))
