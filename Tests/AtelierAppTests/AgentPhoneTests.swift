@@ -47,7 +47,7 @@ final class AgentPhoneTests: XCTestCase {
     }
 
     /// Above Settings > Agents' limit a Mac client gets the Allow sheet; a phone never does: it
-    /// fails at once with This app asks for me off, and runs on the phone's own Allow with it.
+    /// fails at once with Asks you itself off, and runs on the phone's own Allow with it.
     @MainActor
     func testAPhoneCallNeverRaisesAMacAllowSheet() async throws {
         let saved = UserDefaults.standard.object(forKey: AgentSettings.confirmAboveKey)

@@ -239,7 +239,7 @@ final class AgentPhone: ObservableObject {
         return .allowed(device.profile)
     }
 
-    /// Whether the phone's own Allow card is the only approval ("This app asks for me").
+    /// Whether the phone's own Allow card is the only approval ("Asks you itself").
     func asksForMe(_ client: AgentClient) -> Bool {
         guard let id = PairedDevice.deviceID(fromClientID: client.id) else { return false }
         return store.device(id: id)?.asksForMe ?? false
@@ -247,7 +247,7 @@ final class AgentPhone: ObservableObject {
 
     /// What a phone hears when a call needs an Allow at the Mac and it may not give one itself.
     static func needsAllowAtMac(_ client: AgentClient) -> String {
-        "Nothing was changed: this needs an Allow, and nobody may be at the Mac. Allow \(client.name) to ask for you in "
-            + "\(AgentServer.appName) > Settings… > Agents > Phone (This app asks for me)."
+        "Allow \(client.name) to ask for you in \(AgentServer.appName) > Settings… > Agents > Phone (Asks you itself), "
+            + "then try again. Nothing was changed."
     }
 }
