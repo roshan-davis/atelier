@@ -24,8 +24,8 @@ let package = Package(
         // Fine Edges' model (BiRefNet, an optional download) runs with ONNX Runtime (MIT).
         .package(url: "https://github.com/microsoft/onnxruntime-swift-package-manager", exact: "1.24.2"),
         // Rosh's shared library (roshan-davis/studio-shared-lib): skills and the Markdown editor
-        // for Settings > Agents > Skills (SL-002c). Pinned to v0.2.0's commit until the tag is pushed.
-        .package(url: "https://github.com/roshan-davis/studio-shared-lib.git", revision: "6f7420c5eabe494fd51a2515d9b71bddfd370cee"),
+        // for Settings > Agents > Skills (SL-002c); v0.3.0 keeps spelling marks off links and code (SL-003).
+        .package(url: "https://github.com/roshan-davis/studio-shared-lib.git", from: "0.3.0"),
     ],
     targets: [
         // App-neutral: actions, kinds and tiers, parameter schemas, the registry and menu

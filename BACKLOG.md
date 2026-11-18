@@ -1560,3 +1560,5 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 **Known:** switches draw a grey track in a window that isn't key (snapshots only); the editor's macOS spell checking underlines file names such as `sharpness.md` (a library follow-up: turn it off for links and code, or entirely).
 
 **Not in scope / deferred:** Easel's copy of `MCPPrompts.swift` (studio-shared-lib SL-002d); custom key bindings in the editor's list (it shows each action's default key); a skill opened from the Activity log.
+
+**Follow-up (Nov 18, 2026):** the app depends on studio-shared-lib `from: "0.3.0"` instead of the pinned commit, once Rosh OK'd the tags (v0.1.0, v0.2.0, v0.3.0). v0.3.0 adds SL-003: Edit Skill keeps spelling marks off link targets, code and `{{placeholders}}`. Branch `claude/shared-lib-0.3.0`.
