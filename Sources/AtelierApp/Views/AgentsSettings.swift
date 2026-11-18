@@ -138,6 +138,8 @@ private struct AgentsSettingsForm: View {
 
             PhoneSettingsSection(phone: server.phone)
 
+            SkillsSettingsSection(skills: server.skills)
+
             SettingsSection("Connect an App") {
                 LabeledContent("Helper") {
                     if let url = AgentHelper.url, AgentHelper.isBuilt {

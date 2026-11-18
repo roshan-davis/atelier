@@ -90,6 +90,12 @@ public final class MCPSocketServer: @unchecked Sendable {
         for session in open { session.toolsChanged() }
     }
 
+    /// Tells every connected client that its prompts (the person's skills) changed.
+    public func promptsChanged() {
+        let open = lock.withLock { Array(sessions.values) }
+        for session in open { session.promptsChanged() }
+    }
+
     private func acceptLoop() {
         while true {
             let fd: Int32 = lock.withLock { running ? listener : -1 }

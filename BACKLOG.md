@@ -1548,3 +1548,13 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 - Four drawn pictures in `Docs/readme/` (hero, Develop tools, storage, chat apps), made by `Scripts/readme/make_readme_images.py` from HTML pages in `Scripts/readme/` with the app's Graphite colors, Help's before/after pictures and the splash photos. They are illustrations, not screenshots of a running build; the README says so.
 - README brought up to date with main at `bfced31`: storage locations and backups (AT-079), photo notes (AT-058), Cull Pick By (AT-059), Remove (AT-066), AI Denoise (AT-067), new masks (AT-068), Calibration (AT-069), Lens Blur (AT-072 to AT-074), phone pairing and "show me this photo" (AT-050f, AT-081); "Not built yet" updated. Nothing else removed.
 - **Deferred:** swap the drawn pictures for real screenshots of a current build once a Mac run can make them (layout snapshots in `.build/ui-checks` date from Nov 9 and use flat test fixtures).
+
+## AT-083 — Agents: skills you write in Settings > Agents (studio-shared-lib SL-002c)
+
+**Status:** In review (Rosh, Nov 18, 2026: approved the Skills PRD in studio-shared-lib and said "looks good go ahead", an autonomous run over SL-002a..d). **Owner:** Claude (Cl). **Chat:** [Write the shared library's AGENTS.md](https://claude.ai/code/session_013w17eDA6RToM23Lmq2wEpL). **Branch:** `claude/skills-settings`. **Depends on:** studio-shared-lib SL-002b (merged as `6f7420c`, v0.2.0 once the tag is pushed). Spec: studio-shared-lib `Requirements/Skills-PRD.md`; this app's part in the PRD's Agent access, "Skills".
+
+**Scope:** Settings > Agents > Skills (the library's `SkillsList`, with Atelier's delete sound, Open panels and Show in Finder), the Edit Skill window (`EditSkillView` in its own window: centered over the window it opened from, then where it was left; Save, Don't Save or Cancel on close), the store in `~/Library/Application Support/Atelier/Skills` (`ATELIER_SKILLS_FOLDER`; a throwaway folder in tests, the smoke test and snapshots), `get_skill` (every profile), `prompts/list` and `prompts/get` with `notifications/prompts/list_changed` (shared `Sources/AgentMCP/MCPPrompts.swift`), the skills paragraph in the server's instructions, "Read the skill …" in Activity, and grant notes in prepared text (`Agents/AgentSkills.swift`). The catalog the library checks skills against is every registry action plus the typed tools a skill can name (`AtelierSkills.catalog`).
+
+**Validation:** pending: Mac `check_pr.py` and the `skills` snapshots at the PR's head.
+
+**Not in scope / deferred:** Easel's copy of `MCPPrompts.swift` (studio-shared-lib SL-002d); custom key bindings in the editor's list (it shows each action's default key); a skill opened from the Activity log.

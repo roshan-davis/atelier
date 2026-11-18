@@ -87,6 +87,11 @@ public struct MCPToolResult: Sendable, Hashable {
                       imageList: [Image(data: data, mimeType: mimeType)], isError: false)
     }
 
+    /// A result that is only text, such as a skill's prepared Markdown (`get_skill`).
+    public static func text(_ text: String) -> MCPToolResult {
+        MCPToolResult(structured: nil, text: text, imageList: [], isError: false)
+    }
+
     public static func error(_ message: String) -> MCPToolResult {
         MCPToolResult(structured: nil, text: message, imageList: [], isError: true)
     }
@@ -179,6 +184,19 @@ public final class MCPSession: @unchecked Sendable {
 
     public static let toolsListChanged = "notifications/tools/list_changed"
 
+    /// Tells the client its prompts changed (`notifications/prompts/list_changed`): the app
+    /// calls it when a skill is added, removed, renamed, turned on or off. Sent only after
+    /// `initialize`, only with a way back, and only by a host that offers prompts.
+    @discardableResult
+    public func promptsChanged() -> Bool {
+        guard host is MCPPromptHost, let output, initializedLock.withLock({ answeredInitialize }) else { return false }
+        let line = JSONValue.object(["jsonrpc": .string("2.0"), "method": .string(Self.promptsListChanged),
+                                     "params": .object([:])]).compactText
+        return output(line)
+    }
+
+    public static let promptsListChanged = "notifications/prompts/list_changed"
+
     private var channel: MCPChannel {
         if let openChannel { return openChannel }
         let channel = MCPChannel(client: client, output: output)
@@ -239,6 +257,9 @@ public final class MCPSession: @unchecked Sendable {
             var capabilities: [String: JSONValue] = ["tools": .object(["listChanged": .bool(output != nil)])]
             if host is MCPResourceHost {
                 capabilities["resources"] = .object(["listChanged": .bool(false)])
+            }
+            if host is MCPPromptHost {
+                capabilities["prompts"] = .object(["listChanged": .bool(output != nil)])
             }
             if showsViews, host is MCPResourceHost {
                 capabilities["extensions"] = .object([MCPApps.extensionID: .object([:])])
@@ -320,7 +341,35 @@ public final class MCPSession: @unchecked Sendable {
                 return Self.result(id: id, .object(["contents": .array([resource.contents])]))
             }
         case "prompts/list":
-            return Self.result(id: id, .object(["prompts": .array([])]))
+            guard let host = host as? MCPPromptHost else {
+                return Self.result(id: id, .object(["prompts": .array([])]))
+            }
+            switch await host.authorize(client) {
+            case .denied(let reason):
+                return Self.error(id: id, code: -32001, message: reason)
+            case .allowed(let profile):
+                let prompts = await host.prompts(for: client, profile: profile)
+                return Self.result(id: id, .object(["prompts": .array(prompts.map(\.json))]))
+            }
+        case "prompts/get":
+            guard let name = params["name"]?.stringValue else {
+                return Self.error(id: id, code: -32602, message: "prompts/get needs a prompt name")
+            }
+            guard let host = host as? MCPPromptHost else {
+                return Self.error(id: id, code: -32602, message: "Unknown prompt: \(name)")
+            }
+            switch await host.authorize(client) {
+            case .denied(let reason):
+                return Self.error(id: id, code: -32001, message: reason)
+            case .allowed(let profile):
+                let prompts = await host.prompts(for: client, profile: profile)
+                guard let listed = prompts.first(where: { $0.name == name }),
+                      let text = await host.prompt(name, arguments: Self.promptArguments(params), client: client, profile: profile) else {
+                    let hint = Suggest.closest(to: name, in: prompts.map(\.name)).map { " Did you mean \($0)?" } ?? ""
+                    return Self.error(id: id, code: -32602, message: "Unknown prompt: \(name).\(hint)")
+                }
+                return Self.result(id: id, Self.promptResult(description: listed.description, text: text))
+            }
         default:
             return Self.error(id: id, code: -32601, message: "Method not found: \(method)")
         }

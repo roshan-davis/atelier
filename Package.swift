@@ -23,6 +23,9 @@ let package = Package(
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.0.0"),
         // Fine Edges' model (BiRefNet, an optional download) runs with ONNX Runtime (MIT).
         .package(url: "https://github.com/microsoft/onnxruntime-swift-package-manager", exact: "1.24.2"),
+        // Rosh's shared library (roshan-davis/studio-shared-lib): skills and the Markdown editor
+        // for Settings > Agents > Skills (SL-002c). Pinned to v0.2.0's commit until the tag is pushed.
+        .package(url: "https://github.com/roshan-davis/studio-shared-lib.git", revision: "6f7420c5eabe494fd51a2515d9b71bddfd370cee"),
     ],
     targets: [
         // App-neutral: actions, kinds and tiers, parameter schemas, the registry and menu
@@ -57,13 +60,17 @@ let package = Package(
         .executableTarget(
             name: "AtelierApp",
             dependencies: ["AtelierCore", "AtelierHDRCore", "AgentActions", "AtelierActions", "AgentMCP",
-                           .product(name: "GRDB", package: "GRDB.swift")],
+                           .product(name: "GRDB", package: "GRDB.swift"),
+                           .product(name: "StudioSkills", package: "studio-shared-lib"),
+                           .product(name: "StudioSkillsUI", package: "studio-shared-lib"),
+                           .product(name: "StudioMarkdownEditor", package: "studio-shared-lib")],
             resources: [.process("Resources"), .copy("Help")],
             swiftSettings: swift6
         ),
         .testTarget(
             name: "AtelierAppTests",
-            dependencies: ["AtelierApp", "AgentActions", "AtelierActions", "AgentMCP"]
+            dependencies: ["AtelierApp", "AgentActions", "AtelierActions", "AgentMCP",
+                           .product(name: "StudioSkills", package: "studio-shared-lib")]
         ),
         .testTarget(
             name: "AtelierCoreTests",

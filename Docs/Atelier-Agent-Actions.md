@@ -148,6 +148,7 @@ For Gemma or Qwen, start with Organize or Edit.
 | Export | `export` | Export with a preset to a folder; license gate applies | Asks first |
 | Edit In | `edit_in` | Open in an editor from Settings > Edit In | Asks first |
 | Safety | `undo_change`, `job_status` | Undo one of the agent's own changes by id; check or cancel a running job | Undoable |
+| Skills | `get_skill` | One of the person's skills (Settings > Agents > Skills, SL-002c) as prepared text, or one of its other files with `file`; only skills that are on. The skills also come as MCP prompts (`prompts/list`, `prompts/get`) and in the server's instructions | Reads |
 | Every command | `command_list` | Commands in the registry: id, title, menu path, key, parameters, tier, and whether it's enabled now | Reads |
 | | `command_run`, `command_batch` | Run any listed command, or several as one named undo step. Each command keeps its own tier. | Its own tier |
 | Not exposed | — | Remove or delete photos, delete imports or collections, change Settings or keys. Not listed and can't be run in any way; the agent points Rosh to Photo > Remove Photo… | Never |
@@ -412,7 +413,7 @@ Protocol: build on 2025-06-18 with the 2026-07-28 response shapes added (see the
 | **A2. Organize** | Ratings, flags, labels, keywords, collections, cull groups. Guard, toast and named undo steps, "did you mean" errors, recheck after waiting. |
 | **A3. Edit** | Develop adjust, auto, presets, sync, crop, masks, Match Look. `command_run` and atomic `command_batch`. Wait for an active drag. |
 | **A4. Everything** | Export, Edit In and AI recipes with an Allow bound to the exact operation, rechecks at run time, folder roots, background jobs, progress and Cancel. |
-| **A5. Optional** | HTTP listener with Tailscale and a token, request keys for retries, App Intents for Shortcuts, MCP prompts such as "Cull this import". |
+| **A5. Optional** | HTTP listener with Tailscale and a token, request keys for retries, App Intents for Shortcuts, MCP prompts such as "Cull this import" (built as the person's own skills in SL-002c: `prompts/list`, `prompts/get` and `get_skill`). |
 
 Each phase is one PR, updating the PRD, Help (a new Agents page) and BACKLOG.md. A1 is the cheapest real test of whether this gets used day to day.
 

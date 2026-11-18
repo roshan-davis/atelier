@@ -52,6 +52,13 @@ final class AgentServer: ObservableObject {
     private(set) var host: AtelierMCPHost?
     /// Paired phones over Tailscale (AT-050f, Agents/AgentPhone.swift).
     private(set) lazy var phone = AgentPhone(server: self)
+    /// The person's skills (SL-002c, Agents/AgentSkills.swift), read by agents with get_skill and
+    /// listed as prompts. A change agents see is sent to every connected chat app.
+    private(set) lazy var skills: AgentSkills = {
+        let skills = AgentSkills()
+        skills.onListingsChange = { [weak self] in self?.server?.promptsChanged() }
+        return skills
+    }()
     /// One approval question per client at a time, however many requests are waiting on it.
     private var questions: [String: Task<AgentProfile?, Never>] = [:]
 
@@ -60,13 +67,16 @@ final class AgentServer: ObservableObject {
         grantList = grants.all
     }
 
-    func startIfEnabled() {
-        // Tests, the smoke test and layout snapshots open throwaway catalogs: they must never
-        // take the socket of the Atelier the person is using.
+    /// Tests, the smoke test and layout snapshots open throwaway catalogs: they must never take
+    /// the socket of the Atelier the person is using, or read and write the person's skills.
+    static var isThrowawayRun: Bool {
         let environment = ProcessInfo.processInfo.environment
-        let throwaway = NSClassFromString("XCTestCase") != nil || environment["XCTestConfigurationFilePath"] != nil
+        return NSClassFromString("XCTestCase") != nil || environment["XCTestConfigurationFilePath"] != nil
             || environment["ATELIER_UI_SMOKE"] == "1" || LayoutSnapshots.outputFolder != nil
-        if AgentSettings.isEnabled, !throwaway { start() }
+    }
+
+    func startIfEnabled() {
+        if AgentSettings.isEnabled, !Self.isThrowawayRun { start() }
     }
 
     func setEnabled(_ enabled: Bool) {
@@ -77,7 +87,7 @@ final class AgentServer: ObservableObject {
     func start() {
         guard server == nil, let model else { return }
         let host = AtelierMCPHost(server: self, tools: AgentLookTools(catalog: model.catalog, previews: model.previews),
-                                  docking: dock.coordinator)
+                                  docking: dock.coordinator, skills: skills.snapshot)
         let socket = MCPSocketServer(path: socketPath, host: host)
         socket.onConnect = { [weak self] client in
             Task { @MainActor in self?.clientConnected(client) }
@@ -183,7 +193,7 @@ final class AgentServer: ObservableObject {
     }
 
     func tools(profile: AgentProfile) -> [MCPTool] {
-        var tools = AgentLookTools.tools(options: AgentSettings.options) + [CommandListTool.tool]
+        var tools = AgentLookTools.tools(options: AgentSettings.options) + [CommandListTool.tool, AtelierAgentTools.getSkill]
         if profile >= .organize { tools += AtelierAgentTools.organizeTools + [AtelierAgentTools.commandBatch] }
         if profile >= .edit { tools += AtelierAgentTools.editTools }
         return tools
@@ -317,9 +327,11 @@ final class AgentServer: ObservableObject {
 
     // MARK: Activity
 
-    func logCall(_ client: AgentClient, _ tool: String, _ result: MCPToolResult) {
+    /// `text`: what the log says for a call that worked, instead of the tool's name ("Read the
+    /// skill cull-import").
+    func logCall(_ client: AgentClient, _ tool: String, _ result: MCPToolResult, text: String? = nil) {
         grants.touch(clientID: client.id)
-        log(client.name, result.isError ? .failed : .call, result.isError ? "\(tool): \(result.text)" : tool)
+        log(client.name, result.isError ? .failed : .call, result.isError ? "\(tool): \(result.text)" : text ?? tool)
     }
 
     private func clientConnected(_ client: AgentClient) {
@@ -344,28 +356,32 @@ final class AgentServer: ObservableObject {
 
 /// The bridge from the socket's sessions (background threads) to `AgentServer` (main thread).
 /// Catalog reads run off the main thread; only the window's state is read on it.
-final class AtelierMCPHost: MCPDockingHost, MCPResourceHost, @unchecked Sendable {
+final class AtelierMCPHost: MCPDockingHost, MCPResourceHost, MCPPromptHost, @unchecked Sendable {
     private weak var server: AgentServer?
     private let lookTools: AgentLookTools
     /// The docking protocol: only a chat app's window code sends it, never a model.
     let docking: DockingCoordinator?
+    /// The person's skills, kept current by `AgentSkills`.
+    private let skills: AtelierSkills.Snapshot
 
-    init(server: AgentServer, tools: AgentLookTools, docking: DockingCoordinator) {
+    init(server: AgentServer, tools: AgentLookTools, docking: DockingCoordinator, skills: AtelierSkills.Snapshot) {
         self.server = server
         self.lookTools = tools
         self.docking = docking
+        self.skills = skills
     }
 
     var serverInfo: MCPServerInfo {
         MCPServerInfo(
             name: "atelier", title: "Atelier",
             version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1",
-            instructions: Self.instructions)
+            instructions: AtelierSkills.instructions(Self.instructions, skills: skills.skills))
     }
 
     /// The server's instructions, read once at `initialize`, so nothing in them follows a setting
     /// (get_context says whether previews are on). Chat apps that show images show get_preview's
-    /// JPEG to the person; models read `show` as doing that unless told otherwise.
+    /// JPEG to the person; models read `show` as doing that unless told otherwise. The skills
+    /// that are on follow, as a paragraph (`AtelierSkills.instructions`).
     static let instructions = """
                 Atelier is a Lightroom-style photo catalog and editor on this Mac. Use get_context to see what the \
                 person is looking at, search_photos and get_photo to answer questions about the library, and \
@@ -397,8 +413,29 @@ final class AtelierMCPHost: MCPDockingHost, MCPResourceHost, @unchecked Sendable
         [AtelierPhotoCarousel.resource]
     }
 
+    /// The skills that are on, for chat apps that show prompts (Docent, under `/`).
+    func prompts(for client: AgentClient, profile: AgentProfile) async -> [MCPPrompt] {
+        AtelierSkills.prompts(skills.skills)
+    }
+
+    func prompt(_ name: String, arguments: [String: String], client: AgentClient, profile: AgentProfile) async -> String? {
+        let text = AtelierSkills.promptText(name, arguments: arguments, skills: skills.skills, profile: profile,
+                                            clientName: client.name)
+        if let text, let server {
+            await server.logCall(client, "prompts/get", .text(text), text: "Read the skill \(name)")
+        }
+        return text
+    }
+
     func call(_ tool: String, arguments: [String: JSONValue], client: AgentClient, profile: AgentProfile) async -> MCPToolResult {
         guard let server else { return .error("Atelier is closing.") }
+        if tool == AtelierAgentTools.getSkill.name {
+            let result = AtelierSkills.getSkill(arguments, skills: skills.skills, profile: profile, clientName: client.name)
+            let name = arguments["name"]?.stringValue ?? ""
+            let file = arguments["file"]?.stringValue.map { " (\($0))" } ?? ""
+            await server.logCall(client, tool, result, text: "Read the skill \(name)\(file)")
+            return result
+        }
         let result: MCPToolResult
         if Self.editsDevelop(tool, arguments), !(await server.waitForDevelopIdle()) {
             result = .error("The person is still dragging in Develop. Nothing was changed; try again in a moment.")
