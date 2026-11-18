@@ -178,9 +178,19 @@ Keep the description current: when you push more commits, update the bullets and
 
 ## UI changes
 
-- For routine native UI checks, read the PR's **Atelier UI checks** summary and `layout-snapshots` artifact. Confirm the tested revision. If Actions is unavailable, run `python3 Scripts/check_ui.py` from the task worktree on a Mac with a logged-in desktop session. Read the summary and open the relevant diffs or failure artifacts.
+- For routine native UI checks, read the PR's **Atelier UI checks** summary and `layout-snapshots` artifact (kept 7 days). Confirm the tested revision. If Actions is unavailable, run `python3 Scripts/check_ui.py` from the task worktree on a Mac with a logged-in desktop session. Read the summary and open the relevant diffs or failure artifacts.
 - Passing covered checks need no agent-driven desktop replay. Review intentional visual changes in the generated screenshots before handoff. List uncovered gestures and workflows that still need manual acceptance.
 - For a new screen or state, add coverage to `LayoutSnapshots.swift`. For repeatable interactions, extend the native smoke suite under `Tests/AtelierUITests`.
+
+## Screenshots in PRs
+
+Rosh's GitHub plan has 0.5 GB of Actions storage, shared by every repo and by GitHub Packages, and workflow artifacts count against it (Rosh, Nov 17, 2026: the account hit 90%). Screenshots are the biggest part, so they go where the PR can show them, not into artifacts.
+
+- **Post them with `Scripts/attach_screenshots.sh <pr> <head-sha> <image>...`.** It puts the images on the `pr-screenshots` branch (no shared history with `main`, never merged) under `pr-<n>/`, then comments them on the PR so they show inline. Say in the comment what each one shows, wrong things included, and look at every image before posting it.
+- **Never upload screenshots with `actions/upload-artifact`**, from an agent run or a new workflow step. Artifacts can't be shown in the PR and are kept for 90 days unless the step sets `retention-days`. Any artifact step in `.github/workflows/` sets `retention-days: 7` or less.
+- **Only what shows the change:** the screens and states the PR touches, not the whole snapshot set. Crop to the panel or window that changed.
+- **Keep each image under about 500 KB.** Scale large captures (`sips -Z 1600 in.png --out out.png`), and save screens full of photos as JPEG (`sips -s format jpeg -s formatOptions 85 in.png --out out.jpg`). Pixel-comparison baselines from `check_ui.py` stay PNG and stay local.
+- **Don't commit screenshots to the PR branch.** `main` never carries them.
 
 ## Handing off to Rosh
 
