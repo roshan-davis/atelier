@@ -35,12 +35,14 @@ final class AgentPhoneTests: XCTestCase {
                                      ["ids": .array([.int(Int(ids[0]))]), "rating": .int(4)])
         let change = try XCTUnwrap(changed["change"]?.stringValue)
         for key in ["did", "photos", "ids", "undo"] { XCTAssertNotNil(changed[key], key) }
-        XCTAssertEqual(try await call(endpoint, token, session, "get_photo", ["id": .int(Int(ids[0]))])["rating"], .int(4))
+        let rated = try await call(endpoint, token, session, "get_photo", ["id": .int(Int(ids[0]))])
+        XCTAssertEqual(rated["rating"], .int(4))
         // The activity log names the phone.
         XCTAssertTrue(library.agents.activity.entries.contains { $0.clientName == "Docent on iPhoneRo" })
 
         _ = try await call(endpoint, token, session, "undo_change", ["change": .string(change)])
-        XCTAssertEqual(try await call(endpoint, token, session, "get_photo", ["id": .int(Int(ids[0]))])["rating"], .int(0))
+        let undone = try await call(endpoint, token, session, "get_photo", ["id": .int(Int(ids[0]))])
+        XCTAssertEqual(undone["rating"], .int(0))
     }
 
     /// Above Settings > Agents' limit a Mac client gets the Allow sheet; a phone never does: it
