@@ -1572,3 +1572,13 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 **Validation:** in a separate worktree at `origin/main` `6888256`, in the background: the script built `Atelier.app` 72.2 MB (executable 36.1 MB) against about 101.8 MB unstripped (executable 65.7 MB); `codesign --verify --deep --strict` passes; `dwarfdump --uuid` gives the same UUID for the executable and the dSYM (`FF97C24B-DE6E-3B75-8969-E732567A8C85`). The app wasn't launched.
 
 **Acceptance:** Rosh's next `python3 Scripts/build_macos_app.py` app is about 29 MB smaller and runs as before; a crash log symbolicates with the dSYM.
+
+## AT-085 — ONNX Runtime from studio-shared-lib (studio-shared-lib SL-004)
+
+**Status:** In review. **Decision:** Rosh, Nov 18, 2026, project thread (chose to move ONNX Runtime into studio-shared-lib). **Owner:** Claude (Remote Control session on Rosh's Mac). **Branch:** `claude/onnx-from-shared-lib`.
+
+**Evidence:** `github.com/microsoft/onnxruntime-swift-package-manager` returned 404 from Nov 17–18, 2026, so `swift build` and Xcode stopped resolving Atelier's packages ("The remote repository could not be accessed" in Xcode's package log, Nov 18 15:58). Rosh's Mac has built meanwhile with a local SwiftPM mirror setting (`.swiftpm/configuration/mirrors.json`, ignored by git).
+
+**Scope:** `Package.swift` drops Microsoft's package and takes ONNX Runtime from studio-shared-lib `from: "0.4.0"` (product `onnxruntime`, the same module `OnnxRuntimeBindings`, version 1.24.2, Microsoft's binary and checksum). The library pin moves from the `6f7420c` commit to `from: "0.4.0"`, which also brings v0.3.0's prose-only spelling (so atelier#197 is no longer needed). No Swift code changes; app size unchanged.
+
+**Acceptance:** Atelier builds with no mirror setting, and Fine Edges, Depth and AI Denoise run as before.
