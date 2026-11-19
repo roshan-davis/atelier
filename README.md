@@ -128,7 +128,7 @@ python3 Scripts/build_macos_app.py                   # this Mac's processor (as 
 
 Apps land in `.build/Applications/<arch>/Atelier.app` (`.build/Applications/Atelier.app` for
 the default). Each arch is built with `swift build -c release --triple <arch>-apple-macosx15.0`;
-universal joins the two executables with `lipo`. Check a result with
+universal joins the two executables with `lipo`. Release builds keep their symbols in `Atelier.app.dSYM` next to the app and strip them from the app itself (about 29 MB smaller); keep the dSYM with the app so crash logs show function names. Check a result with
 `lipo -archs .build/Applications/universal/Atelier.app/Contents/MacOS/AtelierApp`. An Intel build
 runs on an Apple Silicon Mac under Rosetta (`softwareupdate --install-rosetta` once). These are
 local builds, not notarized: another Mac needs right-click > Open the first time.
