@@ -1562,3 +1562,15 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 **Not in scope / deferred:** Easel's copy of `MCPPrompts.swift` (studio-shared-lib SL-002d); custom key bindings in the editor's list (it shows each action's default key); a skill opened from the Activity log.
 
 **Follow-up (Nov 18, 2026):** the app depends on studio-shared-lib `from: "0.3.0"` instead of the pinned commit, once Rosh OK'd the tags (v0.1.0, v0.2.0, v0.3.0). v0.3.0 adds SL-003: Edit Skill keeps spelling marks off link targets, code and `{{placeholders}}`. Branch `claude/shared-lib-0.3.0`.
+
+## AT-084 — Release builds keep symbols in a .dSYM, not in the app
+
+**Status:** In review. **Decision:** Rosh, Nov 18–19, 2026, project thread ("I don't want app size to be ballooned with libs"; chose "Both" on the strip + dSYM proposal). **Owner:** Claude (Remote Control session on Rosh's Mac). **Branch:** `claude/strip-release-symbols`.
+
+**Evidence:** the installed release `Atelier.app` (Nov 18) was 99–101 MB, of which about 31 MB was the executable's symbol tables (`__LINKEDIT`, 456,876 symbols): `build_macos_app.py` never stripped. ONNX Runtime is about 14 MB of code and is unchanged by this item.
+
+**Scope:** `Scripts/build_macos_app.py`, Release only: `dsymutil` writes `Atelier.app.dSYM` next to the app (a previous one is kept beside the previous app), then `strip -x` removes the symbols from `Contents/MacOS/AtelierApp` before signing. Debug builds are unchanged. README's release-build section says so.
+
+**Validation:** in a separate worktree at `origin/main` `6888256`, in the background: the script built `Atelier.app` 72.2 MB (executable 36.1 MB) against about 101.8 MB unstripped (executable 65.7 MB); `codesign --verify --deep --strict` passes; `dwarfdump --uuid` gives the same UUID for the executable and the dSYM (`FF97C24B-DE6E-3B75-8969-E732567A8C85`). The app wasn't launched.
+
+**Acceptance:** Rosh's next `python3 Scripts/build_macos_app.py` app is about 29 MB smaller and runs as before; a crash log symbolicates with the dSYM.

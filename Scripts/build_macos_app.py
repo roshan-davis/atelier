@@ -136,6 +136,15 @@ def package(args, arch, products, revision, output):
 
     bundle(staging, "AtelierApp", "Atelier", args.bundle_id,
            ["Atelier_AtelierApp.bundle", "GRDB_GRDB.bundle", "Atelier_AtelierCore.bundle"])
+    # Release: keep the symbols in Atelier.app.dSYM next to the app (crash logs and Instruments
+    # find it by UUID), then strip them from the app's executable. They were about 29 MB of the
+    # app (Nov 19, 2026: 101.4 MB to 72.1 MB). dsymutil reads the debug map before strip removes it.
+    staging_dsym = None
+    if args.configuration == "release":
+        executable = staging / "Contents/MacOS/AtelierApp"
+        staging_dsym = staging.with_name(staging.name + ".dSYM")
+        subprocess.run(["xcrun", "dsymutil", str(executable), "-o", str(staging_dsym)], check=True)
+        subprocess.run(["xcrun", "strip", "-x", str(executable)], check=True)
     # The MCP helper chat apps launch (Settings > Agents shows its path). Nested code is
     # signed before the bundle that holds it.
     helper = staging / "Contents/MacOS/atelier-mcp"
@@ -147,6 +156,12 @@ def package(args, arch, products, revision, output):
         output.rename(backup)
         print("Previous generated app preserved at", backup)
     staging.rename(output)
+    dsym = output.with_name(output.name + ".dSYM")
+    if dsym.exists():
+        # The previous app (kept above) still matches the previous dSYM, so keep it beside it.
+        dsym.rename(output.parent / (output.stem + "-previous-" + str(uuid.uuid4()) + ".app.dSYM"))
+    if staging_dsym is not None:
+        staging_dsym.rename(dsym)
     shutil.rmtree(scratch, ignore_errors=True)
     kinds = subprocess.check_output(["lipo", "-archs", str(output / "Contents/MacOS/AtelierApp")], text=True).strip()
     return output, kinds
