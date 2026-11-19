@@ -1560,3 +1560,13 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 **Known:** switches draw a grey track in a window that isn't key (snapshots only); the editor's macOS spell checking underlines file names such as `sharpness.md` (a library follow-up: turn it off for links and code, or entirely).
 
 **Not in scope / deferred:** Easel's copy of `MCPPrompts.swift` (studio-shared-lib SL-002d); custom key bindings in the editor's list (it shows each action's default key); a skill opened from the Activity log.
+
+## AT-085 — ONNX Runtime from studio-shared-lib (studio-shared-lib SL-004)
+
+**Status:** In review. **Decision:** Rosh, Nov 18, 2026, project thread (chose to move ONNX Runtime into studio-shared-lib). **Owner:** Claude (Remote Control session on Rosh's Mac). **Branch:** `claude/onnx-from-shared-lib`.
+
+**Evidence:** `github.com/microsoft/onnxruntime-swift-package-manager` returned 404 from Nov 17–18, 2026, so `swift build` and Xcode stopped resolving Atelier's packages ("The remote repository could not be accessed" in Xcode's package log, Nov 18 15:58). Rosh's Mac has built meanwhile with a local SwiftPM mirror setting (`.swiftpm/configuration/mirrors.json`, ignored by git).
+
+**Scope:** `Package.swift` drops Microsoft's package and takes ONNX Runtime from studio-shared-lib `from: "0.4.0"` (product `onnxruntime`, the same module `OnnxRuntimeBindings`, version 1.24.2, Microsoft's binary and checksum). The library pin moves from the `6f7420c` commit to `from: "0.4.0"`, which also brings v0.3.0's prose-only spelling (so atelier#197 is no longer needed). No Swift code changes; app size unchanged.
+
+**Acceptance:** Atelier builds with no mirror setting, and Fine Edges, Depth and AI Denoise run as before.

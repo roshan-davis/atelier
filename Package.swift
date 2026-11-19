@@ -21,11 +21,11 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.0.0"),
-        // Fine Edges' model (BiRefNet, an optional download) runs with ONNX Runtime (MIT).
-        .package(url: "https://github.com/microsoft/onnxruntime-swift-package-manager", exact: "1.24.2"),
         // Rosh's shared library (roshan-davis/studio-shared-lib): skills and the Markdown editor
-        // for Settings > Agents > Skills (SL-002c). Pinned to v0.2.0's commit until the tag is pushed.
-        .package(url: "https://github.com/roshan-davis/studio-shared-lib.git", revision: "6f7420c5eabe494fd51a2515d9b71bddfd370cee"),
+        // for Settings > Agents > Skills (SL-002c), and ONNX Runtime 1.24.2 (MIT), which Fine
+        // Edges, Depth and AI Denoise run with (SL-004: Microsoft's onnxruntime-swift-package-manager
+        // repository is gone from GitHub, so the library carries its bindings unchanged).
+        .package(url: "https://github.com/roshan-davis/studio-shared-lib.git", from: "0.4.0"),
     ],
     targets: [
         // App-neutral: actions, kinds and tiers, parameter schemas, the registry and menu
@@ -49,7 +49,7 @@ let package = Package(
         .target(
             name: "AtelierCore",
             dependencies: [.product(name: "GRDB", package: "GRDB.swift"),
-                           .product(name: "onnxruntime", package: "onnxruntime-swift-package-manager")],
+                           .product(name: "onnxruntime", package: "studio-shared-lib")],
             // Select People's built-in parts model (MediaPipe, Apache 2.0), compiled on first use.
             resources: [.copy("Models")],
             // Optimized in Debug too, like AtelierHDRCore: Match Look, histograms, color cubes
