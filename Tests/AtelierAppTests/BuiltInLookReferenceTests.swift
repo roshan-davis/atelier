@@ -4,11 +4,20 @@ import XCTest
 @testable import AtelierCore
 
 final class BuiltInLookReferenceTests: XCTestCase {
+    /// The test photos. ATELIER_LOOK_FIXTURES points at another folder with the same file names,
+    /// such as Scripts/presets/scenes (Rosh's photos) when making the Match Look pictures in Help.
+    static var fixtures: URL {
+        if let path = ProcessInfo.processInfo.environment["ATELIER_LOOK_FIXTURES"] {
+            return URL(fileURLWithPath: path, isDirectory: true)
+        }
+        return URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Scripts/presets/fixtures")
+    }
+
     /// Use the same artwork, Whole Photo target and Develop renders as the dialog. Optionally
     /// export the actual fits for visual qualification and Atelier Help.
     func testStudiesMoveRealPhotosTowardTheirPalettes() throws {
-        let fixtures = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-            .deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Scripts/presets/fixtures")
+        let fixtures = Self.fixtures
         let photos: [BuiltInLookReference: String] = [
             .matrixPortrait: "portrait", .matrixCity: "street",
             .thronesPortrait: "portrait-light", .thronesLandscape: "landscape",
@@ -98,8 +107,7 @@ final class BuiltInLookReferenceTests: XCTestCase {
     }
 
     func testPortraitStudiesMatchFaceColorWithEditableMasks() throws {
-        let fixtures = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-            .deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Scripts/presets/fixtures")
+        let fixtures = Self.fixtures
         for study in BuiltInLookReference.allCases {
             let image = try XCTUnwrap(study.image())
             let target = try XCTUnwrap(LookTarget(image: image, areas: .wholePhoto, skinMode: .match,
