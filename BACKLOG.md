@@ -1561,6 +1561,8 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 
 **Not in scope / deferred:** Easel's copy of `MCPPrompts.swift` (studio-shared-lib SL-002d); custom key bindings in the editor's list (it shows each action's default key); a skill opened from the Activity log.
 
+**Follow-up (Nov 19, 2026, studio-shared-lib v0.5.0, SL-005):** the app depends on studio-shared-lib `from: "0.5.0"`. Edit Skill gets the editor's toolbar (Bold ⌘B, Italic ⌘I, Code ⌘E, Heading, lists, Quote, Link ⌘K, Insert Command, Insert Argument, Write / Preview), chips with a symbol (⌘ for a command, a wrench for a tool, ⚠ for a warning) and a solid outline, and colors kept at WCAG AA contrast in every theme. Rosh asked for these on Nov 19 ("not able to recognize" commands; toolbar; contrast in dark and light). Help's Edit Skill section covers it. Branch `claude/shared-lib-0.5.0`.
+
 ## AT-084 — Release builds keep symbols in a .dSYM, not in the app
 
 **Status:** In review. **Decision:** Rosh, Nov 18–19, 2026, project thread ("I don't want app size to be ballooned with libs"; chose "Both" on the strip + dSYM proposal). **Owner:** Claude (Remote Control session on Rosh's Mac). **Branch:** `claude/strip-release-symbols`.
