@@ -147,6 +147,16 @@ What differs on Intel: develop rendering, Vision masks and culling all work, but
 since current PyTorch no longer ships Intel Mac builds. MLX, when added, is Apple Silicon only
 and must be hidden on Intel. See the PRD's Non-functional requirements > Compatibility.
 
+## Sharing Atelier and updates
+
+Atelier is shared as a file from [GitHub Releases](https://github.com/roshan-davis/atelier/releases):
+a `.dmg` to install and a `.zip` that installed copies update from. Atelier checks for new versions
+(Sparkle 2, `Releases/appcast.xml` on `main`), installs them when you quit, shows What's New once
+after each update, and backs up the catalog before any upgrade. Make a release with
+`python3 Scripts/release/make_release.py`; [Docs/Releasing.md](Docs/Releasing.md) has the steps,
+signing choices (ad hoc, self-signed or Developer ID) and how to test an update. Builds run from
+Xcode never check for updates.
+
 ## CI
 
 [.github/workflows/build.yml](.github/workflows/build.yml) is configured for main pushes and PRs: macOS build, tests and layout snapshots. Check the actual run status; configuration alone does not prove Actions is available or passing. The local command below works without GitHub setup. RAW sample tests can skip when fixtures are unavailable.

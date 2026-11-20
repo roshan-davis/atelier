@@ -765,12 +765,48 @@ Targets assume an M4 Mac and a catalog of 100k photos. They are starting targets
 
 Decided Nov 6, 2026 (Rosh): Atelier builds for both Apple Silicon (arm64) and Intel (x86_64), as separate apps or one universal app. Before this it was Apple Silicon only.
 
-- **Builds.** Release builds come from `python3 Scripts/build_macos_app.py --arch arm64|x86_64|universal|all`, or from Xcode with the Release build configuration and the Any Mac (Apple Silicon, Intel) destination. Local, ad-hoc-signed builds; nothing is notarized or distributed yet.
+- **Builds.** Release builds come from `python3 Scripts/build_macos_app.py --arch arm64|x86_64|universal|all`, or from Xcode with the Release build configuration and the Any Mac (Apple Silicon, Intel) destination. Local builds are ad-hoc signed; shared builds come from the release script (see Updates and distribution).
 - **Same features, same catalog.** The catalog, previews, presets and XMP are identical on both; a catalog moves between Macs unchanged.
 - **Works on Intel, slower:** Core Image rendering with the runtime Metal kernels (every Mac that runs macOS 15 has a Metal GPU), Vision masks (Select Subject), culling feature prints and the splash saliency crop. No Neural Engine, so Vision tasks run on the GPU or CPU.
 - **Apple Silicon in practice:** the ComfyUI backend. ComfyUI is installed separately and current PyTorch has no Intel Mac builds, so the AI tools may simply find no server on an Intel Mac; Atelier already handles an unreachable server.
 - **Apple Silicon only:** the MLX backend (not built yet). When it is added it must be compiled out or hidden on Intel (`#if arch(arm64)` or a runtime check), not shown and then fail. The same goes for any later Core ML model that needs the Neural Engine or `Float16`.
 - As of Nov 6, 2026 no app code is architecture-specific (no `Float16`, MLX, `#if arch` or direct Metal device code), so nothing needed guarding for the first Intel build.
+
+## Updates and distribution (AT-087, decided Nov 20, 2026)
+
+Rosh, Nov 20, 2026: no App Store for now. Atelier is shared as a file (a .dmg or .zip from GitHub Releases), checks for new versions itself, updates itself, shows what's new, and treats major versions with care. The updater is Sparkle 2 (MIT), the standard updater for Mac apps outside the App Store. Nothing else is downloaded or run by it.
+
+**Versions.** Semantic versioning, `MAJOR.MINOR.PATCH`, with an optional pre-release tag (`1.3.0-beta.2`).
+- **Patch** (1.2.1): fixes only. No catalog change.
+- **Minor** (1.3.0): new features. May add catalog migrations that older catalogs take on their own (new tables and columns with defaults, as every migration so far).
+- **Major** (2.0.0): may change the catalog in ways an older Atelier can't read, or remove something. Never installed without asking.
+- The version people see (`CFBundleShortVersionString`) comes from the `VERSION` file at the repository root. The build number (`CFBundleVersion`, which Sparkle compares) is the commit count of `main`, so it always grows. About Atelier and Settings > Updates show both: "Atelier 1.3.0 (1482)".
+
+**Checking.** Atelier checks in the background once a day (without asking first) and whenever you choose Atelier > Check for Updates…. The feed is `Releases/appcast.xml` on `main` (served from raw.githubusercontent.com); the archives are assets of the GitHub Release `v<version>`. The check sends only what Sparkle sends by default (the app's version and macOS version in the request); no profile, no telemetry. A background check never interrupts work. With automatic install on, a patch or minor update downloads and installs on quit with no window. Otherwise the update window opens only right after launch; later in a session the menu item turns into Atelier > Update Available: 1.3.0… and Settings > Updates says so, and the window opens when you choose it.
+
+**Settings > Updates** (a pane in the Atelier group):
+- "Atelier 1.3.0 (1482)", the last check ("Checked today at 9:41") and **Check Now**.
+- **Check for updates automatically** (on by default).
+- **Download and install updates automatically** (on by default; signed builds only, see below). Patch and minor updates download in the background and install when Atelier quits, so an edit session is never cut short.
+- **Include beta versions** (off by default): adds the appcast's `beta` channel.
+- **What's New in Atelier…** opens the notes window.
+- Builds run from Xcode (no app bundle, no feed) show "Updates are off in builds run from Xcode" and nothing else; no check runs, so no window ever pops up during development or tests.
+
+**What's new.** One changelog, `Sources/AtelierApp/Resources/ReleaseNotes.md`, in Markdown: `## 1.3.0 (2026-11-20)` per version, then `### New`, `### Improved`, `### Fixed`, each a bullet list written for people, in the app's own names. The release script puts each version's section in the appcast (`<description sparkle:format="markdown">`, Sparkle 2.9+), so the update window shows it before installing. After an update, the first launch shows a **What's New in Atelier 1.3** window with every version since the one last used (newest first), once; Help > What's New in Atelier shows it again any time. A fresh install shows nothing.
+
+**Major versions.** The release script sets `sparkle:minimumAutoupdateVersion` to the major's first build, so every older Atelier asks before installing it, with the notes, whatever the automatic setting says. The update window also says the catalog will be upgraded and an older Atelier can't open it afterwards.
+- **The catalog is backed up before every upgrade, major or not:** when Atelier opens a catalog that has migrations still to run, it first copies the database to `Backups/Before Upgrade/catalog-<date>.sqlite` inside the catalog (the last 3 kept, separate from the quit-time backups so those never push it out), then migrates. If the copy fails, the catalog is not migrated and Atelier says why.
+- **Catalog format.** The catalog records its format number (`PRAGMA user_version`, `Catalog.format`, 1 today). Minor versions only add tables and columns an older Atelier ignores, so the number stays and going back a minor version (or switching branches in Xcode) keeps working. A major version that changes the catalog in a way older versions can't read raises it. An older Atelier opening a catalog with a higher number leaves it untouched: the catalog screen says "This catalog was upgraded by a newer version of Atelier", with Check for Updates… and Show in Finder (the Before Upgrade copy is there).
+- A critical fix can be marked `--critical` (Sparkle shows it as important, and Skip This Version is not offered). Phased rollout is not used.
+
+**Signing: two ways, one build script.** Rosh hasn't decided on a Developer ID ($99/year). The release script works both ways and nothing is rebuilt to switch.
+- **Developer ID (recommended for sharing widely):** signed with hardened runtime, notarized with `notarytool`, stapled. People download the .dmg, drag Atelier to Applications and open it with no warning; updates install themselves on quit.
+- **Without a Developer ID:** signed with a free self-signed certificate ("Atelier Release", made once in Keychain Access) or ad hoc. The first open needs System Settings > Privacy & Security > Open Anyway (the .dmg has a short Read Me saying so). A self-signed certificate keeps the app's identity the same across versions, so Keychain items (storage passwords) and Files & Folders permissions survive updates; ad hoc doesn't, so those are asked again after each update. Sparkle still checks each update's EdDSA signature. Whether automatic install works without notarization is checked on a Mac before it's offered; until then, unsigned builds show "Download and install automatically" off and the update window's Install button downloads and installs on request.
+- **Integrity either way:** every archive is signed with an EdDSA key (Sparkle's `generate_keys`, private key in Rosh's login Keychain, public key in `Scripts/release/sparkle-public-key.txt` and the app's `SUPublicEDKey`). Sparkle refuses an update whose signature doesn't match. Losing the private key means existing copies can't update (Developer ID builds can rotate keys), so it is exported once to a safe place.
+
+**Releasing** (`python3 Scripts/release/make_release.py`, on a Mac): checks `VERSION` is newer than the last appcast item and that ReleaseNotes.md has its section; builds the universal app (`build_macos_app.py --arch universal`) with the version, build number, feed and public key; signs (and notarizes when a Developer ID is given); makes `Atelier-<version>.dmg` and `Atelier-<version>.zip`; signs the zip for Sparkle; adds the item to `Releases/appcast.xml`; and with `--publish` creates the GitHub Release `v<version>` with both files (gh). The appcast change is then merged to `main` like any change, which is when installed copies see it. Docs/Releasing.md has the steps.
+
+**App Store later.** An App Store build leaves Sparkle out (the store updates apps) and needs the App Sandbox (see Non-functional requirements); the update code is behind one `AppUpdater` so it can be compiled out.
 
 ## Milestones and roadmap
 

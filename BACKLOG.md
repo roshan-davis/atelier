@@ -1601,3 +1601,19 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 - Children removed: the Cull "Same frame" dance pair became two adults in fog.
 - **Found, not fixed (separate item):** Match Look's Fury Road studies push photos cyan. For color studies, `fitWhiteBalance` matches the drawing's least-colorful pixels, which are its teal sky (LookMatch+Regions.swift:500, LookMatch.swift:522-572). The Help examples don't use Fury Road.
 - **Still subtle by design:** Clean Product, Fine Art & Pigments, Natural Skin, Soft Glow, Haze Cut. Expired's grain looks clumpy at 100%.
+
+## AT-087 — Updates: check, auto update, What's New, major versions; share Atelier as a file
+
+**Status:** In progress. **Decision:** Rosh, Nov 20, 2026, project thread "Add auto updates and file distribution": check for updates, auto update, what's new, major/minor handling; no App Store soon, shared by file. Developer ID ($99/year) not decided, so the design works signed or unsigned. **Owner:** Claude (project thread). **Branch:** `claude/project-thread-om5oqi`.
+
+**Scope (PRD "Updates and distribution"):**
+- Sparkle 2 (MIT, SwiftPM), wrapped in `AppUpdater` (Sources/AtelierApp/Updates). Off in builds run from Xcode.
+- Atelier > Check for Updates…; Help > What's New in Atelier; Settings > Updates pane.
+- Core: `AppVersion` (semver, update kind), `ReleaseNotes` (changelog parser), catalog backup before migrations (`Backups/Before Upgrade`, last 3) and a clear error for a catalog upgraded by a newer Atelier.
+- One changelog, `Sources/AtelierApp/Resources/ReleaseNotes.md`; first launch after an update shows What's New once.
+- `build_macos_app.py`: version, build number, feed, public key, Sparkle.framework, signing identity (Developer ID with hardened runtime, self-signed or ad hoc).
+- `Scripts/release/make_release.py`: dmg + zip, notarization when a Developer ID is given, EdDSA signature, appcast item (major sets `minimumAutoupdateVersion`, `--critical`, `--beta`), optional GitHub Release.
+
+**Acceptance:** on a Mac: a build with an older version finds a newer test release from a local appcast, shows its notes, installs it (signed and unsigned), What's New shows once after the relaunch; a catalog with pending migrations gets a Before Upgrade backup; an older build refuses a newer catalog with the message. Rosh tests Settings > Updates.
+
+**Left out:** App Store build (needs the App Sandbox, PRD Non-functional requirements), phased rollout, delta updates.

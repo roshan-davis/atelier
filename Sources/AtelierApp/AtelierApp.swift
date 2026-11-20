@@ -28,6 +28,8 @@ struct AtelierApp: App {
                         .onAppear {
                             appDelegate.model = model
                             LegacyHDRReceipts.importPending(into: model)
+                            // Once, on the first launch after an update (AT-087).
+                            WhatsNewWindow.shared.showAfterUpdateIfNeeded()
                             PanelHelp.hasTopic = { HelpWindow.topic(forPanel: $0) != nil }
                             PanelHelp.show = { title in
                                 if let topic = HelpWindow.topic(forPanel: title) {
@@ -51,12 +53,15 @@ struct AtelierApp: App {
             // Atelier is one library window: File > New Window would open a second copy of the
             // same library (one shared model, keys and renders tied to the first window).
             CommandGroup(replacing: .newItem) {}
+            // Atelier > Check for Updates… (AT-087), under About as on every Mac app.
+            CommandGroup(after: .appInfo) { CheckForUpdatesItem(updater: AppUpdater.shared) }
             LibraryCommands(model: launch.model)
             CommandGroup(replacing: .help) {
                 // Help works before a catalog opens (the recovery screen), so it is not a
                 // registry action, and it means nothing to an agent.
                 Button("Atelier Help") { HelpWindow.shared.show() }  // not an action: works without a catalog
                     .keyboardShortcut("?", modifiers: [.command])
+                Button("What’s New in Atelier") { WhatsNewWindow.shared.showAll() }  // not an action: works without a catalog
                 if let model = launch.model {
                     model.actions.button(AtelierAction.keyboardShortcuts)
                 } else {
@@ -71,6 +76,21 @@ struct AtelierApp: App {
                 CatalogRecoveryView(opening: launch.opening, retry: { launch.open() })
                     .frame(width: 680, height: 480)
             }
+        }
+    }
+}
+
+/// Atelier > Check for Updates… (AT-087). It works before a catalog opens (a newer version may be
+/// what the recovery screen needs) and installs software, which no agent may start, so it is not
+/// a registry action. Reads "Update Available: 1.3.0…" while a found update waits; hidden in
+/// builds run from Xcode, which never update.
+struct CheckForUpdatesItem: View {
+    @ObservedObject var updater: AppUpdater
+
+    var body: some View {
+        if updater.isEnabled {
+            Button(updater.menuTitle) { updater.checkForUpdates() }  // not an action: installs software, works without a catalog
+                .disabled(!updater.canCheck)
         }
     }
 }
@@ -247,6 +267,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             #endif
         }
         if !snapshots { NSApp.activate(ignoringOtherApps: true) }
+        // Sparkle starts only in a released app bundle; never in snapshot runs (AT-087).
+        if !snapshots { MainActor.assumeIsolated { AppUpdater.shared.start() } }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

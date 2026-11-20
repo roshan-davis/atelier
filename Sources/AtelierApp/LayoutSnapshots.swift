@@ -272,13 +272,34 @@ enum LayoutSnapshots {
             else { UserDefaults.standard.removeObject(forKey: SettingsPane.defaultsKey) }
         }
         let shots: [(Theme, SettingsPane)] = [(.light, .general), (.light, .appearance), (.light, .ai), (.light, .agents), (.light, .keyboard),
-                                              (.graphite, .general), (.graphite, .editIn)]
+                                              (.light, .updates), (.graphite, .general), (.graphite, .editIn)]
         for (theme, pane) in shots {
             UserDefaults.standard.set(theme.rawValue, forKey: Theme.defaultsKey)
             theme.apply()
             UserDefaults.standard.set(pane.rawValue, forKey: SettingsPane.defaultsKey)
             await capture(AnyView(SettingsView().environmentObject(model)), size: SettingsView.size,
                           to: folder.appendingPathComponent("settings-window-\(pane.rawValue)-\(theme.rawValue).png"))
+        }
+        // What's New after an update from 1.2.1 to 1.3 (AT-087), from a fixed changelog so the
+        // picture doesn't change with every release.
+        let notes = ReleaseNotes(markdown: """
+            ## 1.3.0 (2026-11-20)
+            Atelier now keeps itself up to date.
+            ### New
+            - **Settings > Updates:** check for new versions and install them when you quit.
+            - **Help > What’s New in Atelier** shows these notes again any time.
+            ### Fixed
+            - Crop: straighten no longer leaves streaks at the edges.
+            ## 1.2.1 (2026-11-02)
+            ### Fixed
+            - Import: photos on an offline NAS share no longer stall the import.
+            """)
+        for theme in [Theme.light, .graphite] {
+            UserDefaults.standard.set(theme.rawValue, forKey: Theme.defaultsKey)
+            theme.apply()
+            let content = WhatsNewContent(current: AppVersion(1, 3, 0), previous: AppVersion(1, 2, 0), releases: notes.releases)
+            await capture(AnyView(WhatsNewView(content: content, close: {})), size: WhatsNewView.size,
+                          to: folder.appendingPathComponent("whats-new-\(theme.rawValue).png"))
         }
     }
 
