@@ -114,8 +114,12 @@ before installing it, and its notes start with a line about the catalog upgrade.
 - **"codesign wants to sign using key "Atelier Release""**: enter your Mac login password and
   click **Always Allow** (Allow covers only one of the several signatures a build makes). Pressing
   Escape or Deny makes codesign fail with `errSecInternalComponent`; run the release again.
-- **`CSSMERR_TP_NOT_TRUSTED` for Atelier Release**: Keychain Access > login > My Certificates,
-  double-click Atelier Release > Trust > Code Signing: Always Trust.
+- **`CSSMERR_TP_NOT_TRUSTED` for Atelier Release** in `security find-identity`: expected for a
+  self-signed certificate, and signing still works; no trust change is needed. Only if codesign
+  itself refuses after Always Allow: Keychain Access > login > My Certificates, double-click
+  Atelier Release > Trust > Code Signing: Always Trust.
+- **`--publish` rebuilds**: it doesn't upload the dry run's files; it builds, signs and uploads
+  fresh ones (same commit, so the same app).
 - **No Atelier > Check for Updates…**: that copy has no feed or update key, so it hides the item on
   purpose (`AppUpdater.isEnabled`). Copies run from Xcode and `build_macos_app.py` builds without
   `--release` are like this; What's New still shows in them. Install a published dmg (quit other
@@ -124,4 +128,5 @@ before installing it, and its notes start with a line about the catalog upgrade.
   Mac (self-signed and ad hoc builds).
 - **Lost the private update key**: make a new one, commit the new public key and release; every
   installed copy then needs one manual dmg download (only Developer ID builds can rotate keys
-  without that). Rosh's backup is the locked Apple Note "Atelier update signing key".
+  without that). The key is in the login Keychain (item `https://sparkle-project.org`, account `ed25519`);
+  Rosh's backup is the locked Apple Note "Atelier update signing key".
