@@ -25,7 +25,7 @@ let package = Package(
         // for Settings > Agents > Skills (SL-002c), and ONNX Runtime 1.24.2 (MIT), which Fine
         // Edges, Depth and AI Denoise run with (SL-004: Microsoft's onnxruntime-swift-package-manager
         // repository is gone from GitHub, so the library carries its bindings unchanged).
-        .package(url: "https://github.com/roshan-davis/studio-shared-lib.git", from: "0.4.0"),
+        .package(url: "https://github.com/roshan-davis/studio-shared-lib.git", from: "0.5.0"),
     ],
     targets: [
         // App-neutral: actions, kinds and tiers, parameter schemas, the registry and menu
