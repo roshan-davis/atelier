@@ -26,6 +26,9 @@ let package = Package(
         // Edges, Depth and AI Denoise run with (SL-004: Microsoft's onnxruntime-swift-package-manager
         // repository is gone from GitHub, so the library carries its bindings unchanged).
         .package(url: "https://github.com/roshan-davis/studio-shared-lib.git", from: "0.5.0"),
+        // Sparkle 2 (MIT): checks for, downloads and installs new versions from the appcast on
+        // GitHub (AT-087). Pinned, like ONNX Runtime; raise it on purpose.
+        .package(url: "https://github.com/sparkle-project/Sparkle.git", exact: "2.10.1"),
     ],
     targets: [
         // App-neutral: actions, kinds and tiers, parameter schemas, the registry and menu
@@ -63,7 +66,8 @@ let package = Package(
                            .product(name: "GRDB", package: "GRDB.swift"),
                            .product(name: "StudioSkills", package: "studio-shared-lib"),
                            .product(name: "StudioSkillsUI", package: "studio-shared-lib"),
-                           .product(name: "StudioMarkdownEditor", package: "studio-shared-lib")],
+                           .product(name: "StudioMarkdownEditor", package: "studio-shared-lib"),
+                           .product(name: "Sparkle", package: "Sparkle")],
             resources: [.process("Resources"), .copy("Help")],
             swiftSettings: swift6
         ),

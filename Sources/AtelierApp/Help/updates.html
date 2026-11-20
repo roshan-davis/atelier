@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Updates and What’s New · Atelier Help</title>
+<link rel="stylesheet" href="assets/help.css">
+<script src="assets/toc.js" defer></script>
+<script src="assets/help.js" defer></script>
+<style>
+  .mock { border-radius: 10px; border: 1px solid var(--line, rgba(127,127,127,.3)); background: var(--panel, rgba(127,127,127,.06));
+          padding: 14px 18px; font: 13px -apple-system, BlinkMacSystemFont, sans-serif; max-width: 560px; }
+  .mock .band { font-weight: 600; font-size: 12px; opacity: .75; margin: 10px 0 6px; }
+  .mock .band:first-child { margin-top: 0; }
+  .mock .row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0;
+               border-bottom: 1px solid rgba(127,127,127,.18); gap: 12px; }
+  .mock .row:last-child { border-bottom: 0; }
+  .mock .muted { opacity: .6; }
+  .mock .btn { display: inline-block; padding: 2px 10px; border-radius: 5px; border: 1px solid rgba(127,127,127,.4);
+               background: rgba(255,255,255,.5); font-size: 12px; margin-right: 6px; }
+  .mock .switch { width: 30px; height: 17px; border-radius: 9px; background: #4a90e2; position: relative; flex: none; }
+  .mock .switch::after { content: ""; position: absolute; top: 2px; right: 2px; width: 13px; height: 13px; border-radius: 50%; background: #fff; }
+  .mock .switch.off { background: rgba(127,127,127,.35); }
+  .mock .switch.off::after { right: auto; left: 2px; }
+  .mock h3.mock-title { margin: 4px 0 2px; font-size: 20px; }
+  .mock .tag { font-size: 11px; font-weight: 600; letter-spacing: .05em; margin-top: 10px; }
+  .mock .new { color: #5a9a68; } .mock .fixed { color: #c98a5c; }
+  .mock ul { margin: 4px 0 0 0; padding-left: 18px; }
+</style>
+</head>
+<body>
+<main class="page">
+
+<div class="eyebrow">Set up</div>
+<h1 id="updates">Updates and What’s New</h1>
+<p class="lede">Atelier looks for new versions by itself, tells you what changed, and installs them when you quit, so an editing session is never cut short. A major version always asks first, and your catalog is backed up before any upgrade.</p>
+
+<figure>
+  <div class="mock" aria-label="A drawn Settings, Updates pane">
+    <div class="band">Atelier</div>
+    <div class="row"><span>Version</span><span class="muted">1.3.0 (1482)</span></div>
+    <div class="row"><span>Last checked</span><span class="muted">Today at 9:41 AM</span></div>
+    <div class="row"><span><span class="btn">Check Now</span><span class="btn">What’s New in Atelier…</span></span></div>
+    <div class="band">Automatic Updates</div>
+    <div class="row"><span>Check for updates automatically</span><span class="switch"></span></div>
+    <div class="row"><span>Download and install updates automatically</span><span class="switch"></span></div>
+    <div class="row"><span>Include beta versions</span><span class="switch off"></span></div>
+  </div>
+  <figcaption><b>Atelier › Settings… › Updates.</b> Your version and build, the last check, and how updates arrive.</figcaption>
+</figure>
+
+<h2 id="check">Check for a new version</h2>
+<ul>
+  <li><span class="path">Atelier › Check for Updates…</span> looks now and always shows the answer: a new version with its notes, or “You’re up to date”.</li>
+  <li>Atelier also checks once a day in the background. It never opens a window over your work: when it finds a version later in a session, the menu item reads <span class="path">Atelier › Update Available: 1.3.0…</span> and <span class="path">Settings › Updates</span> says so. Choose it when you’re ready.</li>
+  <li>New versions come from Atelier’s releases on GitHub. Each one is signed, and Atelier refuses a download whose signature doesn’t match. Checking sends nothing about you or your photos.</li>
+  <li>Copies of Atelier run from Xcode never check; <span class="path">Settings › Updates</span> says “Updates are off in builds run from Xcode”.</li>
+</ul>
+
+<h2 id="install">How updates install</h2>
+<dl class="defs">
+  <dt>Bug fixes (1.3.1)</dt><dd>Download in the background and install when you quit Atelier.</dd>
+  <dt>New features (1.4)</dt><dd>The same, and <b>What’s New</b> opens once the next time Atelier starts.</dd>
+  <dt>Major versions (2.0)</dt><dd>Always ask first, whatever the settings say, because they can upgrade the catalog so older versions can’t open it. The update window says so.</dd>
+  <dt>Install button</dt><dd>With <b>Download and install updates automatically</b> off, or on a copy that isn’t signed with a Developer ID, the update window’s <b>Install Update</b> downloads it and restarts Atelier; <b>Remind Me Later</b> and <b>Skip This Version</b> do what they say.</dd>
+</dl>
+<p><b>Include beta versions</b> adds previews of the next release. Turn it off to go back to regular releases at the next one.</p>
+
+<h2 id="whats-new">What’s New</h2>
+<figure>
+  <div class="mock" aria-label="A drawn What’s New window">
+    <h3 class="mock-title" id="whats-new-window">What’s New in Atelier 1.3</h3>
+    <div class="muted">Updated from 1.2.</div>
+    <div class="band" style="margin-top:14px">Atelier 1.3 &nbsp;<span class="muted">November 20, 2026</span></div>
+    <div class="tag new">NEW</div>
+    <ul><li><b>Settings › Updates:</b> check for new versions and install them when you quit.</li></ul>
+    <div class="tag fixed">FIXED</div>
+    <ul><li>Crop: straighten no longer leaves streaks at the edges.</li></ul>
+  </div>
+  <figcaption><b>What’s New in Atelier</b> after an update: every version since the one you used last, newest first.</figcaption>
+</figure>
+<ul>
+  <li>Opens by itself once, the first time a new version starts. A fresh install doesn’t show it.</li>
+  <li><span class="path">Help › What’s New in Atelier</span> and <span class="path">Settings › Updates › What’s New in Atelier…</span> show the notes for every version any time.</li>
+</ul>
+
+<h2 id="catalog">Your catalog across versions</h2>
+<ul>
+  <li><b>Backed up before every upgrade.</b> When a new version needs to change the catalog, Atelier first copies it to <span class="path">Backups › Before Upgrade</span> inside the catalog (the last 3 are kept, apart from the backups made when Atelier quits). If that copy fails, the catalog isn’t changed and Atelier says why.</li>
+  <li><b>Going back to an older version.</b> Minor versions only add to the catalog, so an older 1.x still opens it. After a major upgrade, an older version shows “This catalog was upgraded by a newer version of Atelier” and leaves it untouched: install the newer version again (<b>Check for Updates…</b> on that screen), or open the copy in Before Upgrade.</li>
+</ul>
+
+<h2 id="first-open">Opening Atelier the first time</h2>
+<p>A copy that isn’t notarized by Apple asks once before it opens: drag Atelier from the disk image to Applications and open it, then choose <span class="path">System Settings › Privacy &amp; Security › Open Anyway</span> and confirm. After that it opens normally and updates itself as above.</p>
+
+<div class="see-also">See also: <a href="settings.html#updates">Settings › Updates</a> · <a href="workspace.html#catalog-recovery">If the catalog cannot open</a></div>
+
+</main>
+</body>
+</html>

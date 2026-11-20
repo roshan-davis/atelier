@@ -65,6 +65,7 @@ GROUPS = [
     ]),
     ("Set up", [
         ("settings.html", "Settings"),
+        ("updates.html", "Updates and What’s New"),
         ("chat-apps.html", "Connect a chat app"),
     ]),
 ]

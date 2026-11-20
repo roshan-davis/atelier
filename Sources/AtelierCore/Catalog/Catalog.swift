@@ -4,11 +4,17 @@ import GRDB
 public enum CatalogError: Error, LocalizedError {
     case notFound(String)
     case missingDatabase(URL)
+    /// The catalog was upgraded by a newer major version of Atelier (AT-087).
+    case newerFormat(found: Int, supported: Int)
+    /// The backup taken before migrating failed, so the catalog was left as it was.
+    case upgradeBackupFailed(String)
 
     public var errorDescription: String? {
         switch self {
         case .notFound(let what): return "\(what) not found in the catalog."
         case .missingDatabase(let url): return "The catalog database is missing at \(url.path). Use Show in Finder to check the Backups folder inside this catalog. Atelier does not restore backups automatically."
+        case .newerFormat: return "This catalog was upgraded by a newer version of Atelier, and this version can't open it. Install the newer version (Atelier > Check for Updates…), or open a backup from before the upgrade in the catalog's Backups > Before Upgrade folder."
+        case .upgradeBackupFailed(let reason): return "Atelier needs to update this catalog, but couldn't back it up first (\(reason)), so the catalog was left unchanged. Check there is free space on the catalog's drive, then try again."
         }
     }
 }
@@ -43,12 +49,16 @@ public final class Catalog: Sendable {
         }
         try FileManager.default.createDirectory(at: packageURL, withIntermediateDirectories: true)
         let dbPath = databaseURL.path
+        let existed = FileManager.default.fileExists(atPath: dbPath)
         var config = Configuration()
         config.foreignKeysEnabled = true
         // DatabasePool runs SQLite in WAL mode.
         self.writer = try DatabasePool(path: dbPath, configuration: config)
         self.packageURL = packageURL
+        // AT-087: refuse a newer catalog format, back up before new migrations, then migrate.
+        if existed { try Self.prepareForUpgrade(writer, packageURL: packageURL) }
         try Self.migrator.migrate(writer)
+        try Self.stampFormat(writer)
     }
 
     /// In-memory catalog for tests.
@@ -56,6 +66,7 @@ public final class Catalog: Sendable {
         self.writer = try DatabaseQueue()
         self.packageURL = nil
         try Self.migrator.migrate(writer)
+        try Self.stampFormat(writer)
     }
 
     /// Default location: ~/Pictures/Atelier/Atelier Catalog.atelier

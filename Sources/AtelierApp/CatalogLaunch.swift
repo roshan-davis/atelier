@@ -105,6 +105,10 @@ struct CatalogRecoveryView: View {
                         }
                         NSWorkspace.shared.activateFileViewerSelecting([url])
                     }
+                    // A newer Atelier may be what this catalog needs (AT-087).
+                    if AppUpdater.shared.isEnabled {
+                        Button("Check for Updates…") { AppUpdater.shared.checkForUpdates() }
+                    }
                     Spacer()
                     Button("Quit") { NSApp.terminate(nil) }.keyboardShortcut("q", modifiers: .command)
                     Button("Try Again", action: retry).keyboardShortcut(.defaultAction)

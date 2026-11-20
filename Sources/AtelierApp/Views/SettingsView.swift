@@ -28,7 +28,7 @@ struct SettingsView: View {
 
 /// The panes of the Settings window, in sidebar order.
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case general, appearance, keyboard, imports = "import", storage, develop, export, metadata, editIn, ai, agents
+    case general, appearance, keyboard, updates, imports = "import", storage, develop, export, metadata, editIn, ai, agents
 
     static let defaultsKey = "settings.pane"
 
@@ -36,7 +36,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
 
     /// Sidebar groups: the app itself, the photo workflow, then other apps and AI.
     static let groups: [(title: String, panes: [SettingsPane])] = [
-        ("Atelier", [.general, .appearance, .keyboard]),
+        ("Atelier", [.general, .appearance, .keyboard, .updates]),
         ("Photos", [.imports, .storage, .develop, .export, .metadata]),
         ("Editors & AI", [.editIn, .ai, .agents]),
     ]
@@ -46,6 +46,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .general: return "General"
         case .appearance: return "Appearance"
         case .keyboard: return "Keyboard"
+        case .updates: return "Updates"
         case .imports: return "Import"
         case .storage: return "Storage"
         case .develop: return "Develop"
@@ -62,6 +63,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .general: return "gearshape"
         case .appearance: return "paintpalette"
         case .keyboard: return "keyboard"
+        case .updates: return "arrow.triangle.2.circlepath"
         case .imports: return "square.and.arrow.down"
         case .storage: return "externaldrive.connected.to.line.below"
         case .develop: return "slider.horizontal.3"
@@ -79,6 +81,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .general: return SettingsPalette.slate
         case .appearance: return SettingsPalette.lavender
         case .keyboard: return SettingsPalette.periwinkle
+        case .updates: return SettingsPalette.coral
         case .imports: return SettingsPalette.sky
         case .storage: return SettingsPalette.amber
         case .develop: return SettingsPalette.peach
@@ -96,6 +99,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .general: return "Catalog, backups, private photos, splash screen and previews."
         case .appearance: return "The theme for every window, Settings included."
         case .keyboard: return "The key for each command. Click a key, then press a new one."
+        case .updates: return "New versions of Atelier: checking, installing, and what’s new."
         case .imports: return "What the Import dialog starts with, and RAW+JPEG pairs."
         case .storage: return "The drives, NAS shares and folders you keep photos on."
         case .develop: return "Zoom and panel behavior in Develop."
@@ -226,6 +230,7 @@ private struct SettingsPaneView: View {
         case .general: GeneralSettings()
         case .appearance: AppearanceSettings()
         case .keyboard: KeyboardSettings()
+        case .updates: UpdatesSettings()
         case .imports: ImportSettings()
         case .storage: StorageSettings()
         case .develop: DevelopSettingsTab()
