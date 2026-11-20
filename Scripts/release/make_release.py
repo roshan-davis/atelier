@@ -7,13 +7,21 @@
         --notary-profile atelier                                  # signed and notarized
     ... --publish                                                 # also create the GitHub Release
 
-Steps: checks VERSION is newer than Releases/appcast.xml and that ReleaseNotes.md has its
+Releases live in a public repository of their own, roshan-davis/atelier-releases, so the
+source repository can stay private: its GitHub Releases hold the files and its appcast.xml is
+the feed installed copies read.
+
+Steps: reads the published appcast; checks VERSION is newer and that ReleaseNotes.md has its
 section; builds the universal app with the version, build number, feed and key; signs it (and
 notarizes it with a Developer ID); makes Atelier-<version>.dmg and .zip under
-.build/Releases/<version>/; signs the zip with Sparkle's EdDSA key; adds the item to
-Releases/appcast.xml. With --publish it creates the GitHub Release v<version> with both files
-(gh). Installed copies see the release once the appcast change is merged to main.
+.build/Releases/<version>/; signs the zip with Sparkle's EdDSA key; writes the new appcast.xml
+next to them. With --publish it creates the GitHub Release v<version> in the releases repository
+with both files, then commits appcast.xml there (gh); installed copies see it from then on.
 """
+import base64
+import json
+import urllib.error
+import urllib.request
 import argparse
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,9 +33,11 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import appcast  # noqa: E402
 
-REPO = "roshan-davis/atelier"
+# Public, holds only appcast.xml and the release files (no source). Keep in step with FEED_URL
+# in build_macos_app.py.
+REPO = "roshan-davis/atelier-releases"
+FEED_URL = "https://raw.githubusercontent.com/%s/main/appcast.xml" % REPO
 NOTES = ROOT / "Sources/AtelierApp/Resources/ReleaseNotes.md"
-APPCAST = ROOT / "Releases/appcast.xml"
 BUILD = ROOT / "Scripts/build_macos_app.py"
 
 READ_ME_UNSIGNED = """Opening Atelier the first time
@@ -61,11 +71,14 @@ def main():
                         help="Developer ID Application identity, a self-signed certificate's name, or - (ad hoc)")
     parser.add_argument("--notary-profile", help="notarytool keychain profile (xcrun notarytool store-credentials)")
     parser.add_argument("--critical", action="store_true", help="Mark as a critical update (no Skip This Version)")
-    parser.add_argument("--publish", action="store_true", help="Create the GitHub Release v<version> with gh")
+    parser.add_argument("--publish", action="store_true",
+                        help="Create the GitHub Release v<version> in %s and update its appcast.xml (gh)" % REPO)
     parser.add_argument("--allow-dirty", action="store_true", help="Release with uncommitted changes (testing only)")
     args = parser.parse_args()
     if sys.platform != "darwin":
         raise SystemExit("Releases are built on a Mac.")
+    if args.publish and not shutil.which("gh"):
+        parser.error("--publish uploads with gh: brew install gh, then gh auth login")
     developer_id = args.sign.startswith("Developer ID Application")
     if developer_id and not args.notary_profile:
         parser.error("A Developer ID release is notarized: pass --notary-profile (Docs/Releasing.md, step 3)")
@@ -79,7 +92,8 @@ def main():
     release = next((r for r in appcast.parse_notes(NOTES.read_text()) if r.version == version), None)
     if release is None or not release.sections:
         raise SystemExit("Add a '## %s (date)' section with New/Improved/Fixed bullets to %s." % (version, NOTES.relative_to(ROOT)))
-    items = appcast.read_appcast(APPCAST.read_text() if APPCAST.exists() else "")
+    published, sha = read_published_appcast()
+    items = appcast.read_appcast(published)
     appcast.check_new_release(items, version, build)
     kind = appcast.update_kind(items[0].version, version) if items else "first"
     print("Releasing Atelier %s (build %d), a %s release, signed %s." % (
@@ -107,11 +121,11 @@ def main():
     url = "https://github.com/%s/releases/download/v%s/%s" % (REPO, version, archive.name)
     item = appcast.new_item(items, release, build, url, length, signature, datetime.now(timezone.utc),
                             critical=args.critical)
-    APPCAST.parent.mkdir(parents=True, exist_ok=True)
-    APPCAST.write_text(appcast.write_appcast(items + [item]))
+    feed = out / "appcast.xml"
+    feed.write_text(appcast.write_appcast(items + [item]))
     notes_file = out / "notes.md"
     notes_file.write_text(item.notes + "\n")
-    print("Added %s to %s." % (version, APPCAST.relative_to(ROOT)))
+    print("Wrote %s with %s added." % (feed, version))
 
     # 5. The GitHub Release.
     if args.publish:
@@ -120,10 +134,44 @@ def main():
         if version.prerelease:
             command.append("--prerelease")
         run(command)
-    print("\nDone: %s\n%s\n" % (archive, dmg))
-    if not args.publish:
-        print("Next: upload both files to a GitHub Release named v%s (or run again with --publish)." % version)
-    print("Then open a PR with Releases/appcast.xml. Installed copies see %s once it merges to main." % version)
+        # The feed last, once the files it points at are there.
+        publish_appcast(feed, sha, version)
+        print("\nPublished Atelier %s. Installed copies see it within a day, or at once with Check for Updates…" % version)
+    else:
+        print("\nDone: %s\n%s\n%s" % (archive, dmg, feed))
+        print("Nothing is published. Run again with --publish, or by hand: make a GitHub Release v%s in %s "
+              "with the .dmg and .zip, then replace appcast.xml there with the one above." % (version, REPO))
+
+
+def read_published_appcast():
+    """The live appcast.xml and its blob sha (for the update), or ("", None) before the first release.
+    Read through the API with gh when it's there, so a just-published release is seen at once."""
+    if shutil.which("gh"):
+        result = subprocess.run(["gh", "api", "repos/%s/contents/appcast.xml" % REPO], capture_output=True, text=True)
+        if result.returncode == 0:
+            data = json.loads(result.stdout)
+            return base64.b64decode(data["content"]).decode("utf-8"), data["sha"]
+        if "Not Found" not in result.stderr and "404" not in result.stderr:
+            raise SystemExit("Couldn't read appcast.xml from %s: %s" % (REPO, result.stderr.strip()))
+        return "", None
+    try:
+        with urllib.request.urlopen(FEED_URL, timeout=30) as response:
+            return response.read().decode("utf-8"), None
+    except urllib.error.HTTPError as error:
+        if error.code == 404:
+            return "", None
+        raise
+
+
+def publish_appcast(feed, sha, version):
+    """Commits the new appcast.xml to the releases repository."""
+    fields = ["-f", "message=Atelier %s" % version,
+              "-f", "content=" + base64.b64encode(feed.read_bytes()).decode("ascii")]
+    if sha:
+        fields += ["-f", "sha=" + sha]
+    print("$ gh api -X PUT repos/%s/contents/appcast.xml (Atelier %s)" % (REPO, version), flush=True)
+    subprocess.run(["gh", "api", "-X", "PUT", "repos/%s/contents/appcast.xml" % REPO] + fields,
+                   check=True, stdout=subprocess.DEVNULL)
 
 
 def notarize(path, out, profile):

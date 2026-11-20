@@ -10,8 +10,12 @@ Design: PRD "Updates and distribution". Everything runs on a Mac, from a clean c
 | Version people see | `VERSION` (semantic: `1.3.0`, `1.3.0-beta.1`) |
 | Build number Sparkle compares | the commit count of `main` (`git rev-list --count HEAD`), set by the build |
 | Release notes | `Sources/AtelierApp/Resources/ReleaseNotes.md` (What's New and the update window) |
-| The feed installed copies read | `Releases/appcast.xml` on `main` (raw.githubusercontent.com) |
-| The downloads | GitHub Release `v<version>`: `Atelier-<version>.dmg` (people) and `.zip` (Sparkle) |
+| The feed installed copies read | `appcast.xml` on `main` of the public `roshan-davis/atelier-releases` repository (raw.githubusercontent.com) |
+| The downloads | GitHub Release `v<version>` in `atelier-releases`: `Atelier-<version>.dmg` (people) and `.zip` (Sparkle) |
+
+The source repository is private, so releases go to `atelier-releases`, which holds only the feed
+and the release files. Create it once on github.com: New repository, name `atelier-releases`,
+Public, tick "Add a README file" (a release needs a first commit), Create repository.
 | Update signing key | private: your login Keychain; public: `Scripts/release/sparkle-public-key.txt` |
 
 ## 1. Once: make the update signing key
@@ -67,11 +71,11 @@ xcrun notarytool store-credentials atelier --apple-id <your Apple ID> --team-id 
    python3 Scripts/release/make_release.py --sign "Atelier Release" --publish
    python3 Scripts/release/make_release.py --sign "Developer ID Application: <Name> (<TEAMID>)" --notary-profile atelier --publish
    ```
-   `--publish` uploads both files to the GitHub Release with `gh` (`brew install gh`, then
-   `gh auth login`). Without it, upload `.build/Releases/<version>/Atelier-<version>.dmg` and
-   `.zip` by hand to a release named `v<version>`. Add `--critical` for an urgent fix.
-4. Open a PR with the changed `Releases/appcast.xml` and merge it. Installed copies see the
-   version within a day, or at once with Atelier > Check for Updates….
+   `--publish` creates the release `v<version>` in `atelier-releases` with both files, then
+   replaces its `appcast.xml`, using `gh` (`brew install gh`, then `gh auth login`). Installed
+   copies see the version within a day, or at once with Atelier > Check for Updates….
+   Without `--publish` nothing goes out: the files and the new `appcast.xml` are in
+   `.build/Releases/<version>/` to check or upload by hand. Add `--critical` for an urgent fix.
 
 A pre-release version (`1.4.0-beta.1`) goes on the beta channel: only copies with Settings >
 Updates > Include beta versions see it, and its GitHub Release is marked pre-release.
@@ -81,12 +85,13 @@ before installing it, and its notes start with a line about the catalog upgrade.
 
 ## Testing an update before releasing
 
-1. Build an older copy that reads a test feed from your branch:
+1. In `atelier-releases`, make a branch `test` (GitHub: branch menu > type `test` > Create branch).
+2. Build an older copy that reads the test branch's feed:
    ```
    python3 Scripts/build_macos_app.py --configuration release --release --version 0.9.0 \
-     --feed-url https://raw.githubusercontent.com/roshan-davis/atelier/<branch>/Releases/appcast.xml
+     --feed-url https://raw.githubusercontent.com/roshan-davis/atelier-releases/test/appcast.xml
    ```
-2. Run `make_release.py` on that branch (`--allow-dirty` if needed), upload the zip to a draft or
-   pre-release, and push the branch with its `Releases/appcast.xml`.
-3. Open the 0.9.0 copy: Atelier > Check for Updates… finds the release, shows its notes, installs
+3. Run `make_release.py` without `--publish`, upload the zip to a pre-release in
+   `atelier-releases`, and put the generated `appcast.xml` on the `test` branch.
+4. Open the 0.9.0 copy: Atelier > Check for Updates… finds the release, shows its notes, installs
    it, and What's New opens once after the restart.

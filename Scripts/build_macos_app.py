@@ -24,8 +24,9 @@ APP_ICON = ROOT / "Sources/AtelierApp/Resources/AppIcon.icns"
 MIN_MACOS = "15.0"
 VERSION_FILE = ROOT / "VERSION"
 PUBLIC_KEY_FILE = ROOT / "Scripts/release/sparkle-public-key.txt"
-# Releases/appcast.xml on main: installed copies see a release once its appcast change merges.
-FEED_URL = "https://raw.githubusercontent.com/roshan-davis/atelier/main/Releases/appcast.xml"
+# The appcast in the public releases repository (the source repository is private), which
+# Scripts/release/make_release.py updates after uploading a release's files.
+FEED_URL = "https://raw.githubusercontent.com/roshan-davis/atelier-releases/main/appcast.xml"
 
 
 def read_version():
