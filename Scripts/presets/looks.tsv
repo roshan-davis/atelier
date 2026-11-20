@@ -10,7 +10,7 @@ Vivid Slide	sky	Sunlit landscapes and bold natural color	Deep blues and greens, 
 Chrome 64	street	Daylight documentary and travel	Richer brick reds and deeper blues, with more subdued greens and overall saturation than Vivid Slide. Fine grain.
 Tungsten 800T	urban	Mixed-light streets and bright practical lights	Cool shadows, visible fine-textured grain and red-orange halation around the brightest lights. Compare the lit bridge and the street lamps against the dark blocks.
 Expired	street	Creative faded snapshots	Fogged blacks, a green-to-pink color shift and uneven-looking coarse grain. Age and storage give real expired film a wide range of looks.
-Instant	portrait	Casual portraits and snapshots	Creamy highlights, raised blacks, soft contrast and darker corners. Compare the faces and the frame edges.
+Instant	portrait	Casual portraits and snapshots	Creamy highlights, raised blacks, soft contrast and darker corners. Compare the face and the frame edges.
 Neutral	portrait	A plain starting point for monochrome	Even grayscale with Atelier's default B&W Mix. Check that there's no added curve, grain or toning when applied to a reset photo.
 Silver Gelatin	sky	Monochrome landscapes and gallery prints	Dense shadows, bright whites and a barely visible cool-shadow and warm-highlight split. Look for detail in the white clouds.
 Classic 400	street	Everyday monochrome reportage	Crisp detail, a mild yellow-filter effect and visible classic grain. Compare the sky and the building surfaces.
@@ -19,16 +19,16 @@ Dark Sky	sky	Monochrome landscapes with blue skies	Blue sky and cyan tones darke
 Infrared Glow	forest	Sunlit foliage and landscapes	Greens and yellows become lighter, blues turn very dark, and bright edges bloom softly. The recipe works from visible colors.
 Selenium	sky	Subtly toned monochrome prints	Dense blacks with a faint plum shift in the darker tones and near-neutral highlights. Compare with the warmer Sepia.
 Sepia	portrait	Warm archival-style portraits	Chocolate-brown shadows, warm midtones and lighter cream highlights. Look for warmth across the grayscale image.
-Natural Skin	portrait-light	Everyday portraits	Gently reduced reds and oranges, a small lift in skin mids, and slightly softer texture. Compare the cheeks and hands.
-Bright & Airy	portrait	Bright, open-shade portraits and weddings	Lifted skin mids and open shadows, lighter surrounding colors, and recognizable dark tones. Look at the face and dark fabric.
-Soft Glow	portrait-light	Backlit portraits and soft window light	Gentle diffusion and softer texture with warm light spilling at bright edges. Compare the cheek highlights and the sea behind.
+Natural Skin	portrait-light	Everyday portraits	Gently reduced reds and oranges, a small lift in skin mids, and slightly softer texture. Compare the cheeks and arms.
+Bright & Airy	portrait	Bright, open-shade portraits and weddings	Lifted skin mids and open shadows, lighter surrounding colors, and recognizable dark tones. Look at the face and the hat band.
+Soft Glow	portrait-light	Backlit portraits and soft window light	Gentle diffusion and softer texture with warm light spilling at bright edges. Compare the cheek highlights and the white apron.
 Rich Skin	portrait	Portraits with deeper skin tones	Open shadows and restrained golden warmth. Look for definition in the face without a strong red or yellow shift.
-Clean Studio	portrait	Studio headshots and fashion	Crisper tonal separation with controlled skin saturation and clean light areas. Compare fabric and facial texture.
+Clean Studio	portrait	Studio headshots and fashion	Crisper tonal separation with controlled skin saturation and clean light areas. Compare the checked shirt and facial texture.
 Moody Portrait	portrait	Low-key editorial portraits	Deeper surroundings and subdued background color with warmer skin mids. The vignette concentrates attention toward the center.
 Dramatic Sky	sky	Landscapes with bright textured clouds	A darker blue sky and more cloud texture, with less pressure on foreground shadows. Inspect the tree line for halos.
 Golden Hour	sky	Already warm side light and late-day landscapes	Amber sunlit grass and warmer trees, with cooler shadow separation. Compare the fairway and the clouds.
 Blue Hour	twilight	Twilight and city scenes with warm lights	Cobalt-blue midtones and deeper shadows separate warm practical lights from the cooler surroundings. The strongest fit is an already cool scene.
-Deep Greens	forest	Forests and backlit leaves	Deeper greens, darker foliage shadows and warmer light. Compare the leaves to the wet path.
+Deep Greens	forest	Forests and backlit leaves	Deeper greens, darker foliage shadows and warmer light. Compare the lighter yellow-green leaves to the shaded ones.
 Autumn Colors	landscape	Woodland with yellow and turning foliage	Yellow-green grass leans toward amber and existing oranges and reds become stronger. Compare the hillsides and the green slopes.
 Haze Cut	haze	Distant hills and haze	Stronger distant contrast and clearer distant shapes. Check the headland in the fog and reduce Amount on already clear air.
 Wildlife & Detail	wildlife	Feathers and fur	More fine subject texture, brighter warm details and more subdued surroundings. Compare the breast feathers and beak.

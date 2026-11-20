@@ -39,14 +39,13 @@ PHOTOS = {
     "snow": ("DSC_0211", 2400),        # Chromatic aberration, Defringe
     "bay": ("RHN_3172", 1600),         # Straighten, Match Look
     "cars": ("DSC_0264", 1600),        # AI Remove Object
-    "bench": ("RDV_1309", 1600),       # Select Subject / Background
     "flower": ("DSC_0425", 1600),      # Post-crop vignette
     # Library, Grid, Filmstrip and Cull thumbnails
     "kayaks": ("DSC_0052", 800),
     "clown": ("DSC_0243", 800),
     "blossoms": ("RDV_7677", 800),
     "golden-gate": ("DSC_0099", 800),
-    "dancers": ("DSC_0037", 800),
+    "locks": ("_RZF1292", 800),
     "tomatoes": ("DSC_4803", 800),
     "lanterns": ("RDV_1489", 800),
     "bikes": ("_RZF0876", 800),
@@ -55,16 +54,16 @@ PHOTOS = {
     "flower-2": ("DSC_0426", 800),
     "flower-3": ("DSC_0433", 800),
     "flower-4": ("DSC_0425", 800),
-    "fog-1": ("DSC_0568", 800),        # Cull: same frame, a second apart
-    "fog-2": ("DSC_0569", 800),
+    "temple-1": ("RDV_1302", 800),     # Cull: same frame, a moment apart
+    "temple-2": ("RDV_1303", 800),
 }
 
 # Preset Lookbook and Match Look scenes (Scripts/presets/scenes): name: (NEF, crop x, y, w, h
-# as fractions or None). No children: the repo is public (Rosh, 2026-11-19).
+# as fractions or None). People: strangers only, no children and no family (Rosh, 2026-11-19).
 SCENES_OUT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "presets", "scenes")
 SCENES = {
-    "portrait": ("DSC_0314", (0.22, 0.17, 0.54, 0.75)),        # a couple by the sea, faces large
-    "portrait-light": ("DSC_0315", (0.485, 0.22, 0.255, 0.62)), # one face in soft overcast light
+    "portrait": ("DSC_0243", (0.2, 0.08, 0.44, 0.92)),         # a clown at a fair, face large
+    "portrait-light": ("DSC_9090", (0.34, 0.28, 0.32, 0.62)),  # a shopkeeper behind the window
     "landscape": ("RHN_2983", None),       # dry golden hills
     "sky": ("DSC_0027", None),             # blue sky with white clouds
     "haze": ("DSC_0053", None),            # a headland in fog
@@ -72,7 +71,7 @@ SCENES = {
     "urban": ("_RZF1429", None),           # Paris at night
     "twilight": ("_RZF0572", None),
     "product": ("DSC_4804", None),         # white garlic
-    "forest": ("RDV_1307", None),          # lush green park
+    "forest": ("RDV_1307", (0.48, 0.0, 0.52, 0.52)),          # lush green park trees
     "wildlife": ("DSC_0046", None),
     "fine-art": ("_RZF1123", (0.375, 0.05, 0.22, 0.19)),       # the chapel's ceiling painting
 }

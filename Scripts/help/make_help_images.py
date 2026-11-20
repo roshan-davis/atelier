@@ -957,12 +957,12 @@ def make_lens_blur_images(lake):
 
 
 def subject_mask(image):
-    """Select Subject on the man on the bench: GrabCut from a box around him (Vision's subject
-    mask stand-in), softened at the edge like Feather 20."""
+    """Select Subject on the finch: GrabCut from a box around it (Vision's subject mask
+    stand-in), softened at the edge like Feather 20."""
     H, W = image.shape[:2]
     img8 = (np.clip(image, 0, 1) * 255).astype(np.uint8)[..., ::-1].copy()
     mask = np.zeros((H, W), np.uint8)
-    rect = (int(W * 0.235), int(H * 0.49), int(W * 0.235), int(H * 0.45))
+    rect = (int(W * 0.225), int(H * 0.265), int(W * 0.15), int(H * 0.545))
     bgd, fgd = np.zeros((1, 65), np.float64), np.zeros((1, 65), np.float64)
     cv2.grabCut(img8, mask, rect, bgd, fgd, 6, cv2.GC_INIT_WITH_RECT)
     fg = np.isin(mask, (cv2.GC_FGD, cv2.GC_PR_FGD)).astype(np.uint8)
@@ -982,10 +982,12 @@ def thumbnails():
     kathakali = load("kathakali.jpg", width=1200)
     shots = {"lake": lake, "lake-warm": temperature(lake, 0.9), "lake-bw": bw(lake),
              "kathakali-face": crop(kathakali, 0.44, 0.16, 0.36, 0.5)}
-    for name in ("kayaks", "clown", "blossoms", "golden-gate", "dancers", "market", "tomatoes", "lanterns",
+    for name in ("kayaks", "clown", "blossoms", "golden-gate", "locks", "market", "tomatoes", "lanterns",
                  "bikes", "rose", "kathakali", "palace", "flower-1", "flower-2", "flower-3", "flower-4",
-                 "fog-1", "fog-2"):
+                 "temple-1", "temple-2"):
         shots[name] = kathakali if name == "kathakali" else load(f"{name}.jpg", width=None)
+    # The clown alone: leave out the backs of heads at both edges.
+    shots["clown"] = crop(shots["clown"], 0.17, 0.0, 0.5, 1.0)
     for name, image in shots.items():
         h, w = image.shape[:2]
         scale = 360 / max(h, w)
@@ -1173,7 +1175,7 @@ def main():
     radial = 1 - smoothstep(0.25, 1.0, ellipse)
     pair("mask-radial", base, mix(exposure(base, -0.35), exposure(base, 0.45), radial))
     save(red_overlay(base, radial), "mask-radial-overlay.jpg")
-    bench = load("bench.jpg")
+    bench = load("bird.jpg")
     bench_base = flat(bench)
     subject = subject_mask(bench)
     background = 1 - subject
