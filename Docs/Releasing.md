@@ -24,12 +24,12 @@ Public, tick "Add a README file" (a release needs a first commit), Create reposi
 | Step | State |
 |---|---|
 | 1. Update signing key | Done Nov 20, 2026. The private key is in Rosh's login Keychain. The public key `t/NpmlAw8z1I4OduK0RpLNDbPH9BLelayk3XzISG/ps=` is in `Scripts/release/sparkle-public-key.txt`. |
-| 1. Back up the private key | **Rosh, not yet confirmed**: run the `generate_keys -x` command below and move the file into a password manager or onto an encrypted drive, then delete it from the Desktop. Agents never export it. |
+| 1. Back up the private key | Done Nov 20, 2026: exported into Rosh's Apple Note "Atelier update signing key" (Rosh locks the note), Desktop export file deleted. Agents never export or read it. |
 | `product-releases` repository | Exists: public, branch `main`, holds a README. |
 | `gh` | Installed (`/opt/homebrew/bin/gh`) and logged in as `roshan-davis` with `repo` scope. |
-| 2. Signing | The Mac has only an "Apple Development" certificate, which can't sign for distribution, so releases are **ad hoc** (the default) until Rosh makes the `Atelier Release` self-signed certificate or buys a Developer ID. |
+| 2. Signing | Self-signed `Atelier Release` certificate in Rosh's login Keychain (Nov 20, 2026); release with `--sign "Atelier Release"`. codesign asks for the login password once: click Always Allow. No Developer ID yet. |
 | 3. Notarization | Not set up (needs a Developer ID). |
-| First release | Not made. `VERSION` is `1.0.0`. |
+| First release | Atelier 1.0.0 (build 296) published Nov 20, 2026 from main 633a22b: [atelier-v1.0.0](https://github.com/roshan-davis/product-releases/releases/tag/atelier-v1.0.0), dmg 68.0 MB, zip 62.9 MB, feed live. |
 
 ## 1. Once: make the update signing key
 
