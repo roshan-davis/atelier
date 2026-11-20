@@ -8,7 +8,7 @@ Pastel 400	portrait	Open-shade and outdoor portraits	Brighter lower midtones, mu
 Vivid 100	street	Colorful travel and architecture	Saturated reds and clear blues with fine grain. Compare with Vivid Slide for more open shadows.
 Vivid Slide	sky	Sunlit landscapes and bold natural color	Deep blues and greens, firm shadows and crisp highlight separation. Look at the fairway and the clouds.
 Chrome 64	street	Daylight documentary and travel	Richer brick reds and deeper blues, with more subdued greens and overall saturation than Vivid Slide. Fine grain.
-Tungsten 800T	neon	Mixed-light streets and bright practical lights	Cool shadows, visible fine-textured grain and red-orange halation around the brightest lights. The glow depends on nearby dark tones.
+Tungsten 800T	urban	Mixed-light streets and bright practical lights	Cool shadows, visible fine-textured grain and red-orange halation around the brightest lights. Compare the lit bridge and the street lamps against the dark blocks.
 Expired	street	Creative faded snapshots	Fogged blacks, a green-to-pink color shift and uneven-looking coarse grain. Age and storage give real expired film a wide range of looks.
 Instant	portrait	Casual portraits and snapshots	Creamy highlights, raised blacks, soft contrast and darker corners. Compare the faces and the frame edges.
 Neutral	portrait	A plain starting point for monochrome	Even grayscale with Atelier's default B&W Mix. Check that there's no added curve, grain or toning when applied to a reset photo.
@@ -26,7 +26,7 @@ Rich Skin	portrait	Portraits with deeper skin tones	Open shadows and restrained 
 Clean Studio	portrait	Studio headshots and fashion	Crisper tonal separation with controlled skin saturation and clean light areas. Compare fabric and facial texture.
 Moody Portrait	portrait	Low-key editorial portraits	Deeper surroundings and subdued background color with warmer skin mids. The vignette concentrates attention toward the center.
 Dramatic Sky	sky	Landscapes with bright textured clouds	A darker blue sky and more cloud texture, with less pressure on foreground shadows. Inspect the tree line for halos.
-Golden Hour	landscape	Already warm side light and late-day landscapes	Amber sunlit grass and trees, with cooler shadow separation. Compare the lit hillsides to the shaded oaks.
+Golden Hour	sky	Already warm side light and late-day landscapes	Amber sunlit grass and warmer trees, with cooler shadow separation. Compare the fairway and the clouds.
 Blue Hour	twilight	Twilight and city scenes with warm lights	Cobalt-blue midtones and deeper shadows separate warm practical lights from the cooler surroundings. The strongest fit is an already cool scene.
 Deep Greens	forest	Forests and backlit leaves	Deeper greens, darker foliage shadows and warmer light. Compare the leaves to the wet path.
 Autumn Colors	landscape	Woodland with yellow and turning foliage	Yellow-green grass leans toward amber and existing oranges and reds become stronger. Compare the hillsides and the green slopes.
@@ -39,7 +39,7 @@ Teal & Orange	portrait	Cinematic portraits and mixed light	Teal-biased darks and
 Bleach Bypass	street	Industrial, editorial and desaturated cinema	Hard darks, metallic highlights and color muted enough to approach monochrome. Compare the remaining colors in signs and vehicles.
 Noir	street	Low-key city and nighttime monochrome	Deep black-and-white contrast, bright highlights and darker corners. Look at the headlights and the shadowed buildings.
 Night City	urban	Neon signs and urban night	Stronger cyan and magenta accents with deeper midnight shadows. Check that detail in the brightest lights remains legible.
-Warm Drama	landscape	Warm cinematic exteriors	Bronze shadows and ochre midtones with less blue and green saturation. Compare the sunlit grass and the subdued greens.
+Warm Drama	street	Warm cinematic exteriors	Bronze shadows and ochre midtones with less blue and green saturation. Compare the stone facades and the blue taxi.
 Faded Matte	street	Muted editorial prints and street	Lifted charcoal blacks and softer highlights with some midtone contrast. Look at the deepest shadows for a restrained cast.
 Seventies	street	Retro snapshots and warm street color	Mustard yellows, terracotta reds, softened blues and lightly faded blacks. Compare street signage and pale walls.
 Midcentury Postcard	sky	Travel views with blue sky and warm details	Soft turquoise blues, coral warmth and gently lifted shadows. Compare the sky with the sunlit grass.
