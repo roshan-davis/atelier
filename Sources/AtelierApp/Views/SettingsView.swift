@@ -696,7 +696,7 @@ private struct CropGuidePreview: View {
                 }, look: look)
             }
         }
-        .frame(height: 120)
+        .frame(height: 64)
         .clipShape(RoundedRectangle(cornerRadius: 6))
         .accessibilityLabel("Preview of the crop overlay lines")
     }
