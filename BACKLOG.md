@@ -1604,7 +1604,7 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 
 ## AT-087 — Updates: check, auto update, What's New, major versions; share Atelier as a file
 
-**Status:** Done in code — merged PR #204 (Rosh: "if all good merge it", Nov 20, 2026); a real update cycle awaits the Sparkle key and a first release. **Decision:** Rosh, Nov 20, 2026, project thread "Add auto updates and file distribution": check for updates, auto update, what's new, major/minor handling; no App Store soon, shared by file. Developer ID ($99/year) not decided, so the design works signed or unsigned. **Owner:** Claude (project thread). **Branch:** `claude/project-thread-om5oqi`.
+**Status:** Done in code — merged PR #204 as 2f31332 (Rosh: "if all good merge it", Nov 20, 2026); a real update cycle awaits the Sparkle key and a first release. **Decision:** Rosh, Nov 20, 2026, project thread "Add auto updates and file distribution": check for updates, auto update, what's new, major/minor handling; no App Store soon, shared by file. Developer ID ($99/year) not decided, so the design works signed or unsigned. **Owner:** Claude (project thread). **Branch:** `claude/project-thread-om5oqi`.
 
 **Scope (PRD "Updates and distribution"):**
 - Sparkle 2 (MIT, SwiftPM), wrapped in `AppUpdater` (Sources/AtelierApp/Updates). Off in builds run from Xcode.
