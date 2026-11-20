@@ -1628,7 +1628,7 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 
 **Scope:**
 - `DevelopSettings.Crop.cropToolView` (turns and flips only) is what the crop tool renders; `ProxyRenderKey` lets `scheduleRender` skip a crop-tool render identical to the last one. Background results (fills, AI Denoise, masks) and failed renders always render again (`renderFreshResult`).
-- `CropGuide` (AtelierCore): Grid, Thirds, Diagonal, Triangle (2 orientations), Golden Ratio, Golden Spiral (8), Aspect Ratios, as polylines in frame coordinates; the fine straighten grid. `CropGuideVisibility`: Always, While Dragging, Never.
+- `CropGuide` (AtelierCore): Grid, Thirds, Diagonal, Triangle (2 orientations), Golden Ratio, Golden Spiral (8), Aspect Ratios, as polylines in frame coordinates; the fine straighten grid. `CropGuideVisibility`: Always, While Dragging, Never. `CropGuideLineStyle`: Light, Medium (default), Strong, a white line over a faint dark edge (Rosh asked for more visible lines).
 - Crop panel: Overlay menu, turn button, Show menu. O (in the crop tool, instead of the mask overlay key) and ⇧O (`KeyAction.turnCropGuide`). Develop > Crop Guide Overlay submenu.
 - Agent actions added: `develop.cropGuide`, `develop.nextCropGuide`, `develop.turnCropGuide`, `develop.cropGuideVisibility` (all `view`).
 - Help (crop.html Guide overlays, shortcuts), PRD Crop & Straighten, ReleaseNotes 1.1.0.

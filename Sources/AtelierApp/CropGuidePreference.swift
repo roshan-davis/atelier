@@ -8,6 +8,7 @@ enum CropGuidePreference {
     static let guideKey = "crop.guide"
     static let orientationKey = "crop.guideOrientation"
     static let visibilityKey = "crop.guideVisibility"
+    static let lineStyleKey = "crop.guideLines"
 
     static var guide: CropGuide {
         get { UserDefaults.standard.string(forKey: guideKey).flatMap(CropGuide.init(rawValue:)) ?? .thirds }

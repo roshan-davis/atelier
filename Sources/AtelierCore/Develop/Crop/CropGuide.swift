@@ -208,6 +208,50 @@ public enum CropGuideVisibility: String, CaseIterable, Codable, Sendable {
     }
 }
 
+/// How strongly the crop tool draws its guide lines. Each is a white line over a faint dark edge,
+/// so the lines show on bright skies as well as dark ground (Rosh, Nov 20, 2026: "a bit more
+/// visible, thicker").
+public enum CropGuideLineStyle: String, CaseIterable, Codable, Sendable {
+    case light, medium, strong
+
+    public var title: String {
+        switch self {
+        case .light: return "Light"
+        case .medium: return "Medium"
+        case .strong: return "Strong"
+        }
+    }
+
+    /// Width of the white line in points.
+    public var width: Double {
+        switch self {
+        case .light: return 0.5
+        case .medium: return 1
+        case .strong: return 1.5
+        }
+    }
+
+    /// Opacity of the white line at rest; a drag raises it by `dragBoost`.
+    public var opacity: Double {
+        switch self {
+        case .light: return 0.35
+        case .medium: return 0.5
+        case .strong: return 0.7
+        }
+    }
+
+    public var dragBoost: Double { 0.2 }
+
+    /// Opacity of the dark edge under the line (it is one point wider).
+    public var edgeOpacity: Double {
+        switch self {
+        case .light: return 0.15
+        case .medium: return 0.25
+        case .strong: return 0.35
+        }
+    }
+}
+
 public extension DevelopSettings.Crop {
     /// The part of the crop the crop tool's render depends on. The tool shows the whole photo,
     /// upright, and turns and frames it in the view, so only quarter turns and flips change the

@@ -12,7 +12,7 @@ to the catalog.
 Smoother cropping, and composition guides beyond the rule of thirds.
 
 ### New
-- **Crop guide overlays:** Grid, Thirds, Diagonal, Triangle, Golden Ratio, Golden Spiral and Aspect Ratios, as in Lightroom. Press O while cropping to step through them and Shift-O to turn the Triangle or Golden Spiral, or pick one in the Crop panel's Overlay menu or Develop > Crop Guide Overlay. Show them always, only while dragging, or never.
+- **Crop guide overlays:** Grid, Thirds, Diagonal, Triangle, Golden Ratio, Golden Spiral and Aspect Ratios, as in Lightroom. Press O while cropping to step through them and Shift-O to turn the Triangle or Golden Spiral, or pick one in the Crop panel's Overlay menu or Develop > Crop Guide Overlay. Show them always, only while dragging, or never, with light, medium or strong lines.
 
 ### Improved
 - **Crop & Straighten:** dragging a corner, an edge or the whole crop, and straightening, follow the pointer smoothly instead of stuttering.

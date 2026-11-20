@@ -140,3 +140,16 @@ final class CropGuideTests: XCTestCase {
                        DevelopRenderer.applyGeometry(before, to: image, cropping: false).extent)
     }
 }
+
+final class CropGuideLineStyleTests: XCTestCase {
+    /// Each step is thicker and brighter than the one before, and stays visible while dragging.
+    func testStylesGetStronger() {
+        let styles = CropGuideLineStyle.allCases
+        for (a, b) in zip(styles, styles.dropFirst()) {
+            XCTAssertLessThan(a.width, b.width)
+            XCTAssertLessThan(a.opacity, b.opacity)
+            XCTAssertLessThan(a.edgeOpacity, b.edgeOpacity)
+        }
+        XCTAssert(styles.allSatisfy { $0.opacity + $0.dragBoost <= 1 })
+    }
+}
