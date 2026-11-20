@@ -70,7 +70,6 @@ SCENES = {
     "haze": ("DSC_0053", None),            # a headland in fog
     "street": ("DSC_0013", None),
     "urban": ("_RZF1429", None),           # Paris at night
-    "neon": ("DSC_9090", None),            # a lit shop window at night
     "twilight": ("_RZF0572", None),
     "product": ("DSC_4804", None),         # white garlic
     "forest": ("RDV_1307", None),          # lush green park

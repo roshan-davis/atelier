@@ -24,7 +24,6 @@ SCENES = {
     "haze": "A headland and a footbridge in fog",
     "street": "A San Francisco street with taxis",
     "urban": "Paris at night from the Eiffel Tower",
-    "neon": "A lit shop window at night",
     "twilight": "The Eiffel Tower at dusk",
     "product": "White garlic bulbs",
     "forest": "A lush green park after rain",
