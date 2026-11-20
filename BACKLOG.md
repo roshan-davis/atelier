@@ -1619,3 +1619,20 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 **Validation:** Mac check by Claude on Rosh's Mac at fc88143 (background): build and build-tests pass; UpdatesTests 9/9, AtelierActionsTests 39/39, StackTests 5/5, AtelierCoreTests 14/14, CatalogLaunchTests 1/1, CatalogOpeningTests 7/7, Scripts/tests 22; packaging (Sparkle embedded, codesign strict, @rpath) checked; snapshots reviewed. Full suite and check_ui.py not run. GitHub Actions red on main and here (private studio-shared-lib clone).
 
 **Left out:** App Store build (needs the App Sandbox, PRD Non-functional requirements), phased rollout, delta updates. Untested until a first release: a real update cycle, automatic install on ad-hoc/self-signed copies. Releases repo `roshan-davis/product-releases` created Nov 20, 2026.
+
+## AT-088 — Crop: smooth frame drags and composition guide overlays
+
+**Status:** In progress — implementation on branch `claude/project-thread-so8t17`; Mac check and Rosh's acceptance pending. **Decision:** Rosh, Nov 20, 2026, project thread "Smooth crop drag and add composition overlays": "the crop handle drag seems to be bit freezy … can we have other composition type drawing also?". Intended for Atelier 1.1.0 (first real Sparkle update; publishing waits for Rosh). **Owner:** Claude (project thread).
+
+**Cause of the stutter (from the code path):** every drag tick called `setCrop`, and `scheduleRender` rendered the whole photo again although the crop tool shows it uncropped and upright (`cropping: false`, angle 0); the crop tool takes the ordinary render path, so each tick read the frame back from the GPU, measured a histogram and published a new full-size `NSImage` that SwiftUI redrew with high-quality interpolation.
+
+**Scope:**
+- `DevelopSettings.Crop.cropToolView` (turns and flips only) is what the crop tool renders; `ProxyRenderKey` lets `scheduleRender` skip a crop-tool render identical to the last one. Background results (fills, AI Denoise, masks) and failed renders always render again (`renderFreshResult`).
+- `CropGuide` (AtelierCore): Grid, Thirds, Diagonal, Triangle (2 orientations), Golden Ratio, Golden Spiral (8), Aspect Ratios, as polylines in frame coordinates; the fine straighten grid. `CropGuideVisibility`: Always, While Dragging, Never. `CropGuideLook` (thickness, opacity, color, a contrast edge in the opposite tone) set in Settings > Develop > Crop Overlay with a preview; Light/Medium/Strong quick choices in the panel's eye menu (Rosh asked for more visible lines, then for thickness, opacity and color in Settings).
+- Crop panel: Overlay menu, turn button, Show menu. O (in the crop tool, instead of the mask overlay key) and ⇧O (`KeyAction.turnCropGuide`). Develop > Crop Guide Overlay submenu.
+- Agent actions added: `develop.cropGuide`, `develop.nextCropGuide`, `develop.turnCropGuide`, `develop.cropGuideVisibility` (all `view`).
+- Help (crop.html Guide overlays, shortcuts), PRD Crop & Straighten, ReleaseNotes 1.1.0.
+
+**Acceptance:** corner, edge, move and straighten drags follow the pointer smoothly on a full-size RAW with no flicker (Rosh on their Mac; renders per drag measured before and after); turning, flipping and aspect changes in the tool still update the photo; each overlay draws inside the frame at every aspect and orientation; O, ⇧O, the panel and the menu agree. `CropGuideTests`, `AtelierActionsTests`.
+
+**Left out:** dragging an overlay on its own (a drag inside the frame moves the crop, as in Lightroom); choosing which ratios Aspect Ratios outlines; menu checkmarks on the chosen overlay (the panel shows it); narrowing what `CropEditorView` observes (the whole controller) unless the measurement shows it matters.

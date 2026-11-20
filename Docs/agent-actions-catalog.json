@@ -167,6 +167,64 @@
     },
     {
       "exposed": true,
+      "id": "develop.cropGuide",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {
+          "guide": {
+            "enum": [
+              "grid",
+              "thirds",
+              "diagonal",
+              "triangle",
+              "goldenRatio",
+              "goldenSpiral",
+              "aspectRatios"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "guide"
+        ],
+        "type": "object"
+      },
+      "place": "Develop > Crop Guide Overlay, Crop & Straighten panel > Overlay",
+      "summary": "Picks the composition guide drawn inside the crop frame: Grid, Thirds, Diagonal, Triangle, Golden Ratio, Golden Spiral or Aspect Ratios.",
+      "tier": "runs",
+      "title": "Crop Guide Overlay",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "develop.cropGuideVisibility",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {
+          "show": {
+            "enum": [
+              "always",
+              "whileDragging",
+              "never"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "show"
+        ],
+        "type": "object"
+      },
+      "place": "Develop > Crop Guide Overlay > Show, Crop & Straighten panel > Show",
+      "summary": "Sets when the crop guide shows: always, only while dragging, or never.",
+      "tier": "runs",
+      "title": "Crop Guide Overlay: Show",
+      "version": 1
+    },
+    {
+      "exposed": true,
       "id": "develop.cycleCompareMode",
       "kind": "view",
       "parameters": {
@@ -293,6 +351,22 @@
       "summary": "Opens the dialog to save the open photo's settings as a preset.",
       "tier": "undoable",
       "title": "New Preset…",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "develop.nextCropGuide",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Develop > Crop Guide Overlay > Cycle Guide Overlay, key O in the crop tool",
+      "summary": "Moves to the next crop guide overlay, as O does in the crop tool.",
+      "tier": "runs",
+      "title": "Crop Guide Overlay: Next",
       "version": 1
     },
     {
@@ -426,6 +500,22 @@
       "summary": "Shows or hides clipped highlights and shadows on the photo.",
       "tier": "runs",
       "title": "Show Clipping (J)",
+      "version": 1
+    },
+    {
+      "exposed": true,
+      "id": "develop.turnCropGuide",
+      "kind": "view",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "place": "Develop > Crop Guide Overlay > Cycle Guide Overlay Orientation, key ⇧O in the crop tool",
+      "summary": "Turns the Triangle or Golden Spiral guide to its next orientation (the spiral has eight, the triangle two).",
+      "tier": "runs",
+      "title": "Crop Guide Overlay: Cycle Orientation",
       "version": 1
     },
     {

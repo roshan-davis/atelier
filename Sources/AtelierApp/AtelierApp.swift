@@ -215,6 +215,26 @@ private struct ReadyLibraryCommands: Commands {
                 actions.button(AtelierAction.autoWhiteBalance)
                 actions.button(AtelierAction.whiteBalanceSelector)
                 actions.button(AtelierAction.crop)
+                // As Lightroom's Tools > Crop Guide Overlay; O and ⇧O work in the crop tool.
+                Menu(AtelierAction.cropGuide.descriptor.title) {
+                    ForEach(CropGuide.allCases, id: \.self) { guide in
+                        actions.button(AtelierAction.cropGuide,
+                                       CropGuideParameters(guide: CropGuideChoice(rawValue: guide.rawValue) ?? .thirds),
+                                       title: guide.title)
+                    }
+                    Divider()
+                    actions.button(AtelierAction.nextCropGuide, title: "Cycle Guide Overlay (O)")
+                    actions.button(AtelierAction.turnCropGuide, title: "Cycle Guide Overlay Orientation (⇧O)")
+                    Divider()
+                    Menu("Show") {
+                        ForEach(CropGuideVisibility.allCases, id: \.self) { visibility in
+                            actions.button(AtelierAction.cropGuideVisibility,
+                                           CropGuideVisibilityParameters(
+                                               show: CropGuideVisibilityChoice(rawValue: visibility.rawValue) ?? .always),
+                                           title: visibility.title)
+                        }
+                    }
+                }
                 actions.button(AtelierAction.remove)
                 actions.button(AtelierAction.clearSpots)
                 actions.button(AtelierAction.rotateLeft)

@@ -15,6 +15,7 @@ enum KeyAction: String, CaseIterable, Identifiable {
     case masking, radialGradient, colorRange, guidedUpright
     case remove, visualizeSpots
     case nextArea, previousArea
+    case turnCropGuide
 
     var id: String { rawValue }
 
@@ -42,7 +43,7 @@ enum KeyAction: String, CaseIterable, Identifiable {
         case .whiteBalance: return "White Balance Selector"
         case .linearGradient: return "Masking: Linear Gradient (Shift for Radial Gradient)"
         case .brush: return "Masking: Brush"
-        case .maskOverlay: return "Masking: show overlay (toggle)"
+        case .maskOverlay: return "Masking: show overlay (toggle) (in the crop tool: next guide overlay)"
         case .clipping: return "Show clipping on the photo (toggle)"
         case .masking: return "Masking: open or close"
         case .radialGradient: return "Masking: Radial Gradient"
@@ -52,6 +53,7 @@ enum KeyAction: String, CaseIterable, Identifiable {
         case .visualizeSpots: return "Remove: Visualize Spots (toggle)"
         case .nextArea: return "Focus: next area (Presets, right panel, Filmstrip)"
         case .previousArea: return "Focus: previous area"
+        case .turnCropGuide: return "Crop: cycle the guide overlay's orientation"
         }
     }
 
@@ -62,7 +64,7 @@ enum KeyAction: String, CaseIterable, Identifiable {
         case .pick, .reject, .unflag: return "Flags"
         case .grid, .loupe, .develop, .zoom: return "Views"
         case .beforeAfter, .compareMode, .crop, .treatment, .whiteBalance, .linearGradient, .brush, .maskOverlay, .clipping,
-             .masking, .radialGradient, .colorRange, .guidedUpright, .remove, .visualizeSpots: return "Develop"
+             .masking, .radialGradient, .colorRange, .guidedUpright, .remove, .visualizeSpots, .turnCropGuide: return "Develop"
         case .nextArea, .previousArea: return "Keyboard focus"
         }
     }
@@ -107,6 +109,7 @@ enum KeyAction: String, CaseIterable, Identifiable {
         case .visualizeSpots: return "a"
         case .nextArea: return "⌃" + KeyCombo.tab
         case .previousArea: return "⌃⇧" + KeyCombo.tab
+        case .turnCropGuide: return "⇧o"
         }
     }
 }

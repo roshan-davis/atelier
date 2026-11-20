@@ -184,6 +184,12 @@ struct CropEditorView: View {
     @State private var dragStart: Crop?
     @State private var handle: Handle?
     @State private var startAngle = 0.0
+    @AppStorage(CropGuidePreference.guideKey) private var guide: CropGuide = .thirds
+    @AppStorage(CropGuidePreference.orientationKey) private var guideOrientation = 0
+    @AppStorage(CropGuidePreference.visibilityKey) private var guideVisibility: CropGuideVisibility = .always
+    @AppStorage(CropGuidePreference.widthKey) private var guideWidth = CropGuideLook.standard.width
+    @AppStorage(CropGuidePreference.opacityKey) private var guideOpacity = CropGuideLook.standard.opacity
+    @AppStorage(CropGuidePreference.colorKey) private var guideColor = CropGuidePreference.defaultColor
 
     var body: some View {
         GeometryReader { geometry in
@@ -214,8 +220,9 @@ struct CropEditorView: View {
                     path.addRect(rect)
                 }
                 .fill(Color.black.opacity(0.6), style: FillStyle(eoFill: true))
-                grid(in: rect, lines: handle == .rotate ? 8 : 3)
-                    .stroke(Color.white.opacity(handle == nil ? 0.35 : 0.6), lineWidth: 0.5)
+                CropGuideLines(path: guidePath(in: rect),
+                               look: CropGuidePreference.look(width: guideWidth, opacity: guideOpacity, color: guideColor),
+                               dragging: handle != nil)
                 Rectangle()
                     .stroke(Color.white, lineWidth: 1)
                     .frame(width: rect.width, height: rect.height)
@@ -233,15 +240,21 @@ struct CropEditorView: View {
         }
     }
 
-    private func grid(in rect: CGRect, lines: Int) -> Path {
-        Path { path in
-            for i in 1..<lines {
-                let fx = rect.minX + rect.width * CGFloat(i) / CGFloat(lines)
-                let fy = rect.minY + rect.height * CGFloat(i) / CGFloat(lines)
-                path.move(to: CGPoint(x: fx, y: rect.minY))
-                path.addLine(to: CGPoint(x: fx, y: rect.maxY))
-                path.move(to: CGPoint(x: rect.minX, y: fy))
-                path.addLine(to: CGPoint(x: rect.maxX, y: fy))
+    /// The chosen guide overlay inside the frame (Grid, Thirds, … Golden Spiral; O and ⇧O), or
+    /// the fine grid while straightening, as in Lightroom. Its lines come from `CropGuide`.
+    private func guidePath(in rect: CGRect) -> Path {
+        let aspect = rect.height > 0 ? Double(rect.width / rect.height) : 1
+        let lines: [[CGPoint]]
+        switch guideVisibility {
+        case .never: lines = []
+        case .whileDragging where handle == nil: lines = []
+        default:
+            lines = handle == .rotate ? CropGuide.straightenGrid(aspect: aspect)
+                : guide.polylines(aspect: aspect, orientation: guideOrientation)
+        }
+        return Path { path in
+            for line in lines {
+                path.addLines(line.map { CGPoint(x: rect.minX + $0.x * rect.width, y: rect.minY + $0.y * rect.height) })
             }
         }
     }
@@ -394,6 +407,17 @@ struct CropEditorView: View {
 struct CropPanel: View {
     @ObservedObject var develop: DevelopController
 
+    @AppStorage(CropGuidePreference.guideKey) private var guide: CropGuide = .thirds
+    @AppStorage(CropGuidePreference.visibilityKey) private var guideVisibility: CropGuideVisibility = .always
+    @AppStorage(CropGuidePreference.widthKey) private var guideWidth = CropGuideLook.standard.width
+    @AppStorage(CropGuidePreference.opacityKey) private var guideOpacity = CropGuideLook.standard.opacity
+    @AppStorage(CropGuidePreference.colorKey) private var guideColor = CropGuidePreference.defaultColor
+    @Environment(\.openSettings) private var openSettings
+
+    private var lineStyle: CropGuideLineStyle? {
+        CropGuideLineStyle.matching(CropGuidePreference.look(width: guideWidth, opacity: guideOpacity, color: guideColor))
+    }
+
     private var crop: Crop { develop.crop }
     private var imageAspect: Double { develop.orientedAspect }
 
@@ -429,6 +453,46 @@ struct CropPanel: View {
                 .buttonStyle(.borderless)
                 .help(crop.lockedAspect == nil ? "Lock the aspect ratio" : "Unlock the aspect ratio")
             }
+            HStack(spacing: 8) {
+                Text("Overlay").frame(width: 78, alignment: .leading)
+                Picker("Overlay", selection: $guide) {
+                    ForEach(CropGuide.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
+                .labelsHidden()
+                .frame(maxWidth: .infinity)
+                .help("The guide drawn inside the crop (O picks the next one)")
+                Button { CropGuidePreference.turn() } label: {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                }
+                .buttonStyle(.borderless)
+                .disabled(guide.orientationCount == 1)
+                .help(guide.orientationCount == 1 ? "This overlay looks the same every way round"
+                      : "Cycle the overlay's orientation (⇧O)")
+                Menu {
+                    Picker("Show", selection: $guideVisibility) {
+                        ForEach(CropGuideVisibility.allCases, id: \.self) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.inline)
+                    Section("Lines") {
+                        ForEach(CropGuideLineStyle.allCases, id: \.self) { style in
+                            Toggle(style.title, isOn: Binding(get: { lineStyle == style }, set: { _ in
+                                guideWidth = style.width
+                                guideOpacity = style.opacity
+                            }))
+                        }
+                        Button("Line Settings…") {
+                            UserDefaults.standard.set(SettingsPane.develop.rawValue, forKey: SettingsPane.defaultsKey)
+                            openSettings()
+                        }
+                    }
+                } label: {
+                    Image(systemName: guideVisibility == .never ? "eye.slash" : "eye")
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("When the overlay shows, and its lines")
+            }
             SliderRow(label: "Angle", value: Binding(get: { crop.angle }, set: { setAngle($0) }),
                       range: -45...45, step: 0.1, format: { String(format: "%.1f°", $0) })
             HStack(spacing: 6) {
@@ -456,7 +520,7 @@ struct CropPanel: View {
                     .keyboardShortcut(.defaultAction)
                     .help("Close the crop tool (R or Return)")
             }
-            Text("Drag a corner or edge to crop, inside to move, outside to straighten.")
+            Text("Drag a corner or edge to crop, inside to move, outside to straighten. O picks the overlay, ⇧O turns it.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

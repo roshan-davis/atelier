@@ -1,4 +1,5 @@
 import AgentActions
+import AtelierActions
 import AppKit
 import AtelierCore
 import Combine
@@ -1233,6 +1234,10 @@ final class LibraryModel: ObservableObject {
         if action == .reject, mode == .develop, develop.isCropping {
             develop.setCrop(develop.crop.switchedOrientation(imageAspect: develop.orientedAspect))
             return true
+        }
+        // And O picks the next crop guide overlay instead of the mask overlay.
+        if action == .maskOverlay, mode == .develop, develop.isCropping {
+            return actions.run(AtelierAction.nextCropGuide)
         }
         return action.run(in: actions)
     }

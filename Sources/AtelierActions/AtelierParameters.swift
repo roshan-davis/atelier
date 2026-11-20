@@ -61,6 +61,28 @@ public struct CompareParameters: ActionParameters, Hashable {
     public static let example = CompareParameters(mode: .sideBySide)
 }
 
+/// The crop tool's guide overlays (`CropGuide` in AtelierCore).
+public enum CropGuideChoice: String, AgentEnum {
+    case grid, thirds, diagonal, triangle, goldenRatio, goldenSpiral, aspectRatios
+}
+
+public struct CropGuideParameters: ActionParameters, Hashable {
+    public var guide: CropGuideChoice
+    public init(guide: CropGuideChoice) { self.guide = guide }
+    public static let example = CropGuideParameters(guide: .goldenSpiral)
+}
+
+/// When the crop tool shows its guide (`CropGuideVisibility` in AtelierCore).
+public enum CropGuideVisibilityChoice: String, AgentEnum {
+    case always, whileDragging, never
+}
+
+public struct CropGuideVisibilityParameters: ActionParameters, Hashable {
+    public var show: CropGuideVisibilityChoice
+    public init(show: CropGuideVisibilityChoice) { self.show = show }
+    public static let example = CropGuideVisibilityParameters(show: .always)
+}
+
 public enum PrivacyChoice: String, AgentEnum {
     case hidden, shown, only
 }

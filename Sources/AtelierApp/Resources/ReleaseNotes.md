@@ -8,6 +8,15 @@ One "## <version> (<yyyy-mm-dd>)" per release, newest first, then a short summar
 to the catalog.
 -->
 
+## 1.1.0 (2026-11-20)
+Smoother cropping, and composition guides beyond the rule of thirds.
+
+### New
+- **Crop guide overlays:** Grid, Thirds, Diagonal, Triangle, Golden Ratio, Golden Spiral and Aspect Ratios, as in Lightroom. Press O while cropping to step through them and Shift-O to turn the Triangle or Golden Spiral, or pick one in the Crop panel's Overlay menu or Develop > Crop Guide Overlay. Show them always, only while dragging, or never, and set the lines' thickness, opacity and color in Settings > Develop > Crop Overlay.
+
+### Improved
+- **Crop & Straighten:** dragging a corner, an edge or the whole crop, and straightening, follow the pointer smoothly instead of stuttering.
+
 ## 1.0.0 (2026-11-20)
 The first copy of Atelier to share as a file. It now keeps itself up to date.
 
