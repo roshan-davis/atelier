@@ -108,3 +108,25 @@ before installing it, and its notes start with a line about the catalog upgrade.
    `product-releases`, and put the generated `appcast.xml` at `atelier/appcast.xml` on the `test` branch.
 4. Open the 0.9.0 copy: Atelier > Check for Updates… finds the release, shows its notes, installs
    it, and What's New opens once after the restart.
+
+## Troubleshooting
+
+- **"codesign wants to sign using key "Atelier Release""**: enter your Mac login password and
+  click **Always Allow** (Allow covers only one of the several signatures a build makes). Pressing
+  Escape or Deny makes codesign fail with `errSecInternalComponent`; run the release again.
+- **`CSSMERR_TP_NOT_TRUSTED` for Atelier Release** in `security find-identity`: expected for a
+  self-signed certificate, and signing still works; no trust change is needed. Only if codesign
+  itself refuses after Always Allow: Keychain Access > login > My Certificates, double-click
+  Atelier Release > Trust > Code Signing: Always Trust.
+- **`--publish` rebuilds**: it doesn't upload the dry run's files; it builds, signs and uploads
+  fresh ones (same commit, so the same app).
+- **No Atelier > Check for Updates…**: that copy has no feed or update key, so it hides the item on
+  purpose (`AppUpdater.isEnabled`). Copies run from Xcode and `build_macos_app.py` builds without
+  `--release` are like this; What's New still shows in them. Install a published dmg (quit other
+  copies first, Replace in Applications) to get updates, and use Xcode for development.
+- **First open of a downloaded copy**: System Settings > Privacy & Security > Open Anyway, once per
+  Mac (self-signed and ad hoc builds).
+- **Lost the private update key**: make a new one, commit the new public key and release; every
+  installed copy then needs one manual dmg download (only Developer ID builds can rotate keys
+  without that). The key is in the login Keychain (item `https://sparkle-project.org`, account `ed25519`);
+  Rosh's backup is the locked Apple Note "Atelier update signing key".
