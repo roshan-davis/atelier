@@ -198,6 +198,16 @@ extension LibraryModel {
             model.develop.isCropping.toggle()
             return true
         }
+        r.bind(AtelierAction.cropGuide) { _, parameters, _ in
+            CropGuidePreference.guide = CropGuide(rawValue: parameters.guide.rawValue) ?? .thirds
+        }
+        r.bind(AtelierAction.nextCropGuide) { _, _, _ in CropGuidePreference.next() }
+        r.bindChecked(AtelierAction.turnCropGuide, enabled: { _ in CropGuidePreference.guide.orientationCount > 1 }) { _, _, _ in
+            CropGuidePreference.turn()
+        }
+        r.bind(AtelierAction.cropGuideVisibility) { _, parameters, _ in
+            CropGuidePreference.visibility = CropGuideVisibility(rawValue: parameters.show.rawValue) ?? .always
+        }
         r.bind(AtelierAction.rotateLeft, enabled: { $0.mode == .develop }) { model, _, _ in model.rotate(clockwise: false) }
         r.bind(AtelierAction.rotateRight, enabled: { $0.mode == .develop }) { model, _, _ in model.rotate(clockwise: true) }
         r.bindChecked(AtelierAction.showBefore, enabled: { $0.mode == .develop }) { model, _, _ in
@@ -348,8 +358,8 @@ extension PrivateVisibility {
 // MARK: - Keys
 
 extension KeyAction {
-    /// The registry action this key runs. `.reject` in the crop tool is handled before this
-    /// (it switches the crop's orientation, as in Lightroom).
+    /// The registry action this key runs. `.reject` and `.maskOverlay` in the crop tool are
+    /// handled before this (they switch the crop's orientation and its guide, as in Lightroom).
     @MainActor
     func run(in registry: AtelierRegistry) -> Bool {
         switch self {
@@ -378,6 +388,7 @@ extension KeyAction {
         case .linearGradient: return registry.run(AtelierAction.linearGradient)
         case .brush: return registry.run(AtelierAction.brush)
         case .maskOverlay: return registry.run(AtelierAction.maskOverlay)
+        case .turnCropGuide: return registry.run(AtelierAction.turnCropGuide)
         case .clipping: return registry.run(AtelierAction.showClipping)
         case .masking: return registry.run(AtelierAction.masking)
         case .radialGradient: return registry.run(AtelierAction.radialGradient)

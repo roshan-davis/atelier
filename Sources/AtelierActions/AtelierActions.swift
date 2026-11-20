@@ -238,6 +238,21 @@ public enum AtelierAction {
     public static let crop = Action<NoParameters>(
         "develop.crop", "Crop & Straighten (R)", place: "Develop > Crop & Straighten (R), key R",
         summary: "Opens or closes the crop tool.", kind: .view)
+    public static let cropGuide = Action<CropGuideParameters>(
+        "develop.cropGuide", "Crop Guide Overlay", place: "Develop > Crop Guide Overlay, Crop & Straighten panel > Overlay",
+        summary: "Picks the composition guide drawn inside the crop frame: Grid, Thirds, Diagonal, Triangle, Golden Ratio, Golden Spiral or Aspect Ratios.",
+        kind: .view)
+    public static let nextCropGuide = Action<NoParameters>(
+        "develop.nextCropGuide", "Crop Guide Overlay: Next", place: "Develop > Crop Guide Overlay > Cycle Guide Overlay, key O in the crop tool",
+        summary: "Moves to the next crop guide overlay, as O does in the crop tool.", kind: .view)
+    public static let turnCropGuide = Action<NoParameters>(
+        "develop.turnCropGuide", "Crop Guide Overlay: Cycle Orientation",
+        place: "Develop > Crop Guide Overlay > Cycle Guide Overlay Orientation, key ⇧O in the crop tool",
+        summary: "Turns the Triangle or Golden Spiral guide to its next orientation (the spiral has eight, the triangle two).",
+        kind: .view)
+    public static let cropGuideVisibility = Action<CropGuideVisibilityParameters>(
+        "develop.cropGuideVisibility", "Crop Guide Overlay: Show", place: "Develop > Crop Guide Overlay > Show, Crop & Straighten panel > Show",
+        summary: "Sets when the crop guide shows: always, only while dragging, or never.", kind: .view)
     public static let rotateLeft = Action<NoParameters>(
         "develop.rotateLeft", "Rotate Left", place: "Develop > Rotate Left",
         summary: "Turns the open photo 90° counterclockwise.", kind: .edit, shortcut: KeyShortcut("["))
@@ -335,7 +350,8 @@ public enum AtelierAction {
         setFlag.descriptor, toggleLabel.descriptor, addToCollection.descriptor,
         removeFromCollection.descriptor, removeFromImport.descriptor, resetSettings.descriptor,
         frameDiagnostics.descriptor, copySettings.descriptor, pasteSettings.descriptor, resetAll.descriptor,
-        autoWhiteBalance.descriptor, whiteBalanceSelector.descriptor, crop.descriptor, rotateLeft.descriptor,
+        autoWhiteBalance.descriptor, whiteBalanceSelector.descriptor, crop.descriptor, cropGuide.descriptor,
+        nextCropGuide.descriptor, turnCropGuide.descriptor, cropGuideVisibility.descriptor, rotateLeft.descriptor,
         rotateRight.descriptor, showBefore.descriptor, showClipping.descriptor, compareMode.descriptor,
         cycleCompareMode.descriptor, newPreset.descriptor, managePresets.descriptor, applyPreset.descriptor,
         blackAndWhite.descriptor, masking.descriptor, linearGradient.descriptor, radialGradient.descriptor,

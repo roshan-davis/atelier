@@ -61,6 +61,21 @@ private struct LiveFrameKey: Equatable {
     let renderBefore: Bool
 }
 
+/// Everything a proxy render's picture depends on (`DevelopController.scheduleRender`).
+private struct ProxyRenderKey: Equatable {
+    let settings: DevelopSettings
+    let preview: SliderPreview?
+    let renderBefore: Bool
+    let cropping: Bool
+    let overlay: UUID?
+    let shadowClipping: Bool
+    let highlightClipping: Bool
+    let assetID: Int64?
+    let generation: Int
+    let session: ObjectIdentifier
+    let lensBlur: Bool
+}
+
 /// A proxy render handed to the render queue (`DevelopController.submitRender`).
 private struct ProxyRenderRequest {
     let session: DevelopSession
@@ -703,6 +718,8 @@ final class DevelopController: ObservableObject {
     private let renderJob = LatestJob<ProxyRenderRequest>()
     /// The last request handed to the render queue, for the settled image (`publishWhenSettled`).
     private var lastRender: ProxyRenderRequest?
+    /// What the last render asked for, so the crop tool skips renders that would draw the same.
+    private var lastRenderKey: ProxyRenderKey?
     private var settleItem: DispatchWorkItem?
     /// How long an edit rests before its last live frame is published as `image`.
     private static let settleDelay: TimeInterval = 0.12
@@ -811,7 +828,7 @@ final class DevelopController: ObservableObject {
         // So does Content-Aware Remove's fill (until then the spot shows Heal), and AI Denoise's
         // noise picture (until then the photo shows Apple's noise reduction).
         for name in [ContentAwareFill.fillReady, AIDenoise.ready] {
-            observers.observe(name) { [weak self] _ in MainActor.assumeIsolated { self?.scheduleRender() } }
+            observers.observe(name) { [weak self] _ in MainActor.assumeIsolated { self?.renderFreshResult() } }
         }
         observers.observe(AIDenoise.statusChanged) { [weak self] _ in
             MainActor.assumeIsolated { self?.aiDenoiseStatusChanges += 1 }
@@ -2306,16 +2323,15 @@ final class DevelopController: ObservableObject {
                     + "(showing \(showingBefore ? "Before" : "After"))")
             }
         }
-        rendering = true
-        noteLensBlurWork()
         let preview = sliderPreview
         let renderBefore = showingBefore && preview == nil
         var settings = renderBefore ? beforeSettings : self.settings
         if isGuiding { settings = guidedViewSettings(settings) }
         let cropping = !isCropping
-        if isCropping, var crop = settings.crop {
-            crop.angle = 0
-            settings.crop = crop
+        if isCropping, let crop = settings.crop {
+            // The crop tool shows the whole photo upright and turns and frames it in the view, so
+            // only turns and flips reach the render (`cropToolView`).
+            settings.crop = crop.cropToolView
         }
         // In Lens Blur's Refine the overlay shows the Focus area when no area is selected, so
         // Show Overlay always shows something (Rosh, Nov 16, 2026: it often showed nothing).
@@ -2327,6 +2343,18 @@ final class DevelopController: ObservableObject {
         // of after the blur (the blur is back as soon as the overlay is off).
         if overlay != nil, isLensBlurring { settings[.lensBlurApply] = 0 }
         let clipping = overlay == nil && preview == nil ? clippingOverlay : (shadows: false, highlights: false)
+        // Dragging the crop frame, its corners or the angle changes nothing the crop tool renders.
+        // Rendering it anyway read every frame back from the GPU and handed SwiftUI a new
+        // full-size image per tick, which made the drag stutter (Rosh, Nov 20, 2026).
+        let key = ProxyRenderKey(settings: settings, preview: preview, renderBefore: renderBefore, cropping: cropping,
+                                 overlay: overlay, shadowClipping: clipping.shadows,
+                                 highlightClipping: clipping.highlights, assetID: assetID,
+                                 generation: openGeneration.value, session: ObjectIdentifier(session),
+                                 lensBlur: isLensBlurring)
+        if isCropping, key == lastRenderKey { return }
+        lastRenderKey = key
+        rendering = true
+        noteLensBlurWork()
         renderCount += 1
         frameHUD.scheduled(renderCount)
         // Once the photo is up, live frames go straight from the GPU to the photo view (see
@@ -2441,6 +2469,8 @@ final class DevelopController: ObservableObject {
         // Nothing newer has been asked for.
         let latest = request.count == renderCount
         if latest { rendering = false }
+        // A render that failed may be asked for again with the same settings.
+        if latest, live == nil, cgImage == nil { lastRenderKey = nil }
         renderHangLogged = false
         // Rendered from this open's copy, not one from before a `reopen()` of the same photo (the
         // old file). A render started before the crop tool opened or closed has the wrong shape;
@@ -3153,6 +3183,13 @@ extension DevelopController {
     private func backgroundWorkArrived() {
         // The full-size image stays on screen until the new one is in, rather than the proxy.
         fullImageIsStale = true
+        renderFreshResult()
+    }
+
+    /// Renders again with the same settings, for work that finished in the background (a fill,
+    /// a model's mask), which the crop tool's skip of unchanged renders must not hold back.
+    private func renderFreshResult() {
+        lastRenderKey = nil
         scheduleRender()
     }
 

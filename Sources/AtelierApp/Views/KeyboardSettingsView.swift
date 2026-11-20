@@ -412,6 +412,7 @@ extension KeyAction {
         case .visualizeSpots: return "circle.dotted"
         case .nextArea: return "arrow.right.to.line"
         case .previousArea: return "arrow.left.to.line"
+        case .turnCropGuide: return "arrow.triangle.2.circlepath"
         }
     }
 
