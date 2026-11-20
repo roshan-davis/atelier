@@ -76,7 +76,7 @@
     <figcaption>With <b>Show Overlay</b>: red is where the change is full, fading to nothing at the bottom line.</figcaption>
   </figure>
   <figure>
-    <div class="frame compare" data-before="redwoods-flat.jpg" data-after="mask-linear-after.jpg" data-labels="Before|Exposure −1"></div>
+    <div class="frame compare" data-before="lake-flat.jpg" data-after="mask-linear-after.jpg" data-labels="Before|Exposure −1"></div>
     <figcaption>The result: the bright top darkened, the rest untouched.</figcaption>
   </figure>
 </div>
@@ -106,8 +106,8 @@
     <figcaption>Drag the pin to move it, the four square handles to resize, the round handle on top to rotate. The dashed inner ellipse shows where the full effect ends.</figcaption>
   </figure>
   <figure>
-    <div class="frame compare" data-before="redwoods-flat.jpg" data-after="mask-radial-after.jpg" data-labels="Before|Hiker lifted"></div>
-    <figcaption>A radial gradient lifts the hiker; the rest is slightly darkened with a second, inverted mask.</figcaption>
+    <div class="frame compare" data-before="lake-flat.jpg" data-after="mask-radial-after.jpg" data-labels="Before|The man lifted"></div>
+    <figcaption>A radial gradient lifts the man by the lake; the rest is slightly darkened with a second, inverted mask.</figcaption>
   </figure>
 </div>
 <ul>
@@ -130,7 +130,7 @@
 <p>Selects by brightness: only the parts of the photo between two brightness levels (0 to 100). <b>Smoothness</b> softens the edges of the range.</p>
 <div class="duo">
   <figure><div class="pic"><img src="images/mask-luminance-overlay.jpg" alt=""><span class="tag">Overlay: the brightest areas</span></div></figure>
-  <figure><div class="frame compare" data-before="redwoods-flat.jpg" data-after="mask-luminance-after.jpg" data-labels="Before|Highlights −60 in the range"></div></figure>
+  <figure><div class="frame compare" data-before="lake-flat.jpg" data-after="mask-luminance-after.jpg" data-labels="Before|Highlights −60 in the range"></div></figure>
 </div>
 <div class="tip"><p><span class="label">Most useful combined.</span> Intersect a Linear Gradient with a Luminance Range to darken only the bright sky, not the trees that reach into it.</p></div>
 
@@ -144,8 +144,8 @@
   <tr><td>Click again (no key held)</td><td>Start over with the new color.</td></tr>
 </table>
 <div class="duo">
-  <figure><div class="pic"><img src="images/mask-color-overlay.jpg" alt=""><span class="tag">Overlay: the greens picked from one click</span></div></figure>
-  <figure><div class="frame compare" data-before="redwoods-flat.jpg" data-after="mask-color-after.jpg" data-labels="Before|Greens brighter and richer"></div></figure>
+  <figure><div class="pic"><img src="images/mask-color-overlay.jpg" alt=""><span class="tag">Overlay: the yellow kayak picked with one click</span></div></figure>
+  <figure><div class="frame compare" data-before="lake-flat.jpg" data-after="mask-color-after.jpg" data-labels="Before|Kayak brighter and richer"></div></figure>
 </div>
 <figure>
   <div class="pins pinned">
@@ -278,15 +278,15 @@
   <dt>Defringe <span class="range">0 to 100</span></dt><dd>Removes purple and green fringes along edges inside the mask, with the same method as <a href="lens-corrections.html#defringe">Lens Corrections › Defringe</a> at its default colors. Use it where the whole-photo Defringe would touch colors you want to keep.</dd>
 </dl>
 <figure>
-  <div class="frame compare" data-before="redwoods-flat.jpg" data-after="mask-hue-after.jpg" data-labels="Before|Color Range on the leaves, Hue −50°"></div>
-  <figcaption>Hue on a Color Range mask of the leaves turns them toward autumn gold without touching the trunks or the light.</figcaption>
+  <div class="frame compare" data-before="lake-flat.jpg" data-after="mask-hue-after.jpg" data-labels="Before|Color Range on the yellow kayak, Hue −50°"></div>
+  <figcaption>Hue on a Color Range mask of the yellow kayak turns it orange without touching the red kayaks, the man or the lake.</figcaption>
 </figure>
 <h3 id="mask-grade">Color Grading in a mask</h3>
 <p>Under the sliders, each mask has its own <b>Color Grading</b>, as in Lightroom Classic 16: the same wheels as the <a href="color-grading.html">Color Grading panel</a>, with the 3-Way view or one wheel at a time, Luminance, Blending and Balance. They work exactly like the panel's (drag the dot, Shift, Command and Option, double-click to reset, arrow keys over a wheel, right-click to copy a wheel and paste it, also between the panel and a mask), but only inside the mask, on top of the photo's own grade. The mask's <b>Amount</b> scales how strong the tints and Luminance are; the hues, Blending and Balance stay. Double-click the <b>Color Grading</b> heading to reset just the mask's grade; <b>Reset Sliders</b> clears it with the rest.</p>
 <p>The panel's Preset menu, color picker and eye buttons work on the whole photo, so they aren't in a mask.</p>
 <figure>
-  <div class="frame compare" data-before="redwoods-flat.jpg" data-after="mask-grade-after.jpg" data-labels="Before|Color Range on the leaves, graded teal and gold"></div>
-  <figcaption>Only the leaves are graded: teal shadows and midtones, golden highlights. The trunks, logs and light keep the photo's own colors.</figcaption>
+  <div class="frame compare" data-before="lake-flat.jpg" data-after="mask-grade-after.jpg" data-labels="Before|Color Range on the yellow kayak, graded teal and gold"></div>
+  <figcaption>Only the yellow kayak is graded: teal shadows and midtones, golden highlights. The red kayaks, the gravel and the lake keep the photo's own colors.</figcaption>
 </figure>
 <div class="tip"><p><span class="label">Change your mind later.</span> Masks stay on the same spot of the photo when you crop, straighten or change the Transform. They're saved with the photo, copied by Copy/Paste Settings and virtual copies, and can be included in presets.</p></div>
 

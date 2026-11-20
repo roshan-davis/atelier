@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """Makes the pictures in Atelier Help (Sources/AtelierApp/Help/images).
 
-The example photos are the splash images in Sources/AtelierApp/Resources/Splash. Each tool's
-before/after pair is made here with a close approximation of what the tool does, so Help can
-be rebuilt anywhere without the app. When CI can run the app again, pairs can be swapped for
+The example photos are Rosh's own, in Scripts/help/photos (made from the RAW samples with
+prepare_photos.py, metadata stripped). Each tool gets a photo that suits it: a lake at dawn for
+Basic and Masking, a foggy coast for Dehaze, a Kathakali dancer for Select Subject, a market
+stall for Vibrance, a golf course sky for dust spots. Each tool's before/after pair is made here
+with a close approximation of what the tool does, so Help can be rebuilt anywhere without the
+app. AI Denoise is the exception: it is the app's own PMRID model on a real ISO 2800 RAW
+(pmrid_example.py). When CI can run the app again, pairs can be swapped for
 real renders from DevelopRenderer; keep the file names so the pages don't change.
 
     pip install numpy scipy opencv-python-headless pillow
@@ -26,7 +30,8 @@ from PIL import Image
 from scipy.interpolate import PchipInterpolator
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-SPLASH = os.path.join(ROOT, "Sources/AtelierApp/Resources/Splash")
+PHOTOS = os.path.join(ROOT, "Scripts/help/photos")
+DATA = os.path.join(ROOT, "Scripts/help/data")
 OUT = os.path.join(ROOT, "Sources/AtelierApp/Help/images")
 WIDTH = 960
 QUALITY = 74
@@ -38,7 +43,7 @@ rng = np.random.default_rng(7)
 # MARK: Basics
 
 def load(name, width=WIDTH):
-    image = Image.open(os.path.join(SPLASH, name)).convert("RGB")
+    image = Image.open(os.path.join(PHOTOS, name)).convert("RGB")
     if width and image.width != width:
         image = image.resize((width, round(image.height * width / image.width)), Image.LANCZOS)
     return np.asarray(image).astype(np.float32) / 255
@@ -395,11 +400,15 @@ def turn_hue(image, degrees):
     return np.where(linear <= 0.0031308, linear * 12.92, 1.055 * linear ** (1 / 2.4) - 0.055).astype(np.float32)
 
 
+# Color Range's pick on the lake photo: the yellow kayak (x, y, w, h fractions).
+KAYAK = (0.62, 0.56, 0.03, 0.03)
+
+
 def make_mask_slider_images(base):
-    greens = color_range_mask(base, (0.1, 0.48, 0.015, 0.02))
-    pair("mask-hue", base, mix(base, turn_hue(base, -50), greens))
-    # A mask's own Color Grading: the leaves only, teal shadows and golden highlights.
-    pair("mask-grade", base, mix(base, color_grade(base, shadows=(185, 1.0), midtones=(170, 0.6), highlights=(45, 1.0)), greens))
+    kayak = color_range_mask(base, KAYAK)
+    pair("mask-hue", base, mix(base, turn_hue(base, -50), kayak))
+    # A mask's own Color Grading: the kayak only, teal shadows and golden highlights.
+    pair("mask-grade", base, mix(base, color_grade(base, shadows=(185, 1.0), midtones=(170, 0.6), highlights=(45, 1.0)), kayak))
 
 
 def red_overlay(image, mask, strength=0.55):
@@ -636,33 +645,9 @@ def radial_area(shape, center, radius_x, radius_y, feather=0.5):
     return 1 - smoothstep(1 - feather, 1.0, r)
 
 
-def make_lens_blur_images(red):
-    """The redwoods photo focused on the hiker, from the depth model's map of it (Depth Anything
-    V2 Small, made once and kept in Scripts/help/data so Help builds without the model): the
-    whole photo, a 100% crop from the full-size photo, and a Focus Area on the log in front."""
-    depth = np.asarray(Image.open(os.path.join(ROOT, "Scripts/help/data/splash-redwoods-depth.png"))).astype(np.float32) / 255
-    focus = dict(amount=0.5, near=0.70, far=0.80, boost=0.5)
-    placed = guided_depth(depth, red)
-    after = lens_blur(red, placed, **focus)
-    pair("lens-blur", red, after)
-    save(depth_view(depth, 0.70, 0.80, (red.shape[1], red.shape[0])), "lens-blur-depth.jpg")
-    # Refine: a Focus Area (a Radial Gradient, Lens Focus +100) keeps the log in front sharp too.
-    area = radial_area(red.shape, (0.5, 0.86), 0.19, 0.075)
-    areas = np.dstack([area, np.zeros_like(area)])
-    save(lens_blur(red, placed, areas=areas, **focus), "lens-blur-refine-after.jpg")
-    # 100%: the hiker and the ground around him on the full-size photo, at Blur Amount 100.
-    full = load("splash-redwoods.jpg", width=None)
-    sharp = lens_blur(full, guided_depth(depth, full), **dict(focus, amount=1.0))
-    H, W = full.shape[:2]
-    x, y = int(0.33 * W), int(0.47 * H)
-    box = (slice(y, y + 400), slice(x, x + 600))
-    save(full[box], "lens-blur-zoom-before.jpg")
-    save(sharp[box], "lens-blur-zoom-after.jpg")
-
-
 def pair(name, before, after):
-    """Writes name-before.jpg and name-after.jpg, except for a shared picture (redwoods.jpg,
-    redwoods-flat.jpg), which the page uses directly."""
+    """Writes name-before.jpg and name-after.jpg, except for a shared picture (lake.jpg,
+    lake-flat.jpg), which the page uses directly."""
     for side, image in (("before", before), ("after", after)):
         if not any(image is shared for shared in SHARED.values()):
             save(image, f"{name}-{side}.jpg")
@@ -671,26 +656,6 @@ def pair(name, before, after):
 def frames(name, image, values, fn):
     for i, v in enumerate(values):
         save(fn(image, v), f"{name}-{i}.jpg", quality=76)
-
-
-def eagle_mask(eagle):
-    """A rough subject mask for the eagle: everything that isn't the blue-gray water."""
-    lab = cv2.cvtColor(eagle, cv2.COLOR_RGB2LAB)
-    border = np.concatenate([lab[:20].reshape(-1, 3), lab[-20:].reshape(-1, 3), lab[:, :20].reshape(-1, 3)])
-    ref = np.median(border, axis=0)
-    local = cv2.GaussianBlur(lab, (0, 0), 25)
-    distance = np.linalg.norm(lab - (0.5 * ref + 0.5 * local), axis=2)
-    mask = (distance > 9).astype(np.uint8)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((21, 21), np.uint8))
-    count, labels, stats, _ = cv2.connectedComponentsWithStats(mask)
-    keep = 1 + np.argsort(stats[1:, cv2.CC_STAT_AREA])[::-1][:2]
-    mask = np.isin(labels, keep).astype(np.uint8)
-    mask = cv2.erode(mask, np.ones((5, 5), np.uint8)).astype(np.float32)
-    # Leave out the photographer's watermark in the bottom left corner.
-    H, W = mask.shape
-    mask[int(H * 0.88):, :int(W * 0.12)] = 0
-    return blur(mask, 2)
 
 
 def wheel_svg(path, image, region, hue, sat, others=()):
@@ -760,25 +725,6 @@ def histogram_json(image):
     counts = np.sqrt(counts.astype(np.float64))
     result["l"] = [round(v, 3) for v in (counts / counts.max()).tolist()]
     return result
-
-
-def thumbnails(red, eagle, paint):
-    """Small photos for the Library and Cull diagrams."""
-    os.makedirs(os.path.join(OUT, "thumbs"), exist_ok=True)
-    shots = {
-        "forest": red, "forest-warm": temperature(red, 0.4), "forest-bw": bw(red),
-        "logs": crop(red, 0.3, 0.55, 0.6, 0.45), "person": crop(red, 0.25, 0.4, 0.4, 0.45),
-        "eagle": eagle, "eagle-wide": cv2.resize(eagle, None, fx=0.8, fy=0.8),
-        "eagle-head": crop(eagle, 0.55, 0.45, 0.3, 0.3), "eagle-tail": crop(eagle, 0.15, 0.4, 0.45, 0.45),
-        "eagle-soft": blur(eagle, 3), "eagle-dark": exposure(eagle, -0.8),
-        "paint": paint, "paint-face": crop(paint, 0.15, 0.25, 0.65, 0.4),
-        "light": crop(red, 0.35, 0.0, 0.4, 0.4), "fern": crop(red, 0.6, 0.25, 0.4, 0.4),
-    }
-    for name, image in shots.items():
-        h, w = image.shape[:2]
-        scale = 360 / max(h, w)
-        small = cv2.resize(image, (round(w * scale), round(h * scale)), interpolation=cv2.INTER_AREA)
-        save(small, f"thumbs/{name}.jpg", quality=74)
 
 
 def hdr_render(linear, method="direct", range_=0.65, spacing=2.0, micro=0.6, detail=0.35, shadows=0.0,
@@ -926,39 +872,150 @@ def make_skin_look_images(folder):
             save(image, f"match-skin-{kind}.jpg")
 
 
-def make_spot_images(eagle):
-    """Remove tool: sensor dust on the eagle's calm water (before) and the clean photo (after),
+def make_calibration_images(base):
+    pair("calibration", base, calibration(base, red_hue=0.25, blue_sat=0.6))
+
+
+
+
+def dehaze(image, amount=0.6):
+    """Dehaze's idea: estimate the haze from each area's darkest channel and take it back out."""
+    dark = cv2.erode(image.min(axis=2), np.ones((15, 15), np.uint8))
+    dark = blur(dark, 12)
+    air = np.percentile(image.reshape(-1, 3), 99.5, axis=0)
+    t = np.clip(1 - amount * dark / air.max(), 0.3, 1)[..., None]
+    out = (image - air) / t + air
+    return np.clip(saturation(contrast(np.clip(out, 0, 1), 0.1), 0.15), 0, 1)
+
+
+def lake_depth(shape):
+    """A depth map of the lake photo (0 near, 1 far), worked out from where things stand: the
+    beach and the water are one flat plane, so distance follows the height above the far shore;
+    the man stands where his feet touch the beach; each kayak is as far as where it rests."""
+    H, W = shape[:2]
+    y = (np.arange(H, dtype=np.float32) + 0.5)[:, None] / H * np.ones((1, W), np.float32)
+    x = np.ones((H, 1), np.float32) * (np.arange(W, dtype=np.float32) + 0.5)[None, :] / W
+    shore, feet = 0.345, 0.565
+    plane = 0.75 * np.sqrt((feet - shore) / np.maximum(y - shore, 1e-3))
+    depth = np.where(y > shore, np.minimum(plane, 1.0), 1.0)
+    # The man, at the distance of his feet.
+    # The man, at the distance of his feet: inside his outline, what is darker or more orange
+    # than the pale sky and water behind him.
+    image = load("lake.jpg", width=W)
+    hsv_image = hsv(image)
+    box = np.zeros((H, W), np.uint8)
+    cv2.rectangle(box, (int(0.262 * W), int(0.195 * H)), (int(0.358 * W), int(feet * H)), 1, -1)
+    figure = (luma(image) < 0.33) | ((hsv_image[..., 1] > 0.4) & (hsv_image[..., 0] < 40))
+    man = (box > 0) & figure & (y < feet + 0.005)
+    man = cv2.morphologyEx(man.astype(np.uint8), cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
+    man = cv2.morphologyEx(man, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+    depth = np.where(man > 0, 0.75, depth)
+    # Kayaks (saturated red, orange and yellow): as far as the lowest point of each one's column.
+    boats = ((hsv_image[..., 1] > 0.45) & (hsv_image[..., 2] > 0.35) & (y > 0.45)).astype(np.uint8)
+    boats = cv2.morphologyEx(boats, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
+    rows = np.where(boats > 0, y, 0).max(axis=0)
+    contact = 0.75 * np.sqrt((feet - shore) / np.maximum(rows - shore, 1e-3))
+    depth = np.where(boats > 0, np.minimum(contact, 1.0)[None, :] * np.ones((H, 1), np.float32), depth)
+    return blur(depth.astype(np.float32), 5)
+
+
+def make_lens_blur_images(lake):
+    """The lake photo focused on the man: the whole photo, Visualize Depth, a Focus Area that
+    keeps the yellow kayak in front sharp too, and a 100% crop from the full-size photo."""
+    focus = dict(amount=0.5, near=0.70, far=0.80, boost=0.5)
+    depth = lake_depth(lake.shape)
+    placed = guided_depth(depth, lake)
+    after = lens_blur(lake, placed, **focus)
+    pair("lens-blur", lake, after)
+    save(depth_view(depth, 0.70, 0.80, (lake.shape[1], lake.shape[0])), "lens-blur-depth.jpg")
+    area = radial_area(lake.shape, (0.71, 0.66), 0.2, 0.14)
+    areas = np.dstack([area, np.zeros_like(area)])
+    save(lens_blur(lake, placed, areas=areas, **focus), "lens-blur-refine-after.jpg")
+    full = load("lake.jpg", width=None)
+    sharp = lens_blur(full, guided_depth(lake_depth(full.shape), full), **dict(focus, amount=1.0))
+    H, W = full.shape[:2]
+    x, y = int(0.20 * W), int(0.30 * H)
+    box = (slice(y, y + 400), slice(x, x + 600))
+    save(full[box], "lens-blur-zoom-before.jpg")
+    save(sharp[box], "lens-blur-zoom-after.jpg")
+
+
+def subject_mask(image):
+    """Select Subject on the Kathakali dancer: everything brighter than the dark stage."""
+    L = blur(luma(image), 1.5)
+    mask = (L > 0.09).astype(np.uint8)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((15, 15), np.uint8))
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(mask)
+    keep = 1 + np.argmax(stats[1:, cv2.CC_STAT_AREA])
+    mask = (labels == keep).astype(np.uint8)
+    # Fill holes (dark make-up lines, shadows inside the costume).
+    flood = mask.copy()
+    cv2.floodFill(flood, None, (0, 0), 1)
+    mask = mask | (1 - flood)
+    return blur(mask.astype(np.float32), 1.5)
+
+
+def thumbnails():
+    """Small photos for the Library, Grid, Filmstrip, Import and Cull diagrams."""
+    os.makedirs(os.path.join(OUT, "thumbs"), exist_ok=True)
+    for old in os.listdir(os.path.join(OUT, "thumbs")):
+        os.remove(os.path.join(OUT, "thumbs", old))
+    lake = load("lake.jpg", width=800)
+    kathakali = load("kathakali.jpg", width=1200)
+    shots = {"lake": lake, "lake-warm": temperature(lake, 0.4), "lake-bw": bw(lake),
+             "kathakali-face": crop(kathakali, 0.44, 0.16, 0.36, 0.5)}
+    for name in ("kayaks", "clown", "blossoms", "golden-gate", "dancers", "market", "tomatoes", "lanterns",
+                 "bikes", "rose", "kathakali", "palace", "flower-1", "flower-2", "flower-3", "flower-4",
+                 "dance-1", "dance-2"):
+        shots[name] = kathakali if name == "kathakali" else load(f"{name}.jpg", width=None)
+    for name, image in shots.items():
+        h, w = image.shape[:2]
+        scale = 360 / max(h, w)
+        small = cv2.resize(image, (round(w * scale), round(h * scale)), interpolation=cv2.INTER_AREA)
+        save(small, f"thumbs/{name}.jpg", quality=78)
+
+
+def make_spot_images(golf):
+    """Remove tool: sensor dust in the golf course's sky (before) and the clean photo (after),
     Visualize Spots, which shows the specks as dark rings on white, and Content-Aware removing
-    the fish."""
-    view = eagle.copy()
-    H, W = view.shape[:2]
-    dusty = view.copy()
+    the golf ball on the right."""
+    H, W = golf.shape[:2]
+    dusty = golf.copy()
     y, x = np.mgrid[0:H, 0:W].astype(np.float32)
-    for cx, cy, r, depth in [(0.12, 0.2, 10, 0.32), (0.83, 0.16, 7, 0.38), (0.2, 0.7, 13, 0.26),
-                             (0.86, 0.62, 8, 0.36), (0.6, 0.86, 6, 0.4), (0.92, 0.88, 11, 0.28)]:
+    for cx, cy, r, depth in [(0.12, 0.16, 10, 0.30), (0.83, 0.22, 7, 0.36), (0.36, 0.06, 12, 0.26),
+                             (0.62, 0.36, 8, 0.34), (0.47, 0.13, 6, 0.4), (0.93, 0.07, 11, 0.28)]:
         d = np.sqrt((x - cx * W) ** 2 + (y - cy * H) ** 2)
         speck = (1 - smoothstep(r * 0.35, r, d)) * depth
         dusty = dusty * (1 - speck[..., None])
-    pair("spots", dusty, view)
-    # Content-Aware: the fish under the eagle, filled from the water around it.
+    pair("spots", dusty, golf)
     from patchmatch_fill import complete
-    # A brush stroke along the fish, from its tail to below the talons.
-    (ax, ay), (bx, by), radius = (272, 585), (372, 505), 34
-    x0, y0, x1, y1 = 140, 380, min(W, 500), H
-    region = view[y0:y1, x0:x1].astype(np.float64)
+    cx, cy, radius = 0.716 * W, 0.784 * H, 0.016 * W
+    x0, y0, x1, y1 = int(cx - 0.12 * W), int(cy - 0.12 * H), int(cx + 0.12 * W), min(H, int(cy + 0.12 * H))
+    region = golf[y0:y1, x0:x1].astype(np.float64)
     yy, xx = np.mgrid[y0:y1, x0:x1].astype(np.float64)
-    t = np.clip(((xx - ax) * (bx - ax) + (yy - ay) * (by - ay)) / ((bx - ax) ** 2 + (by - ay) ** 2), 0, 1)
-    hole = np.hypot(xx - (ax + t * (bx - ax)), yy - (ay + t * (by - ay))) <= radius
-    filled = view.copy()
+    hole = np.hypot(xx - cx, (yy - cy) * 1.15) <= radius
+    filled = golf.copy()
     filled[y0:y1, x0:x1] = complete(region, hole).astype(np.float32)
-    pair("content-aware", view, filled)
+    pair("content-aware", golf, filled)
     L = blur(np.clip(luma(dusty), 0, 1) ** (1 / 2.2), 1.0)
     edge = np.abs(cv2.Laplacian(L, cv2.CV_32F, ksize=3))
     save(np.repeat((1 - smoothstep(0.03, 0.07, edge))[..., None], 3, axis=2), "spots-visualize.jpg")
 
 
-def make_calibration_images(base):
-    pair("calibration", base, calibration(base, red_hue=0.25, blue_sat=0.6))
+def load_data(name):
+    return np.asarray(Image.open(os.path.join(DATA, name)).convert("RGB")).astype(np.float32) / 255
+
+
+def lab_denoise(image, luminance=0, color=0):
+    """Noise Reduction: smooth brightness (Luminance) and color (Color) separately."""
+    lab = cv2.cvtColor(image.astype(np.float32), cv2.COLOR_RGB2LAB)
+    if luminance:
+        L8 = np.clip(lab[..., 0] * 2.55, 0, 255).astype(np.uint8)
+        lab[..., 0] = cv2.fastNlMeansDenoising(L8, None, luminance, 7, 21).astype(np.float32) / 2.55
+    if color:
+        lab[..., 1] = blur(lab[..., 1], color)
+        lab[..., 2] = blur(lab[..., 2], color)
+    return np.clip(cv2.cvtColor(lab, cv2.COLOR_LAB2RGB), 0, 1)
 
 
 def main():
@@ -973,71 +1030,64 @@ def main():
     if len(sys.argv) == 3 and sys.argv[1] == "--skin-look-from":
         make_skin_look_images(sys.argv[2])
         return 0
-    if "--spots-only" in sys.argv:
-        make_spot_images(load("splash-eagle.jpg"))
-        return 0
-    if "--mask-sliders-only" in sys.argv:
-        base = flat(load("splash-redwoods.jpg"))
-        SHARED["redwoods-flat.jpg"] = base
-        make_mask_slider_images(base)
-        return 0
+    lake = load("lake.jpg")
+    lake_full = load("lake.jpg", width=None)
+    base = flat(lake)
     if "--lens-blur-only" in sys.argv:
-        make_lens_blur_images(load("splash-redwoods.jpg"))
+        make_lens_blur_images(lake)
         return 0
-    if "--calibration-only" in sys.argv:
-        base = flat(load("splash-redwoods.jpg"))
-        SHARED["redwoods-flat.jpg"] = base
-        make_calibration_images(base)
-        return 0
-    if "--hdr-only" in sys.argv:
-        make_hdr_images(flat(load("splash-redwoods.jpg")))
-        return 0
-    red = load("splash-redwoods.jpg")
-    eagle = load("splash-eagle.jpg")
-    paint = load("splash-watercolor.jpg", width=760)
-    red_full = load("splash-redwoods.jpg", width=None)
-    eagle_full = load("splash-eagle.jpg", width=None)
-    base = flat(red)
-    eagle_base = flat(eagle)
 
     # Overview pictures, shared by many pairs
-    save(red, "redwoods.jpg")
-    save(base, "redwoods-flat.jpg")
-    SHARED.update({"redwoods.jpg": red, "redwoods-flat.jpg": base})
-    thumbnails(red, eagle, paint)
+    save(lake, "lake.jpg")
+    save(base, "lake-flat.jpg")
+    SHARED.update({"lake.jpg": lake, "lake-flat.jpg": base})
+    thumbnails()
 
-    # Basic
+    # Basic: the lake at dawn, with tools that need other light on photos that show them best
     frames("exposure", base, [-1.5, -0.75, 0, 0.75, 1.5], exposure)
     frames("temp", base, [-0.8, -0.4, 0, 0.4, 0.8], temperature)
     pair("contrast", base, contrast(base, 0.45))
-    pair("highlights", base, highlights(base, -0.9))
-    pair("shadows", base, shadows(base, 0.9))
+    sunset = flat(load("sunset.jpg"))
+    pair("highlights", sunset, highlights(sunset, -0.9))
+    palace = load("palace.jpg")
+    palace_flat = flat(palace)
+    pair("shadows", palace_flat, shadows(palace_flat, 0.9))
     pair("whites-blacks", base, blacks(whites(base, 0.5), -0.6))
     pair("tint", tint(base, 0.5), base)
-    pair("texture", crop(flat(eagle_full), 0.48, 0.25, 0.3, 0.3), texture(crop(flat(eagle_full), 0.48, 0.25, 0.3, 0.3), 0.9, 1.4))
+    bird_full = load("bird.jpg", width=None)
+    feathers = crop(flat(bird_full), 0.235, 0.32, 0.12, 0.12)
+    feathers = cv2.resize(feathers, (720, round(720 * feathers.shape[0] / feathers.shape[1])), interpolation=cv2.INTER_CUBIC)
+    pair("texture", feathers, texture(feathers, 0.9, 1.4))
     pair("clarity", base, clarity(base, 0.7))
-    pair("dehaze", haze(red, 0.55), red)
-    save(base, "presence-base.jpg")
-    save(vibrance(base, 0.6), "vibrance.jpg")
-    save(saturation(base, 0.6), "saturation.jpg")
-    pair("treatment", paint, bw(paint))
-    pair("profile", red, flat(red))
-    neutral_wb = temperature(base, 0.5)
-    pair("white-balance", neutral_wb, base)
-    pair("auto-tone", exposure(flat(red), -1.0), red)
+    fog = load("fog.jpg")
+    pair("dehaze", fog, dehaze(fog, 0.6))
+    market = flat(load("market.jpg"))
+    save(market, "presence-base.jpg")
+    save(vibrance(market, 0.6), "vibrance.jpg")
+    save(saturation(market, 0.6), "saturation.jpg")
+    berets = load("berets.jpg", width=760)
+    pair("treatment", berets, bw(berets))
+    pair("profile", lake, flat(lake))
+    pair("white-balance", temperature(base, 0.5), base)
+    pair("auto-tone", exposure(flat(lake), -1.0), lake)
 
-    # Tone Curve
+    # Tone Curve: the Palace of Fine Arts at sunrise
     s_curve = [(0, 0), (0.25, 0.18), (0.5, 0.5), (0.75, 0.83), (1, 1)]
-    pair("tone-curve", base, tone_curve(base, s_curve))
+    pair("tone-curve", palace_flat, tone_curve(palace_flat, s_curve))
     matte = [(0, 0.12), (0.25, 0.27), (0.5, 0.52), (0.8, 0.82), (1, 0.95)]
-    save(tone_curve(red, matte), "tone-curve-matte.jpg")
+    save(palace, "palace.jpg")
+    save(tone_curve(palace, matte), "tone-curve-matte.jpg")
 
-    # HSL / Color and B&W Mix
-    pair("hsl-hue", red, hsl(red, hue={"green": -1.0, "yellow": -0.6}))
-    pair("hsl-sat", paint, hsl(paint, sat={"orange": -0.7, "red": -0.5}))
-    pair("hsl-lum", red, hsl(red, lum={"green": -0.6, "yellow": -0.5}))
-    save(bw(red), "bw-default.jpg")
-    save(bw(red, {"green": 0.9, "yellow": 0.8, "orange": -0.6}), "bw-mix.jpg")
+    # HSL / Color and B&W Mix: golden hills, a market stall
+    hills = load("hills.jpg")
+    save(hills, "hills.jpg")
+    SHARED["hills.jpg"] = hills
+    pair("hsl-hue", hills, hsl(hills, hue={"green": -1.0, "yellow": -0.6}))
+    market_full = load("market.jpg")
+    pair("hsl-sat", market_full, hsl(market_full, sat={"orange": -0.7, "red": -0.5}))
+    pair("hsl-lum", hills, hsl(hills, lum={"green": -0.6, "yellow": -0.5}))
+    save(bw(hills), "bw-default.jpg")
+    save(bw(hills, {"green": 0.9, "yellow": 0.8, "orange": -0.6}), "bw-mix.jpg")
 
     # Color Grading
     graded = color_grade(base, shadows=(195, 0.55), highlights=(35, 0.55))
@@ -1047,105 +1097,117 @@ def main():
     wheel_svg("wheel-midtones.svg", graded, "midtones", 0, 0.0, others=[(195, 0.55), (35, 0.55)])
     pair("grade-split", base, color_grade(base, shadows=(220, 0.6), highlights=(50, 0.5), blending=0.8))
 
-    # Detail: 100% views of the eagle's head
-    head = crop(eagle_full, 0.6, 0.48, 0.2, 0.2)
+    # Detail: the finch's head at 100%; real high-ISO noise from the doe at ISO 2800
+    head = crop(bird_full, 0.255, 0.265, 0.1, 0.1)
     head = cv2.resize(head, (540, round(540 * head.shape[0] / head.shape[1])), interpolation=cv2.INTER_CUBIC)
     soft = blur(head, 1.2)
     pair("sharpening", soft, sharpen(soft, 2.4, 1.4))
-    noisy = luminance_noise(head, 0.05)
-    pair("noise", noisy, blur(head, 0.6))
-    pair("color-noise", color_noise(head, 0.07), head)
-    # AI Denoise: a high-ISO look (noise that grows with brightness, plus colored blotches), and
-    # the clean head it aims for. Its own generator, so the pictures before it don't change.
-    shot = np.random.default_rng(67)
-    speckle = blur(shot.standard_normal(head.shape[:2]).astype(np.float32), 0.5)
-    blotches = blur(shot.standard_normal(head.shape).astype(np.float32), 1.8)
-    blotches -= blotches.mean(axis=2, keepdims=True)
-    high_iso = np.clip(head + (speckle * np.sqrt(0.002 + 0.006 * head.mean(axis=2)))[..., None] + blotches * 0.05, 0, 1)
-    pair("ai-denoise", high_iso, head)
+    doe = load_data("deer-pmrid-before.jpg")[:600]
+    doe_clean = load_data("deer-pmrid-after.jpg")[:600]
+    pair("noise", doe, lab_denoise(doe, luminance=14, color=2))
+    pair("color-noise", doe, lab_denoise(doe, color=4))
+    pair("ai-denoise", doe, doe_clean)
 
     # Lens Corrections
-    pair("distortion", barrel(red, 0.32), red)
-    pair("lens-vignette", np.clip(red * (1 - 0.6 * smoothstep(0.25, 1.0, radius_map(red))[..., None]), 0, 1), red)
-    corner = crop(red_full, 0.0, 0.08, 0.12, 0.12)
-    ca = scale_channels(red_full, 1.0015, 0.9985)
-    pair("chromatic-aberration", enlarge(crop(ca, 0.0, 0.08, 0.12, 0.12), 3), enlarge(corner, 3))
-    edge = crop(red_full, 0.08, 0.0, 0.14, 0.14)
+    street = load("street.jpg")
+    pair("distortion", barrel(street, 0.32), street)
+    golf = load("golf.jpg")
+    pair("lens-vignette", np.clip(golf * (1 - 0.6 * smoothstep(0.25, 1.0, radius_map(golf))[..., None]), 0, 1), golf)
+    snow_full = load("snow.jpg", width=None)
+    corner = crop(snow_full, 0.30, 0.0, 0.12, 0.12)
+    ca = scale_channels(snow_full, 1.0015, 0.9985)
+    pair("chromatic-aberration", enlarge(crop(ca, 0.30, 0.0, 0.12, 0.12), 3), enlarge(corner, 3))
+    edge = crop(snow_full, 0.62, 0.0, 0.14, 0.14)
     L = luma(edge)
     edges = np.abs(cv2.Sobel(blur(L, 1), cv2.CV_32F, 1, 0, ksize=3)) + np.abs(cv2.Sobel(blur(L, 1), cv2.CV_32F, 0, 1, ksize=3))
     near = blur((edges > 0.6).astype(np.float32), 1.5) * (1 - smoothstep(0.45, 0.75, L))
     fringed = mix(edge, np.array([0.55, 0.22, 0.8], np.float32) * (0.5 + 0.5 * L[..., None]), np.clip(near * 1.2, 0, 0.6))
     pair("defringe", enlarge(fringed, 3), enlarge(edge, 3))
 
-    # Transform
-    pair("upright", keystone(red, 0.12), red)
-    pair("straighten", rotate(red, 4), red)
+    # Transform: a San Francisco street for Upright, the bay's horizon for Straighten
+    pair("upright", keystone(street, 0.12), street)
+    bay = load("bay.jpg")
+    save(bay, "bay.jpg")
+    SHARED["bay.jpg"] = bay
+    pair("straighten", rotate(bay, 4), bay)
 
-    # Effects
-    pair("post-crop-vignette", base, vignette(base, -0.5))
-    # Calibration
+    # Effects: a daisy in the rain, the berets for grain
+    flower = flat(load("flower.jpg"))
+    pair("post-crop-vignette", flower, vignette(flower, -0.5))
     make_calibration_images(base)
-    make_lens_blur_images(red)
-    grain_view = crop(red_full, 0.42, 0.42, 0.2, 0.15)
+    make_lens_blur_images(lake)
+    berets_full = load("berets.jpg", width=None)
+    grain_view = crop(berets_full, 0.62, 0.62, 0.2, 0.15)
     pair("grain", enlarge(grain_view, 2), enlarge(grain(grain_view, 0.45, 1.0), 2))
 
-    # Masking
-    H, W = red.shape[:2]
+    # Masking: the lake (gradients, ranges), the Kathakali dancer (Select Subject)
+    H, W = lake.shape[:2]
     ramp = 1 - smoothstep(0.02, 0.45, np.linspace(0, 1, H, dtype=np.float32))[:, None] * np.ones((1, W), np.float32)
     pair("mask-linear", base, mix(base, exposure(base, -1.0), ramp))
     save(red_overlay(base, ramp), "mask-linear-overlay.jpg")
     y, x = np.mgrid[0:H, 0:W].astype(np.float32)
-    ellipse = np.sqrt(((x / W - 0.425) / 0.13) ** 2 + ((y / H - 0.66) / 0.24) ** 2)
+    ellipse = np.sqrt(((x / W - 0.31) / 0.09) ** 2 + ((y / H - 0.39) / 0.24) ** 2)
     radial = 1 - smoothstep(0.55, 1.0, ellipse)
-    lifted = exposure(base, 0.9)
-    pair("mask-radial", base, mix(exposure(base, -0.35), lifted, radial))
+    pair("mask-radial", base, mix(exposure(base, -0.35), exposure(base, 0.9), radial))
     save(red_overlay(base, radial), "mask-radial-overlay.jpg")
-    subject = eagle_mask(eagle)
-    pair("mask-subject", eagle_base, mix(saturation(exposure(eagle_base, -0.3), -0.35), exposure(eagle_base, 0.2), subject))
-    save(red_overlay(eagle_base, subject), "mask-subject-overlay.jpg")
+    dancer = load("kathakali.jpg")
+    dancer_base = flat(dancer)
+    subject = subject_mask(dancer)
+    pair("mask-subject", dancer_base, mix(saturation(exposure(dancer_base, -0.3), -0.35), exposure(dancer_base, 0.25), subject))
+    save(red_overlay(dancer_base, subject), "mask-subject-overlay.jpg")
     background = 1 - subject
-    save(red_overlay(eagle_base, background), "mask-background-overlay.jpg")
+    save(red_overlay(dancer_base, background), "mask-background-overlay.jpg")
     # The page reuses mask-subject-before.jpg as the before picture.
-    save(mix(eagle_base, temperature(exposure(eagle_base, -0.45), -0.35), background), "mask-background-after.jpg")
+    save(mix(dancer_base, temperature(exposure(dancer_base, -0.6), -0.45), background), "mask-background-after.jpg")
     bright = smoothstep(0.55, 0.75, luma(base))
     save(red_overlay(base, bright), "mask-luminance-overlay.jpg")
     pair("mask-luminance", base, mix(base, highlights(base, -0.6), bright))
-    greens = color_range_mask(base, (0.1, 0.48, 0.015, 0.02))
-    save(red_overlay(base, greens), "mask-color-overlay.jpg")
-    pair("mask-color", base, mix(base, saturation(exposure(base, 0.25), 0.5), greens))
+    kayak = color_range_mask(base, KAYAK)
+    save(red_overlay(base, kayak), "mask-color-overlay.jpg")
+    pair("mask-color", base, mix(base, saturation(exposure(base, 0.25), 0.5), kayak))
     make_mask_slider_images(base)
 
-    # Remove tool
-    make_spot_images(eagle)
+    # Remove tool: dust in the golf course's sky, a golf ball
+    make_spot_images(golf)
 
-    # Match Look: Reinhard transfer in Lab, as a stand-in for the slider fit
-    reference = load("splash-eagle.jpg")
-    lab_ref, lab_photo = cv2.cvtColor(reference, cv2.COLOR_RGB2LAB), cv2.cvtColor(base, cv2.COLOR_RGB2LAB)
+    # Match Look: Reinhard transfer in Lab, as a stand-in for the slider fit. The bay takes on
+    # the golden light of a sunset over the water.
+    reference = load("sunset.jpg")
+    bay_flat = flat(bay)
+    lab_ref, lab_photo = cv2.cvtColor(reference, cv2.COLOR_RGB2LAB), cv2.cvtColor(bay_flat, cv2.COLOR_RGB2LAB)
     matched = (lab_photo - lab_photo.mean((0, 1))) / lab_photo.std((0, 1)) * lab_ref.std((0, 1)) * [0.9, 0.7, 0.7] + lab_ref.mean((0, 1))
     matched = cv2.cvtColor(matched.astype(np.float32), cv2.COLOR_LAB2RGB)
-    save(mix(base, np.clip(matched, 0, 1), 0.8), "match-result.jpg")
+    save(bay_flat, "match-photo.jpg")
+    save(mix(bay_flat, np.clip(matched, 0, 1), 0.8), "match-result.jpg")
     save(cv2.resize(reference, (540, round(540 * reference.shape[0] / reference.shape[1]))), "match-reference.jpg")
 
-    # AI: Remove Object (the hiker), Upscale (the eagle's eye)
+    # AI: Remove Object (the man by the cars), Upscale (the dancer's eye)
+    cars = load("cars.jpg")
+    H, W = cars.shape[:2]
     person = np.zeros((H, W), np.uint8)
-    cv2.ellipse(person, (int(W * 0.425), int(H * 0.655)), (int(W * 0.03), int(H * 0.12)), 0, 0, 360, 255, -1)
-    cv2.circle(person, (int(W * 0.427), int(H * 0.585)), int(W * 0.015), 255, -1)
+    cv2.ellipse(person, (int(W * 0.138), int(H * 0.47)), (int(W * 0.03), int(H * 0.115)), 0, 0, 360, 255, -1)
+    cv2.circle(person, (int(W * 0.136), int(H * 0.37)), int(W * 0.014), 255, -1)
     person = cv2.dilate(person, np.ones((9, 9), np.uint8))
-    # Stand-in for the model: fill from the forest floor beside the hiker.
-    removed = np.roll(red, -int(W * 0.07), axis=1)
-    soft_mask = blur(person.astype(np.float32) / 255, 4)
-    pair("ai-remove", red, mix(red, removed, soft_mask))
-    save(red_overlay(red, soft_mask, 0.6), "ai-remove-strokes.jpg")
-    eye = crop(eagle_full, 0.68, 0.53, 0.09, 0.09)
+    from patchmatch_fill import complete
+    x0, y0, x1, y1 = int(0.02 * W), int(0.28 * H), int(0.30 * W), int(0.64 * H)
+    hole = person[y0:y1, x0:x1] > 0
+    removed = cars.copy()
+    removed[y0:y1, x0:x1] = complete(cars[y0:y1, x0:x1].astype(np.float64), hole).astype(np.float32)
+    soft_mask = blur(person.astype(np.float32) / 255, 3)
+    pair("ai-remove", cars, mix(cars, removed, soft_mask))
+    save(red_overlay(cars, soft_mask, 0.6), "ai-remove-strokes.jpg")
+    dancer_full = load("kathakali.jpg", width=None)
+    eye = crop(dancer_full, 0.56, 0.355, 0.09, 0.07)
     small_eye = cv2.resize(eye, (eye.shape[1] // 4, eye.shape[0] // 4), interpolation=cv2.INTER_AREA)
     pair("ai-upscale", cv2.resize(small_eye, (540, 540 * eye.shape[0] // eye.shape[1]), interpolation=cv2.INTER_LINEAR),
          sharpen(cv2.resize(eye, (540, 540 * eye.shape[0] // eye.shape[1]), interpolation=cv2.INTER_CUBIC), 0.6, 1.2))
 
-    make_hdr_images(base)
+    # HDR: the palace at sunrise, bright sky over a dark lagoon
+    make_hdr_images(palace_flat)
 
     # Histogram data for the panel diagrams
     with open(os.path.join(OUT, "histogram.js"), "w") as f:
-        f.write("window.HELP_HISTOGRAM = " + json.dumps({"redwoods": histogram_json(base)}) + ";\n")
+        f.write("window.HELP_HISTOGRAM = " + json.dumps({"lake": histogram_json(base)}) + ";\n")
 
     total = sum(os.path.getsize(os.path.join(dirpath, n)) for dirpath, _, names in os.walk(OUT) for n in names)
     print(f"Wrote {OUT} ({total / 1e6:.1f} MB)")

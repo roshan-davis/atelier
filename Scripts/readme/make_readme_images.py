@@ -2,8 +2,8 @@
 """Render the README's landing visuals into Docs/readme/*.webp.
 
 Each picture is an HTML page in this folder (hero, features, agents, storage) drawn with
-the app's Graphite colors, Help's before/after pictures and the splash photos. The hero's
-histogram is computed from the photo it shows. Pages are screenshotted at 2x with
+the app's Graphite colors, Help's before/after pictures and Rosh's example photos
+(Scripts/help/photos). The hero's histogram is computed from the photo it shows. Pages are screenshotted at 2x with
 Playwright (Node) and saved as WebP with transparent rounded corners.
 
     python3 Scripts/readme/make_readme_images.py            # all four
@@ -25,7 +25,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
 OUT = ROOT / "Docs" / "readme"
 PAGES = ["hero", "features", "agents", "storage"]
-HERO_PHOTO = ROOT / "Sources/AtelierApp/Resources/Splash/splash-redwoods.jpg"
+HERO_PHOTO = ROOT / "Scripts/help/photos/palace.jpg"
 
 RENDER_JS = r"""
 const { chromium } = require('playwright');

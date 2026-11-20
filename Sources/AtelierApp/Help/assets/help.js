@@ -343,9 +343,9 @@
 
   // MARK: Histogram drawings
 
-  // <canvas class="histogram" data-source="redwoods"></canvas>
+  // <canvas class="histogram" data-source="lake"></canvas>
   function drawHistogram(canvas) {
-    const data = (window.HELP_HISTOGRAM || {})[canvas.dataset.source || "redwoods"];
+    const data = (window.HELP_HISTOGRAM || {})[canvas.dataset.source || "lake"];
     if (!data) return;
     const ratio = window.devicePixelRatio || 1;
     const width = canvas.clientWidth || 300;
