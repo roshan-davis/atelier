@@ -77,12 +77,13 @@ enum LayoutSnapshots {
             model.develop.set(parameter, to: value)
         }
         try? await Task.sleep(for: .seconds(3))
-        // ATELIER_SNAPSHOTS_ONLY=lens-blur,hdr renders just those groups (a Mac check of one PR, in seconds).
+        // ATELIER_SNAPSHOTS_ONLY=lens-blur,hdr renders just those groups (also storage, skills, settings) (a Mac check of one PR, in seconds).
         if !only.isEmpty {
             if only.contains("lens-blur") { await snapshotLensBlurMode(model: model, into: folder) }
             if only.contains("hdr") { await snapshotHDR(model: model, into: folder) }
             if only.contains("storage") { await snapshotStorage(model: model, into: folder) }
             if only.contains("skills") { await snapshotSkills(into: folder) }
+            if only.contains("settings") { await snapshotSettingsWindow(model: model, into: folder) }
             fflush(stdout)
             exit(0)
         }

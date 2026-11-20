@@ -77,8 +77,10 @@ public struct ReleaseNotes: Sendable, Equatable {
     /// "1.3.0 (2026-11-20)", "1.3.0 — 2026-11-20", "v1.3.0" or "[1.3.0] - 2026-11-20".
     private static func release(fromHeading heading: String) -> Release? {
         let cleaned = heading.replacingOccurrences(of: "[", with: "").replacingOccurrences(of: "]", with: "")
-        let words = cleaned.split(whereSeparator: { $0 == " " || $0 == "(" || $0 == ")" })
-            .map(String.init).filter { $0 != "—" && $0 != "-" && $0 != "–" }
+        let separators: Set<Character> = [" ", "(", ")"]
+        let dashes: Set<String> = ["—", "-", "–"]
+        let words: [String] = cleaned.split(whereSeparator: { separators.contains($0) })
+            .map(String.init).filter { !dashes.contains($0) }
         guard let first = words.first, let version = AppVersion(first) else { return nil }
         return Release(version: version, date: words.dropFirst().first, summary: "", sections: [])
     }
