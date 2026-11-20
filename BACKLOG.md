@@ -1584,3 +1584,13 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 **Scope:** `Package.swift` drops Microsoft's package and takes ONNX Runtime from studio-shared-lib `from: "0.4.0"` (product `onnxruntime`, the same module `OnnxRuntimeBindings`, version 1.24.2, Microsoft's binary and checksum). The library pin moves from the `6f7420c` commit to `from: "0.4.0"`, which also brings v0.3.0's prose-only spelling (so atelier#197 is no longer needed). No Swift code changes; app size unchanged.
 
 **Acceptance:** Atelier builds with no mirror setting, and Fine Edges, Depth and AI Denoise run as before.
+
+## AT-086 — Help and README: Rosh's own photos in every example
+
+**Status:** In review. **Decision:** Rosh, Nov 19, 2026, project thread "Replace doc photos with Rosh's samples" ("use the appropriate photos from /Users/rosh/Documents/for Atelier … the right set of samples for the right set of examples"; colorful photos for list and grid, a duplicate set for Cull). **Owner:** Claude (project thread). **Branch:** `claude/project-thread-cjl5s8`.
+
+**Scope:** 30 photos from Rosh's 86 NEFs, as JPEGs with no metadata (`Scripts/help/photos`, `prepare_photos.py`); `make_help_images.py` gives each tool a photo that suits it (lake at dawn for Basic and Masking, foggy coast for Dehaze, palace at sunrise for Shadows, Tone Curve and HDR, market stall for Vibrance and HSL, Kathakali dancer for Select Subject and Upscale, golf sky for dust spots, finch for Texture and Sharpening, a real ISO 2800 deer for Noise Reduction); AI Denoise is the built-in PMRID model's own output on that RAW (`pmrid_example.py`). Grid, Filmstrip, Import and Help home use colorful thumbnails; Cull shows a rain-soaked daisy burst (Similar Shots) and a two-frame dance pair (Same Frame). README pictures regenerated from the same photos. Captions and alt text updated.
+
+**Left out:** the Preset Lookbook (`look-*.jpg`) and the built-in Match Look and Match Skin Tone examples are the app's own renders (PresetQualification, BuiltInLookReferenceTests) and need a Mac run to redo with these photos. The app's splash photos are unchanged.
+
+**Acceptance:** Help pages and README show the new photos with matching captions; `build_help_index.py` reports no problems; Rosh checks Help > Atelier Help in the app.

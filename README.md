@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="Docs/readme/hero.webp" width="880" alt="Atelier: the darkroom, native to your Mac. A Develop window with the Navigator, presets and history on the left, a redwood forest photo in the middle, the histogram and Basic sliders on the right and a filmstrip below.">
+  <img src="Docs/readme/hero.webp" width="880" alt="Atelier: the darkroom, native to your Mac. A Develop window with the Navigator, presets and history on the left, the Palace of Fine Arts at sunrise in the middle, the histogram and Basic sliders on the right and a filmstrip below.">
 </p>
 
 <p align="center">
@@ -20,7 +20,7 @@
 Scope and architecture follow [Requirements/Atelier-PRD.md](Requirements/Atelier-PRD.md), the source of truth; update it in the same PR as any change it covers.
 Agents working in this repo follow [AGENTS.md](AGENTS.md).
 
-> The pictures on this page are drawn from the app's Graphite theme, Help's before/after pictures and the splash photos (`Scripts/readme/make_readme_images.py`), not screenshots of a running build.
+> The pictures on this page are drawn from the app's Graphite theme, Help's before/after pictures and Rosh's own example photos (`Scripts/readme/make_readme_images.py`), not screenshots of a running build.
 
 ## Features
 
@@ -36,7 +36,7 @@ Agents working in this repo follow [AGENTS.md](AGENTS.md).
 - The last session (view, sidebar item, filter, photo, zoom and grid scroll) comes back on the next launch.
 
 <p align="center">
-  <img src="Docs/readme/features.webp" width="880" alt="Six Develop tools as before/after tiles: Masking (Select Subject on an eagle), Lens Blur (a redwood forest with its depth map), single-image HDR, AI Denoise on a noisy eagle close-up, Remove (dust spots taken out of the sky) and Match Look (a valley matched to a built-in color study).">
+  <img src="Docs/readme/features.webp" width="880" alt="Six Develop tools as before/after tiles: Masking (Select Subject on a Kathakali dancer), Lens Blur (a man by a lake with its depth map), single-image HDR (a palace at sunrise), AI Denoise on a noisy deer close-up, Remove (dust spots taken out of a golf course sky) and Match Look (the bay matched to a golden sunset).">
 </p>
 
 **Develop** (non-destructive, GPU-first)
@@ -77,7 +77,7 @@ Atelier has no cloud of its own and sets nothing up by default. In **Settings > 
 ## Chat apps and agents
 
 <p align="center">
-  <img src="Docs/readme/agents.webp" width="880" alt="A chat app finds five-star eagle photos in Atelier, shows them as a carousel and warms them by +8 Temp in one Undo; Docent on an iPhone reaches Atelier over Tailscale.">
+  <img src="Docs/readme/agents.webp" width="880" alt="A chat app finds five-star flower photos in Atelier, shows them as a carousel and warms them by +8 Temp in one Undo; Docent on an iPhone reaches Atelier over Tailscale.">
 </p>
 
 Chat apps reach Atelier over MCP (AT-050) through the `atelier-mcp` helper inside the app, with access granted per app in **Settings > Agents** (Look, Organize, Edit or Everything):
