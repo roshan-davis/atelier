@@ -1604,7 +1604,7 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 
 ## AT-087 — Updates: check, auto update, What's New, major versions; share Atelier as a file
 
-**Status:** In progress. **Decision:** Rosh, Nov 20, 2026, project thread "Add auto updates and file distribution": check for updates, auto update, what's new, major/minor handling; no App Store soon, shared by file. Developer ID ($99/year) not decided, so the design works signed or unsigned. **Owner:** Claude (project thread). **Branch:** `claude/project-thread-om5oqi`.
+**Status:** Done in code — merged PR #204 (Rosh: "if all good merge it", Nov 20, 2026); a real update cycle awaits the Sparkle key and a first release. **Decision:** Rosh, Nov 20, 2026, project thread "Add auto updates and file distribution": check for updates, auto update, what's new, major/minor handling; no App Store soon, shared by file. Developer ID ($99/year) not decided, so the design works signed or unsigned. **Owner:** Claude (project thread). **Branch:** `claude/project-thread-om5oqi`.
 
 **Scope (PRD "Updates and distribution"):**
 - Sparkle 2 (MIT, SwiftPM), wrapped in `AppUpdater` (Sources/AtelierApp/Updates). Off in builds run from Xcode.
@@ -1616,4 +1616,6 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 
 **Acceptance:** on a Mac: a build with an older version finds a newer test release from a local appcast, shows its notes, installs it (signed and unsigned), What's New shows once after the relaunch; a catalog with pending migrations gets a Before Upgrade backup; an older build refuses a newer catalog with the message. Rosh tests Settings > Updates.
 
-**Left out:** App Store build (needs the App Sandbox, PRD Non-functional requirements), phased rollout, delta updates.
+**Validation:** Mac check by Claude on Rosh's Mac at fc88143 (background): build and build-tests pass; UpdatesTests 9/9, AtelierActionsTests 39/39, StackTests 5/5, AtelierCoreTests 14/14, CatalogLaunchTests 1/1, CatalogOpeningTests 7/7, Scripts/tests 22; packaging (Sparkle embedded, codesign strict, @rpath) checked; snapshots reviewed. Full suite and check_ui.py not run. GitHub Actions red on main and here (private studio-shared-lib clone).
+
+**Left out:** App Store build (needs the App Sandbox, PRD Non-functional requirements), phased rollout, delta updates. Untested until a first release: a real update cycle, automatic install on ad-hoc/self-signed copies. Releases repo `roshan-davis/product-releases` created Nov 20, 2026.
