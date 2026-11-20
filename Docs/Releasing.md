@@ -12,12 +12,24 @@ Design: PRD "Updates and distribution". Everything runs on a Mac, from a clean c
 | Release notes | `Sources/AtelierApp/Resources/ReleaseNotes.md` (What's New and the update window) |
 | The feed installed copies read | `atelier/appcast.xml` on `main` of the public `roshan-davis/product-releases` repository (raw.githubusercontent.com) |
 | The downloads | GitHub Release `atelier-v<version>` in `product-releases`: `Atelier-<version>.dmg` (people) and `.zip` (Sparkle) |
+| Update signing key | private: your login Keychain; public: `Scripts/release/sparkle-public-key.txt` |
 
 The source repositories are private, so releases of all Rosh's apps go to `product-releases`,
 which holds only feeds and release files: one folder per app for its feed (`atelier/`, `easel/`)
 and tags prefixed with the app (`atelier-v1.3.0`, `easel-v0.4.0`). Create it once on github.com: New repository, name `product-releases`,
 Public, tick "Add a README file" (a release needs a first commit), Create repository.
-| Update signing key | private: your login Keychain; public: `Scripts/release/sparkle-public-key.txt` |
+
+## Setup status on Rosh's Mac
+
+| Step | State |
+|---|---|
+| 1. Update signing key | Done Nov 20, 2026. The private key is in Rosh's login Keychain. The public key `t/NpmlAw8z1I4OduK0RpLNDbPH9BLelayk3XzISG/ps=` is in `Scripts/release/sparkle-public-key.txt`. |
+| 1. Back up the private key | **Rosh, not yet confirmed**: run the `generate_keys -x` command below and move the file into a password manager or onto an encrypted drive, then delete it from the Desktop. Agents never export it. |
+| `product-releases` repository | Exists: public, branch `main`, holds a README. |
+| `gh` | Installed (`/opt/homebrew/bin/gh`) and logged in as `roshan-davis` with `repo` scope. |
+| 2. Signing | The Mac has only an "Apple Development" certificate, which can't sign for distribution, so releases are **ad hoc** (the default) until Rosh makes the `Atelier Release` self-signed certificate or buys a Developer ID. |
+| 3. Notarization | Not set up (needs a Developer ID). |
+| First release | Not made. `VERSION` is `1.0.0`. |
 
 ## 1. Once: make the update signing key
 
