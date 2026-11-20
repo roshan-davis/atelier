@@ -1612,7 +1612,7 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 - Core: `AppVersion` (semver, update kind), `ReleaseNotes` (changelog parser), catalog backup before migrations (`Backups/Before Upgrade`, last 3) and a clear error for a catalog upgraded by a newer Atelier.
 - One changelog, `Sources/AtelierApp/Resources/ReleaseNotes.md`; first launch after an update shows What's New once.
 - `build_macos_app.py`: version, build number, feed, public key, Sparkle.framework, signing identity (Developer ID with hardened runtime, self-signed or ad hoc).
-- `Scripts/release/make_release.py`: dmg + zip, notarization when a Developer ID is given, EdDSA signature, appcast item (major sets `minimumAutoupdateVersion`, `--critical`, pre-releases on the beta channel); `--publish` uploads to the public `roshan-davis/atelier-releases` repository (the source repo goes private, Rosh Nov 20, 2026) and commits its appcast.xml.
+- `Scripts/release/make_release.py`: dmg + zip, notarization when a Developer ID is given, EdDSA signature, appcast item (major sets `minimumAutoupdateVersion`, `--critical`, pre-releases on the beta channel); `--publish` uploads to the public `roshan-davis/product-releases` repository (the source repo goes private, Rosh Nov 20, 2026) and commits its appcast.xml.
 
 **Acceptance:** on a Mac: a build with an older version finds a newer test release from a local appcast, shows its notes, installs it (signed and unsigned), What's New shows once after the relaunch; a catalog with pending migrations gets a Before Upgrade backup; an older build refuses a newer catalog with the message. Rosh tests Settings > Updates.
 

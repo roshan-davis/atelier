@@ -149,9 +149,9 @@ and must be hidden on Intel. See the PRD's Non-functional requirements > Compati
 
 ## Sharing Atelier and updates
 
-Atelier is shared as a file from the public [atelier-releases](https://github.com/roshan-davis/atelier-releases/releases)
+Atelier is shared as a file from the public [product-releases](https://github.com/roshan-davis/product-releases/releases)
 repository (no source in it): a `.dmg` to install and a `.zip` that installed copies update from.
-Atelier checks for new versions (Sparkle 2, that repository's `appcast.xml`), installs them when you quit, shows What's New once
+Atelier checks for new versions (Sparkle 2, that repository's `atelier/appcast.xml`), installs them when you quit, shows What's New once
 after each update, and backs up the catalog before any upgrade. Make a release with
 `python3 Scripts/release/make_release.py`; [Docs/Releasing.md](Docs/Releasing.md) has the steps,
 signing choices (ad hoc, self-signed or Developer ID) and how to test an update. Builds run from

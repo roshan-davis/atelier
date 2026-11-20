@@ -4,7 +4,7 @@ anywhere (Scripts/tests/test_release.py).
 - Versions are semantic (1.3.0, 1.3.0-beta.2) and compared like AppVersion in AtelierCore.
 - Release notes come from Sources/AtelierApp/Resources/ReleaseNotes.md, read the same way as
   ReleaseNotes.swift: "## <version> (<date>)", a summary, then "### New/Improved/Fixed" bullets.
-- appcast.xml (in the public roshan-davis/atelier-releases repository) is Sparkle's feed. A major version's items carry
+- atelier/appcast.xml (in the public roshan-davis/product-releases repository, shared by all apps) is Sparkle's feed. A major version's items carry
   sparkle:minimumAutoupdateVersion (the major's first build), so older copies ask before
   installing it; a pre-release goes on the beta channel.
 """
