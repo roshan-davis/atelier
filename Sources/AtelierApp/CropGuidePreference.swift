@@ -8,7 +8,10 @@ enum CropGuidePreference {
     static let guideKey = "crop.guide"
     static let orientationKey = "crop.guideOrientation"
     static let visibilityKey = "crop.guideVisibility"
-    static let lineStyleKey = "crop.guideLines"
+    static let widthKey = "crop.guideWidth"
+    static let opacityKey = "crop.guideOpacity"
+    static let colorKey = "crop.guideColor"
+    static let defaultColor = CropGuideLook.standard.hex
 
     static var guide: CropGuide {
         get { UserDefaults.standard.string(forKey: guideKey).flatMap(CropGuide.init(rawValue:)) ?? .thirds }
@@ -23,6 +26,12 @@ enum CropGuidePreference {
     static var visibility: CropGuideVisibility {
         get { UserDefaults.standard.string(forKey: visibilityKey).flatMap(CropGuideVisibility.init(rawValue:)) ?? .always }
         set { UserDefaults.standard.set(newValue.rawValue, forKey: visibilityKey) }
+    }
+
+    /// The lines' thickness, opacity and color (Settings > Develop > Crop Overlay).
+    static func look(width: Double, opacity: Double, color: String) -> CropGuideLook {
+        let rgb = CropGuideLook.color(hex: color) ?? (1, 1, 1)
+        return CropGuideLook(width: width, opacity: opacity, red: rgb.red, green: rgb.green, blue: rgb.blue)
     }
 
     /// O in the crop tool.

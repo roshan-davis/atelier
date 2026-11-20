@@ -187,7 +187,9 @@ struct CropEditorView: View {
     @AppStorage(CropGuidePreference.guideKey) private var guide: CropGuide = .thirds
     @AppStorage(CropGuidePreference.orientationKey) private var guideOrientation = 0
     @AppStorage(CropGuidePreference.visibilityKey) private var guideVisibility: CropGuideVisibility = .always
-    @AppStorage(CropGuidePreference.lineStyleKey) private var guideLines: CropGuideLineStyle = .medium
+    @AppStorage(CropGuidePreference.widthKey) private var guideWidth = CropGuideLook.standard.width
+    @AppStorage(CropGuidePreference.opacityKey) private var guideOpacity = CropGuideLook.standard.opacity
+    @AppStorage(CropGuidePreference.colorKey) private var guideColor = CropGuidePreference.defaultColor
 
     var body: some View {
         GeometryReader { geometry in
@@ -218,13 +220,9 @@ struct CropEditorView: View {
                     path.addRect(rect)
                 }
                 .fill(Color.black.opacity(0.6), style: FillStyle(eoFill: true))
-                // A faint dark edge under a white line, so the guide shows on light and dark parts.
-                let guideLine = guidePath(in: rect)
-                guideLine
-                    .stroke(Color.black.opacity(guideLines.edgeOpacity), lineWidth: guideLines.width + 1)
-                guideLine
-                    .stroke(Color.white.opacity(guideLines.opacity + (handle == nil ? 0 : guideLines.dragBoost)),
-                            lineWidth: guideLines.width)
+                CropGuideLines(path: guidePath(in: rect),
+                               look: CropGuidePreference.look(width: guideWidth, opacity: guideOpacity, color: guideColor),
+                               dragging: handle != nil)
                 Rectangle()
                     .stroke(Color.white, lineWidth: 1)
                     .frame(width: rect.width, height: rect.height)
@@ -411,7 +409,14 @@ struct CropPanel: View {
 
     @AppStorage(CropGuidePreference.guideKey) private var guide: CropGuide = .thirds
     @AppStorage(CropGuidePreference.visibilityKey) private var guideVisibility: CropGuideVisibility = .always
-    @AppStorage(CropGuidePreference.lineStyleKey) private var guideLines: CropGuideLineStyle = .medium
+    @AppStorage(CropGuidePreference.widthKey) private var guideWidth = CropGuideLook.standard.width
+    @AppStorage(CropGuidePreference.opacityKey) private var guideOpacity = CropGuideLook.standard.opacity
+    @AppStorage(CropGuidePreference.colorKey) private var guideColor = CropGuidePreference.defaultColor
+    @Environment(\.openSettings) private var openSettings
+
+    private var lineStyle: CropGuideLineStyle? {
+        CropGuideLineStyle.matching(CropGuidePreference.look(width: guideWidth, opacity: guideOpacity, color: guideColor))
+    }
 
     private var crop: Crop { develop.crop }
     private var imageAspect: Double { develop.orientedAspect }
@@ -468,17 +473,25 @@ struct CropPanel: View {
                         ForEach(CropGuideVisibility.allCases, id: \.self) { Text($0.title).tag($0) }
                     }
                     .pickerStyle(.inline)
-                    Picker("Lines", selection: $guideLines) {
-                        ForEach(CropGuideLineStyle.allCases, id: \.self) { Text($0.title).tag($0) }
+                    Section("Lines") {
+                        ForEach(CropGuideLineStyle.allCases, id: \.self) { style in
+                            Toggle(style.title, isOn: Binding(get: { lineStyle == style }, set: { _ in
+                                guideWidth = style.width
+                                guideOpacity = style.opacity
+                            }))
+                        }
+                        Button("Line Settings…") {
+                            UserDefaults.standard.set(SettingsPane.develop.rawValue, forKey: SettingsPane.defaultsKey)
+                            openSettings()
+                        }
                     }
-                    .pickerStyle(.inline)
                 } label: {
                     Image(systemName: guideVisibility == .never ? "eye.slash" : "eye")
                 }
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
                 .fixedSize()
-                .help("Show the overlay: \(guideVisibility.title); lines: \(guideLines.title)")
+                .help("When the overlay shows, and its lines")
             }
             SliderRow(label: "Angle", value: Binding(get: { crop.angle }, set: { setAngle($0) }),
                       range: -45...45, step: 0.1, format: { String(format: "%.1f°", $0) })

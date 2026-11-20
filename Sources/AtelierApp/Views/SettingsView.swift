@@ -612,6 +612,13 @@ private struct DevelopSettingsTab: View {
     @AppStorage(LibraryModel.ZoomOnPhotoChange.resetLevelKey) private var resetLevel = "fit"
     @AppStorage(Preferences.showClipping) private var showClipping: Bool
     @AppStorage(Preferences.soloMode) private var soloMode: Bool
+    @AppStorage(CropGuidePreference.widthKey) private var guideWidth = CropGuideLook.standard.width
+    @AppStorage(CropGuidePreference.opacityKey) private var guideOpacity = CropGuideLook.standard.opacity
+    @AppStorage(CropGuidePreference.colorKey) private var guideColor = CropGuidePreference.defaultColor
+
+    private var guideLook: CropGuideLook {
+        CropGuidePreference.look(width: guideWidth, opacity: guideOpacity, color: guideColor)
+    }
 
     var body: some View {
         Form {
@@ -639,8 +646,59 @@ private struct DevelopSettingsTab: View {
                 Toggle("Solo mode: opening a panel closes the others", isOn: $soloMode)
                 Toggle("Show how much is clipped next to the histogram's triangles", isOn: $showClipping)
             }
+            SettingsSection("Crop Overlay") {
+                SliderRow(label: "Thickness", value: $guideWidth,
+                          range: CropGuideLook.widthRange, step: 0.25, origin: CropGuideLook.standard.width,
+                          format: { String(format: "%.2g pt", $0) }, valueWidth: 52, labelWidth: 90,
+                          reset: { guideWidth = CropGuideLook.standard.width })
+                SliderRow(label: "Opacity",
+                          value: Binding(get: { (guideOpacity * 100).rounded() }, set: { guideOpacity = $0 / 100 }),
+                          range: CropGuideLook.opacityRange.lowerBound * 100...CropGuideLook.opacityRange.upperBound * 100,
+                          step: 1, origin: CropGuideLook.standard.opacity * 100, format: { "\(Int($0.rounded()))%" },
+                          valueWidth: 52, labelWidth: 90, reset: { guideOpacity = CropGuideLook.standard.opacity })
+                LabeledContent("Color") {
+                    HStack(spacing: 8) {
+                        ColorPicker("Color", selection: Binding(get: { guideLook.color }, set: { color in
+                            if let hex = CropGuideLook.hex(of: color) { guideColor = hex }
+                        }), supportsOpacity: false)
+                        .labelsHidden()
+                        Button("White") { guideColor = CropGuidePreference.defaultColor }
+                            .disabled(guideColor == CropGuidePreference.defaultColor)
+                    }
+                }
+                CropGuidePreview(look: guideLook)
+            } footer: {
+                Text("The lines of the crop tool's guide overlay (Thirds, Golden Spiral and the others). A faint edge in the opposite tone keeps them visible on bright skies and dark ground. They get a little brighter while you drag.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
+    }
+}
+
+/// Thirds drawn in the chosen look over a bright and a dark half, so the lines can be judged on both.
+private struct CropGuidePreview: View {
+    let look: CropGuideLook
+
+    var body: some View {
+        GeometryReader { geometry in
+            let rect = CGRect(origin: .zero, size: geometry.size)
+            let aspect = rect.height > 0 ? Double(rect.width / rect.height) : 1
+            ZStack {
+                LinearGradient(colors: [Color(white: 0.92), Color(red: 0.55, green: 0.72, blue: 0.9),
+                                        Color(white: 0.25), Color(white: 0.08)],
+                               startPoint: .top, endPoint: .bottom)
+                CropGuideLines(path: Path { path in
+                    for line in CropGuide.thirds.polylines(aspect: aspect) {
+                        path.addLines(line.map { CGPoint(x: $0.x * rect.width, y: $0.y * rect.height) })
+                    }
+                }, look: look)
+            }
+        }
+        .frame(height: 120)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .accessibilityLabel("Preview of the crop overlay lines")
     }
 }
 

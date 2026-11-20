@@ -141,15 +141,34 @@ final class CropGuideTests: XCTestCase {
     }
 }
 
-final class CropGuideLineStyleTests: XCTestCase {
-    /// Each step is thicker and brighter than the one before, and stays visible while dragging.
-    func testStylesGetStronger() {
+final class CropGuideLookTests: XCTestCase {
+    func testPresetsGetStrongerAndMatch() {
         let styles = CropGuideLineStyle.allCases
         for (a, b) in zip(styles, styles.dropFirst()) {
             XCTAssertLessThan(a.width, b.width)
             XCTAssertLessThan(a.opacity, b.opacity)
-            XCTAssertLessThan(a.edgeOpacity, b.edgeOpacity)
         }
-        XCTAssert(styles.allSatisfy { $0.opacity + $0.dragBoost <= 1 })
+        XCTAssertEqual(CropGuideLineStyle.matching(.standard), .medium)
+        XCTAssertNil(CropGuideLineStyle.matching(CropGuideLook(width: 2.2, opacity: 0.5)))
+    }
+
+    func testValuesAreKeptInRange() {
+        let look = CropGuideLook(width: 10, opacity: 0, red: 2, green: -1, blue: 0.5)
+        XCTAssertEqual(look.width, CropGuideLook.widthRange.upperBound)
+        XCTAssertEqual(look.opacity, CropGuideLook.opacityRange.lowerBound)
+        XCTAssertEqual(look.red, 1)
+        XCTAssertEqual(look.green, 0)
+        XCTAssertLessThanOrEqual(CropGuideLook(width: 1, opacity: 1).dragOpacity, 1)
+    }
+
+    func testColorRoundTripsAndPicksAContrastEdge() {
+        let yellow = CropGuideLook(width: 1, opacity: 0.5, red: 1, green: 0.8, blue: 0)
+        XCTAssertEqual(yellow.hex, "#FFCC00")
+        let parsed = CropGuideLook.color(hex: yellow.hex)
+        XCTAssertEqual(parsed?.red, 1)
+        XCTAssertEqual(parsed?.green ?? 0, 0.8, accuracy: 0.003)
+        XCTAssertNil(CropGuideLook.color(hex: "nope"))
+        XCTAssertTrue(CropGuideLook.standard.edgeIsDark)
+        XCTAssertFalse(CropGuideLook(width: 1, opacity: 0.5, red: 0.1, green: 0.1, blue: 0.4).edgeIsDark)
     }
 }

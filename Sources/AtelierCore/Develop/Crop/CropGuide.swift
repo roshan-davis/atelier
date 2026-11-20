@@ -208,10 +208,59 @@ public enum CropGuideVisibility: String, CaseIterable, Codable, Sendable {
     }
 }
 
-/// How strongly the crop tool draws its guide lines. Each is a white line over a faint dark edge,
-/// so the lines show on bright skies as well as dark ground (Rosh, Nov 20, 2026: "a bit more
-/// visible, thicker").
-public enum CropGuideLineStyle: String, CaseIterable, Codable, Sendable {
+/// How the crop tool draws its guide lines: a line of `width` points in `color` at `opacity`,
+/// over a faint edge in the opposite tone (dark under light colors, light under dark ones), so
+/// the lines show on bright skies and dark ground alike. Set in Settings > Develop > Crop Overlay
+/// (Rosh, Nov 20, 2026: "thickness, opacity and color … in settings").
+public struct CropGuideLook: Equatable, Sendable {
+    public static let widthRange = 0.5...3.0
+    public static let opacityRange = 0.1...1.0
+    /// How much brighter the lines get while you drag.
+    public static let dragBoost = 0.2
+
+    public var width: Double
+    public var opacity: Double
+    /// sRGB, 0...1.
+    public var red: Double
+    public var green: Double
+    public var blue: Double
+
+    public init(width: Double, opacity: Double, red: Double = 1, green: Double = 1, blue: Double = 1) {
+        self.width = min(max(width, Self.widthRange.lowerBound), Self.widthRange.upperBound)
+        self.opacity = min(max(opacity, Self.opacityRange.lowerBound), Self.opacityRange.upperBound)
+        self.red = min(max(red, 0), 1)
+        self.green = min(max(green, 0), 1)
+        self.blue = min(max(blue, 0), 1)
+    }
+
+    /// The default: 1 pt white at 50%.
+    public static let standard = CropGuideLook(width: 1, opacity: 0.5)
+
+    public var dragOpacity: Double { min(1, opacity + Self.dragBoost) }
+
+    /// Whether the contrast edge under the line is dark (for light line colors) or light.
+    public var edgeIsDark: Bool { 0.2126 * red + 0.7152 * green + 0.0722 * blue >= 0.5 }
+
+    /// Opacity of the contrast edge, which is one point wider than the line.
+    public var edgeOpacity: Double { opacity * 0.5 }
+
+    /// The color as "#RRGGBB", for storing.
+    public var hex: String {
+        String(format: "#%02X%02X%02X", Int((red * 255).rounded()), Int((green * 255).rounded()), Int((blue * 255).rounded()))
+    }
+
+    /// Reads "#RRGGBB" (or "RRGGBB"); nil when it isn't one.
+    public static func color(hex: String) -> (red: Double, green: Double, blue: Double)? {
+        var text = hex.trimmingCharacters(in: .whitespaces)
+        if text.hasPrefix("#") { text.removeFirst() }
+        guard text.count == 6, let value = UInt32(text, radix: 16) else { return nil }
+        return (Double((value >> 16) & 0xFF) / 255, Double((value >> 8) & 0xFF) / 255, Double(value & 0xFF) / 255)
+    }
+}
+
+/// Quick choices in the Crop panel's eye menu; each sets the line's thickness and opacity and
+/// keeps its color.
+public enum CropGuideLineStyle: String, CaseIterable, Sendable {
     case light, medium, strong
 
     public var title: String {
@@ -222,7 +271,6 @@ public enum CropGuideLineStyle: String, CaseIterable, Codable, Sendable {
         }
     }
 
-    /// Width of the white line in points.
     public var width: Double {
         switch self {
         case .light: return 0.5
@@ -231,7 +279,6 @@ public enum CropGuideLineStyle: String, CaseIterable, Codable, Sendable {
         }
     }
 
-    /// Opacity of the white line at rest; a drag raises it by `dragBoost`.
     public var opacity: Double {
         switch self {
         case .light: return 0.35
@@ -240,15 +287,9 @@ public enum CropGuideLineStyle: String, CaseIterable, Codable, Sendable {
         }
     }
 
-    public var dragBoost: Double { 0.2 }
-
-    /// Opacity of the dark edge under the line (it is one point wider).
-    public var edgeOpacity: Double {
-        switch self {
-        case .light: return 0.15
-        case .medium: return 0.25
-        case .strong: return 0.35
-        }
+    /// The style a look matches, if any.
+    public static func matching(_ look: CropGuideLook) -> CropGuideLineStyle? {
+        allCases.first { abs($0.width - look.width) < 0.01 && abs($0.opacity - look.opacity) < 0.005 }
     }
 }
 
