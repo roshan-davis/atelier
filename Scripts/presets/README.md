@@ -9,12 +9,11 @@ From the repo root on a Mac with full Xcode and Python with Pillow, NumPy, SciPy
 ```sh
 export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 render_dir="$(mktemp -d)"
-swift run PresetQualification "$render_dir" Scripts/presets/fixtures/*.jpg \
-  Sources/AtelierApp/Resources/Splash/splash-eagle.jpg \
-  Sources/AtelierApp/Resources/Splash/splash-watercolor.jpg \
-  Sources/AtelierApp/Resources/Splash/splash-redwoods.jpg
+swift run PresetQualification "$render_dir" Scripts/presets/scenes/*.jpg
 python3 Scripts/help/make_help_images.py --check-presets-from "$render_dir"
 ```
+
+The Help lookbook uses Rosh's own photos in `Scripts/presets/scenes` (made by `Scripts/help/prepare_photos.py`, no metadata). `Scripts/presets/fixtures` keeps the public-domain and CC photos below as fixed test inputs for `BuiltInLookReferenceTests`; they no longer appear in Help. To make Help's Match Look pictures from Rosh's photos, run that test with `ATELIER_LOOK_FIXTURES=Scripts/presets/scenes`, `ATELIER_BUILT_IN_LOOK_OUT=<dir>` and `ATELIER_SKIN_LOOK_OUT=<dir>`, then `make_help_images.py --built-in-look-from <dir>` and `--skin-look-from <dir>`.
 
 The command renders a neutral image and every visible preset at 100% for each scene through `DevelopSession.renderSRGB`. It writes a folder per scene and `presets.json` with names, IDs, parts and exact settings. The same ID names the corresponding JPEG in each scene. The largest edge is 1,200 pixels. Check the matching scene and at least one alternate scene for each changed look. At 100% zoom inspect grain, skin, edges beside bright signs and halos along ridgelines. Look for lost shadow detail and blown-out highlights alongside the intended color changes.
 
@@ -27,7 +26,7 @@ python3 Scripts/help/build_help_index.py
 
 Open `Sources/AtelierApp/Help/preset-lookbook.html` in a browser to review the pairs and pack links. The older `preset_sheets.py` remains useful for portable experiments. Its NumPy approximation omits Glow.
 
-## Fixed photographs
+## Test fixtures
 
 All fixtures are sRGB JPEGs. The new fixtures were resized as needed, color-converted when an embedded profile was present and re-encoded without capture metadata. The Help credit section applies to the resized and edited derivatives too.
 
@@ -40,7 +39,6 @@ All fixtures are sRGB JPEGs. The new fixtures were resized as needed, color-conv
 | `urban.jpg` | Bright practical lights, colored signage and near-black surroundings | [Carles Tomás Martí, Shinjuku](https://commons.wikimedia.org/wiki/File:A_street_of_Shinjuku_at_night.jpg), [CC BY 2.0](https://creativecommons.org/licenses/by/2.0/) |
 | `twilight.jpg` | Cool twilight sky and warm street lighting | [salomon10, Paris at blue hour](https://commons.wikimedia.org/wiki/File:Blue_hour_-_Paris.jpg), [CC BY 2.0](https://creativecommons.org/licenses/by/2.0/) |
 | `product.jpg` | Black product, textured colored backdrop and bright reflections | [Henry Söderlund, Nikon D750](https://commons.wikimedia.org/wiki/File:Nikon_D750_01.jpg), [CC BY 2.0](https://creativecommons.org/licenses/by/2.0/) |
-| Atelier splash photos | Forest greens and sunbeams, fine feathers and pale paper washes | Rosh, from Atelier’s bundled examples |
 
 ## November 2026 audit
 

@@ -15,16 +15,20 @@ BEGIN = "<!-- BEGIN GENERATED LOOKS -->"
 END = "<!-- END GENERATED LOOKS -->"
 
 SCENES = {
-    "portrait": "Studio portrait of Jessica Watkins",
-    "portrait-light": "Portrait of Eileen Collins",
-    "landscape": "Yosemite Valley with blue sky and clouds",
-    "street": "Market Street in daylight",
-    "urban": "Shinjuku at night",
-    "twilight": "Paris at blue hour",
-    "product": "Camera and lens in studio light",
-    "splash-redwoods": "Sunlight through redwoods",
-    "splash-eagle": "Bald eagle in flight",
-    "splash-watercolor": "Watercolor portrait on paper",
+    # Rosh's own photos (Scripts/presets/scenes, made by Scripts/help/prepare_photos.py).
+    # No children: the repo is public.
+    "portrait": "A couple by the sea on an overcast day",
+    "portrait-light": "A woman by the sea in soft overcast light",
+    "landscape": "Dry golden hills with a winding path",
+    "sky": "A golf course under a blue sky with clouds",
+    "haze": "A headland and a footbridge in fog",
+    "street": "A San Francisco street with taxis",
+    "urban": "Paris at night from the Eiffel Tower",
+    "twilight": "The Eiffel Tower at dusk",
+    "product": "White garlic bulbs",
+    "forest": "A lush green park after rain",
+    "wildlife": "A finch on a branch",
+    "fine-art": "A painted chapel ceiling in a gilded frame",
 }
 
 

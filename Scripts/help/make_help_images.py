@@ -129,22 +129,35 @@ def contrast(image, amount):
     return with_luma(image, np.clip(new, 0, 1))
 
 
-def tone_base(image):
-    """How bright each area is, ignoring detail (Highlights and Shadows act on this)."""
-    L = luma(image)
-    return cv2.bilateralFilter(L, 0, 0.25, image.shape[1] / 40)
+def tone_base(image, full_width=6000):
+    """How bright each area is, ignoring detail, as Atelier's Highlights and Shadows read it
+    (LocalContrast.toneRegions): a guided filter on gamma luma with a 100 px window at full size."""
+    g = np.power(np.clip(np.power(image, 2.2) @ np.array([0.2627, 0.6780, 0.0593], np.float32), 0, 1), 1 / 2.2)
+    radius = max(1, round(100 * image.shape[1] / full_width))
+    box = lambda x: cv2.boxFilter(x, -1, (2 * radius + 1, 2 * radius + 1), borderType=cv2.BORDER_REFLECT)
+    mean, mean_sq = box(g), box(g * g)
+    a = np.maximum(mean_sq - mean * mean, 0) / (np.maximum(mean_sq - mean * mean, 0) + 0.01)
+    b = mean - a * mean
+    return np.clip(box(a) * g + box(b), 0, 1)
+
+
+def _tone_regions(image, highlight_amount, shadow_amount):
+    """Atelier's kernel: bumps peaking at 25% (Shadows) and 75% (Highlights) of the base,
+    added to the gamma-encoded color."""
+    base = tone_base(image)
+    ws = base * (1 - base) ** 3 / 0.10546875
+    wh = base ** 3 * (1 - base) / 0.10546875
+    shadow_gain = 0.22 * (0.7 if shadow_amount < 0 else 1) * shadow_amount
+    shift = shadow_gain * ws + 0.22 * highlight_amount * wh
+    return np.clip(image + shift[..., None], 0, 1)
 
 
 def highlights(image, amount):
-    base = tone_base(image)
-    weight = smoothstep(0.4, 0.85, base)
-    return add_luma(image, amount * 0.38 * weight)
+    return _tone_regions(image, amount, 0)
 
 
 def shadows(image, amount):
-    base = tone_base(image)
-    weight = 1 - smoothstep(0.05, 0.38, base)
-    return add_luma(image, amount * 0.3 * weight * smoothstep(0.0, 0.06, luma(image)))
+    return _tone_regions(image, 0, amount)
 
 
 def whites(image, amount):
@@ -407,8 +420,11 @@ KAYAK = (0.62, 0.56, 0.03, 0.03)
 def make_mask_slider_images(base):
     kayak = color_range_mask(base, KAYAK)
     pair("mask-hue", base, mix(base, turn_hue(base, -50), kayak))
-    # A mask's own Color Grading: the kayak only, teal shadows and golden highlights.
-    pair("mask-grade", base, mix(base, color_grade(base, shadows=(185, 1.0), midtones=(170, 0.6), highlights=(45, 1.0)), kayak))
+    # A mask's own Color Grading: the sky under a Linear Gradient, lavender shadows and peach highlights.
+    H, W = base.shape[:2]
+    ramp = 1 - smoothstep(0.0, 0.3, np.linspace(0, 1, H, dtype=np.float32))[:, None] * np.ones((1, W), np.float32)
+    graded = color_grade(base, shadows=(265, 0.25), midtones=(20, 0.35), highlights=(30, 0.75))
+    pair("mask-grade", base, mix(base, graded, ramp))
 
 
 def red_overlay(image, mask, strength=0.55):
@@ -941,18 +957,20 @@ def make_lens_blur_images(lake):
 
 
 def subject_mask(image):
-    """Select Subject on the Kathakali dancer: everything brighter than the dark stage."""
-    L = blur(luma(image), 1.5)
-    mask = (L > 0.09).astype(np.uint8)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((15, 15), np.uint8))
-    count, labels, stats, _ = cv2.connectedComponentsWithStats(mask)
+    """Select Subject on the man on the bench: GrabCut from a box around him (Vision's subject
+    mask stand-in), softened at the edge like Feather 20."""
+    H, W = image.shape[:2]
+    img8 = (np.clip(image, 0, 1) * 255).astype(np.uint8)[..., ::-1].copy()
+    mask = np.zeros((H, W), np.uint8)
+    rect = (int(W * 0.235), int(H * 0.49), int(W * 0.235), int(H * 0.45))
+    bgd, fgd = np.zeros((1, 65), np.float64), np.zeros((1, 65), np.float64)
+    cv2.grabCut(img8, mask, rect, bgd, fgd, 6, cv2.GC_INIT_WITH_RECT)
+    fg = np.isin(mask, (cv2.GC_FGD, cv2.GC_PR_FGD)).astype(np.uint8)
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(fg)
     keep = 1 + np.argmax(stats[1:, cv2.CC_STAT_AREA])
-    mask = (labels == keep).astype(np.uint8)
-    # Fill holes (dark make-up lines, shadows inside the costume).
-    flood = mask.copy()
-    cv2.floodFill(flood, None, (0, 0), 1)
-    mask = mask | (1 - flood)
-    return blur(mask.astype(np.float32), 1.5)
+    fg = (labels == keep).astype(np.uint8)
+    fg = cv2.morphologyEx(fg, cv2.MORPH_CLOSE, np.ones((9, 9), np.uint8))
+    return blur(fg.astype(np.float32), 2.0)
 
 
 def thumbnails():
@@ -962,11 +980,11 @@ def thumbnails():
         os.remove(os.path.join(OUT, "thumbs", old))
     lake = load("lake.jpg", width=800)
     kathakali = load("kathakali.jpg", width=1200)
-    shots = {"lake": lake, "lake-warm": temperature(lake, 0.4), "lake-bw": bw(lake),
+    shots = {"lake": lake, "lake-warm": temperature(lake, 0.9), "lake-bw": bw(lake),
              "kathakali-face": crop(kathakali, 0.44, 0.16, 0.36, 0.5)}
     for name in ("kayaks", "clown", "blossoms", "golden-gate", "dancers", "market", "tomatoes", "lanterns",
                  "bikes", "rose", "kathakali", "palace", "flower-1", "flower-2", "flower-3", "flower-4",
-                 "dance-1", "dance-2"):
+                 "fog-1", "fog-2"):
         shots[name] = kathakali if name == "kathakali" else load(f"{name}.jpg", width=None)
     for name, image in shots.items():
         h, w = image.shape[:2]
@@ -1063,12 +1081,13 @@ def main():
     pair("dehaze", fog, dehaze(fog, 0.6))
     market = flat(load("market.jpg"))
     save(market, "presence-base.jpg")
-    save(vibrance(market, 0.6), "vibrance.jpg")
+    save(vibrance(market, 1.0), "vibrance.jpg")
     save(saturation(market, 0.6), "saturation.jpg")
     berets = load("berets.jpg", width=760)
     pair("treatment", berets, bw(berets))
-    pair("profile", lake, flat(lake))
-    pair("white-balance", temperature(base, 0.5), base)
+    pair("profile", lake, saturation(contrast(lake, -0.35), -0.22))
+    snow_view = load("snow.jpg")
+    pair("white-balance", temperature(snow_view, 0.6), snow_view)
     pair("auto-tone", exposure(flat(lake), -1.0), lake)
 
     # Tone Curve: the Palace of Fine Arts at sunrise
@@ -1115,17 +1134,21 @@ def main():
     pair("lens-vignette", np.clip(golf * (1 - 0.6 * smoothstep(0.25, 1.0, radius_map(golf))[..., None]), 0, 1), golf)
     snow_full = load("snow.jpg", width=None)
     corner = crop(snow_full, 0.30, 0.0, 0.12, 0.12)
-    ca = scale_channels(snow_full, 1.0015, 0.9985)
+    ca = scale_channels(snow_full, 1.0008, 0.9992)
     pair("chromatic-aberration", enlarge(crop(ca, 0.30, 0.0, 0.12, 0.12), 3), enlarge(corner, 3))
     edge = crop(snow_full, 0.62, 0.0, 0.14, 0.14)
     L = luma(edge)
     edges = np.abs(cv2.Sobel(blur(L, 1), cv2.CV_32F, 1, 0, ksize=3)) + np.abs(cv2.Sobel(blur(L, 1), cv2.CV_32F, 0, 1, ksize=3))
-    near = blur((edges > 0.6).astype(np.float32), 1.5) * (1 - smoothstep(0.45, 0.75, L))
-    fringed = mix(edge, np.array([0.55, 0.22, 0.8], np.float32) * (0.5 + 0.5 * L[..., None]), np.clip(near * 1.2, 0, 0.6))
+    sky = cv2.dilate((L > 0.85).astype(np.uint8), np.ones((5, 5), np.uint8)).astype(np.float32)
+    near = blur(((edges > 0.5) & (sky > 0)).astype(np.float32), 1.2) * (1 - smoothstep(0.55, 0.85, L))
+    fringed = mix(edge, np.array([0.55, 0.25, 0.75], np.float32) * (0.6 + 0.4 * L[..., None]), np.clip(near * 0.9, 0, 0.5))
     pair("defringe", enlarge(fringed, 3), enlarge(edge, 3))
 
     # Transform: a San Francisco street for Upright, the bay's horizon for Straighten
-    pair("upright", keystone(street, 0.12), street)
+    leaning = keystone(street, 0.12)
+    H, W = street.shape[:2]
+    inside = leaning[:, int(W * 0.12):W - int(W * 0.12)]
+    pair("upright", cv2.resize(inside[int(H * 0.12):H - int(H * 0.12)], (W, H), interpolation=cv2.INTER_CUBIC), street)
     bay = load("bay.jpg")
     save(bay, "bay.jpg")
     SHARED["bay.jpg"] = bay
@@ -1146,19 +1169,19 @@ def main():
     pair("mask-linear", base, mix(base, exposure(base, -1.0), ramp))
     save(red_overlay(base, ramp), "mask-linear-overlay.jpg")
     y, x = np.mgrid[0:H, 0:W].astype(np.float32)
-    ellipse = np.sqrt(((x / W - 0.31) / 0.09) ** 2 + ((y / H - 0.39) / 0.24) ** 2)
-    radial = 1 - smoothstep(0.55, 1.0, ellipse)
-    pair("mask-radial", base, mix(exposure(base, -0.35), exposure(base, 0.9), radial))
+    ellipse = np.sqrt(((x / W - 0.31) / 0.13) ** 2 + ((y / H - 0.40) / 0.30) ** 2)
+    radial = 1 - smoothstep(0.25, 1.0, ellipse)
+    pair("mask-radial", base, mix(exposure(base, -0.35), exposure(base, 0.45), radial))
     save(red_overlay(base, radial), "mask-radial-overlay.jpg")
-    dancer = load("kathakali.jpg")
-    dancer_base = flat(dancer)
-    subject = subject_mask(dancer)
-    pair("mask-subject", dancer_base, mix(saturation(exposure(dancer_base, -0.3), -0.35), exposure(dancer_base, 0.25), subject))
-    save(red_overlay(dancer_base, subject), "mask-subject-overlay.jpg")
+    bench = load("bench.jpg")
+    bench_base = flat(bench)
+    subject = subject_mask(bench)
     background = 1 - subject
-    save(red_overlay(dancer_base, background), "mask-background-overlay.jpg")
+    pair("mask-subject", bench_base, mix(bench_base, saturation(exposure(bench_base, -0.4), -0.6), background))
+    save(red_overlay(bench_base, subject), "mask-subject-overlay.jpg")
+    save(red_overlay(bench_base, background), "mask-background-overlay.jpg")
     # The page reuses mask-subject-before.jpg as the before picture.
-    save(mix(dancer_base, temperature(exposure(dancer_base, -0.6), -0.45), background), "mask-background-after.jpg")
+    save(mix(bench_base, temperature(exposure(bench_base, -0.7), -0.5), background), "mask-background-after.jpg")
     bright = smoothstep(0.55, 0.75, luma(base))
     save(red_overlay(base, bright), "mask-luminance-overlay.jpg")
     pair("mask-luminance", base, mix(base, highlights(base, -0.6), bright))

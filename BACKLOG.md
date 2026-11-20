@@ -1594,3 +1594,10 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 **Left out:** the Preset Lookbook (`look-*.jpg`) and the built-in Match Look and Match Skin Tone examples are the app's own renders (PresetQualification, BuiltInLookReferenceTests) and need a Mac run to redo with these photos. The app's splash photos are unchanged.
 
 **Acceptance:** Help pages and README show the new photos with matching captions; `build_help_index.py` reports no problems; Rosh checks Help > Atelier Help in the app.
+
+**Follow-up (branch `claude/lookbook-own-photos`, Nov 19, 2026):** Rosh asked why stock photos (NASA astronauts, Yosemite) were still in Help and for a review of whether every example shows its tool. Rosh decided on a card: adults only, no children anywhere in the public repo.
+- Preset Lookbook and Match Look are now rendered on Rosh's Mac from 12 scenes cut from the RAWs (`Scripts/presets/scenes`, made by `prepare_photos.py`). Each preset sits on a scene that suits it (`looks.tsv`), and the stock credits are gone. `Scripts/presets/fixtures` keeps the stock photos as test inputs only.
+- Weak examples were redone: the White Balance cast (now on snow); Shadows and Highlights (they now use Atelier's exact guided-filter tone-regions math); the Radial halo; the all-purple Defringe; gray wedges in Upright; Apple Neutral and Vibrance, which barely differed; Select Subject and Select Background, where the background was black (now a man on a park bench); masked Color Grading (now the sky under a Linear Gradient); the B&W Mix caption; the Cull burst, which had an unrelated close-up; and dust in the palace sky.
+- Children removed: the Cull "Same frame" dance pair became two adults in fog.
+- **Found, not fixed (separate item):** Match Look's Fury Road studies push photos cyan. For color studies, `fitWhiteBalance` matches the drawing's least-colorful pixels, which are its teal sky (LookMatch+Regions.swift:500, LookMatch.swift:522-572). The Help examples don't use Fury Road.
+- **Still subtle by design:** Clean Product, Fine Art & Pigments, Natural Skin, Soft Glow, Haze Cut. Expired's grain looks clumpy at 100%.
