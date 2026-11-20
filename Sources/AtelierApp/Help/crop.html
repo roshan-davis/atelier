@@ -15,7 +15,7 @@
 <h1>Crop &amp; Straighten</h1>
 <p class="lede">Trim the edges, change the shape, level a horizon, rotate or flip. Nothing is cut from the original; you can change the crop any time.</p>
 
-<div class="chips"><a href="#open">Open the tool</a><a href="#on-photo">On the photo</a><a href="#panel">The Crop panel</a><a href="#straighten">Straighten</a></div>
+<div class="chips"><a href="#open">Open the tool</a><a href="#on-photo">On the photo</a><a href="#overlays">Guide overlays</a><a href="#panel">The Crop panel</a><a href="#straighten">Straighten</a></div>
 
 <h2 id="open">Open the tool</h2>
 <p>In Develop, press <kbd>R</kbd> or click the crop button (the first icon under the histogram). Press <kbd>R</kbd>, <kbd>Return</kbd> or click <b>Done</b> to close it. While it's open you see the whole photo with the crop on top.</p>
@@ -43,9 +43,27 @@
 <ol class="legend">
   <li><b>Corners</b>: drag to resize from that corner. The pointer turns into a diagonal arrow.</li>
   <li><b>Edges</b>: drag to move one side.</li>
-  <li><b>Inside</b>: drag to move the crop (the pointer is a hand). A rule-of-thirds grid helps you place the subject.</li>
+  <li><b>Inside</b>: drag to move the crop (the pointer is a hand). A guide overlay (rule of thirds unless you <a href="#overlays">pick another</a>) helps you place the subject.</li>
   <li><b>Outside</b>: drag to straighten (the pointer is a curved arrow). A finer grid appears while you rotate.</li>
 </ol>
+
+<h2 id="overlays">Guide overlays</h2>
+<p>The lines inside the crop frame help you place the subject. Pick them in the panel's <b>Overlay</b> menu or Develop › Crop Guide Overlay, or press <kbd>O</kbd> while cropping to step through them, as in Lightroom. Atelier remembers your choice for every photo.</p>
+<div class="cards">
+  <div class="card"><div style="position:relative"><img src="images/lake.jpg" alt="Grid guide on a photo" style="aspect-ratio:3/2"><div class="overlay"><svg viewBox="0 0 960 640" preserveAspectRatio="none"><path d="M106.7 0.0 L106.7 640.0 M213.3 0.0 L213.3 640.0 M320.0 0.0 L320.0 640.0 M426.7 0.0 L426.7 640.0 M533.3 0.0 L533.3 640.0 M640.0 0.0 L640.0 640.0 M746.7 0.0 L746.7 640.0 M853.3 0.0 L853.3 640.0 M0.0 106.7 L960.0 106.7 M0.0 213.3 L960.0 213.3 M0.0 320.0 L960.0 320.0 M0.0 426.7 L960.0 426.7 M0.0 533.3 L960.0 533.3" fill="none" stroke="#fff" stroke-opacity=".8" stroke-width="2.5"/></svg></div></div><div class="card-body"><div class="card-title">Grid</div><div class="card-text">Square cells for lining up edges and horizons.</div></div></div>
+  <div class="card"><div style="position:relative"><img src="images/lake.jpg" alt="Thirds guide on a photo" style="aspect-ratio:3/2"><div class="overlay"><svg viewBox="0 0 960 640" preserveAspectRatio="none"><path d="M320.0 0.0 L320.0 640.0 M0.0 213.3 L960.0 213.3 M640.0 0.0 L640.0 640.0 M0.0 426.7 L960.0 426.7" fill="none" stroke="#fff" stroke-opacity=".8" stroke-width="2.5"/></svg></div></div><div class="card-body"><div class="card-title">Thirds</div><div class="card-text">The rule of thirds: put the subject on a line or where two cross.</div></div></div>
+  <div class="card"><div style="position:relative"><img src="images/lake.jpg" alt="Diagonal guide on a photo" style="aspect-ratio:3/2"><div class="overlay"><svg viewBox="0 0 960 640" preserveAspectRatio="none"><path d="M0.0 0.0 L640.0 640.0 M0.0 640.0 L640.0 0.0 M960.0 0.0 L320.0 640.0 M960.0 640.0 L320.0 0.0" fill="none" stroke="#fff" stroke-opacity=".8" stroke-width="2.5"/></svg></div></div><div class="card-body"><div class="card-title">Diagonal</div><div class="card-text">45° lines from each corner, for leading lines and slopes.</div></div></div>
+  <div class="card"><div style="position:relative"><img src="images/lake.jpg" alt="Triangle guide on a photo" style="aspect-ratio:3/2"><div class="overlay"><svg viewBox="0 0 960 640" preserveAspectRatio="none"><path d="M0.0 0.0 L960.0 640.0 M960.0 0.0 L664.6 443.1 M0.0 640.0 L295.4 196.9" fill="none" stroke="#fff" stroke-opacity=".8" stroke-width="2.5"/></svg></div></div><div class="card-body"><div class="card-title">Triangle</div><div class="card-text">A diagonal with lines to it from the other corners. <kbd>⇧O</kbd> flips it.</div></div></div>
+  <div class="card"><div style="position:relative"><img src="images/lake.jpg" alt="Golden Ratio guide on a photo" style="aspect-ratio:3/2"><div class="overlay"><svg viewBox="0 0 960 640" preserveAspectRatio="none"><path d="M366.7 0.0 L366.7 640.0 M0.0 244.5 L960.0 244.5 M593.3 0.0 L593.3 640.0 M0.0 395.5 L960.0 395.5" fill="none" stroke="#fff" stroke-opacity=".8" stroke-width="2.5"/></svg></div></div><div class="card-body"><div class="card-title">Golden Ratio</div><div class="card-text">Like Thirds, but the lines sit at 38% and 62%.</div></div></div>
+  <div class="card"><div style="position:relative"><img src="images/lake.jpg" alt="Golden Spiral guide on a photo" style="aspect-ratio:3/2"><div class="overlay"><svg viewBox="0 0 960 640" preserveAspectRatio="none"><path d="M0.0 640.0 L2.9 577.3 L11.4 515.1 L25.5 454.2 L45.2 395.1 L70.1 338.3 L100.0 284.4 L134.7 234.0 L173.8 187.5 L216.9 145.3 L263.7 107.9 L313.6 75.6 L366.3 48.7 L421.1 27.6 L477.6 12.3 L535.2 3.1 L593.3 0.0 L629.3 1.9 L664.8 7.6 L699.8 17.0 L733.6 30.1 L766.2 46.7 L797.0 66.7 L825.9 89.8 L852.6 115.9 L876.8 144.6 L898.2 175.8 L916.7 209.1 L932.1 244.2 L944.2 280.7 L953.0 318.4 L958.2 356.8 L960.0 395.5 L958.9 419.5 L955.6 443.2 L950.2 466.5 L942.7 489.1 L933.2 510.8 L921.8 531.4 L908.6 550.6 L893.6 568.4 L877.1 584.5 L859.3 598.8 L840.2 611.1 L820.1 621.4 L799.2 629.5 L777.6 635.3 L755.6 638.8 L733.4 640.0 L719.6 639.3 L706.0 637.1 L692.7 633.5 L679.8 628.5 L667.3 622.2 L655.6 614.5 L644.5 605.7 L634.3 595.7 L625.1 584.8 L616.9 572.9 L609.9 560.1 L604.0 546.7 L599.3 532.8 L596.0 518.4 L594.0 503.7 L593.3 488.9 L593.7 479.8 L595.0 470.7 L597.0 461.8 L599.9 453.2 L603.5 444.9 L607.9 437.0 L613.0 429.7 L618.7 422.9 L625.0 416.7 L631.8 411.3 L639.1 406.6 L646.7 402.6 L654.7 399.6 L663.0 397.3 L671.4 396.0 L679.9 395.5 L685.1 395.8 L690.3 396.7 L695.4 398.0 L700.3 399.9 L705.1 402.4 L709.6 405.3 L713.8 408.6 L717.7 412.4 L721.2 416.6 L724.4 421.2 L727.1 426.0 L729.3 431.2 L731.1 436.5 L732.3 442.0 L733.1 447.6 L733.4 453.3 L733.2 456.7 L732.7 460.2 L732.0 463.6 L730.9 466.9 L729.5 470.1 L727.8 473.1 L725.9 475.9 L723.7 478.5 L721.3 480.8 L718.7 482.9 L715.9 484.7 L713.0 486.2 L709.9 487.4 L706.8 488.2 L703.6 488.7 L700.3 488.9 L698.3 488.8 L696.3 488.5 L694.4 488.0 L692.5 487.2 L690.7 486.3 L689.0 485.2 L687.3 483.9 L685.9 482.5 L684.5 480.9 L683.3 479.1 L682.3 477.3 L681.4 475.3 L680.8 473.3 L680.3 471.2 L680.0 469.0 L679.9 466.9 L679.9 465.5 L680.1 464.2 L680.4 462.9 L680.8 461.7 L681.4 460.5 L682.0 459.3 L682.7 458.2 L683.6 457.2 L684.5 456.3 L685.5 455.5 L686.6 454.9 L687.7 454.3 L688.8 453.8 L690.0 453.5 L691.3 453.3 L692.5 453.3 L693.3 453.3 L694.0 453.4 L694.8 453.6 L695.5 453.9 L696.2 454.2 L696.8 454.7 L697.5 455.2 L698.0 455.7 L698.5 456.3 L699.0 457.0 L699.4 457.7 L699.7 458.4 L700.0 459.2 L700.2 460.0 L700.3 460.8 L700.3 461.7 M593.3 0.0 L593.3 640.0 M593.3 395.5 L960.0 395.5 M733.4 395.5 L733.4 640.0 M593.3 488.9 L733.4 488.9 M679.9 395.5 L679.9 488.9 M679.9 453.3 L733.4 453.3 M700.3 453.3 L700.3 488.9 M679.9 466.9 L700.3 466.9 M692.5 453.3 L692.5 466.9 M692.5 461.7 L700.3 461.7" fill="none" stroke="#fff" stroke-opacity=".8" stroke-width="2.5"/></svg></div></div><div class="card-body"><div class="card-title">Golden Spiral</div><div class="card-text">Place the subject in the spiral's eye. <kbd>⇧O</kbd> moves the eye to each corner, winding either way (eight ways in all).</div></div></div>
+  <div class="card"><div style="position:relative"><img src="images/lake.jpg" alt="Aspect Ratios guide on a photo" style="aspect-ratio:3/2"><div class="overlay"><svg viewBox="0 0 960 640" preserveAspectRatio="none"><path d="M160.0 0.0 L800.0 0.0 L800.0 640.0 L160.0 640.0 L160.0 0.0 M80.0 0.0 L880.0 0.0 L880.0 640.0 L80.0 640.0 L80.0 0.0 M32.0 0.0 L928.0 0.0 L928.0 640.0 L32.0 640.0 L32.0 0.0 M53.3 0.0 L906.7 0.0 L906.7 640.0 L53.3 640.0 L53.3 0.0 M0.0 20.0 L960.0 20.0 L960.0 620.0 L0.0 620.0 L0.0 20.0 M0.0 50.0 L960.0 50.0 L960.0 590.0 L0.0 590.0 L0.0 50.0" fill="none" stroke="#fff" stroke-opacity=".8" stroke-width="2.5"/></svg></div></div><div class="card-body"><div class="card-title">Aspect Ratios</div><div class="card-text">Outlines of 1 × 1, 4 × 5, 5 × 7, 2 × 3, 3 × 4, 16 × 10 and 16 × 9 inside the crop, to see what a print or post would keep.</div></div></div>
+</div>
+<table class="keys">
+  <tr><td><kbd>O</kbd> (while cropping)</td><td>Next overlay</td></tr>
+  <tr><td><kbd>⇧O</kbd> (while cropping)</td><td>Turn Triangle or Golden Spiral to its next orientation (also the ⟳ button next to Overlay)</td></tr>
+  <tr><td>Show (the eye button)</td><td><b>Always</b>, <b>While Dragging</b> (only while you move or resize the crop) or <b>Never</b></td></tr>
+</table>
+<p>Nothing needs dragging: the overlay always fills the crop frame, so moving or resizing the crop moves the spiral's eye and the lines with it. While you straighten, a fine grid replaces the overlay so you can line up a horizon.</p>
 
 <h2 id="panel">The Crop panel</h2>
 <figure>
@@ -53,10 +71,11 @@
   <div class="panel">
     <div class="ph"><span class="chev">›</span>Crop &amp; Straighten<span class="dot"></span><span class="grow"></span><span class="reset">↺</span></div>
     <div class="pb">
-      <div class="muted">Drag a corner or edge to crop, inside to move, outside to straighten.</div>
+      <div class="muted">Drag a corner or edge to crop, inside to move, outside to straighten. O picks the overlay, ⇧O turns it.</div>
       <div class="row" data-pin="1"><span class="name">Aspect</span><span class="popup">Original</span><span class="icon" style="width:24px" data-pin="2" data-pin-side="right">⇄</span><span class="icon" style="width:24px">🔒</span></div>
-      <div class="sl" data-pin="3" data-name="Angle" data-value="4.0°" data-at="0.544" data-def="0.5"></div>
-      <div class="row" data-pin="4"><span class="icon" style="width:26px">↺</span><span class="icon" style="width:26px">↻</span><span class="icon" style="width:26px">⇋</span><span class="icon" style="width:26px">⇵</span><span class="grow" style="flex:1"></span><span class="btn">Reset</span><span class="btn on">Done</span></div>
+      <div class="row" data-pin="3"><span class="name">Overlay</span><span class="popup">Golden Spiral</span><span class="icon" style="width:24px">⟳</span><span class="icon" style="width:24px">👁</span></div>
+      <div class="sl" data-pin="4" data-name="Angle" data-value="4.0°" data-at="0.544" data-def="0.5"></div>
+      <div class="row" data-pin="5"><span class="icon" style="width:26px">↺</span><span class="icon" style="width:26px">↻</span><span class="icon" style="width:26px">⇋</span><span class="icon" style="width:26px">⇵</span><span class="grow" style="flex:1"></span><span class="btn">Reset</span><span class="btn on">Done</span></div>
     </div>
   </div>
   </div>
@@ -64,6 +83,7 @@
 <ol class="legend">
   <li><b>Aspect</b>: Original, 1 × 1, 4 × 5 / 8 × 10, 5 × 7, 2 × 3, 3 × 4, 16 × 10, 16 × 9 or Free. The lock keeps the shape while you drag; unlock it to drag freely.</li>
   <li><b>⇄</b> switches between landscape and portrait (or press <kbd>X</kbd> while cropping).</li>
+  <li><b>Overlay</b>: the <a href="#overlays">guide</a> drawn in the crop. ⟳ turns Triangle and Golden Spiral (<kbd>⇧O</kbd>); the eye sets when it shows.</li>
   <li><b>Angle</b>: straighten from −45° to 45°. Double-click the name to reset.</li>
   <li>Rotate left (<kbd>⌘[</kbd>), rotate right (<kbd>⌘]</kbd>), flip horizontal, flip vertical. <b>Reset</b> removes the crop, straightening, rotations and flips.</li>
 </ol>
