@@ -986,6 +986,8 @@ def thumbnails():
                  "bikes", "rose", "kathakali", "palace", "flower-1", "flower-2", "flower-3", "flower-4",
                  "temple-1", "temple-2"):
         shots[name] = kathakali if name == "kathakali" else load(f"{name}.jpg", width=None)
+    # The clown alone: leave out the backs of heads at both edges.
+    shots["clown"] = crop(shots["clown"], 0.17, 0.0, 0.5, 1.0)
     for name, image in shots.items():
         h, w = image.shape[:2]
         scale = 360 / max(h, w)

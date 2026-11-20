@@ -117,7 +117,11 @@ final class BuiltInLookReferenceTests: XCTestCase {
                 continue
             }
 
-            let fixture = study == .matrixPortrait || study == .furyRoadPortrait ? "portrait" : "portrait-light"
+            var fixture = study == .matrixPortrait || study == .furyRoadPortrait ? "portrait" : "portrait-light"
+            // Help's skin example can use another portrait (an unpainted face), e.g. "portrait-light".
+            if study == .matrixPortrait, let override = ProcessInfo.processInfo.environment["ATELIER_SKIN_LOOK_FIXTURE"] {
+                fixture = override
+            }
             let url = fixtures.appendingPathComponent(fixture + ".jpg")
             let fit = try XCTUnwrap(DevelopRenderer.shared.session(for: url, maxPixelSize: LookSample.size))
             let preview = try XCTUnwrap(DevelopRenderer.shared.session(for: url, maxPixelSize: 960))
