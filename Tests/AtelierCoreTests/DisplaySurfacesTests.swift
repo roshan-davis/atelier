@@ -166,12 +166,15 @@ final class DisplaySurfacesTests: XCTestCase {
         }
     }
 
-    /// R, G, B of a BGRA surface pixel from the top left.
+    /// R, G, B of a BGRA surface pixel from the top left of the photo. Surfaces store the
+    /// photo's bottom row first (`DevelopRenderer.surfaceNeedsFlip` turns Core Image's rows to
+    /// that), and the photo view's layers turn them over again, so row `y` of the photo is the
+    /// surface's row `height - 1 - y`.
     private func surfacePixel(_ surface: IOSurface, x: Int, y: Int) throws -> [UInt8] {
         _ = surface.lock(options: .readOnly, seed: nil)
         defer { _ = surface.unlock(options: .readOnly, seed: nil) }
         let bytes = surface.baseAddress.assumingMemoryBound(to: UInt8.self)
-        let offset = y * surface.bytesPerRow + x * 4
+        let offset = (surface.height - 1 - y) * surface.bytesPerRow + x * 4
         return [bytes[offset + 2], bytes[offset + 1], bytes[offset]]
     }
 }

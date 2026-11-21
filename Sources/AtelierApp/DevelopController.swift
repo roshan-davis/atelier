@@ -96,6 +96,8 @@ private struct ProxyRenderRequest {
     /// Puts the frame on screen from the render queue, if it still matches (`liveEpoch`).
     var sink: LiveFrameSink? = nil
     var liveEpoch = 0
+    /// Zoomed in with a sharp detail frame asked for: the stretched proxy frame stays hidden.
+    var hidesFrame = false
     let measureJob: LatestJob<DevelopMeasureRequest>
     let measureQueue: DispatchQueue
     let histogramSink: HistogramSink
@@ -625,13 +627,19 @@ final class DevelopController: ObservableObject {
     /// Detail frames came too slowly for this drag (an Exposure drag re-decoding the RAW): the
     /// proxy draws it alone, as before, until the edit rests.
     var detailGaveUp = false
-    /// Detail renders in a row slower than `ZoomedDetailRequest.slowLimit`.
-    let detailSlowFrames = LockedValue(0)
+    /// This drag's detail frames, for the limit and the timing log line when it rests.
+    let detailStats = LockedValue(ZoomedDetailStats())
+    /// Why the last live render asked for no detail frame, logged when it changes.
+    var detailSkipReason: String?
 
     /// The sharpest image that matches the current settings.
     var displayImage: NSImage? {
         if isCropping || (isMasking && showMaskOverlay) || sliderPreview != nil { return image }
         if !showingBefore, let fullImage, fullImageSettings == settings { return fullImage }
+        // Zoomed in during a drag the sharp detail frame shows the edit over the visible part;
+        // the full-size image stays under it, a step behind but sharp, instead of the stretched
+        // proxy flashing up each time a drag starts. The next full-size render replaces it.
+        if !showingBefore, let fullImage, fullImageSettings != nil, usesZoomedDetail { return fullImage }
         return image
     }
 
@@ -2379,7 +2387,10 @@ final class DevelopController: ObservableObject {
             photoFeed.sink.invalidate()
             photoFeed.detail.invalidate()
         }
-        submitRender(ProxyRenderRequest(
+        // Zoomed in, the visible part is rendered sharp from the full-size photo beside the proxy,
+        // whose stretched frame then stays hidden under it.
+        let underDetail = direct && overlay == nil && scheduleZoomedDetail(settings, clipping: clipping)
+        var request = ProxyRenderRequest(
             session: session, settings: settings, preview: preview, renderBefore: renderBefore, cropping: cropping,
             overlay: overlay, clipping: clipping, assetID: assetID, count: renderCount,
             measures: overlay == nil && preview == nil && !isLensBlurring, generation: openGeneration.value,
@@ -2387,9 +2398,9 @@ final class DevelopController: ObservableObject {
             fallback: liveFramesOff && photoFeed.isAttached && firstRenderDone && cropping ? .liveFramesOff : nil,
             sink: direct ? photoFeed.sink : nil, liveEpoch: photoFeed.sink.currentEpoch,
             measureJob: measureJob, measureQueue: measureQueue, histogramSink: histogramSink,
-            openGeneration: openGeneration, renderBeganAt: renderBeganAt, lensBlur: isLensBlurring))
-        // Zoomed in, the visible part is rendered sharp from the full-size photo beside the proxy.
-        if direct, overlay == nil { scheduleZoomedDetail(settings, clipping: clipping) }
+            openGeneration: openGeneration, renderBeganAt: renderBeganAt, lensBlur: isLensBlurring)
+        request.hidesFrame = underDetail
+        submitRender(request)
     }
 
     /// Hands `request` to the render queue, latest-wins: a request still waiting is replaced, and
@@ -2431,7 +2442,8 @@ final class DevelopController: ObservableObject {
                     // On screen now, from this thread: the main thread may be busy (D1). The
                     // histogram's small copy is made after this, never before.
                     renderedAt = CACurrentMediaTime()
-                    let result = sink.present(rendered, count: request.count, epoch: request.liveEpoch, pool: surfaces)
+                    let result = sink.present(rendered, count: request.count, epoch: request.liveEpoch, pool: surfaces,
+                                              hidden: request.hidesFrame)
                     outcome = result
                     if result == .shown { shownAt = CACurrentMediaTime() }
                 }) {

@@ -185,7 +185,10 @@ final class LiveFrameSink: @unchecked Sendable {
 
     /// Puts `surface`, render `count` requested at `epoch`, on screen, on the calling thread.
     /// The surface is returned to `pool` whenever it isn't shown.
-    func present(_ surface: IOSurface, count: Int, epoch: Int, pool: DisplaySurfaces) -> Outcome {
+    /// `hidden` keeps the frame off screen while it still counts as shown: zoomed in, the sharp
+    /// detail frame (`DetailFrameSink`) is coming, and the image under it stays sharp until then
+    /// rather than the stretched proxy flashing up first (Rosh, Nov 21, 2026).
+    func present(_ surface: IOSurface, count: Int, epoch: Int, pool: DisplaySurfaces, hidden: Bool = false) -> Outcome {
         lock.lock()
         let outcome: Outcome
         if epoch != self.epoch || count <= shownCountValue || count <= floor {
@@ -209,7 +212,7 @@ final class LiveFrameSink: @unchecked Sendable {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         target.contents = surface
-        target.isHidden = false
+        target.isHidden = hidden
         CATransaction.commit()
         // This thread has no run loop to commit for it.
         CATransaction.flush()
