@@ -23,9 +23,10 @@ struct LoupeView: View {
     /// decoded, which then goes on in one step (as in Develop: `DevelopController.holdsPreviousPhoto`).
     /// Showing the 256 px grid thumbnail first made every change a visible swap (Rosh, Nov 21,
     /// 2026: "what is going on in Loupe, which has a flicker on every change?").
-    @State private var holding = false
-    /// The longest the last photo stays up for the next one's preview.
-    private static let holdLimit: Duration = .seconds(1)
+    @StateObject private var hold = PhotoChangeHold(limit: 1.0)
+    /// The preview file `image` came from and its date, so the same preview decoded again
+    /// (another copy of the same pixels, after any photo's preview was stored) isn't swapped in.
+    @State private var shownPreview: (url: URL, modified: Date?)?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -40,7 +41,7 @@ struct LoupeView: View {
                                           if zoom.report != report { zoom.report = report }
                                       },
                                       menu: { model.photoMenu(includeZoom: true) },
-                                      holdsImage: holding)
+                                      holdsImage: hold.isHolding)
                 } else if model.focusedID != nil {
                     ProgressView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -126,14 +127,15 @@ struct LoupeView: View {
             // preview; only with no preview yet, or after `holdLimit`, does the thumbnail show.
             if let previewURL, let cached = PreviewImages.shared.cached(id, at: previewURL) {
                 // Decoded already: shown once, not decoded and swapped in again below.
-                show(cached, for: id)
+                show(cached, for: id, from: previewURL)
                 return
             } else if previewURL != nil, image != nil {
-                holding = true
+                hold.begin()
+                // Past the limit: the thumbnail rather than the last photo.
                 Task { @MainActor in
-                    try? await Task.sleep(for: Self.holdLimit)
-                    guard holding, model.focusedID == id, loadedID != id else { return }
-                    if let thumbnail = ThumbnailLoader.shared.cached(id) { show(thumbnail, for: id) } else { holding = false }
+                    try? await Task.sleep(for: .seconds(hold.limit))
+                    guard model.focusedID == id, loadedID != id, let thumbnail = ThumbnailLoader.shared.cached(id) else { return }
+                    show(thumbnail, for: id)
                 }
             } else if let thumbnail = ThumbnailLoader.shared.cached(id) {
                 show(thumbnail, for: id)
@@ -148,7 +150,7 @@ struct LoupeView: View {
         } else {
             // Nothing to show until its previews are built; don't leave the last photo up.
             if loadedID != id {
-                holding = false
+                hold.end(because: nil)
                 image = nil
                 loadedID = nil
             }
@@ -157,20 +159,27 @@ struct LoupeView: View {
         guard model.focusedID == id else { return }
         guard let loaded else {
             // The preview couldn't be read: the thumbnail, if any, rather than the last photo.
-            if holding {
-                if let thumbnail = ThumbnailLoader.shared.cached(id) { show(thumbnail, for: id) } else { holding = false }
+            if hold.isHolding {
+                if let thumbnail = ThumbnailLoader.shared.cached(id) { show(thumbnail, for: id) } else { hold.end(because: nil) }
             }
             return
         }
         guard loaded !== image else { return }
-        show(loaded, for: id)
+        if loadedID == id, let previewURL, let shownPreview, shownPreview.url == previewURL,
+           shownPreview.modified == Self.modified(previewURL) { return }
+        show(loaded, for: id, from: previewURL)
     }
 
-    private func show(_ shown: NSImage, for id: Int64) {
+    private func show(_ shown: NSImage, for id: Int64, from preview: URL? = nil) {
         image = shown
         imagePixelSize = pixelSize
         loadedID = id
-        holding = false
+        shownPreview = preview.map { ($0, Self.modified($0)) }
+        hold.end(because: nil)
+    }
+
+    private static func modified(_ url: URL) -> Date? {
+        (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
     }
 
     /// Renders the original with its develop settings at full size.

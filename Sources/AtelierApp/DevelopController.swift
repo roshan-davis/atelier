@@ -1,3 +1,4 @@
+import Combine
 import AppKit
 import AtelierCore
 import CoreImage
@@ -636,14 +637,12 @@ final class DevelopController: ObservableObject {
     /// one step (Rosh, Nov 21, 2026: "when I select the next image it is still showing low
     /// resolution first for a split second"). Never the 256-pixel grid thumbnail. Ends after
     /// `photoHoldLimit` whatever happens; the Filmstrip, Navigator and panels move at once.
-    @Published private(set) var holdsPreviousPhoto = false
-    /// What ends the hold: the full-size image (zoomed in), or any picture of the proxy's size.
-    private var holdNeedsFullSize = false
-    private var holdTimeout: DispatchWorkItem?
-    private var holdBegan: CFAbsoluteTime = 0
-    /// The longest the last photo stays up for the next one (a heavy edit's first full-size
+    /// Shared with Loupe (`PhotoChangeHold`); 1 s at most (a heavy edit's first full-size
     /// render took 650 ms).
-    static let photoHoldLimit: TimeInterval = 1.0
+    let photoHold = PhotoChangeHold(limit: 1.0)
+    var holdsPreviousPhoto: Bool { photoHold.isHolding }
+    /// What ends the hold: the full-size image (zoomed in), or the proxy's first render.
+    private var holdNeedsFullSize = false
 
     /// Lets go of the full-size images a moment after the view goes back to Fit (AT-077).
     private var fullRelease: DispatchWorkItem?
@@ -781,6 +780,7 @@ final class DevelopController: ObservableObject {
     private let displaySurfaces = DisplaySurfaces()
     /// Frames of the part in view while zoomed in (another size than the whole-photo frames).
     private let regionSurfaces = DisplaySurfaces(limit: 3)
+    private var holdObserver: AnyCancellable?
     /// See `histogramSessionForRegionFrames`.
     private var histogramSession: DevelopSession?
     private var histogramSessionOpening = false
@@ -898,6 +898,9 @@ final class DevelopController: ObservableObject {
         // macOS says memory is low: Core Image's cache is already cleared (`RenderMemory`); let go
         // of the full-size images too unless the photo is zoomed in (AT-077).
         photoFeed.onFrameLost = { [weak self] in self?.zoomedFrameLost() }
+        photoHold.log = { [weak self] line in DevelopTimingLog.shared.log(self?.assetID, "photo change shown " + line) }
+        // The photo views watch the controller: tell them when the hold starts or ends.
+        holdObserver = photoHold.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
         observers.observe(RenderMemory.pressure) { [weak self] _ in
             MainActor.assumeIsolated { self?.releaseFullResolution(because: "memory pressure") }
         }
@@ -2904,29 +2907,15 @@ final class DevelopController: ObservableObject {
     }
 
     private func beginHold(needsFullSize: Bool) {
-        holdTimeout?.cancel()
-        holdsPreviousPhoto = true
         holdNeedsFullSize = needsFullSize
-        holdBegan = DevelopTimingLog.now()
-        let timeout = DispatchWorkItem { [weak self] in
-            MainActor.assumeIsolated { self?.endHold(because: "after waiting the limit") }
-        }
-        holdTimeout = timeout
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.photoHoldLimit, execute: timeout)
+        photoHold.begin()
     }
 
     /// The photo view shows the open photo again (`holdsPreviousPhoto`); logs how long it took.
     private func endHold(because reason: String?) {
-        holdTimeout?.cancel()
-        holdTimeout = nil
-        guard holdsPreviousPhoto else { return }
-        holdsPreviousPhoto = false
         let zoomed = holdNeedsFullSize
         holdNeedsFullSize = false
-        if let reason {
-            DevelopTimingLog.shared.log(assetID, "photo change shown \(reason)\(zoomed ? " (zoomed in)" : "") "
-                + "+\(DevelopTimingLog.ms(since: holdBegan)) ms")
-        }
+        photoHold.end(because: reason.map { $0 + (zoomed ? " (zoomed in)" : "") })
     }
 
     /// Back at Fit: the full-size images and session go after a few seconds (zooming in again
