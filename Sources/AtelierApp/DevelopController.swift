@@ -643,6 +643,8 @@ final class DevelopController: ObservableObject {
     var holdsPreviousPhoto: Bool { photoHold.isHolding }
     /// What ends the hold: the full-size image (zoomed in), or the proxy's first render.
     private var holdNeedsFullSize = false
+    /// The next photo's own render is in (not its stored preview).
+    private var holdHasRender = false
 
     /// Lets go of the full-size images a moment after the view goes back to Fit (AT-077).
     private var fullRelease: DispatchWorkItem?
@@ -1047,7 +1049,7 @@ final class DevelopController: ObservableObject {
         let cachedPreview = previews.url(for: assetID, size: .preview)
         let hasPreview = previews.has(.preview, for: assetID)
         let url = try? catalog.readableURL(for: assetID, cache: originals)
-        let zoomed = wantsFullResolution && compareMode == .off && !isMasking && !isRemoving && !isLensBlurring
+        let zoomed = wantsFullResolution && !isMasking && !isRemoving && !isLensBlurring
         let decodedPreview = hasPreview ? PreviewImages.shared.cached(assetID, at: cachedPreview) : nil
         // The last photo stays up until this one's own render (or, zoomed in, its full-size image)
         // is in: the stored preview is a JPEG of an earlier render, and showing it first made
@@ -2691,7 +2693,8 @@ final class DevelopController: ObservableObject {
             photoFeed.published(shown, count: request.count, timing: timing)
             showsStandIn = false
             // A compare view also waits for the Before photo, so both sides change together.
-            if !holdNeedsFullSize, compareMode == .off || beforeImage != nil { endHold(because: "with its first render") }
+            holdHasRender = true
+            endHoldIfReady(because: "with its first render")
             imageIsWhole = !request.cropping
         }
         if current, !firstRenderDone {
@@ -2915,10 +2918,21 @@ final class DevelopController: ObservableObject {
 
     private func beginHold(needsFullSize: Bool) {
         holdNeedsFullSize = needsFullSize
+        holdHasRender = false
         photoHold.begin()
     }
 
     /// The photo view shows the open photo again (`holdsPreviousPhoto`); logs how long it took.
+    /// Ends the hold once the next photo has every picture the view shows: its render (or,
+    /// zoomed in, its full-size image) and, in a compare view, the same of its Before photo.
+    private func endHoldIfReady(because reason: String) {
+        guard holdsPreviousPhoto else { return }
+        let afterReady = holdNeedsFullSize ? (fullImage != nil && fullImageSettings == settings) : holdHasRender
+        let beforeReady = compareMode == .off
+            || (holdNeedsFullSize ? (fullBeforeImage != nil && fullBeforeSettings == beforeSettings) : beforeImage != nil)
+        if afterReady, beforeReady { endHold(because: reason) }
+    }
+
     private func endHold(because reason: String?) {
         let zoomed = holdNeedsFullSize
         holdNeedsFullSize = false
@@ -3002,7 +3016,7 @@ final class DevelopController: ObservableObject {
                     if let cgImage, blurs == self.isLensBlurring {
                         self.fullImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
                         self.fullImageSettings = settings
-                        self.endHold(because: "sharp")
+                        self.endHoldIfReady(because: "sharp")
                     } else if cgImage != nil {
                         self.fullNeedsRender = true
                     }
@@ -3047,6 +3061,7 @@ final class DevelopController: ObservableObject {
                     if let cgImage {
                         self.fullBeforeImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
                         self.fullBeforeSettings = before
+                        self.endHoldIfReady(because: "sharp, with its Before")
                     }
                     if self.fullBeforeNeedsRender {
                         self.fullBeforeNeedsRender = false
@@ -3097,7 +3112,7 @@ final class DevelopController: ObservableObject {
                             self.beforeImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
                         }
                         // Compare views: the After render was in first; both sides change now.
-                        if !self.holdNeedsFullSize, self.firstRenderDone { self.endHold(because: "with its Before render") }
+                        self.endHoldIfReady(because: "with its Before render")
                         if !self.rendering { self.scheduleFullRender() }
                         self.scheduleFullBeforeRender()
                     }

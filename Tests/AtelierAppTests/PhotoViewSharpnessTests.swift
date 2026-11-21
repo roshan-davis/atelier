@@ -371,8 +371,18 @@ final class PhotoViewSharpnessTests: XCTestCase {
     /// next one has its After render and its Before render, then both change together; a pane is
     /// never left empty (Rosh, Nov 21, 2026: "the left side part is drawing the background first").
     func testCompareChangesBothSidesTogether() async throws {
+        try await compareChanges(zoomed: false)
+    }
+
+    /// Zoomed in, both sides go on once, at full size (as the single photo view does).
+    func testZoomedCompareChangesBothSidesTogetherSharp() async throws {
+        try await compareChanges(zoomed: true)
+    }
+
+    private func compareChanges(zoomed: Bool) async throws {
         let harness = try await makeHarness()
         let develop = harness.develop, model = harness.model
+        if zoomed { try await pinch(harness, to: 1.0) }
         develop.compareMode = .sideBySide
         try await wait("the Before photo", seconds: 20) { develop.displayBeforeImage != nil }
         try await Task.sleep(for: .milliseconds(800))
@@ -390,11 +400,16 @@ final class PhotoViewSharpnessTests: XCTestCase {
                     if before == nil || before === oldBefore {
                         problems.append(String(format: "%@: shown at %.0f ms without its Before photo", harness.names[index], ms))
                     }
+                    // Zoomed in, both sides must be full size when they go on (a limit-out says so).
+                    if zoomed, (before?.size.width ?? 0) <= 2560 || (develop.displayImage?.size.width ?? 0) <= 2560 {
+                        problems.append(String(format: "%@: shown at %.0f ms before its full-size images (Before %.0f px, After %.0f px)",
+                                               harness.names[index], ms, before?.size.width ?? 0, develop.displayImage?.size.width ?? 0))
+                    }
                     shownAt = ms
                     break
                 }
             }
-            print("SHARPNESS Before/After to \(harness.names[index]): both sides shown "
+            print("SHARPNESS Before/After\(zoomed ? " zoomed" : "") to \(harness.names[index]): both sides shown "
                   + (shownAt.map { String(format: "+%.0f ms", $0) } ?? "never"))
             XCTAssertNotNil(shownAt)
             try await Task.sleep(for: .milliseconds(1200))
