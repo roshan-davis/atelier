@@ -417,6 +417,91 @@ final class PhotoViewSharpnessTests: XCTestCase {
         XCTAssertEqual(problems.count, 0, problems.joined(separator: "\n"))
     }
 
+    // MARK: HDR
+
+    /// HDR: changing photo keeps the last photo on screen until the next one's After is rendered,
+    /// then shows it once; never the empty background with a spinner, nor its Before then After.
+    func testHDRPhotoChangeKeepsTheLastPhoto() async throws {
+        let harness = try await makeHarness()
+        let model = harness.model
+        let hdr = model.hdr
+        model.mode = .hdr
+        try await wait("the HDR photo", seconds: 60) { hdr.after != nil }
+        try await Task.sleep(for: .milliseconds(500))
+        var problems: [String] = []
+        for index in [1, 2] {
+            let clicked = CACurrentMediaTime()
+            model.focusedID = harness.ids[index]
+            var shownAt: Double?
+            var sawHeld = false
+            while CACurrentMediaTime() - clicked < 30 {
+                try await Task.sleep(for: .milliseconds(5))
+                let ms = (CACurrentMediaTime() - clicked) * 1000
+                if hdr.heldPicture != nil { sawHeld = true; continue }
+                // What the view shows now: the next photo's After, or nothing.
+                if hdr.after == nil {
+                    problems.append(String(format: "%@ at %.0f ms: nothing on screen (After %@, Before %@)", harness.names[index], ms,
+                                           hdr.after == nil ? "missing" : "in", hdr.before == nil ? "missing" : "in"))
+                    break
+                }
+                shownAt = ms
+                break
+            }
+            print("SHARPNESS HDR to \(harness.names[index]): " + (shownAt.map { String(format: "shown once at +%.0f ms", $0) } ?? "never")
+                  + (sawHeld ? ", last photo kept until then" : ""))
+            XCTAssertNotNil(shownAt)
+            try await Task.sleep(for: .milliseconds(800))
+        }
+        model.mode = .develop
+        XCTAssertEqual(problems.count, 0, problems.joined(separator: "\n"))
+    }
+
+    // MARK: Cull
+
+    /// Cull: changing photo keeps the last one until the next one's large copy is in, then shows
+    /// it once, never its thumbnail and then the large copy.
+    func testCullPhotoChangeShowsOnePicture() async throws {
+        let env = ProcessInfo.processInfo.environment
+        guard let folder = env["ATELIER_SHARPNESS_FOLDER"] else { throw XCTSkip("ATELIER_SHARPNESS_FOLDER not set") }
+        let names = ["_RZF0502.NEF", "_RZF0503.NEF", "_RZF0504.NEF", "_RZF0505.NEF"]
+        let work = FileManager.default.temporaryDirectory.appendingPathComponent("CullSharpness-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: work) }
+        let catalog = try Catalog(packageURL: work.appendingPathComponent("Cull.atelier"))
+        let model = LibraryModel(catalog: catalog)
+        let files = names.map { URL(fileURLWithPath: folder).appendingPathComponent($0) }
+        let cull = CullModel(source: .importing(sources: files, options: ImportOptions(target: .newGroup(name: "Cull Test"))),
+                             title: "Cull Test", model: model)
+        try await wait("the cull photos", seconds: 120) {
+            !cull.isLoading && !cull.isAnalyzing && cull.photos.count == names.count && cull.photos.allSatisfy { $0.thumbnail != nil }
+        }
+        cull.focus(0)
+        try await wait("the first large photo", seconds: 20) { cull.pixelSize != nil }
+        try await Task.sleep(for: .milliseconds(500))
+        var totalSwaps = 0
+        var lines: [String] = []
+        for index in [2, 1, 3] {
+            let old = cull.largeImage
+            var pictures: [String] = []
+            var last: NSImage? = old
+            let clicked = CACurrentMediaTime()
+            cull.focus(index)
+            while CACurrentMediaTime() - clicked < 2 {
+                try await Task.sleep(for: .milliseconds(5))
+                // What the photo view shows: the model's picture unless it is holding the last one.
+                guard !cull.photoHold.isHolding, let shown = cull.fullImage ?? cull.largeImage, shown !== last else { continue }
+                last = shown
+                pictures.append(String(format: "%.0f ms: %.0f px", (CACurrentMediaTime() - clicked) * 1000, shown.size.width))
+            }
+            totalSwaps += max(0, pictures.count - 1)
+            let line = "Cull to \(names[index]): \(pictures.count) picture(s) — " + pictures.joined(separator: ", ")
+            lines.append(line)
+            print("SHARPNESS \(line)")
+            XCTAssertFalse(pictures.isEmpty)
+        }
+        XCTAssertEqual(totalSwaps, 0, lines.joined(separator: "\n"))
+    }
+
     // MARK: Loupe
 
     /// Loupe, at Fit: each photo change puts one picture of the new photo on screen (its 2560 px

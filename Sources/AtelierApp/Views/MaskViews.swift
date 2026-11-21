@@ -21,7 +21,9 @@ struct MaskEditorView: View {
                           overlay: { [develop, image] frame in
                               AnyView(MaskOverlay(develop: develop, image: image, frame: frame))
                           },
-                          feed: develop.photoFeed)
+                          feed: develop.photoFeed,
+                          // Changing photo: the shared rule (`PhotoChangeHold`), as in Develop.
+                          holdsImage: develop.holdsPreviousPhoto)
     }
 }
 

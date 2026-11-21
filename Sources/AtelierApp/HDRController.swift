@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 import AtelierHDRCore
 import AtelierCore
@@ -17,6 +18,14 @@ final class HDRController: ObservableObject {
     @Published private(set) var before: NSImage?
     @Published private(set) var after: NSImage?
     @Published private(set) var pixelSize: CGSize?
+    /// Changing photo: the last photo's picture and size stay on screen until the next one's
+    /// After is rendered, then it goes on once (the shared rule, `PhotoChangeHold`, as in Develop
+    /// and Loupe). Opening a photo in HDR decodes its original, so past the hold's limit a spinner
+    /// shows over the last photo rather than the empty background.
+    @Published private(set) var heldPicture: NSImage?
+    @Published private(set) var heldPixelSize: CGSize?
+    let photoHold = PhotoChangeHold(limit: 1.0)
+    private var holdObserver: AnyCancellable?
     /// Saving: the controls are locked and Esc cancels.
     @Published private(set) var busy = false
     /// Opening a photo or project.
@@ -97,6 +106,8 @@ final class HDRController: ObservableObject {
         self.model = model
         zoom = model.zoomState
         presets = presetStore.all()
+        // The photo view watches this controller: tell it when the hold's limit passes.
+        holdObserver = photoHold.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
     }
 
     /// What the photo shows: the preset the pointer rests on, otherwise the settings.
@@ -118,7 +129,14 @@ final class HDRController: ObservableObject {
     func open(_ id: Int64?) {
         guard id != assetID || (id != nil && before == nil && !isLoading) else { return }
         if let id, id == resultAssetID { return }
-        close()
+        // Another photo: the one on screen stays until this one's After is in.
+        if id != nil, let shown = heldPicture ?? after ?? before {
+            heldPicture = shown
+            heldPixelSize = heldPixelSize ?? pixelSize
+            photoHold.begin()
+        }
+        close(keepingHeldPicture: true)
+        if id == nil { releaseHeldPicture() }
         guard let id, let model else { return }
         assetID = id
         isLoading = true
@@ -135,6 +153,7 @@ final class HDRController: ObservableObject {
             } catch {
                 guard assetID == id else { return }
                 isLoading = false
+                releaseHeldPicture()
                 self.error = error.localizedDescription
             }
         }
@@ -228,7 +247,16 @@ final class HDRController: ObservableObject {
     }
 
     /// Leaves the photo: frees its images. Unsaved changes are the caller's to confirm first.
-    func close() {
+    /// The next photo is on screen: the last one goes.
+    private func releaseHeldPicture() {
+        guard heldPicture != nil else { return }
+        heldPicture = nil
+        heldPixelSize = nil
+        photoHold.end(because: nil)
+    }
+
+    func close(keepingHeldPicture: Bool = false) {
+        if !keepingHeldPicture { releaseHeldPicture() }
         openTask?.cancel(); openTask = nil
         renderTask?.cancel(); renderTask = nil
         renderRevision += 1
@@ -446,6 +474,7 @@ final class HDRController: ObservableObject {
                     let image = NSImage(cgImage: result, size: .zero)
                     photoFeed.published(image, count: count)
                     after = image
+                    releaseHeldPicture()
                 }
             } catch is CancellationError {
             } catch { self.error = error.localizedDescription }

@@ -265,7 +265,9 @@ struct CullView: View {
                                       menu: { nil },
                                       onPick: cull.placingNote == nil ? nil : { (point: CGPoint) in cull.placeNote(at: point) },
                                       overlay: markersOverlay,
-                                      overlayPassesClicks: true)
+                                      overlayPassesClicks: true,
+                                      // Changing photo: the shared rule (`PhotoChangeHold`).
+                                      holdsImage: cull.photoHold.isHolding)
                 } else if cull.focused != nil {
                     ProgressView()
                 }

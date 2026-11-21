@@ -220,10 +220,8 @@ struct LoupeView: View {
         guard let key = wantedFullKey, key != fullKey else { return }
         guard let url = try? model.catalog.readableURL(for: key.id, cache: model.originals),
               let settings = try? model.catalog.developSettings(for: key.id) else { return }
-        let rendered = await Task.detached(priority: .userInitiated) { () -> NSImage? in
-            guard let cgImage = DevelopRenderer.shared.session(for: url, maxPixelSize: nil)?.render(settings) else { return nil }
-            return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
-        }.value
+        // The one full-size render every photo view shares (Develop's, when it made it already).
+        let rendered = await FullSizeRenders.shared.render(url, settings: settings)
         guard !Task.isCancelled, currentFullKey == key, let rendered else { return }
         fullImage = rendered
         fullKey = key

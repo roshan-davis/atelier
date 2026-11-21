@@ -2960,6 +2960,7 @@ final class DevelopController: ObservableObject {
         let held = fullImage != nil || fullBeforeImage != nil || fullSession != nil
         regionSurfaces.drain()
         histogramSession = nil
+        FullSizeRenders.shared.clear()
         fullImage = nil
         fullImageSettings = nil
         fullImageIsStale = false
@@ -2987,24 +2988,37 @@ final class DevelopController: ObservableObject {
             fullNeedsRender = true
             return
         }
-        fullRendering = true
-        noteLensBlurWork()
-        fullImageIsStale = false
         let settings = self.settings
         let assetID = self.assetID
         let existing = fullSession
         let clipping = clippingOverlay
         let blurs = isLensBlurring
+        let shareable = !blurs && !clipping.shadows && !clipping.highlights
+        // The same photo and settings rendered at full size already (Loupe zoomed in, or this
+        // photo before): shown at once from the shared render; only the session is opened.
+        if shareable, !fullImageIsStale, let shared = FullSizeRenders.shared.cached(url, settings: settings) {
+            fullImage = shared
+            fullImageSettings = settings
+            endHoldIfReady(because: "sharp, from the shared full-size render")
+            if existing != nil { return }
+        }
+        fullRendering = true
+        noteLensBlurWork()
+        fullImageIsStale = false
+        let reuses = shareable && fullImageSettings == settings && fullImage != nil
         fullQueue.async {
             let began = DevelopTimingLog.now()
             let session = existing ?? DevelopRenderer.shared.session(for: url, maxPixelSize: nil, interactive: true)
             session?.rendersLensBlur = blurs
-            let cgImage = RenderSignposts.measure("Full-size render") {
+            // Already shown from the shared render: only the session was wanted.
+            let cgImage = reuses ? nil : RenderSignposts.measure("Full-size render") {
                 session?.renderForDisplay(settings, shadowClipping: clipping.shadows,
                                           highlightClipping: clipping.highlights)?.image
             }
-            DevelopTimingLog.shared.log(assetID, "full-size render (zoomed in)\(existing == nil ? " with full decode" : "")"
-                + "\(blurs ? " with Lens Blur" : ""): \(DevelopTimingLog.ms(since: began)) ms")
+            DevelopTimingLog.shared.log(assetID, reuses
+                ? "full-size session opened, picture from the shared full-size render: \(DevelopTimingLog.ms(since: began)) ms"
+                : "full-size render (zoomed in)\(existing == nil ? " with full decode" : "")"
+                    + "\(blurs ? " with Lens Blur" : ""): \(DevelopTimingLog.ms(since: began)) ms")
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     self.fullRendering = false
@@ -3016,6 +3030,7 @@ final class DevelopController: ObservableObject {
                     if let cgImage, blurs == self.isLensBlurring {
                         self.fullImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
                         self.fullImageSettings = settings
+                        if shareable, let fullImage = self.fullImage { FullSizeRenders.shared.store(fullImage, for: url, settings: settings) }
                         self.endHoldIfReady(because: "sharp")
                     } else if cgImage != nil {
                         self.fullNeedsRender = true

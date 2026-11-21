@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import AtelierCore
 import Foundation
 
@@ -133,11 +134,18 @@ final class CullModel: ObservableObject, Identifiable {
     /// Measurements between a group's first shot and later ones, made as grouping needs them.
     private var distant: [Int: CullComparison] = [:]
     @Published private(set) var largeImage: NSImage?
+    /// The photo `largeImage` is of (it can still be the last photo's while the next loads).
+    private var largeImageID: Int?
     /// The focused photo at full size, read once it is zoomed past Fit; nil until then.
     @Published private(set) var fullImage: NSImage?
     /// The focused photo's size in pixels (as shot, turned upright), so 100% is one pixel per
     /// screen pixel whatever size the preview is.
     @Published private(set) var pixelSize: CGSize?
+    /// Changing photo: the last one stays, at its zoom, until the next one's picture for the
+    /// view is in (its 1800 px copy at Fit, its full size zoomed in), then it goes on once, not
+    /// its thumbnail and then the larger picture (the shared rule, `PhotoChangeHold`).
+    let photoHold = PhotoChangeHold(limit: 1.0)
+    private var holdObserver: AnyCancellable?
     /// The Cull preview's zoom, its own: zooming here doesn't move Loupe or Develop. Kept from
     /// photo to photo, so the same spot can be compared across a group, as in Lightroom.
     let zoom = ZoomState()
@@ -177,6 +185,8 @@ final class CullModel: ObservableObject, Identifiable {
         self.source = source
         self.title = title
         self.model = model
+        // The photo view watches this model: tell it when a photo change's hold starts or ends.
+        holdObserver = photoHold.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
         load()
     }
 
@@ -521,8 +531,22 @@ final class CullModel: ObservableObject, Identifiable {
             pixelSize = nil
             return
         }
-        largeImage = photos[id].thumbnail
-        pixelSize = nil
+        // With a photo on screen it stays until this one is ready; otherwise its thumbnail shows.
+        if largeImage == nil {
+            largeImage = photos[id].thumbnail
+            largeImageID = id
+            pixelSize = nil
+        } else {
+            photoHold.begin()
+            // Past the limit: its thumbnail rather than the last photo.
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(self?.photoHold.limit ?? 1))
+                guard let self, self.focused == id, self.largeImageID != id, let thumbnail = self.photos[id].thumbnail else { return }
+                self.largeImage = thumbnail
+                self.largeImageID = id
+                self.pixelSize = nil
+            }
+        }
         largeTask?.cancel()
         largeTask = Task.detached(priority: .userInitiated) { [weak self] in
             let size = Culling.pixelSize(at: url)
@@ -530,8 +554,11 @@ final class CullModel: ObservableObject, Identifiable {
             await MainActor.run { [weak self] in
                 guard let self, !Task.isCancelled, self.focused == id else { return }
                 self.largeImage = image
+                self.largeImageID = id
                 self.pixelSize = size
                 self.zoomChanged()
+                // At Fit this is the picture; zoomed in, the full-size one ends the hold.
+                if !self.zoom.report.isZoomedPastFit || image == nil { self.photoHold.end(because: nil) }
             }
         }
     }
@@ -548,6 +575,7 @@ final class CullModel: ObservableObject, Identifiable {
             await MainActor.run { [weak self] in
                 guard let self, !Task.isCancelled, self.focused == id else { return }
                 self.fullImage = image
+                self.photoHold.end(because: nil)
             }
         }
     }

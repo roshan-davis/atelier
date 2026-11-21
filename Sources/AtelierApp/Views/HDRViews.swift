@@ -17,7 +17,15 @@ struct HDRImageView: View {
         VStack(spacing: 0) {
             ZStack(alignment: .topLeading) {
                 Color(nsColor: theme.surround)
-                if let before = hdr.before {
+                if let held = hdr.heldPicture {
+                    // Changing photo: the last one stays until the next one's After is in
+                    // (`PhotoChangeHold`); past the limit a spinner shows over it.
+                    ZoomableImageView(image: held, pixelSize: hdr.heldPixelSize, zoom: model.zoomState,
+                                      onReport: onZoomReport, menu: { model.photoMenu(includeZoom: true) })
+                    if !hdr.photoHold.isHolding {
+                        ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                } else if let before = hdr.before {
                     let after = hdr.after ?? before
                     if hdr.showingBefore || hdr.compareMode == .off {
                         // Live slider frames are drawn into the After photo (`PhotoFeed`), as in Develop.
