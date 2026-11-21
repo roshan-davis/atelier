@@ -321,8 +321,14 @@ final class PhotoViewSharpnessTests: XCTestCase {
         var totalSoft = 0
         var totalSwaps = 0
         var lines: [String] = []
+        let key = LibraryModel.photoZoomsKey
+        let savedZooms = UserDefaults.standard.object(forKey: key)
+        defer { UserDefaults.standard.set(savedZooms, forKey: key) }
+        var oldChanges: [String] = []
         for index in [1, 3, 0] {
             let old = sample(view).contents
+            let oldMagnification = view.magnification
+            let oldAlpha = view.documentView?.alphaValue ?? 1
             var soft: [String] = []
             var kinds: [String: Int] = [:]
             let clicked = CACurrentMediaTime()
@@ -337,6 +343,12 @@ final class PhotoViewSharpnessTests: XCTestCase {
                 let now = sample(view)
                 let ms = (CACurrentMediaTime() - clicked) * 1000
                 let isOld = now.contents != nil && now.contents === old
+                // Until the next photo goes on, nothing about the last one may change.
+                if isOld, newSharpAt == nil, oldChanges.count < 5,
+                   abs(view.magnification - oldMagnification) > 0.001 || abs((view.documentView?.alphaValue ?? 1) - oldAlpha) > 0.001 {
+                    oldChanges.append(String(format: "%@ at %.0f ms: the last photo redrawn (zoom %.0f%% → %.0f%%)",
+                                             harness.names[index], ms, oldMagnification * 100, view.magnification * 100))
+                }
                 let kind = isOld ? (now.soft ? "old photo, soft" : "old photo") : (now.soft ? "new photo, soft" : "new photo, sharp")
                 kinds[kind, default: 0] += 1
                 if !isOld, let contents = now.contents, newPictures.last != ObjectIdentifier(contents) {
@@ -363,6 +375,7 @@ final class PhotoViewSharpnessTests: XCTestCase {
         }
         XCTAssertEqual(totalSoft, 0, lines.joined(separator: "\n"))
         XCTAssertEqual(totalSwaps, 0, "the new photo swapped pictures on screen:\n" + lines.joined(separator: "\n"))
+        XCTAssertEqual(oldChanges.count, 0, oldChanges.joined(separator: "\n"))
     }
 
     // MARK: Before/After
@@ -515,11 +528,21 @@ final class PhotoViewSharpnessTests: XCTestCase {
         try await loupePhotoChanges(zoomed: true)
     }
 
-    private func loupePhotoChanges(zoomed: Bool) async throws {
+    /// Rosh's "return to its last zoom": the last photo at 100%, the next ones never zoomed (Fit).
+    /// The last photo must not be redrawn at the next one's zoom before the next one goes on.
+    func testLoupeReturningToEachZoomNeverRedrawsTheLastPhoto() async throws {
+        try await loupePhotoChanges(zoomed: true, onChange: "remember")
+    }
+
+    private func loupePhotoChanges(zoomed: Bool, onChange: String = "keep") async throws {
         let key = LibraryModel.ZoomOnPhotoChange.key
         let saved = UserDefaults.standard.object(forKey: key)
-        UserDefaults.standard.set("keep", forKey: key)
+        UserDefaults.standard.set(onChange, forKey: key)
         defer { UserDefaults.standard.set(saved, forKey: key) }
+        // Zooms remembered for photos of earlier test catalogs (the same ids) mustn't apply here.
+        let savedZooms = UserDefaults.standard.object(forKey: LibraryModel.photoZoomsKey)
+        UserDefaults.standard.removeObject(forKey: LibraryModel.photoZoomsKey)
+        defer { UserDefaults.standard.set(savedZooms, forKey: LibraryModel.photoZoomsKey) }
         let env = ProcessInfo.processInfo.environment
         guard let folder = env["ATELIER_SHARPNESS_FOLDER"] else { throw XCTSkip("ATELIER_SHARPNESS_FOLDER not set") }
         // Far apart in the list, so the photo clicked is not a neighbour whose preview is
@@ -602,9 +625,11 @@ final class PhotoViewSharpnessTests: XCTestCase {
         func identify(_ print: [UInt8]?) -> String {
             known.first { Self.samePicture($0.1, print) }?.0 ?? "unknown"
         }
-        for index in [4, 7, 2, 5] {
+        var redrawn: [String] = []
+        for index in (onChange == "remember" ? [4] : [4, 7, 2, 5]) {
             let view = try XCTUnwrap(photoView())
             let old = view.liveFrameLayer.superlayer?.contents as AnyObject?
+            let oldMagnification = view.magnification
             var pictures: [String] = []
             var lastID: ObjectIdentifier?
             var lastPrint: [UInt8]?
@@ -613,6 +638,11 @@ final class PhotoViewSharpnessTests: XCTestCase {
             model.focusedID = ids[index]
             while CACurrentMediaTime() - clicked < (zoomed ? 3 : 1.5) {
                 try await Task.sleep(for: .milliseconds(5))
+                if let now = photoView(), let contents = now.liveFrameLayer.superlayer?.contents as AnyObject?, contents === old,
+                   abs(now.magnification - oldMagnification) > 0.001, redrawn.isEmpty {
+                    redrawn.append(String(format: "%.0f ms: the last photo redrawn at %.0f%% (was %.0f%%)",
+                                          (CACurrentMediaTime() - clicked) * 1000, now.magnification * 100, oldMagnification * 100))
+                }
                 guard let contents = photoView()?.liveFrameLayer.superlayer?.contents as AnyObject?, contents !== old else { continue }
                 if lastID != ObjectIdentifier(contents) {
                     lastID = ObjectIdentifier(contents)
@@ -628,15 +658,17 @@ final class PhotoViewSharpnessTests: XCTestCase {
                 }
             }
             totalSwaps += max(0, pictures.count - 1)
-            let line = "Loupe\(zoomed ? " zoomed" : "") to \(names[index]): \(pictures.count) picture(s) — " + pictures.joined(separator: ", ")
+            let line = "Loupe\(zoomed ? " zoomed" : "")\(onChange == "remember" ? " (return to last zoom)" : "") to \(names[index]): "
+                + "\(pictures.count) picture(s) — " + pictures.joined(separator: ", ") + (redrawn.isEmpty ? "" : "; " + redrawn.joined())
             lines.append(line)
             print("SHARPNESS \(line)")
             XCTAssertFalse(pictures.isEmpty, "\(names[index]) never showed")
-            if zoomed, let firstPicture = pictures.first {
+            if zoomed, onChange == "keep", let firstPicture = pictures.first {
                 XCTAssertTrue(firstPicture.contains("6048 px") || firstPicture.contains("4032 px"), "zoomed in, the first picture was \(firstPicture)")
             }
         }
         XCTAssertEqual(totalSwaps, 0, lines.joined(separator: "\n"))
+        XCTAssertEqual(redrawn.count, 0, redrawn.joined(separator: "\n"))
     }
 
     // MARK: Helpers

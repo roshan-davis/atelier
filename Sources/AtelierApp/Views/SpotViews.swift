@@ -23,7 +23,7 @@ struct SpotEditorView: View {
                           },
                           feed: develop.photoFeed,
                           // Changing photo: the shared rule (`PhotoChangeHold`), as in Develop.
-                          holdsImage: develop.holdsPreviousPhoto)
+                          wantedPhotoID: develop.assetID, imagePhotoID: develop.shownPhotoID)
     }
 }
 

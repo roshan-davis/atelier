@@ -23,7 +23,6 @@ struct LoupeView: View {
     /// decoded, which then goes on in one step (as in Develop: `DevelopController.holdsPreviousPhoto`).
     /// Showing the 256 px grid thumbnail first made every change a visible swap (Rosh, Nov 21,
     /// 2026: "what is going on in Loupe, which has a flicker on every change?").
-    @StateObject private var hold = PhotoChangeHold(limit: 1.0)
     /// The preview file `image` came from and its date, so the same preview decoded again
     /// (another copy of the same pixels, after any photo's preview was stored) isn't swapped in.
     @State private var shownPreview: (url: URL, modified: Date?)?
@@ -45,7 +44,9 @@ struct LoupeView: View {
                                           if zoom.report != report { zoom.report = report }
                                       },
                                       menu: { model.photoMenu(includeZoom: true) },
-                                      holdsImage: hold.isHolding)
+                                      // `image` is of `loadedID`, the last photo until the
+                                      // selected one's picture is in: the view holds it until then.
+                                      wantedPhotoID: model.focusedID, imagePhotoID: loadedID)
                 } else if model.focusedID != nil {
                     ProgressView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -109,7 +110,7 @@ struct LoupeView: View {
     /// photo stepping down to its preview first.
     private var showsFullImage: Bool {
         guard let fullKey, fullKey.id == loadedID else { return false }
-        return fullKey.revision == previewRevision.value || loadedID != model.focusedID
+        return fullKey.revision == previewRevision.value
     }
 
     private var currentFullKey: FullKey? {
@@ -117,7 +118,18 @@ struct LoupeView: View {
     }
 
     private var wantedFullKey: FullKey? {
-        zoom.report.isZoomedPastFit ? currentFullKey : nil
+        zoomedPastFit ? currentFullKey : nil
+    }
+
+    /// The zoom the selected photo shows at is past Fit: its own zoom (with "return to its last
+    /// zoom") from the shared level, not the report of the photo still on screen.
+    private var zoomedPastFit: Bool {
+        switch zoom.level {
+        case .fit: return false
+        case .fill: return zoom.report.isZoomedPastFit
+        case .percent(let percent):
+            return zoom.report.fitPercent > 0 ? percent > zoom.report.fitPercent * 1.01 : zoom.report.isZoomedPastFit
+        }
     }
 
     private var pixelSize: CGSize? {
@@ -132,18 +144,10 @@ struct LoupeView: View {
             return
         }
         let previewURL = model.thumbnailURL(for: id, size: .preview)
-        let zoomed = zoom.report.isZoomedPastFit
-        if loadedID != id, zoomed, image != nil {
+        if loadedID != id, zoomedPastFit, image != nil {
             // Zoomed in: the last photo stays until this one's full-size render is in
             // (`loadFullResolution`), with its preview ready under it.
-            hold.begin()
             pending = nil
-            Task { @MainActor in
-                try? await Task.sleep(for: .seconds(hold.limit))
-                guard model.focusedID == id, loadedID != id else { return }
-                if let pending, pending.id == id { show(pending.image, for: id, from: pending.url) }
-                else if let thumbnail = ThumbnailLoader.shared.cached(id) { show(thumbnail, for: id) }
-            }
             let loaded: NSImage?
             if let previewURL { loaded = await PreviewImages.shared.load(id, at: previewURL) } else { loaded = ThumbnailLoader.shared.cached(id) }
             guard model.focusedID == id, loadedID != id, let loaded else { return }
@@ -162,13 +166,7 @@ struct LoupeView: View {
                 show(cached, for: id, from: previewURL)
                 return
             } else if previewURL != nil, image != nil {
-                hold.begin()
-                // Past the limit: the thumbnail rather than the last photo.
-                Task { @MainActor in
-                    try? await Task.sleep(for: .seconds(hold.limit))
-                    guard model.focusedID == id, loadedID != id, let thumbnail = ThumbnailLoader.shared.cached(id) else { return }
-                    show(thumbnail, for: id)
-                }
+                // The last photo stays (tagged as such) while the preview decodes, below.
             } else if let thumbnail = ThumbnailLoader.shared.cached(id) {
                 show(thumbnail, for: id)
             }
@@ -182,7 +180,6 @@ struct LoupeView: View {
         } else {
             // Nothing to show until its previews are built; don't leave the last photo up.
             if loadedID != id {
-                hold.end(because: nil)
                 image = nil
                 loadedID = nil
             }
@@ -191,9 +188,7 @@ struct LoupeView: View {
         guard model.focusedID == id else { return }
         guard let loaded else {
             // The preview couldn't be read: the thumbnail, if any, rather than the last photo.
-            if hold.isHolding {
-                if let thumbnail = ThumbnailLoader.shared.cached(id) { show(thumbnail, for: id) } else { hold.end(because: nil) }
-            }
+            if loadedID != id, let thumbnail = ThumbnailLoader.shared.cached(id) { show(thumbnail, for: id) }
             return
         }
         guard loaded !== image else { return }
@@ -202,13 +197,17 @@ struct LoupeView: View {
         show(loaded, for: id, from: previewURL)
     }
 
+    private func showPending(for id: Int64) {
+        guard loadedID != id, model.focusedID == id, let pending, pending.id == id else { return }
+        show(pending.image, for: id, from: pending.url)
+    }
+
     private func show(_ shown: NSImage, for id: Int64, from preview: URL? = nil) {
         image = shown
         imagePixelSize = pixelSize
         loadedID = id
         shownPreview = preview.map { ($0, Self.modified($0)) }
         if pending?.id == id { pending = nil }
-        hold.end(because: nil)
     }
 
     private static func modified(_ url: URL) -> Date? {
@@ -219,10 +218,15 @@ struct LoupeView: View {
     private func loadFullResolution() async {
         guard let key = wantedFullKey, key != fullKey else { return }
         guard let url = try? model.catalog.readableURL(for: key.id, cache: model.originals),
-              let settings = try? model.catalog.developSettings(for: key.id) else { return }
+              let settings = try? model.catalog.developSettings(for: key.id) else {
+            // No full size (the original offline): the waiting photo goes on with its preview.
+            showPending(for: key.id)
+            return
+        }
         // The one full-size render every photo view shares (Develop's, when it made it already).
         let rendered = await FullSizeRenders.shared.render(url, settings: settings)
-        guard !Task.isCancelled, currentFullKey == key, let rendered else { return }
+        guard !Task.isCancelled, currentFullKey == key else { return }
+        guard let rendered else { showPending(for: key.id); return }
         fullImage = rendered
         fullKey = key
         // Zoomed in on a newly selected photo: it goes on now, sharp (`pending`).

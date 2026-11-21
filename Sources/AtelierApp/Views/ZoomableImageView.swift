@@ -179,6 +179,13 @@ struct ZoomableImageView: NSViewRepresentable {
     /// Keeps the photo on screen as it is, at its zoom and spot, and takes the new image, zoom
     /// and spot together once this goes false (`DevelopController.holdsPreviousPhoto`).
     var holdsImage = false
+    /// The photo the view should show (the selection), and the photo `image` is a picture of.
+    /// While they differ the photo on screen stays exactly as it is (picture, zoom, spot,
+    /// dimming), from the moment the selection changes, until a picture of the selected photo
+    /// arrives: the one rule for changing photo in every photo view (Rosh, Nov 21, 2026). A
+    /// view that hasn't the next photo's picture ready keeps passing the last one, tagged as such.
+    var wantedPhotoID: Int64? = nil
+    var imagePhotoID: Int64? = nil
 
     func makeNSView(context: Context) -> ZoomScrollView {
         let view = ZoomScrollView()
@@ -208,8 +215,11 @@ struct ZoomableImageView: NSViewRepresentable {
         feed?.attach(view)
         view.visibleWidth = visibleWidth
         view.isUpdating = true
-        view.show(image, pixelSize: pixelSize, zoom: zoom, holding: holdsImage)
-        view.setDimmed(dimmed)
+        let waiting = wantedPhotoID != nil && imagePhotoID != wantedPhotoID
+        let holding = (holdsImage || waiting) && view.shownImage != nil
+        view.show(image, pixelSize: pixelSize, zoom: zoom, holding: holding)
+        // The dimming (a rejected photo) is the shown photo's, so it changes with the photo.
+        if !holding { view.setDimmed(dimmed) }
         view.overlayPassesClicks = overlayPassesClicks
         view.setOverlay(overlay?(view.photoFrame))
         view.isUpdating = false

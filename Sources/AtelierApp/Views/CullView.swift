@@ -267,7 +267,8 @@ struct CullView: View {
                                       overlay: markersOverlay,
                                       overlayPassesClicks: true,
                                       // Changing photo: the shared rule (`PhotoChangeHold`).
-                                      holdsImage: cull.photoHold.isHolding)
+                                      holdsImage: cull.photoHold.isHolding,
+                                      wantedPhotoID: cull.focused.map(Int64.init), imagePhotoID: cull.shownPhotoID)
                 } else if cull.focused != nil {
                     ProgressView()
                 }

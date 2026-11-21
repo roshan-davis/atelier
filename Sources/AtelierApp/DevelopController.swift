@@ -641,6 +641,9 @@ final class DevelopController: ObservableObject {
     /// render took 650 ms).
     let photoHold = PhotoChangeHold(limit: 1.0)
     var holdsPreviousPhoto: Bool { photoHold.isHolding }
+    /// The photo the photo views' pictures are of (`ZoomableImageView.imagePhotoID`): the open one,
+    /// except while the last photo is held for it.
+    var shownPhotoID: Int64? { holdsPreviousPhoto ? nil : assetID }
     /// What ends the hold: the full-size image (zoomed in), or the proxy's first render.
     private var holdNeedsFullSize = false
     /// The next photo's own render is in (not its stored preview).

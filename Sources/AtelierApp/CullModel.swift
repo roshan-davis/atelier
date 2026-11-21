@@ -136,6 +136,9 @@ final class CullModel: ObservableObject, Identifiable {
     @Published private(set) var largeImage: NSImage?
     /// The photo `largeImage` is of (it can still be the last photo's while the next loads).
     private var largeImageID: Int?
+    /// The photo the preview's picture (`fullImage ?? largeImage`) is of, for the photo view
+    /// (`ZoomableImageView.imagePhotoID`).
+    var shownPhotoID: Int64? { (fullImage != nil ? focused : largeImageID).map(Int64.init) }
     /// The focused photo at full size, read once it is zoomed past Fit; nil until then.
     @Published private(set) var fullImage: NSImage?
     /// The focused photo's size in pixels (as shot, turned upright), so 100% is one pixel per

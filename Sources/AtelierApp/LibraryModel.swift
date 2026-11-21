@@ -578,7 +578,7 @@ final class LibraryModel: ObservableObject {
         if zoom != next { zoom = next }
     }
 
-    nonisolated private static let photoZoomsKey = "zoom.byPhoto"
+    nonisolated static let photoZoomsKey = "zoom.byPhoto"
     /// Photos remembered at most; the ones zoomed longest ago are dropped first.
     nonisolated private static let photoZoomsLimit = 2000
 

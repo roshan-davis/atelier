@@ -40,7 +40,7 @@ struct DevelopImageView: View {
                                           onPick: photoPick,
                                           onPickDrag: photoDrag,
                                           feed: develop.photoFeed,
-                                          holdsImage: develop.holdsPreviousPhoto)
+                                          wantedPhotoID: develop.assetID, imagePhotoID: develop.shownPhotoID)
                         if let picker = develop.picker {
                             PickerHint(text: develop.pickerMessage ?? picker.hint, isWarning: develop.pickerMessage != nil)
                         }
@@ -50,13 +50,13 @@ struct DevelopImageView: View {
                             ComparePane(image: develop.displayBeforeImage, label: "Before", pixelSize: pixelSize,
                                         zoom: model.zoomState, onReport: onZoomReport,
                                         menu: { model.photoMenu(includeZoom: true) },
-                                        holdsImage: develop.holdsPreviousPhoto)
+                                        wantedPhotoID: develop.assetID, imagePhotoID: develop.shownPhotoID)
                             // Live slider frames go straight onto the After pane, as on the
                             // single photo view (`PhotoFeed`).
                             ComparePane(image: develop.displayImage ?? image, label: "After", pixelSize: pixelSize,
                                         zoom: model.zoomState, onReport: onZoomReport,
                                         menu: { model.photoMenu(includeZoom: true) }, feed: develop.photoFeed,
-                                        holdsImage: develop.holdsPreviousPhoto)
+                                        wantedPhotoID: develop.assetID, imagePhotoID: develop.shownPhotoID)
                         }
                         .padding(.horizontal, 8)
                     } else {
@@ -64,7 +64,7 @@ struct DevelopImageView: View {
                                           pixelSize: pixelSize, zoom: model.zoomState, onReport: onZoomReport,
                                           menu: { model.photoMenu(includeZoom: true) },
                                           position: $develop.sliderPosition, feed: develop.photoFeed,
-                                          holdsImage: develop.holdsPreviousPhoto)
+                                          wantedPhotoID: develop.assetID, imagePhotoID: develop.shownPhotoID)
                     }
                 }
                 // Only while what's on screen isn't the photo yet: nothing, or a thumbnail or the
@@ -302,14 +302,15 @@ struct ComparePane: View {
     /// Set on the After pane: live slider frames are drawn into it (`PhotoFeed`).
     var feed: PhotoFeed? = nil
     /// Changing photo: the pane keeps the last photo until the next one is ready in both panes
-    /// (`DevelopController.holdsPreviousPhoto`, `PhotoChangeHold`), never the empty background.
-    var holdsImage = false
+    /// (`ZoomableImageView.wantedPhotoID`), never the empty background.
+    var wantedPhotoID: Int64? = nil
+    var imagePhotoID: Int64? = nil
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            if image != nil || holdsImage {
+            if image != nil || (wantedPhotoID != nil && imagePhotoID != wantedPhotoID) {
                 ZoomableImageView(image: image, pixelSize: pixelSize, zoom: zoom, onReport: onReport, menu: menu,
-                                  feed: feed, holdsImage: holdsImage)
+                                  feed: feed, wantedPhotoID: wantedPhotoID, imagePhotoID: imagePhotoID)
             } else {
                 BeforeLoadingView()
             }
@@ -339,8 +340,9 @@ struct SliderCompareView: View {
     @Binding var position: Double
     /// Live slider frames are drawn into the After photo, under the Before one (`PhotoFeed`).
     var feed: PhotoFeed? = nil
-    /// Changing photo: both sides keep the last photo until the next one is ready (`PhotoChangeHold`).
-    var holdsImage = false
+    /// Changing photo: both sides keep the last photo until the next one is ready.
+    var wantedPhotoID: Int64? = nil
+    var imagePhotoID: Int64? = nil
 
     var body: some View {
         GeometryReader { geometry in
@@ -348,10 +350,10 @@ struct SliderCompareView: View {
             let dividerX = size.width * position
             ZStack(alignment: .topLeading) {
                 ZoomableImageView(image: after, pixelSize: pixelSize, zoom: zoom, onReport: onReport, menu: menu,
-                                  feed: feed, holdsImage: holdsImage)
-                if before != nil || holdsImage {
+                                  feed: feed, wantedPhotoID: wantedPhotoID, imagePhotoID: imagePhotoID)
+                if before != nil || (wantedPhotoID != nil && imagePhotoID != wantedPhotoID) {
                     ZoomableImageView(image: before, pixelSize: pixelSize, zoom: zoom, visibleWidth: CGFloat(position),
-                                      onReport: onReport, menu: menu, holdsImage: holdsImage)
+                                      onReport: onReport, menu: menu, wantedPhotoID: wantedPhotoID, imagePhotoID: imagePhotoID)
                 } else if dividerX > 0 {
                     BeforeLoadingView()
                         .frame(width: dividerX, height: size.height)
