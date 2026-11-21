@@ -603,10 +603,21 @@ final class DevelopController: ObservableObject {
                 scheduleFullRender()
                 scheduleFullBeforeRender()
             } else if !wantsFullResolution, oldValue {
+                endAwaitingSharp(because: "back to Fit")
                 scheduleFullRelease()
             }
         }
     }
+    /// Zoomed in, a newly opened photo is shown only once it is sharp: until its full-size image
+    /// is in, the photo view keeps the last photo instead of the stretched preview and proxy
+    /// (Rosh, Nov 21, 2026: "when I click on a new image, it is drawing low resolution then
+    /// drawing the high resolution which is very annoying to watch"). The Filmstrip, Navigator and
+    /// panels move to the new photo at once. Ends after `sharpOpenLimit` whatever happens.
+    @Published private(set) var awaitingSharp = false
+    private var sharpOpenTimeout: DispatchWorkItem?
+    /// The longest a zoomed open waits for its full-size image (a heavy edit took 325 ms).
+    static let sharpOpenLimit: TimeInterval = 1.0
+    private var sharpOpenBegan: CFAbsoluteTime = 0
     /// Lets go of the full-size images a moment after the view goes back to Fit (AT-077).
     private var fullRelease: DispatchWorkItem?
     @Published private(set) var fullImage: NSImage?
@@ -978,7 +989,17 @@ final class DevelopController: ObservableObject {
         navigatorSession = nil
         lensBlurPhoto = nil
         lensBlurSaveError = nil
+        endAwaitingSharp(because: nil)
         guard let assetID else { return }
+        if wantsFullResolution, compareMode == .off, !isMasking, !isRemoving, !isLensBlurring {
+            awaitingSharp = true
+            sharpOpenBegan = DevelopTimingLog.now()
+            let timeout = DispatchWorkItem { [weak self] in
+                MainActor.assumeIsolated { self?.endAwaitingSharp(because: "timed out") }
+            }
+            sharpOpenTimeout = timeout
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.sharpOpenLimit, execute: timeout)
+        }
 
         settings = (try? catalog.developSettings(for: assetID)) ?? .neutral
         if isMasking { selectedMaskID = editedMasks.last?.id }
@@ -1110,6 +1131,13 @@ final class DevelopController: ObservableObject {
         let start = {
             // Left (or opened again) before it started: don't decode it for this open.
             guard openGeneration.value == generation else { return }
+            // Zoomed in, the full-size photo decodes beside the proxy rather than after its first
+            // render, so the photo is sharp as soon as it can be.
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    if openGeneration.value == generation, self.wantsFullResolution { self.scheduleFullRender() }
+                }
+            }
             // Its own queue, beside any decode still running for a photo already left, so the
             // photo you stopped on never waits for one you passed.
             Self.openQueue.async {
@@ -2377,7 +2405,7 @@ final class DevelopController: ObservableObject {
         frameHUD.scheduled(renderCount)
         // Once the photo is up, live frames go straight from the GPU to the photo view (see
         // `PhotoFeed`); the first render is published the ordinary way, as it ends the stand-in.
-        let direct = photoFeed.isAttached && firstRenderDone && cropping && !liveFramesOff
+        let direct = photoFeed.isAttached && firstRenderDone && cropping && !liveFramesOff && !awaitingSharp
         // A frame still rendering for another photo, the Before view, the crop tool or an
         // Option view must not reach the screen once this one is asked for.
         let liveKey = LiveFrameKey(assetID: assetID, generation: openGeneration.value, cropping: cropping,
@@ -2768,6 +2796,17 @@ final class DevelopController: ObservableObject {
         wantsFullResolution && (compareMode == .off || (firstRenderDone && beforeRequest.value == nil))
     }
 
+    /// Lets the photo view show the open photo again (`awaitingSharp`); logs how long it waited.
+    private func endAwaitingSharp(because reason: String?) {
+        sharpOpenTimeout?.cancel()
+        sharpOpenTimeout = nil
+        guard awaitingSharp else { return }
+        awaitingSharp = false
+        if let reason {
+            DevelopTimingLog.shared.log(assetID, "zoomed open shown \(reason) +\(DevelopTimingLog.ms(since: sharpOpenBegan)) ms")
+        }
+    }
+
     /// Back at Fit: the full-size images and session go after a few seconds (zooming in again
     /// within that keeps them), so a photo looked at closely once doesn't hold hundreds of MB
     /// until another photo opens (AT-077).
@@ -2845,6 +2884,7 @@ final class DevelopController: ObservableObject {
                     if let cgImage, blurs == self.isLensBlurring {
                         self.fullImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
                         self.fullImageSettings = settings
+                        self.endAwaitingSharp(because: "sharp")
                     } else if cgImage != nil {
                         self.fullNeedsRender = true
                     }

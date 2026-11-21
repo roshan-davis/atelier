@@ -176,6 +176,9 @@ struct ZoomableImageView: NSViewRepresentable {
     /// The overlay only shows something (the Cull preview's note markers): clicks, drags and the
     /// cursor stay the photo view's own, so zoom and pan work as without it.
     var overlayPassesClicks = false
+    /// Keeps the photo on screen and ignores `image` (Develop, zoomed in, while the next photo's
+    /// full-size image renders: `DevelopController.awaitingSharp`).
+    var holdsImage = false
 
     func makeNSView(context: Context) -> ZoomScrollView {
         let view = ZoomScrollView()
@@ -206,7 +209,8 @@ struct ZoomableImageView: NSViewRepresentable {
         view.visibleWidth = visibleWidth
         // Only a new photo takes the position: ZoomState changes reach this view before the
         // window passes it the next photo, and the photo still shown must not use it.
-        if let center = zoom.pendingCenter, let image, image !== view.shownImage {
+        let holds = holdsImage && view.shownImage != nil
+        if !holds, let center = zoom.pendingCenter, let image, image !== view.shownImage {
             view.pendingCenter = center
             zoom.pendingCenter = nil
         }
@@ -215,7 +219,7 @@ struct ZoomableImageView: NSViewRepresentable {
             zoom.restoreCenter = nil
         }
         view.isUpdating = true
-        view.setImage(image, pixelSize: pixelSize)
+        if !holds { view.setImage(image, pixelSize: pixelSize) }
         view.setDimmed(dimmed)
         view.apply(zoom.level)
         view.applyPendingCenter()
