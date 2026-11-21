@@ -432,9 +432,13 @@ final class ZoomScrollView: NSScrollView {
     }
 
     func setImage(_ image: NSImage?, pixelSize: CGSize?) {
+        // SwiftUI passes the same image again with every change the controller publishes during
+        // a drag (the histogram, the slider value). Only a new image can replace a detail frame:
+        // the same full-size image again is the one under the frame, a step behind it.
+        let isNewImage = image !== shownImage
         shownImage = image
         canvas.setImage(image)
-        if let feed, feed.attachedView === self, let image, canvas.bounds.width > 0,
+        if isNewImage, let feed, feed.attachedView === self, let image, canvas.bounds.width > 0,
            let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) {
             // The full-size render at rest is as sharp as a zoomed detail frame and takes its place.
             feed.detail.imageShown(pixelsPerPoint: CGFloat(cgImage.width) / canvas.bounds.width)
