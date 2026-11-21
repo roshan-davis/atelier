@@ -153,7 +153,9 @@ final class PhotoViewSharpnessTests: XCTestCase {
                 return develop.croppedPixelSize(assetSize: CGSize(width: width, height: height))
             }
             view.isUpdating = true
-            view.show(develop.displayImage, pixelSize: pixelSize, zoom: zoom, holding: develop.holdsPreviousPhoto)
+            // As DevelopView's ZoomableImageView: the shared rule decides what goes on screen.
+            view.offer(ZoomScrollView.Picture(image: develop.displayImage, pixelSize: pixelSize, photoID: develop.shownPhotoID,
+                                              wantedPhotoID: develop.assetID, sharper: develop.sharperImage), zoom: zoom)
             view.isUpdating = false
         }
         let later = { DispatchQueue.main.async { MainActor.assumeIsolated { update() } } }
@@ -669,6 +671,176 @@ final class PhotoViewSharpnessTests: XCTestCase {
         }
         XCTAssertEqual(totalSwaps, 0, lines.joined(separator: "\n"))
         XCTAssertEqual(redrawn.count, 0, redrawn.joined(separator: "\n"))
+    }
+
+    // MARK: Sweep
+
+    /// Picture pixels per screen pixel over the photo view, for whatever is on top.
+    private func density(_ view: ZoomScrollView) -> (Double, AnyObject?) {
+        let frame = view.liveFrameLayer, canvas = frame.superlayer
+        let scale = view.magnification * (view.window?.backingScaleFactor ?? 2)
+        if !frame.isHidden, let width = Self.width(of: frame.contents), frame.bounds.width > 0 {
+            return (Double(CGFloat(width) / (frame.bounds.width * scale)), frame.contents as AnyObject?)
+        }
+        if let canvas, let width = Self.width(of: canvas.contents), canvas.bounds.width > 0 {
+            return (Double(CGFloat(width) / (canvas.bounds.width * scale)), canvas.contents as AnyObject?)
+        }
+        return (0, nil)
+    }
+
+    private struct SweepResult { var soft = 0; var oldRedrawn = 0; var pictures = 0; var note = "" }
+
+    /// Runs `action`, then samples the photo view every 5 ms for `seconds`: frames below 80% of the
+    /// screen pixels they cover (softer than the zoom needs), changes to the last photo before a
+    /// new one goes on (`photoChange`), and pictures shown.
+    private func sweep(_ view: () -> ZoomScrollView?, photoChange: Bool, seconds: Double = 1.5,
+                       action: () -> Void) async throws -> SweepResult {
+        var result = SweepResult()
+        guard let start = view() else { return result }
+        let (_, old) = density(start)
+        let oldMagnification = start.magnification
+        let oldAlpha = start.documentView?.alphaValue ?? 1
+        var last = old
+        var newSeen = false
+        let began = CACurrentMediaTime()
+        action()
+        while CACurrentMediaTime() - began < seconds {
+            try await Task.sleep(for: .milliseconds(5))
+            guard let now = view() else { continue }
+            let (value, contents) = density(now)
+            if contents !== last { result.pictures += 1; last = contents }
+            if photoChange, !newSeen {
+                if contents === old {
+                    if abs(now.magnification - oldMagnification) > 0.001 || abs((now.documentView?.alphaValue ?? 1) - oldAlpha) > 0.001 {
+                        result.oldRedrawn += 1
+                    }
+                    continue
+                }
+                newSeen = true
+            }
+            if value < 0.8 {
+                if result.soft == 0 { result.note = String(format: "first soft at %.0f ms: %.2f", (CACurrentMediaTime() - began) * 1000, value) }
+                result.soft += 1
+            }
+        }
+        return result
+    }
+
+    /// Every way the Develop photo changes zoom, on the real controller: none may show a frame
+    /// softer than the zoom needs (photo changes and slider drags have their own tests above).
+    func testDevelopSweep() async throws {
+        let zoomsKey = LibraryModel.photoZoomsKey
+        let savedZooms = UserDefaults.standard.object(forKey: zoomsKey)
+        UserDefaults.standard.removeObject(forKey: zoomsKey)
+        defer { UserDefaults.standard.set(savedZooms, forKey: zoomsKey) }
+        let harness = try await makeHarness(onChange: "remember")
+        let view = harness.view, model = harness.model
+        if model.zoomState.level != .fit { model.zoomState.level = .fit }
+        try await Task.sleep(for: .milliseconds(2500))
+        var rows: [(String, SweepResult)] = []
+        func run(_ name: String, photoChange: Bool = false, seconds: Double = 1.5, _ action: () -> Void) async throws {
+            let result = try await sweep({ view }, photoChange: photoChange, seconds: seconds, action: action)
+            rows.append((name, result))
+            try await Task.sleep(for: .milliseconds(1500))
+        }
+        try await run("zoom in (pinch to 100%)") {
+            view.magnification = 1.0
+            NotificationCenter.default.post(name: NSScrollView.didEndLiveMagnifyNotification, object: view)
+        }
+        try await run("zoom out (Fit)") { model.zoomState.level = .fit }
+        try await Task.sleep(for: .milliseconds(1500))
+        try await run("Navigator click (zooms in)") { model.zoomState.focus?(CGPoint(x: 0.3, y: 0.4)) }
+        try await run("zoom out again") { model.zoomState.level = .fit }
+        for (name, result) in rows {
+            print("SWEEP Develop | \(name) | soft \(result.soft) | old redrawn \(result.oldRedrawn) | pictures \(result.pictures) | \(result.note)")
+        }
+        XCTAssertEqual(rows.map(\.1.soft).reduce(0, +), 0)
+    }
+
+    /// Every way the Loupe photo changes, on the real LoupeView: none may show a frame softer
+    /// than the zoom needs or redraw the last photo before the next one.
+    func testLoupeSweep() async throws {
+        let key = LibraryModel.ZoomOnPhotoChange.key, zoomsKey = LibraryModel.photoZoomsKey
+        let savedMode = UserDefaults.standard.object(forKey: key), savedZooms = UserDefaults.standard.object(forKey: zoomsKey)
+        UserDefaults.standard.set("remember", forKey: key)
+        UserDefaults.standard.removeObject(forKey: zoomsKey)
+        defer { UserDefaults.standard.set(savedMode, forKey: key); UserDefaults.standard.set(savedZooms, forKey: zoomsKey) }
+        let env = ProcessInfo.processInfo.environment
+        guard let folder = env["ATELIER_SHARPNESS_FOLDER"] else { throw XCTSkip("ATELIER_SHARPNESS_FOLDER not set") }
+        let names = ["_RZF0502.NEF", "_RZF0503.NEF", "_RZF0504.NEF", "_RZF0505.NEF", "_RZF0506.NEF", "_RZF0507.NEF", "_RZF0508.NEF", "_RZF0509.NEF"]
+        let work = FileManager.default.temporaryDirectory.appendingPathComponent("LoupeSweep-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: work) }
+        let catalog = try Catalog(packageURL: work.appendingPathComponent("Sweep.atelier"))
+        let previews = PreviewCache(rootURL: try XCTUnwrap(catalog.previewsURL))
+        previews.discardIfOutdated()
+        var ids: [Int64] = []
+        for name in names {
+            let file = URL(fileURLWithPath: folder).appendingPathComponent(name)
+            let imported = await Importer(catalog: catalog, previews: nil).run(sources: [file], options: ImportOptions(buildPreviews: false))
+            let id = try XCTUnwrap(imported.importedAssetIDs.first)
+            try previews.generate(for: id, from: file)
+            ids.append(id)
+        }
+        let model = LibraryModel(catalog: catalog)
+        try await wait("the rows", seconds: 20) { model.rows.count >= ids.count }
+        let window = NSWindow(contentRect: NSRect(x: -30000, y: -30000, width: 1512, height: 900),
+                              styleMask: [.borderless], backing: .buffered, defer: true)
+        window.isReleasedWhenClosed = false
+        window.alphaValue = 0
+        window.ignoresMouseEvents = true
+        window.contentView = NSHostingView(rootView: LoupeView(zoom: model.zoomState).environmentObject(model))
+        addTeardownBlock { @MainActor in window.close() }
+        model.focusedID = ids[0]
+        model.mode = .loupe
+        func photoView() -> ZoomScrollView? {
+            var stack: [NSView] = window.contentView.map { [$0] } ?? []
+            while let view = stack.popLast() {
+                if let zoom = view as? ZoomScrollView { return zoom }
+                stack.append(contentsOf: view.subviews)
+            }
+            return nil
+        }
+        try await wait("the Loupe photo", seconds: 20) { photoView().map { Self.width(of: $0.liveFrameLayer.superlayer?.contents) != nil } ?? false }
+        var lastRevision = PreviewRevision.shared.value, quietSince = Date()
+        try await wait("previews to settle", seconds: 60) {
+            if PreviewRevision.shared.value != lastRevision { lastRevision = PreviewRevision.shared.value; quietSince = Date() }
+            return Date().timeIntervalSince(quietSince) > 2
+        }
+        func pinch(to magnification: CGFloat) {
+            guard let view = photoView() else { return }
+            view.magnification = magnification
+            NotificationCenter.default.post(name: NSScrollView.didEndLiveMagnifyNotification, object: view)
+        }
+        var rows: [(String, SweepResult)] = []
+        func run(_ name: String, photoChange: Bool, seconds: Double = 1.5, _ action: () -> Void) async throws {
+            let result = try await sweep(photoView, photoChange: photoChange, seconds: seconds, action: action)
+            rows.append((name, result))
+            try await Task.sleep(for: .milliseconds(1200))
+        }
+        try await run("photo change at Fit", photoChange: true) { model.focusedID = ids[4] }
+        try await run("zoom in (pinch to 100%)", photoChange: false) { pinch(to: 1.0) }
+        try await run("zoom out (Fit)", photoChange: false) { model.zoomState.level = .fit }
+        try await run("Navigator click (zooms in)", photoChange: false) { model.zoomState.focus?(CGPoint(x: 0.3, y: 0.4)) }
+        try await run("photo change zoomed (to a photo at Fit: return to last zoom)", photoChange: true) { model.focusedID = ids[7] }
+        try await run("photo change back to the zoomed photo", photoChange: true, seconds: 2) { model.focusedID = ids[4] }
+        try await run("another photo's preview stored", photoChange: false) {
+            if let image = ThumbnailLoader.decode(previews.url(for: ids[1], size: .preview))?.cgImage(forProposedRect: nil, context: nil, hints: nil) {
+                try? previews.store(image, for: ids[1], size: .preview)
+            }
+            PreviewRevision.shared.value += 1
+        }
+        try await run("this photo's preview rebuilt", photoChange: false, seconds: 2) {
+            if let image = ThumbnailLoader.decode(previews.url(for: ids[4], size: .preview))?.cgImage(forProposedRect: nil, context: nil, hints: nil) {
+                try? previews.store(image, for: ids[4], size: .preview)
+            }
+            PreviewRevision.shared.value += 1
+        }
+        for (name, result) in rows {
+            print("SWEEP Loupe | \(name) | soft \(result.soft) | old redrawn \(result.oldRedrawn) | pictures \(result.pictures) | \(result.note)")
+        }
+        XCTAssertEqual(rows.map(\.1.soft).reduce(0, +), 0)
+        XCTAssertEqual(rows.map(\.1.oldRedrawn).reduce(0, +), 0)
     }
 
     // MARK: Helpers

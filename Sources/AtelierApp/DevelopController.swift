@@ -644,6 +644,37 @@ final class DevelopController: ObservableObject {
     /// The photo the photo views' pictures are of (`ZoomableImageView.imagePhotoID`): the open one,
     /// except while the last photo is held for it.
     var shownPhotoID: Int64? { holdsPreviousPhoto ? nil : assetID }
+
+    /// The photo's full-size picture with the current settings, made in the background once the
+    /// photo has rested at Fit (`FullSizeRenders`), handed to the photo view as its sharper picture
+    /// (`ZoomableImageView.sharperImage`): zooming in, pinching or a Navigator click is then sharp
+    /// from the first frame instead of the proxy blown up until the full-size render is in.
+    @Published private(set) var restingFullImage: NSImage?
+    private var restingFullSettings: DevelopSettings?
+    private var restingFullTask: Task<Void, Never>?
+    /// The sharper picture for the photo view: only for exactly what it shows.
+    var sharperImage: NSImage? {
+        guard !showingBefore, sliderPreview == nil, !isCropping, !isGuiding, !(isMasking && showMaskOverlay),
+              let restingFullImage, restingFullSettings == settings else { return nil }
+        return restingFullImage
+    }
+
+    /// After an edit or an open rests: renders the full-size picture in the background.
+    private func prepareRestingFullImage() {
+        restingFullTask?.cancel()
+        guard let url = sourceURL, !isLensBlurring, assetID != nil else { return }
+        if restingFullSettings == settings, restingFullImage != nil { return }
+        let settings = self.settings
+        let assetID = self.assetID
+        restingFullTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(800))
+            guard !Task.isCancelled, let self, self.assetID == assetID, self.settings == settings else { return }
+            let image = await FullSizeRenders.shared.render(url, settings: settings)
+            guard !Task.isCancelled, self.assetID == assetID, self.settings == settings, let image else { return }
+            self.restingFullImage = image
+            self.restingFullSettings = settings
+        }
+    }
     /// What ends the hold: the full-size image (zoomed in), or the proxy's first render.
     private var holdNeedsFullSize = false
     /// The next photo's own render is in (not its stored preview).
@@ -1004,6 +1035,9 @@ final class DevelopController: ObservableObject {
         let heldFullSize = fullSession != nil
         fullSession = nil
         histogramSession = nil
+        restingFullTask?.cancel()
+        restingFullImage = nil
+        restingFullSettings = nil
         fullRelease?.cancel()
         fullRelease = nil
         // The last photo's full-size stages in Core Image's cache (step 1, Lens Blur, depth) are
@@ -2721,6 +2755,7 @@ final class DevelopController: ObservableObject {
         }
         scheduleFullRender()
         if compareMode != .off { scheduleFullBeforeRender() }
+        prepareRestingFullImage()
     }
 
     /// Once the edit rests, renders the last live frame's settings the ordinary way and publishes
@@ -2963,7 +2998,6 @@ final class DevelopController: ObservableObject {
         let held = fullImage != nil || fullBeforeImage != nil || fullSession != nil
         regionSurfaces.drain()
         histogramSession = nil
-        FullSizeRenders.shared.clear()
         fullImage = nil
         fullImageSettings = nil
         fullImageIsStale = false

@@ -40,7 +40,8 @@ struct DevelopImageView: View {
                                           onPick: photoPick,
                                           onPickDrag: photoDrag,
                                           feed: develop.photoFeed,
-                                          wantedPhotoID: develop.assetID, imagePhotoID: develop.shownPhotoID)
+                                          wantedPhotoID: develop.assetID, imagePhotoID: develop.shownPhotoID,
+                                          sharperImage: develop.sharperImage)
                         if let picker = develop.picker {
                             PickerHint(text: develop.pickerMessage ?? picker.hint, isWarning: develop.pickerMessage != nil)
                         }
