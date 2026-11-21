@@ -757,6 +757,64 @@ final class PhotoViewSharpnessTests: XCTestCase {
         XCTAssertEqual(rows.map(\.1.soft).reduce(0, +), 0)
     }
 
+    /// Masking and Remove show the same photo view: photo change, zoom in and out, and a zoomed
+    /// slider drag must not show a frame softer than the zoom needs nor redraw the last photo.
+    func testMaskingAndRemoveSweep() async throws {
+        let zoomsKey = LibraryModel.photoZoomsKey
+        let savedZooms = UserDefaults.standard.object(forKey: zoomsKey)
+        UserDefaults.standard.removeObject(forKey: zoomsKey)
+        defer { UserDefaults.standard.set(savedZooms, forKey: zoomsKey) }
+        let harness = try await makeHarness(onChange: "keep")
+        let view = harness.view, model = harness.model, develop = harness.develop
+        var rows: [(String, SweepResult)] = []
+        for tool in ["Masking", "Remove"] {
+            if tool == "Masking" { develop.isMasking = true } else { develop.isRemoving = true }
+            if model.zoomState.level != .fit { model.zoomState.level = .fit }
+            try await Task.sleep(for: .milliseconds(2500))
+            func run(_ name: String, photoChange: Bool = false, seconds: Double = 1.5, _ action: () -> Void) async throws {
+                let result = try await sweep({ view }, photoChange: photoChange, seconds: seconds, action: action)
+                rows.append(("\(tool): \(name)", result))
+                try await Task.sleep(for: .milliseconds(1500))
+            }
+            try await run("photo change at Fit", photoChange: true) { model.focusedID = harness.ids[tool == "Masking" ? 1 : 2] }
+            try await Task.sleep(for: .milliseconds(1000))
+            try await run("zoom in (pinch to 100%)") {
+                view.magnification = 1.0
+                NotificationCenter.default.post(name: NSScrollView.didEndLiveMagnifyNotification, object: view)
+            }
+            try await Task.sleep(for: .milliseconds(1000))
+            try await run("photo change zoomed", photoChange: true, seconds: 2) { model.focusedID = harness.ids[tool == "Masking" ? 3 : 0] }
+            var tick = 0
+            let start = develop.sliderValue(.contrast)
+            let drag = try await sweep({ view }, photoChange: false, seconds: 2) {
+                // Kicked off here; the ticks below run while the sweep samples.
+            }
+            _ = drag
+            let clock = ContinuousClock()
+            var next = clock.now
+            var dragSoft = 0
+            for _ in 0..<90 {
+                develop.setSlider(.contrast, to: start + Double(tick) * 0.3)
+                tick += 1
+                next += .milliseconds(16)
+                try await Task.sleep(until: next, clock: clock)
+                if density(view).0 < 0.8 { dragSoft += 1 }
+            }
+            var dragResult = SweepResult()
+            dragResult.soft = dragSoft
+            rows.append(("\(tool): zoomed Contrast drag", dragResult))
+            try await Task.sleep(for: .milliseconds(1500))
+            try await run("zoom out (Fit)") { model.zoomState.level = .fit }
+            if tool == "Masking" { develop.isMasking = false } else { develop.isRemoving = false }
+            try await Task.sleep(for: .milliseconds(800))
+        }
+        for (name, result) in rows {
+            print("SWEEP \(name) | soft \(result.soft) | old redrawn \(result.oldRedrawn) | pictures \(result.pictures) | \(result.note)")
+        }
+        XCTAssertEqual(rows.map(\.1.soft).reduce(0, +), 0)
+        XCTAssertEqual(rows.map(\.1.oldRedrawn).reduce(0, +), 0)
+    }
+
     /// Every way the Loupe photo changes, on the real LoupeView: none may show a frame softer
     /// than the zoom needs or redraw the last photo before the next one.
     func testLoupeSweep() async throws {

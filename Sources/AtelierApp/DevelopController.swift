@@ -659,10 +659,17 @@ final class DevelopController: ObservableObject {
         return restingFullImage
     }
 
+    /// Develop or Loupe was left: the resting full-size picture goes (`FullSizeRenders`).
+    func releaseRestingFullImage() {
+        restingFullTask?.cancel()
+        restingFullImage = nil
+        restingFullSettings = nil
+    }
+
     /// After an edit or an open rests: renders the full-size picture in the background.
     private func prepareRestingFullImage() {
         restingFullTask?.cancel()
-        guard let url = sourceURL, !isLensBlurring, assetID != nil else { return }
+        guard FullSizeRenders.shared.preparesAhead, let url = sourceURL, !isLensBlurring, assetID != nil else { return }
         if restingFullSettings == settings, restingFullImage != nil { return }
         let settings = self.settings
         let assetID = self.assetID
@@ -1086,7 +1093,9 @@ final class DevelopController: ObservableObject {
         let cachedPreview = previews.url(for: assetID, size: .preview)
         let hasPreview = previews.has(.preview, for: assetID)
         let url = try? catalog.readableURL(for: assetID, cache: originals)
-        let zoomed = wantsFullResolution && !isMasking && !isRemoving && !isLensBlurring
+        // Masking and Remove show the full-size image too; only the mask overlay (red, on the
+        // proxy) and Lens Blur don't.
+        let zoomed = wantsFullResolution && !(isMasking && showMaskOverlay) && !isLensBlurring
         let decodedPreview = hasPreview ? PreviewImages.shared.cached(assetID, at: cachedPreview) : nil
         // The last photo stays up until this one's own render (or, zoomed in, its full-size image)
         // is in: the stored preview is a JPEG of an earlier render, and showing it first made

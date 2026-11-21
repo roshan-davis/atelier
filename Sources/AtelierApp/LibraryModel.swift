@@ -150,6 +150,11 @@ final class LibraryModel: ObservableObject {
                 develop.releaseFullResolution(because: "left Develop")
                 RenderMemory.shared.releaseAllSoon(because: "left Develop")
             }
+            // The shared full-size picture is for Loupe and Develop only (`FullSizeRenders`).
+            if mode != .develop, mode != .loupe, oldValue == .develop || oldValue == .loupe {
+                FullSizeRenders.shared.clear()
+                develop.releaseRestingFullImage()
+            }
             if mode == .hdr {
                 if oldValue != .hdr { hdrReturnMode = oldValue }
                 hdr.open(focusedID)

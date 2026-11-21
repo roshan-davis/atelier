@@ -22,14 +22,24 @@ final class FullSizeRenders {
         }
     }
 
+    /// Whether photos get a full-size picture ahead of being zoomed (Develop and Loupe make one
+    /// once a photo rests): only with a memory budget of at least 1 GB (a 16 GB Mac or more). Its
+    /// decode costs a transient ~750 MB beside the photo being edited (30-photo walk in Develop),
+    /// too much on an 8 GB Mac; there zooming in sharpens once the full-size render is in.
+    var preparesAhead: Bool { RenderMemory.shared.budget >= 1 << 30 }
+
     /// The full-size picture of `url` with `settings`, if it is the one kept.
     func cached(_ url: URL, settings: DevelopSettings) -> NSImage? {
         guard let last, last.url == url, last.settings == settings else { return nil }
         return last.image
     }
 
-    /// Keeps `image`, rendered elsewhere (Develop's full-size session), as the full-size picture.
+    /// Keeps `image`, rendered elsewhere (Develop's full-size session), as the full-size picture,
+    /// unless it is more than half the memory budget (`RenderMemory.budget`: 768 MB on an 8 GB
+    /// Mac), so one kept picture never crowds out the photo being edited.
     func store(_ image: NSImage, for url: URL, settings: DevelopSettings) {
+        let bytes = Int(image.size.width * image.size.height) * 4
+        guard bytes <= RenderMemory.shared.budget / 2 else { last = nil; return }
         last = (url, settings, image)
     }
 
@@ -38,8 +48,12 @@ final class FullSizeRenders {
     func render(_ url: URL, settings: DevelopSettings) async -> NSImage? {
         if let image = cached(url, settings: settings) { return image }
         if let running, running.url == url, running.settings == settings { return await running.task.value }
-        let task = Task.detached(priority: .userInitiated) { () -> NSImage? in
-            guard let cgImage = DevelopRenderer.shared.session(for: url, maxPixelSize: nil)?.renderForDisplay(settings)?.image
+        let task = Task.detached(priority: .utility) { () -> NSImage? in
+            // Its own renderer, let go with this render: the full-size decode and Core Image's
+            // working memory for it don't stay in the shared renderer's cache (a 30-photo walk in
+            // Develop held about 750 MB more with the shared one).
+            let renderer = DevelopRenderer()
+            guard let cgImage = renderer.session(for: url, maxPixelSize: nil)?.renderForDisplay(settings)?.image
             else { return nil }
             return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
         }

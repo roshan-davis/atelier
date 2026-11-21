@@ -184,6 +184,7 @@ struct LoupeView: View {
     private func loadFullResolution() async {
         guard let key = wantedFullKey, key != fullKey else { return }
         if zoom.level == .fit {
+            guard FullSizeRenders.shared.preparesAhead else { return }
             try? await Task.sleep(for: Self.fullRest)
             guard !Task.isCancelled, wantedFullKey == key else { return }
         }
