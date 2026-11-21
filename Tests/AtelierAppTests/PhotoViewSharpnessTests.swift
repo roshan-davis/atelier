@@ -1,6 +1,7 @@
 import AppKit
 import AtelierCore
 import Combine
+import SwiftUI
 import ImageIO
 import IOSurface
 import XCTest
@@ -314,6 +315,90 @@ final class PhotoViewSharpnessTests: XCTestCase {
         }
         XCTAssertEqual(totalSoft, 0, lines.joined(separator: "\n"))
         XCTAssertEqual(totalSwaps, 0, "the new photo swapped pictures on screen:\n" + lines.joined(separator: "\n"))
+    }
+
+    // MARK: Loupe
+
+    /// Loupe, at Fit: each photo change puts one picture of the new photo on screen (its 2560 px
+    /// preview), never the grid thumbnail and then the preview. Hosts the real `LoupeView`.
+    func testLoupePhotoChangeShowsOnePicture() async throws {
+        let env = ProcessInfo.processInfo.environment
+        guard let folder = env["ATELIER_SHARPNESS_FOLDER"] else { throw XCTSkip("ATELIER_SHARPNESS_FOLDER not set") }
+        // Far apart in the list, so the photo clicked is not a neighbour whose preview is
+        // decoded ahead (`prefetchNeighbourPreviews`).
+        let names = (env["ATELIER_LOUPE_FILES"]
+            ?? "_RZF0502.NEF,_RZF0503.NEF,_RZF0504.NEF,_RZF0505.NEF,_RZF0506.NEF,_RZF0507.NEF,_RZF0508.NEF,_RZF0509.NEF")
+            .split(separator: ",").map(String.init)
+        let work = FileManager.default.temporaryDirectory.appendingPathComponent("LoupeSharpness-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: work) }
+        let catalog = try Catalog(packageURL: work.appendingPathComponent("Loupe.atelier"))
+        let previews = PreviewCache(rootURL: try XCTUnwrap(catalog.previewsURL))
+        // As the app does on launch, so the model doesn't discard the previews made below.
+        previews.discardIfOutdated()
+        var ids: [Int64] = []
+        for name in names {
+            let file = URL(fileURLWithPath: folder).appendingPathComponent(name)
+            let imported = await Importer(catalog: catalog, previews: nil).run(sources: [file], options: ImportOptions(buildPreviews: false))
+            let id = try XCTUnwrap(imported.importedAssetIDs.first)
+            try previews.generate(for: id, from: file)
+            ids.append(id)
+        }
+        let model = LibraryModel(catalog: catalog)
+        try await wait("the rows", seconds: 20) { model.rows.count >= ids.count }
+        // Every photo's 2560 px preview on disk, as after an import has finished.
+        try await wait("the previews", seconds: 120) {
+            ids.allSatisfy { previews.has(.preview, for: $0) && previews.has(.thumbnail, for: $0) }
+        }
+        let window = NSWindow(contentRect: NSRect(x: -30000, y: -30000, width: 1512, height: 900),
+                              styleMask: [.borderless], backing: .buffered, defer: true)
+        window.isReleasedWhenClosed = false
+        window.alphaValue = 0
+        window.ignoresMouseEvents = true
+        window.contentView = NSHostingView(rootView: LoupeView(zoom: model.zoomState).environmentObject(model))
+        addTeardownBlock { @MainActor in window.close() }
+        model.focusedID = ids[0]
+        model.mode = .loupe
+        func photoView() -> ZoomScrollView? {
+            var stack: [NSView] = window.contentView.map { [$0] } ?? []
+            while let view = stack.popLast() {
+                if let zoom = view as? ZoomScrollView { return zoom }
+                stack.append(contentsOf: view.subviews)
+            }
+            return nil
+        }
+        try await wait("the Loupe photo", seconds: 20) { photoView().map { Self.width(of: $0.liveFrameLayer.superlayer?.contents) != nil } ?? false }
+        try await Task.sleep(for: .milliseconds(800))
+        var totalSwaps = 0
+        var lines: [String] = []
+        // The Filmstrip has every photo's grid thumbnail in memory, as in the app.
+        for (index, id) in ids.enumerated() {
+            var loaded = false
+            ThumbnailLoader.shared.load(id, from: previews.url(for: id, size: .thumbnail)) { _ in loaded = true }
+            try await wait("thumbnail \(index)", seconds: 10) { loaded }
+        }
+        for index in [4, 7, 2, 5] {
+            let view = try XCTUnwrap(photoView())
+            let old = view.liveFrameLayer.superlayer?.contents as AnyObject?
+            var pictures: [String] = []
+            var lastID: ObjectIdentifier?
+            let clicked = CACurrentMediaTime()
+            model.focusedID = ids[index]
+            while CACurrentMediaTime() - clicked < 1.5 {
+                try await Task.sleep(for: .milliseconds(5))
+                guard let contents = photoView()?.liveFrameLayer.superlayer?.contents as AnyObject?, contents !== old else { continue }
+                if lastID != ObjectIdentifier(contents) {
+                    lastID = ObjectIdentifier(contents)
+                    pictures.append(String(format: "%.0f ms: %d px", (CACurrentMediaTime() - clicked) * 1000, Self.width(of: contents) ?? 0))
+                }
+            }
+            totalSwaps += max(0, pictures.count - 1)
+            let line = "Loupe to \(names[index]): \(pictures.count) picture(s) — " + pictures.joined(separator: ", ")
+            lines.append(line)
+            print("SHARPNESS \(line)")
+            XCTAssertFalse(pictures.isEmpty, "\(names[index]) never showed")
+        }
+        XCTAssertEqual(totalSwaps, 0, lines.joined(separator: "\n"))
     }
 
     // MARK: Helpers

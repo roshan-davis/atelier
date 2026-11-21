@@ -19,6 +19,13 @@ struct LoupeView: View {
     @State private var fullKey: FullKey?
     /// The focused photo's camera settings, for the info overlay.
     @State private var info: ShootingInfo?
+    /// The last photo stays as it is, at its zoom, until the next one's 2560 px preview is
+    /// decoded, which then goes on in one step (as in Develop: `DevelopController.holdsPreviousPhoto`).
+    /// Showing the 256 px grid thumbnail first made every change a visible swap (Rosh, Nov 21,
+    /// 2026: "what is going on in Loupe, which has a flicker on every change?").
+    @State private var holding = false
+    /// The longest the last photo stays up for the next one's preview.
+    private static let holdLimit: Duration = .seconds(1)
 
     var body: some View {
         VStack(spacing: 0) {
@@ -32,7 +39,8 @@ struct LoupeView: View {
                                       onReport: { report in
                                           if zoom.report != report { zoom.report = report }
                                       },
-                                      menu: { model.photoMenu(includeZoom: true) })
+                                      menu: { model.photoMenu(includeZoom: true) },
+                                      holdsImage: holding)
                 } else if model.focusedID != nil {
                     ProgressView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -112,10 +120,21 @@ struct LoupeView: View {
         }
         let previewURL = model.thumbnailURL(for: id, size: .preview)
         if loadedID != id {
-            // Never clear to the background: keep the last photo until this one is ready, and
-            // show its decoded preview or its grid thumbnail at once when they're in memory.
+            // Never clear to the background: keep the last photo until this one is ready. Its
+            // decoded preview goes up at once when it is in memory. Otherwise the last photo stays
+            // while the preview decodes (tens of ms), rather than the grid thumbnail and then the
+            // preview; only with no preview yet, or after `holdLimit`, does the thumbnail show.
             if let previewURL, let cached = PreviewImages.shared.cached(id, at: previewURL) {
+                // Decoded already: shown once, not decoded and swapped in again below.
                 show(cached, for: id)
+                return
+            } else if previewURL != nil, image != nil {
+                holding = true
+                Task { @MainActor in
+                    try? await Task.sleep(for: Self.holdLimit)
+                    guard holding, model.focusedID == id, loadedID != id else { return }
+                    if let thumbnail = ThumbnailLoader.shared.cached(id) { show(thumbnail, for: id) } else { holding = false }
+                }
             } else if let thumbnail = ThumbnailLoader.shared.cached(id) {
                 show(thumbnail, for: id)
             }
@@ -129,12 +148,21 @@ struct LoupeView: View {
         } else {
             // Nothing to show until its previews are built; don't leave the last photo up.
             if loadedID != id {
+                holding = false
                 image = nil
                 loadedID = nil
             }
             return
         }
-        guard model.focusedID == id, let loaded, loaded !== image else { return }
+        guard model.focusedID == id else { return }
+        guard let loaded else {
+            // The preview couldn't be read: the thumbnail, if any, rather than the last photo.
+            if holding {
+                if let thumbnail = ThumbnailLoader.shared.cached(id) { show(thumbnail, for: id) } else { holding = false }
+            }
+            return
+        }
+        guard loaded !== image else { return }
         show(loaded, for: id)
     }
 
@@ -142,6 +170,7 @@ struct LoupeView: View {
         image = shown
         imagePixelSize = pixelSize
         loadedID = id
+        holding = false
     }
 
     /// Renders the original with its develop settings at full size.
