@@ -39,7 +39,8 @@ struct DevelopImageView: View {
                                           menu: { model.photoMenu(includeZoom: true) },
                                           onPick: photoPick,
                                           onPickDrag: photoDrag,
-                                          feed: develop.photoFeed)
+                                          feed: develop.photoFeed,
+                                          holdsImage: develop.holdsPreviousPhoto)
                         if let picker = develop.picker {
                             PickerHint(text: develop.pickerMessage ?? picker.hint, isWarning: develop.pickerMessage != nil)
                         }

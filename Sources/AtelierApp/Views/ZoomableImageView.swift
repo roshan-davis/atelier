@@ -176,6 +176,9 @@ struct ZoomableImageView: NSViewRepresentable {
     /// The overlay only shows something (the Cull preview's note markers): clicks, drags and the
     /// cursor stay the photo view's own, so zoom and pan work as without it.
     var overlayPassesClicks = false
+    /// Keeps the photo on screen as it is, at its zoom and spot, and takes the new image, zoom
+    /// and spot together once this goes false (`DevelopController.holdsPreviousPhoto`).
+    var holdsImage = false
 
     func makeNSView(context: Context) -> ZoomScrollView {
         let view = ZoomScrollView()
@@ -204,21 +207,9 @@ struct ZoomableImageView: NSViewRepresentable {
         }
         feed?.attach(view)
         view.visibleWidth = visibleWidth
-        // Only a new photo takes the position: ZoomState changes reach this view before the
-        // window passes it the next photo, and the photo still shown must not use it.
-        if let center = zoom.pendingCenter, let image, image !== view.shownImage {
-            view.pendingCenter = center
-            zoom.pendingCenter = nil
-        }
-        if let center = zoom.restoreCenter {
-            view.pendingCenter = center
-            zoom.restoreCenter = nil
-        }
         view.isUpdating = true
-        view.setImage(image, pixelSize: pixelSize)
+        view.show(image, pixelSize: pixelSize, zoom: zoom, holding: holdsImage)
         view.setDimmed(dimmed)
-        view.apply(zoom.level)
-        view.applyPendingCenter()
         view.overlayPassesClicks = overlayPassesClicks
         view.setOverlay(overlay?(view.photoFrame))
         view.isUpdating = false
@@ -403,6 +394,50 @@ final class ZoomScrollView: NSScrollView {
     var liveFrameLayer: CALayer { canvas.frameLayer }
     /// The size of the image on screen, whose shape live frames must have.
     var liveImageSize: CGSize? { canvas.currentImageSize }
+    /// Where a frame of the whole photo goes: the canvas's bounds.
+    var liveFrameBounds: CGRect { canvas.bounds }
+
+    /// The part of the photo in view, in canvas points; nil before the photo has a size.
+    var shownCanvasRect: CGRect? {
+        guard documentSize.width > 0, documentSize.height > 0 else { return nil }
+        let shown = contentView.bounds.intersection(CGRect(origin: .zero, size: documentSize))
+        return shown.isNull || shown.width <= 0 || shown.height <= 0 ? nil : shown
+    }
+
+    /// Where a frame of only the visible part goes, and its size in screen pixels: nil while the
+    /// whole photo is in view (a frame of the whole photo is then as cheap), before the view is in
+    /// a window, and in the slider compare view.
+    func regionTarget() -> ZoomedDetailTarget? {
+        guard window != nil, visibleWidth == nil, let shown = shownCanvasRect else { return nil }
+        let visible = CGRect(x: shown.minX / documentSize.width, y: shown.minY / documentSize.height,
+                             width: shown.width / documentSize.width, height: shown.height / documentSize.height)
+        guard visible.width < 0.995 || visible.height < 0.995 else { return nil }
+        let backing = window?.backingScaleFactor ?? 2
+        let pixels = CGSize(width: (shown.width * magnification * backing).rounded(),
+                            height: (shown.height * magnification * backing).rounded())
+        return ZoomedDetailTarget(visible: visible, pixels: pixels, canvasRect: shown,
+                                  layerRect: canvas.convertToLayer(shown))
+    }
+
+    /// Shows `image` at `zoom`'s level and spot, as one update. `holding` keeps the photo on
+    /// screen as it is, at its zoom and spot, until it goes false: then the new image, zoom and
+    /// spot go on together (`DevelopController.holdsPreviousPhoto`).
+    func show(_ image: NSImage?, pixelSize: CGSize?, zoom: ZoomState, holding: Bool) {
+        if holding, shownImage != nil { return }
+        // Only a new photo takes the position: ZoomState changes reach this view before the
+        // window passes it the next photo, and the photo still shown must not use it.
+        if let center = zoom.pendingCenter, let image, image !== shownImage {
+            pendingCenter = center
+            zoom.pendingCenter = nil
+        }
+        if let center = zoom.restoreCenter {
+            pendingCenter = center
+            zoom.restoreCenter = nil
+        }
+        setImage(image, pixelSize: pixelSize)
+        apply(zoom.level)
+        applyPendingCenter()
+    }
 
     func setImage(_ image: NSImage?, pixelSize: CGSize?) {
         shownImage = image
@@ -516,6 +551,8 @@ final class ZoomScrollView: NSScrollView {
 
     /// Tells the Navigator what part of the photo is in view, after the current layout pass.
     private func reportVisible() {
+        // A frame of one part of the photo goes as soon as the view moves off it.
+        feed?.visibleChanged(to: shownCanvasRect, in: self)
         // Until the view has taken its spot, what it shows isn't where it is going.
         guard let viewport, pendingCenter == nil else { return }
         var visible: CGRect?
@@ -744,8 +781,13 @@ final class ZoomCanvasView: NSView {
         placeFrameLayer()
     }
 
-    /// Covers the view; set by bounds and position because the layer is transformed.
+    /// Covers the view; set by bounds and position because the layer is transformed. With live
+    /// frames on, their sink places it (a frame of one part of the photo has its own place).
     private func placeFrameLayer() {
+        if let scrollView, let feed = scrollView.feed, feed.isAttached(scrollView) {
+            feed.sink.setWhole(bounds)
+            return
+        }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         frameLayer.bounds = CGRect(origin: .zero, size: bounds.size)
