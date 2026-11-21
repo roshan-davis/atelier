@@ -27,13 +27,17 @@ struct LoupeView: View {
     /// The preview file `image` came from and its date, so the same preview decoded again
     /// (another copy of the same pixels, after any photo's preview was stored) isn't swapped in.
     @State private var shownPreview: (url: URL, modified: Date?)?
+    /// Zoomed in, the next photo's preview waits here for its full-size render, so the photo goes
+    /// on once, sharp at the zoom, as in Develop (its preview at 100% would be the soft first
+    /// picture).
+    @State private var pending: (id: Int64, image: NSImage, url: URL?)?
 
     var body: some View {
         VStack(spacing: 0) {
             ZStack(alignment: .bottomLeading) {
                 Color(nsColor: theme.surround)
                 if let image {
-                    ZoomableImageView(image: fullKey == currentFullKey ? fullImage ?? image : image,
+                    ZoomableImageView(image: showsFullImage ? fullImage ?? image : image,
                                       pixelSize: imagePixelSize,
                                       zoom: zoom,
                                       dimmed: model.detail?.metadata.flag == .rejected,
@@ -100,6 +104,14 @@ struct LoupeView: View {
         var revision: Int
     }
 
+    /// The full-size render is of the photo on screen (`loadedID`, which is the last photo until
+    /// the next one's preview is in), so it stays up while another photo loads instead of the
+    /// photo stepping down to its preview first.
+    private var showsFullImage: Bool {
+        guard let fullKey, fullKey.id == loadedID else { return false }
+        return fullKey.revision == previewRevision.value || loadedID != model.focusedID
+    }
+
     private var currentFullKey: FullKey? {
         model.focusedID.map { FullKey(id: $0, revision: previewRevision.value) }
     }
@@ -120,6 +132,26 @@ struct LoupeView: View {
             return
         }
         let previewURL = model.thumbnailURL(for: id, size: .preview)
+        let zoomed = zoom.report.isZoomedPastFit
+        if loadedID != id, zoomed, image != nil {
+            // Zoomed in: the last photo stays until this one's full-size render is in
+            // (`loadFullResolution`), with its preview ready under it.
+            hold.begin()
+            pending = nil
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(hold.limit))
+                guard model.focusedID == id, loadedID != id else { return }
+                if let pending, pending.id == id { show(pending.image, for: id, from: pending.url) }
+                else if let thumbnail = ThumbnailLoader.shared.cached(id) { show(thumbnail, for: id) }
+            }
+            let loaded: NSImage?
+            if let previewURL { loaded = await PreviewImages.shared.load(id, at: previewURL) } else { loaded = ThumbnailLoader.shared.cached(id) }
+            guard model.focusedID == id, loadedID != id, let loaded else { return }
+            pending = (id, loaded, previewURL)
+            // Its full-size render came first.
+            if let fullKey, fullKey == currentFullKey { show(loaded, for: id, from: previewURL) }
+            return
+        }
         if loadedID != id {
             // Never clear to the background: keep the last photo until this one is ready. Its
             // decoded preview goes up at once when it is in memory. Otherwise the last photo stays
@@ -175,6 +207,7 @@ struct LoupeView: View {
         imagePixelSize = pixelSize
         loadedID = id
         shownPreview = preview.map { ($0, Self.modified($0)) }
+        if pending?.id == id { pending = nil }
         hold.end(because: nil)
     }
 
@@ -194,6 +227,11 @@ struct LoupeView: View {
         guard !Task.isCancelled, currentFullKey == key, let rendered else { return }
         fullImage = rendered
         fullKey = key
+        // Zoomed in on a newly selected photo: it goes on now, sharp (`pending`).
+        if loadedID != key.id, model.focusedID == key.id {
+            if let pending, pending.id == key.id { show(pending.image, for: key.id, from: pending.url) }
+            else { show(rendered, for: key.id) }
+        }
     }
 }
 

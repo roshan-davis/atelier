@@ -45,6 +45,30 @@ final class PhotoViewSharpnessTests: XCTestCase {
         var line: String { "\(top.rawValue) \(contentWidth) px, \(String(format: "%.2f", density)) px per screen px" }
     }
 
+    /// A 16 × 16 copy of a picture's pixels: two copies of the same picture match, a thumbnail
+    /// and the preview (or two different photos) don't.
+    private static func fingerprint(of contents: Any?) -> [UInt8]? {
+        guard let contents else { return nil }
+        let object = contents as AnyObject
+        guard CFGetTypeID(object) == CGImage.typeID else { return nil }
+        let image = object as! CGImage
+        var bytes = [UInt8](repeating: 0, count: 16 * 16 * 4)
+        let drawn = bytes.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(data: buffer.baseAddress, width: 16, height: 16, bitsPerComponent: 8, bytesPerRow: 64,
+                                          space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+            context.interpolationQuality = .medium
+            context.draw(image, in: CGRect(x: 0, y: 0, width: 16, height: 16))
+            return true
+        }
+        return drawn ? bytes : nil
+    }
+
+    private static func samePicture(_ a: [UInt8]?, _ b: [UInt8]?) -> Bool {
+        guard let a, let b, a.count == b.count else { return false }
+        return zip(a, b).allSatisfy { abs(Int($0) - Int($1)) <= 2 }
+    }
+
     private static func width(of contents: Any?) -> Int? {
         guard let contents else { return nil }
         let object = contents as AnyObject
@@ -346,6 +370,19 @@ final class PhotoViewSharpnessTests: XCTestCase {
     /// Loupe, at Fit: each photo change puts one picture of the new photo on screen (its 2560 px
     /// preview), never the grid thumbnail and then the preview. Hosts the real `LoupeView`.
     func testLoupePhotoChangeShowsOnePicture() async throws {
+        try await loupePhotoChanges(zoomed: false)
+    }
+
+    /// Zoomed in, the next photo goes on once at full size, not its preview blown up first.
+    func testZoomedLoupePhotoChangeShowsOnePicture() async throws {
+        try await loupePhotoChanges(zoomed: true)
+    }
+
+    private func loupePhotoChanges(zoomed: Bool) async throws {
+        let key = LibraryModel.ZoomOnPhotoChange.key
+        let saved = UserDefaults.standard.object(forKey: key)
+        UserDefaults.standard.set("keep", forKey: key)
+        defer { UserDefaults.standard.set(saved, forKey: key) }
         let env = ProcessInfo.processInfo.environment
         guard let folder = env["ATELIER_SHARPNESS_FOLDER"] else { throw XCTSkip("ATELIER_SHARPNESS_FOLDER not set") }
         // Far apart in the list, so the photo clicked is not a neighbour whose preview is
@@ -393,34 +430,74 @@ final class PhotoViewSharpnessTests: XCTestCase {
         }
         try await wait("the Loupe photo", seconds: 20) { photoView().map { Self.width(of: $0.liveFrameLayer.superlayer?.contents) != nil } ?? false }
         try await Task.sleep(for: .milliseconds(800))
+        let first = try XCTUnwrap(photoView())
+        if zoomed {
+            first.magnification = 1.0
+            NotificationCenter.default.post(name: NSScrollView.didEndLiveMagnifyNotification, object: first)
+            try await wait("the full-size Loupe photo", seconds: 30) { (Self.width(of: photoView()?.liveFrameLayer.superlayer?.contents) ?? 0) > 2560 }
+        } else if model.zoomState.level != .fit {
+            model.zoomState.level = .fit
+        }
+        try await Task.sleep(for: .milliseconds(800))
         var totalSwaps = 0
         var lines: [String] = []
+        // The library may still be writing previews for the new photos; a preview written while
+        // it shows is rightly shown again. Wait until none has been written for a while.
+        var lastRevision = PreviewRevision.shared.value
+        var quietSince = Date()
+        try await wait("previews to settle", seconds: 60) {
+            if PreviewRevision.shared.value != lastRevision { lastRevision = PreviewRevision.shared.value; quietSince = Date() }
+            return Date().timeIntervalSince(quietSince) > 2
+        }
         // The Filmstrip has every photo's grid thumbnail in memory, as in the app.
         for (index, id) in ids.enumerated() {
             var loaded = false
             ThumbnailLoader.shared.load(id, from: previews.url(for: id, size: .thumbnail)) { _ in loaded = true }
             try await wait("thumbnail \(index)", seconds: 10) { loaded }
         }
+        // Which photo a picture on screen is, by its pixels against each photo's stored preview
+        // and thumbnail.
+        let known: [(String, [UInt8]?)] = ids.enumerated().flatMap { index, id -> [(String, [UInt8]?)] in
+            let preview = ThumbnailLoader.decode(previews.url(for: id, size: .preview))?.cgImage(forProposedRect: nil, context: nil, hints: nil)
+            let thumbnail = ThumbnailLoader.decode(previews.url(for: id, size: .thumbnail))?.cgImage(forProposedRect: nil, context: nil, hints: nil)
+            return [("\(names[index]) preview", Self.fingerprint(of: preview)), ("\(names[index]) thumbnail", Self.fingerprint(of: thumbnail))]
+        }
+        func identify(_ print: [UInt8]?) -> String {
+            known.first { Self.samePicture($0.1, print) }?.0 ?? "unknown"
+        }
         for index in [4, 7, 2, 5] {
             let view = try XCTUnwrap(photoView())
             let old = view.liveFrameLayer.superlayer?.contents as AnyObject?
             var pictures: [String] = []
             var lastID: ObjectIdentifier?
+            var lastPrint: [UInt8]?
+            let oldPrint = Self.fingerprint(of: old)
             let clicked = CACurrentMediaTime()
             model.focusedID = ids[index]
-            while CACurrentMediaTime() - clicked < 1.5 {
+            while CACurrentMediaTime() - clicked < (zoomed ? 3 : 1.5) {
                 try await Task.sleep(for: .milliseconds(5))
                 guard let contents = photoView()?.liveFrameLayer.superlayer?.contents as AnyObject?, contents !== old else { continue }
                 if lastID != ObjectIdentifier(contents) {
                     lastID = ObjectIdentifier(contents)
-                    pictures.append(String(format: "%.0f ms: %d px", (CACurrentMediaTime() - clicked) * 1000, Self.width(of: contents) ?? 0))
+                    // Another copy of the same pixels is no change on screen, and a copy of the
+                    // last photo is still the last photo.
+                    let print = Self.fingerprint(of: contents)
+                    if pictures.isEmpty, Self.samePicture(print, oldPrint) { continue }
+                    if pictures.isEmpty || !Self.samePicture(print, lastPrint) {
+                        pictures.append(String(format: "%.0f ms: %d px ", (CACurrentMediaTime() - clicked) * 1000, Self.width(of: contents) ?? 0)
+                                        + identify(print))
+                    }
+                    lastPrint = print
                 }
             }
             totalSwaps += max(0, pictures.count - 1)
-            let line = "Loupe to \(names[index]): \(pictures.count) picture(s) — " + pictures.joined(separator: ", ")
+            let line = "Loupe\(zoomed ? " zoomed" : "") to \(names[index]): \(pictures.count) picture(s) — " + pictures.joined(separator: ", ")
             lines.append(line)
             print("SHARPNESS \(line)")
             XCTAssertFalse(pictures.isEmpty, "\(names[index]) never showed")
+            if zoomed, let firstPicture = pictures.first {
+                XCTAssertTrue(firstPicture.contains("6048 px") || firstPicture.contains("4032 px"), "zoomed in, the first picture was \(firstPicture)")
+            }
         }
         XCTAssertEqual(totalSwaps, 0, lines.joined(separator: "\n"))
     }
