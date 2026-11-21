@@ -2690,7 +2690,8 @@ final class DevelopController: ObservableObject {
             image = shown
             photoFeed.published(shown, count: request.count, timing: timing)
             showsStandIn = false
-            if !holdNeedsFullSize { endHold(because: "with its first render") }
+            // A compare view also waits for the Before photo, so both sides change together.
+            if !holdNeedsFullSize, compareMode == .off || beforeImage != nil { endHold(because: "with its first render") }
             imageIsWhole = !request.cropping
         }
         if current, !firstRenderDone {
@@ -3095,6 +3096,8 @@ final class DevelopController: ObservableObject {
                         if let cgImage {
                             self.beforeImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
                         }
+                        // Compare views: the After render was in first; both sides change now.
+                        if !self.holdNeedsFullSize, self.firstRenderDone { self.endHold(because: "with its Before render") }
                         if !self.rendering { self.scheduleFullRender() }
                         self.scheduleFullBeforeRender()
                     }

@@ -365,6 +365,43 @@ final class PhotoViewSharpnessTests: XCTestCase {
         XCTAssertEqual(totalSwaps, 0, "the new photo swapped pictures on screen:\n" + lines.joined(separator: "\n"))
     }
 
+    // MARK: Before/After
+
+    /// Y (Before/After side by side): changing photo keeps the last photo in both panes until the
+    /// next one has its After render and its Before render, then both change together; a pane is
+    /// never left empty (Rosh, Nov 21, 2026: "the left side part is drawing the background first").
+    func testCompareChangesBothSidesTogether() async throws {
+        let harness = try await makeHarness()
+        let develop = harness.develop, model = harness.model
+        develop.compareMode = .sideBySide
+        try await wait("the Before photo", seconds: 20) { develop.displayBeforeImage != nil }
+        try await Task.sleep(for: .milliseconds(800))
+        var problems: [String] = []
+        for index in [1, 3, 0] {
+            let oldBefore = develop.displayBeforeImage
+            let clicked = CACurrentMediaTime()
+            model.focusedID = harness.ids[index]
+            var shownAt: Double?
+            while CACurrentMediaTime() - clicked < 3 {
+                try await Task.sleep(for: .milliseconds(5))
+                if !develop.holdsPreviousPhoto {
+                    let ms = (CACurrentMediaTime() - clicked) * 1000
+                    let before = develop.displayBeforeImage
+                    if before == nil || before === oldBefore {
+                        problems.append(String(format: "%@: shown at %.0f ms without its Before photo", harness.names[index], ms))
+                    }
+                    shownAt = ms
+                    break
+                }
+            }
+            print("SHARPNESS Before/After to \(harness.names[index]): both sides shown "
+                  + (shownAt.map { String(format: "+%.0f ms", $0) } ?? "never"))
+            XCTAssertNotNil(shownAt)
+            try await Task.sleep(for: .milliseconds(1200))
+        }
+        XCTAssertEqual(problems.count, 0, problems.joined(separator: "\n"))
+    }
+
     // MARK: Loupe
 
     /// Loupe, at Fit: each photo change puts one picture of the new photo on screen (its 2560 px

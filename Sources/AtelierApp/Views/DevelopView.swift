@@ -49,19 +49,22 @@ struct DevelopImageView: View {
                         HStack(spacing: 12) {
                             ComparePane(image: develop.displayBeforeImage, label: "Before", pixelSize: pixelSize,
                                         zoom: model.zoomState, onReport: onZoomReport,
-                                        menu: { model.photoMenu(includeZoom: true) })
+                                        menu: { model.photoMenu(includeZoom: true) },
+                                        holdsImage: develop.holdsPreviousPhoto)
                             // Live slider frames go straight onto the After pane, as on the
                             // single photo view (`PhotoFeed`).
                             ComparePane(image: develop.displayImage ?? image, label: "After", pixelSize: pixelSize,
                                         zoom: model.zoomState, onReport: onZoomReport,
-                                        menu: { model.photoMenu(includeZoom: true) }, feed: develop.photoFeed)
+                                        menu: { model.photoMenu(includeZoom: true) }, feed: develop.photoFeed,
+                                        holdsImage: develop.holdsPreviousPhoto)
                         }
                         .padding(.horizontal, 8)
                     } else {
                         SliderCompareView(before: develop.displayBeforeImage, after: develop.displayImage ?? image,
                                           pixelSize: pixelSize, zoom: model.zoomState, onReport: onZoomReport,
                                           menu: { model.photoMenu(includeZoom: true) },
-                                          position: $develop.sliderPosition, feed: develop.photoFeed)
+                                          position: $develop.sliderPosition, feed: develop.photoFeed,
+                                          holdsImage: develop.holdsPreviousPhoto)
                     }
                 }
                 // Only while what's on screen isn't the photo yet: nothing, or a thumbnail or the
@@ -298,12 +301,15 @@ struct ComparePane: View {
     var menu: () -> NSMenu?
     /// Set on the After pane: live slider frames are drawn into it (`PhotoFeed`).
     var feed: PhotoFeed? = nil
+    /// Changing photo: the pane keeps the last photo until the next one is ready in both panes
+    /// (`DevelopController.holdsPreviousPhoto`, `PhotoChangeHold`), never the empty background.
+    var holdsImage = false
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            if let image {
+            if image != nil || holdsImage {
                 ZoomableImageView(image: image, pixelSize: pixelSize, zoom: zoom, onReport: onReport, menu: menu,
-                                  feed: feed)
+                                  feed: feed, holdsImage: holdsImage)
             } else {
                 BeforeLoadingView()
             }
@@ -333,6 +339,8 @@ struct SliderCompareView: View {
     @Binding var position: Double
     /// Live slider frames are drawn into the After photo, under the Before one (`PhotoFeed`).
     var feed: PhotoFeed? = nil
+    /// Changing photo: both sides keep the last photo until the next one is ready (`PhotoChangeHold`).
+    var holdsImage = false
 
     var body: some View {
         GeometryReader { geometry in
@@ -340,10 +348,10 @@ struct SliderCompareView: View {
             let dividerX = size.width * position
             ZStack(alignment: .topLeading) {
                 ZoomableImageView(image: after, pixelSize: pixelSize, zoom: zoom, onReport: onReport, menu: menu,
-                                  feed: feed)
-                if let before {
+                                  feed: feed, holdsImage: holdsImage)
+                if before != nil || holdsImage {
                     ZoomableImageView(image: before, pixelSize: pixelSize, zoom: zoom, visibleWidth: CGFloat(position),
-                                      onReport: onReport, menu: menu)
+                                      onReport: onReport, menu: menu, holdsImage: holdsImage)
                 } else if dividerX > 0 {
                     BeforeLoadingView()
                         .frame(width: dividerX, height: size.height)
