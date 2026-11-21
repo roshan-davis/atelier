@@ -17,6 +17,8 @@ public final class DisplaySurfaces: @unchecked Sendable {
     /// At most this many surfaces of one size exist; with all of them in use a frame is
     /// rendered the ordinary way instead.
     public static let limit = 4
+    /// This pool's limit (`DisplaySurfaces.limit` unless set).
+    public let limit: Int
 
     private let lock = NSLock()
     private var free: [IOSurface] = []
@@ -25,8 +27,20 @@ public final class DisplaySurfaces: @unchecked Sendable {
     /// Surfaces of the current size made so far, free or out.
     private var made = 0
 
-    public init(colorSpace: CGColorSpace = DevelopRenderer.displaySpace) {
+    public init(colorSpace: CGColorSpace = DevelopRenderer.displaySpace, limit: Int = DisplaySurfaces.limit) {
         self.colorSpace = colorSpace
+        self.limit = max(1, limit)
+    }
+
+    /// Lets go of every free surface now, and of the ones out as they come back, so a pool used
+    /// only now and then (the zoomed detail frames) holds no memory between uses.
+    public func drain() {
+        lock.lock()
+        free.removeAll()
+        made = 0
+        width = 0
+        height = 0
+        lock.unlock()
     }
 
     /// A surface of `width` × `height` that isn't on screen, or nil when all of them are.
@@ -48,7 +62,7 @@ public final class DisplaySurfaces: @unchecked Sendable {
         if let index = free.firstIndex(where: { !$0.isInUse }) {
             return free.remove(at: index)
         }
-        guard made < Self.limit else {
+        guard made < limit else {
             full = true
             return nil
         }

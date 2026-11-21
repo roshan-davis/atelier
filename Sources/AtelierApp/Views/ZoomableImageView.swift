@@ -404,9 +404,67 @@ final class ZoomScrollView: NSScrollView {
     /// The size of the image on screen, whose shape live frames must have.
     var liveImageSize: CGSize? { canvas.currentImageSize }
 
+    /// The layer sharp visible-area frames go on (`PhotoDisplay`), over the live frames.
+    var detailFrameLayer: CALayer { canvas.detailLayer }
+
+    /// Decides what this view shows, when it shows the Develop photo (`PhotoFeed.display`).
+    private var display: PhotoDisplay? {
+        guard let feed, feed.isAttached(to: self) else { return nil }
+        return feed.display
+    }
+
+    /// The image on the canvas now (`applyImage`); with a display, `shownImage` can be one still
+    /// waiting to be shown.
+    private(set) var appliedImage: NSImage?
+    /// A zoom asked for while the next photo waits to be shown sharp, applied when it shows.
+    private var deferredLevel: ZoomLevel?
+
+    /// A display took this view (`PhotoFeed.attach`): the next image handed to it is offered to the
+    /// display even when it is the one on screen.
+    func displayAttached() {
+        shownImage = nil
+    }
+
     func setImage(_ image: NSImage?, pixelSize: CGSize?) {
+        guard let display, let feed else {
+            shownImage = image
+            applyImage(image, pixelSize: pixelSize)
+            return
+        }
+        // SwiftUI hands the view its image again with every change the controller publishes.
+        guard image !== shownImage else { return }
         shownImage = image
-        canvas.setImage(image)
+        if let image {
+            display.offer(image, tag: feed.tag(of: image), pixelSize: pixelSize)
+        } else {
+            display.clear()
+        }
+        updateNeed()
+    }
+
+    /// Puts `image` on the canvas and sizes the view for it. With a display, called by it when
+    /// the image goes on screen.
+    func applyImage(_ image: NSImage?, pixelSize: CGSize?) {
+        appliedImage = image
+        let display = self.display
+        if display != nil {
+            canvas.showImage(image)
+            feed?.imageShown(image, in: self)
+        } else {
+            canvas.setImage(image)
+        }
+        defer {
+            if let display {
+                display.setGeometry(imageSize: canvas.currentImageSize, corners: canvas.photoCorners)
+                // The next photo is on screen: its zoom and spot apply now.
+                if let level = deferredLevel {
+                    deferredLevel = nil
+                    applyLevel(level, anchor: nil)
+                }
+                applyPendingCenter()
+                updateNeed()
+            }
+        }
         guard let image, image.size.width > 0, image.size.height > 0 else { return }
         // Keep the displayed image's aspect, at the full-size photo's long edge.
         var pixels = image.size
@@ -424,6 +482,39 @@ final class ZoomScrollView: NSScrollView {
         canvas.frame = CGRect(origin: .zero, size: size)
         applyLevel(level, anchor: nil)
         if let center { scroll(toRelative: center) }
+    }
+
+    /// Tells the display what the view needs to be sharp: the part of the photo in view and the
+    /// pixels across the whole photo it takes there. While the next photo waits, the part it
+    /// will show once its zoom and spot apply.
+    private func updateNeed() {
+        guard let display, documentSize.width > 0, documentSize.height > 0, bounds.width > 0, bounds.height > 0 else { return }
+        let backing = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
+        let waiting = display.holdsNewPhoto
+        let scale = waiting ? deferredLevel.map { min(maxMagnification, max(minMagnification, magnification(for: $0))) } ?? magnification
+            : magnification
+        var visible: CGRect
+        if waiting {
+            let size = CGSize(width: min(1, contentView.bounds.width * magnification / scale / documentSize.width),
+                              height: min(1, contentView.bounds.height * magnification / scale / documentSize.height))
+            let center = pendingCenter ?? relativeCenter ?? CGPoint(x: 0.5, y: 0.5)
+            visible = CGRect(x: min(1 - size.width, max(0, center.x - size.width / 2)),
+                             y: min(1 - size.height, max(0, center.y - size.height / 2)),
+                             width: size.width, height: size.height)
+        } else {
+            let shown = contentView.bounds.intersection(CGRect(origin: .zero, size: documentSize))
+            guard !shown.isNull, shown.width > 0, shown.height > 0 else { return }
+            visible = CGRect(x: shown.minX / documentSize.width, y: shown.minY / documentSize.height,
+                             width: shown.width / documentSize.width, height: shown.height / documentSize.height)
+        }
+        if visible.width >= 0.995 && visible.height >= 0.995 { visible = DisplayTag.whole }
+        // At Fit and below the 2560 px proxy is the sharp image even on a window a little wider
+        // than it; only a much smaller stand-in (the Grid thumbnail) waits for it.
+        let pastFit = scale > fitMagnification * 1.01
+        let density = Double(min(scale, 1) * documentSize.width * backing) * (pastFit ? 1 : 0.5)
+        let pixels = CGSize(width: (visible.width * documentSize.width * scale * backing).rounded(),
+                            height: (visible.height * documentSize.height * scale * backing).rounded())
+        display.setNeed(DisplayNeed(visible: visible, density: density), pixels: pixels)
     }
 
     /// The middle of what's visible, 0...1 across and down the photo; nil before it has a size.
@@ -516,6 +607,7 @@ final class ZoomScrollView: NSScrollView {
 
     /// Tells the Navigator what part of the photo is in view, after the current layout pass.
     private func reportVisible() {
+        updateNeed()
         // Until the view has taken its spot, what it shows isn't where it is going.
         guard let viewport, pendingCenter == nil else { return }
         var visible: CGRect?
@@ -546,6 +638,8 @@ final class ZoomScrollView: NSScrollView {
 
     func applyPendingCenter() {
         guard let center = pendingCenter, documentSize.width > 0, bounds.width > 0, bounds.height > 0 else { return }
+        // The spot is the next photo's; the last one stays where it is until that one shows.
+        if display?.holdsNewPhoto == true { return }
         pendingCenter = nil
         scroll(toRelative: center)
     }
@@ -566,6 +660,12 @@ final class ZoomScrollView: NSScrollView {
     // MARK: Zoom
 
     func apply(_ newLevel: ZoomLevel) {
+        if display?.holdsNewPhoto == true {
+            // The next photo's zoom: the last photo keeps its own until that one shows.
+            deferredLevel = newLevel == level ? nil : newLevel
+            return
+        }
+        deferredLevel = nil
         guard newLevel != level else { return }
         applyLevel(newLevel, anchor: nil)
     }
@@ -598,6 +698,7 @@ final class ZoomScrollView: NSScrollView {
         setMagnification(target, centeredAt: center)
         Cursors.shared.refresh()
         report()
+        updateNeed()
     }
 
     func toggleZoom(at point: NSPoint) {
@@ -637,6 +738,7 @@ final class ZoomScrollView: NSScrollView {
         // A layout pass during the gesture may already have reported the same magnification
         // while the shared level was still Fit. Send it again with the pinch now committed.
         report(force: true)
+        updateNeed()
         updatePhotoFrame()
         Cursors.shared.refresh()
     }
@@ -723,6 +825,9 @@ final class ZoomCanvasView: NSView {
     /// photo flip during drags, Nov 10, 2026), so this layer turns its contents back over.
     /// The render queue sets its contents (`LiveFrameSink`); the main thread only places it.
     let frameLayer = CALayer()
+    /// Over `frameLayer`: the visible part of a zoomed photo rendered sharp from the full-size
+    /// photo (`PhotoDisplay`), placed over that part. Turned over like `frameLayer`.
+    let detailLayer = CALayer()
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -736,6 +841,12 @@ final class ZoomCanvasView: NSView {
         frameLayer.isHidden = true
         frameLayer.setAffineTransform(CGAffineTransform(scaleX: 1, y: -1))
         layer?.addSublayer(frameLayer)
+        detailLayer.contentsGravity = .resize
+        detailLayer.minificationFilter = .linear
+        detailLayer.magnificationFilter = .linear
+        detailLayer.isHidden = true
+        detailLayer.setAffineTransform(CGAffineTransform(scaleX: 1, y: -1))
+        layer?.addSublayer(detailLayer)
         placeFrameLayer()
     }
 
@@ -778,6 +889,22 @@ final class ZoomCanvasView: NSView {
 
     /// The size of the image on screen; nil before the first.
     var currentImageSize: CGSize? { currentImage?.size }
+
+    /// Puts `image` on the layer, for a view whose `PhotoDisplay` decided it shows; the display
+    /// looks after the frame layers.
+    func showImage(_ image: NSImage?) {
+        guard image !== currentImage else { return }
+        currentImage = image
+        layer?.contents = image?.cgImage(forProposedRect: nil, context: nil, hints: nil)
+    }
+
+    /// The photo's top-left and bottom-right corners in this view's layer, where visible-area
+    /// frames are placed (`PhotoDisplay`).
+    var photoCorners: (CGPoint, CGPoint)? {
+        guard bounds.width > 0, bounds.height > 0 else { return nil }
+        return (convertToLayer(NSPoint(x: bounds.minX, y: bounds.minY)),
+                convertToLayer(NSPoint(x: bounds.maxX, y: bounds.maxY)))
+    }
 
     // MARK: Cursor
 

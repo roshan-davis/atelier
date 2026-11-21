@@ -52,7 +52,7 @@ final class DevelopMeasures: ObservableObject {
     @Published fileprivate(set) var colorScope: ColorScope?
 }
 
-/// What a live frame shows: frames requested for another key are dropped (`LiveFrameSink`).
+/// What a live frame shows: frames requested for another key are dropped (`PhotoDisplay`).
 private struct LiveFrameKey: Equatable {
     let assetID: Int64?
     let generation: Int
@@ -76,6 +76,42 @@ private struct ProxyRenderKey: Equatable {
     let lensBlur: Bool
 }
 
+/// What a render's picture shows, whatever made it (the proxy, a visible-area render, the
+/// full-size render): renders with the same key show the same edit (`DevelopController.displayRevision`).
+private struct DisplayContentKey: Equatable {
+    let settings: DevelopSettings
+    let preview: SliderPreview?
+    let renderBefore: Bool
+    let cropping: Bool
+    let overlay: UUID?
+    let shadowClipping: Bool
+    let highlightClipping: Bool
+    let lensBlur: Bool
+
+    init(_ key: ProxyRenderKey) {
+        settings = key.settings
+        preview = key.preview
+        renderBefore = key.renderBefore
+        cropping = key.cropping
+        overlay = key.overlay
+        shadowClipping = key.shadowClipping
+        highlightClipping = key.highlightClipping
+        lensBlur = key.lensBlur
+    }
+
+    /// The full-size render's: the edit itself, as it shows at rest.
+    init(settings: DevelopSettings, clipping: (shadows: Bool, highlights: Bool), lensBlur: Bool) {
+        self.settings = settings
+        preview = nil
+        renderBefore = false
+        cropping = true
+        overlay = nil
+        shadowClipping = clipping.shadows
+        highlightClipping = clipping.highlights
+        self.lensBlur = lensBlur
+    }
+}
+
 /// A proxy render handed to the render queue (`DevelopController.submitRender`).
 private struct ProxyRenderRequest {
     let session: DevelopSession
@@ -94,8 +130,10 @@ private struct ProxyRenderRequest {
     var surfaces: DisplaySurfaces?
     var fallback: PhotoFeed.Fallback? = nil
     /// Puts the frame on screen from the render queue, if it still matches (`liveEpoch`).
-    var sink: LiveFrameSink? = nil
+    var display: PhotoDisplay? = nil
     var liveEpoch = 0
+    /// The edit it shows (`DevelopController.displayRevision`), for `SharpDisplay`.
+    var revision = 0
     let measureJob: LatestJob<DevelopMeasureRequest>
     let measureQueue: DispatchQueue
     let histogramSink: HistogramSink
@@ -417,7 +455,9 @@ final class DevelopController: ObservableObject {
         guard let cgImage = Self.cropContext.createCGImage(cropped, from: cropped.extent.integral, format: .RGBA8,
                                                            colorSpace: whole.colorSpace ?? DevelopRenderer.displaySpace)
         else { return }
-        image = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+        let cut = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+        photoFeed.published(cut, photo: openGeneration.value, revision: freshRevision())
+        image = cut
         imageIsWhole = false
     }
 
@@ -612,11 +652,11 @@ final class DevelopController: ObservableObject {
     /// Something the full-size image was made without has arrived in the background
     /// (`backgroundWorkArrived`): render it again, though the settings are the same.
     private var fullImageIsStale = false
-    private var fullSession: DevelopSession?
+    private(set) var fullSession: DevelopSession?
     private var sourceURL: URL?
     private var fullRendering = false
     private var fullNeedsRender = false
-    private let fullQueue = DispatchQueue(label: "atelier.develop.full", qos: .userInitiated)
+    let fullQueue = DispatchQueue(label: "atelier.develop.full", qos: .userInitiated)
 
     /// The sharpest image that matches the current settings.
     var displayImage: NSImage? {
@@ -725,7 +765,21 @@ final class DevelopController: ObservableObject {
     private static let settleDelay: TimeInterval = 0.12
     /// Gives the photo view its live frames straight from the GPU; see `PhotoFeed`.
     let frameHUD = DevelopFrameHUD()
-    lazy var photoFeed = PhotoFeed { [weak frameHUD] timing in frameHUD?.submit(timing) }
+    lazy var photoFeed = PhotoFeed(gated: true) { [weak frameHUD] timing in frameHUD?.submit(timing) }
+    /// What the photo view shows is decided by one rule (`PhotoDisplay`, `SharpDisplay`).
+    var display: PhotoDisplay? { photoFeed.display }
+    /// Counts what renders show: a render whose picture differs from the last one's (another
+    /// edit, the Before view, an Option view, the overlay) shows a newer revision, and the photo
+    /// view never goes back to an older one (`SharpDisplay`). The same picture again, from the
+    /// proxy, a visible-area render or the full-size one, has the same revision.
+    private(set) var displayRevision = 0
+    private var revisionKey: DisplayContentKey?
+    /// Sharp visible-area renders (`DevelopController+SharpRegions.swift`): latest wins, on `fullQueue`.
+    let regionJob = LatestJob<SharpRegionRequest>()
+    /// At most three screens' worth of surfaces, let go when the view no longer shows one.
+    let regionSurfaces = DisplaySurfaces(limit: 3)
+    /// This edit's visible-area renders, for the timing log line when it rests.
+    let regionStats = LockedValue(SharpRegionStats())
     private let displaySurfaces = DisplaySurfaces()
     /// What live frames were last requested for; a change drops frames still rendering.
     private var lastLiveKey: LiveFrameKey?
@@ -885,7 +939,9 @@ final class DevelopController: ObservableObject {
         reopen()
     }
 
-    func open(_ assetID: Int64?) {
+    /// `zoomedIn`: the photo view will show it past Fit (`LibraryModel.nextPhotoIsZoomedIn`), so
+    /// its full-size photo opens beside the proxy.
+    func open(_ assetID: Int64?, zoomedIn: Bool = false) {
         guard assetID != self.assetID else { return }
         // The mode is for one photo: another photo cancels it, on the photo it was open on.
         if isLensBlurring { isLensBlurring = false }
@@ -905,6 +961,10 @@ final class DevelopController: ObservableObject {
         openGeneration.value += 1
         histogramSink.reset(generation: openGeneration.value)
         let generation = openGeneration.value
+        photoFeed.beginPhoto(generation)
+        display?.invalidate()
+        revisionKey = nil
+        displayRevision += 1
         firstRenderDone = false
         liveFramesOff = false
         settleItem?.cancel()
@@ -961,6 +1021,8 @@ final class DevelopController: ObservableObject {
         lensBlurPhoto = nil
         lensBlurSaveError = nil
         guard let assetID else { return }
+        // Zoomed in on this photo though the last one was at Fit ("Return to its last zoom").
+        if zoomedIn, !wantsFullResolution { wantsFullResolution = true }
 
         settings = (try? catalog.developSettings(for: assetID)) ?? .neutral
         if isMasking { selectedMaskID = editedMasks.last?.id }
@@ -976,6 +1038,7 @@ final class DevelopController: ObservableObject {
         let hasPreview = previews.has(.preview, for: assetID)
         let url = try? catalog.readableURL(for: assetID, cache: originals)
         if hasPreview, let decoded = PreviewImages.shared.cached(assetID, at: cachedPreview) {
+            photoFeed.published(decoded, photo: generation, revision: -1)
             image = decoded
             showsStandIn = false
         } else {
@@ -985,6 +1048,9 @@ final class DevelopController: ObservableObject {
                 placeholder = previousImage
                 showsPreviousPhoto = true
             }
+            if let placeholder, placeholder !== previousImage {
+                photoFeed.published(placeholder, photo: generation, revision: -1)
+            }
             image = placeholder
             showsStandIn = placeholder != nil
             if hasPreview {
@@ -992,6 +1058,7 @@ final class DevelopController: ObservableObject {
                     let decoded = await PreviewImages.shared.load(assetID, at: cachedPreview)
                     // Not once the proxy has rendered, or for another photo.
                     guard self.assetID == assetID, self.image === placeholder, let decoded else { return }
+                    self.photoFeed.published(decoded, photo: generation, revision: -1)
                     self.image = decoded
                     self.showsStandIn = false
                     if self.histogram == nil { self.measurePreview(decoded, of: assetID) }
@@ -1092,6 +1159,9 @@ final class DevelopController: ObservableObject {
         let start = {
             // Left (or opened again) before it started: don't decode it for this open.
             guard openGeneration.value == generation else { return }
+            // Zoomed in, the full-size photo opens beside the proxy, so the visible part can be
+            // shown sharp as soon as possible (`scheduleFullRender` renders it first).
+            if self.wantsFullResolution { self.scheduleFullRender() }
             // Its own queue, beside any decode still running for a photo already left, so the
             // photo you stopped on never waits for one you passed.
             Self.openQueue.async {
@@ -2353,10 +2423,12 @@ final class DevelopController: ObservableObject {
                                  lensBlur: isLensBlurring)
         if isCropping, key == lastRenderKey { return }
         lastRenderKey = key
-        rendering = true
         noteLensBlurWork()
         renderCount += 1
         frameHUD.scheduled(renderCount)
+        let revision = displayRevision(for: DisplayContentKey(key))
+        // A sharper image than the proxy can come, unless a tool draws the photo its own way.
+        display?.setCanSharpen(cropping && !isGuiding && overlay == nil && !isLensBlurring)
         // Once the photo is up, live frames go straight from the GPU to the photo view (see
         // `PhotoFeed`); the first render is published the ordinary way, as it ends the stand-in.
         let direct = photoFeed.isAttached && firstRenderDone && cropping && !liveFramesOff
@@ -2366,17 +2438,49 @@ final class DevelopController: ObservableObject {
                                    preview: preview, renderBefore: renderBefore)
         if liveKey != lastLiveKey {
             lastLiveKey = liveKey
-            photoFeed.sink.invalidate()
+            display?.invalidate()
         }
-        submitRender(ProxyRenderRequest(
+        var request = ProxyRenderRequest(
             session: session, settings: settings, preview: preview, renderBefore: renderBefore, cropping: cropping,
             overlay: overlay, clipping: clipping, assetID: assetID, count: renderCount,
             measures: overlay == nil && preview == nil && !isLensBlurring, generation: openGeneration.value,
             queuedAt: DevelopTimingLog.now(), surfaces: direct ? displaySurfaces : nil,
             fallback: liveFramesOff && photoFeed.isAttached && firstRenderDone && cropping ? .liveFramesOff : nil,
-            sink: direct ? photoFeed.sink : nil, liveEpoch: photoFeed.sink.currentEpoch,
+            display: direct ? display : nil, liveEpoch: display?.currentEpoch ?? 0,
             measureJob: measureJob, measureQueue: measureQueue, histogramSink: histogramSink,
-            openGeneration: openGeneration, renderBeganAt: renderBeganAt, lensBlur: isLensBlurring))
+            openGeneration: openGeneration, renderBeganAt: renderBeganAt, lensBlur: isLensBlurring)
+        request.revision = revision
+        // Zoomed in further than the proxy has pixels for, the part on screen is rendered sharp
+        // from the full-size photo. During a drag that render is the only one: rendering the
+        // proxy beside it slowed both about threefold on the GPU (Rosh's Mac, Nov 21, 2026), and
+        // the proxy's stretched frame would never be shown. The proxy renders once the edit
+        // rests (`publishWhenSettled`), for the histogram and everything else that reads `image`.
+        let sharp = overlay == nil && !isLensBlurring && scheduleSharpRegion(settings, cropping: cropping,
+                                                                           preview: preview, clipping: clipping,
+                                                                           photo: openGeneration.value,
+                                                                           revision: revision, count: renderCount)
+        if sharp, direct {
+            lastRender = request
+            publishWhenSettled(request)
+            return
+        }
+        rendering = true
+        submitRender(request)
+    }
+
+    /// The revision a render showing `key` has (`displayRevision`).
+    private func displayRevision(for key: DisplayContentKey) -> Int {
+        if let revisionKey, revisionKey != key { displayRevision += 1 }
+        revisionKey = key
+        return displayRevision
+    }
+
+    /// A revision for a picture made outside the renders (the crop cut at once, the unblurred
+    /// photo put back): newer than everything so far, and the same as the render that follows.
+    private func freshRevision() -> Int {
+        displayRevision += 1
+        revisionKey = nil
+        return displayRevision
     }
 
     /// Hands `request` to the render queue, latest-wins: a request still waiting is replaced, and
@@ -2404,11 +2508,11 @@ final class DevelopController: ObservableObject {
         var cgImage: CGImage?
         var plain: CGImage?
         var fallback = request.fallback
-        var outcome: LiveFrameSink.Outcome?
+        var outcome: PhotoDisplay.Outcome?
         var renderedAt: CFTimeInterval?
         var shownAt: CFTimeInterval?
         RenderSignposts.measure("Proxy render") {
-            if let surfaces = request.surfaces, let sink = request.sink,
+            if let surfaces = request.surfaces, let display = request.display,
                let frame = request.session.renderToSurface(request.settings, cropping: request.cropping,
                                                            overlay: request.overlay, preview: request.preview,
                                                            shadowClipping: request.clipping.shadows,
@@ -2418,7 +2522,8 @@ final class DevelopController: ObservableObject {
                     // On screen now, from this thread: the main thread may be busy (D1). The
                     // histogram's small copy is made after this, never before.
                     renderedAt = CACurrentMediaTime()
-                    let result = sink.present(rendered, count: request.count, epoch: request.liveEpoch, pool: surfaces)
+                    let result = display.offer(surface: rendered, pool: surfaces, photo: request.generation,
+                                               revision: request.revision, region: nil, epoch: request.liveEpoch)
                     outcome = result
                     if result == .shown { shownAt = CACurrentMediaTime() }
                 }) {
@@ -2463,7 +2568,7 @@ final class DevelopController: ObservableObject {
         queue.async { Self.renderNext(job: job, on: queue, controller: controller) }
     }
 
-    private func finishRender(_ request: ProxyRenderRequest, live: LiveFrameSink.Outcome?, cgImage: CGImage?,
+    private func finishRender(_ request: ProxyRenderRequest, live: PhotoDisplay.Outcome?, cgImage: CGImage?,
                               fallback: PhotoFeed.Fallback?,
                               renderBegan: CFAbsoluteTime, timing: PhotoFeed.RenderTiming) {
         // Nothing newer has been asked for.
@@ -2484,6 +2589,9 @@ final class DevelopController: ObservableObject {
         case .shown:
             shownLive = true
             photoFeed.frameShown(timing)
+        case .held, .notNeeded:
+            // Waiting for the sharp render of the same edit, or nothing new: a live frame all the same.
+            shownLive = true
         case .wrongShape, .noView:
             guard fits else { break }
             // Another shape than the photo on screen (an Aspect or crop change), or the view is
@@ -2493,7 +2601,7 @@ final class DevelopController: ObservableObject {
             if latest {
                 var ordinary = request
                 ordinary.surfaces = nil
-                ordinary.sink = nil
+                ordinary.display = nil
                 ordinary.fallback = .liveFramesOff
                 rendering = true
                 submitRender(ordinary)
@@ -2506,7 +2614,7 @@ final class DevelopController: ObservableObject {
             if latest, fits {
                 var ordinary = request
                 ordinary.surfaces = nil
-                ordinary.sink = nil
+                ordinary.display = nil
                 rendering = true
                 submitRender(ordinary)
                 return
@@ -2517,8 +2625,9 @@ final class DevelopController: ObservableObject {
         if fits, let cgImage {
             if let fallback { frameHUD.fallback(fallback, count: request.count) }
             let shown = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+            photoFeed.published(shown, photo: request.generation, revision: request.revision,
+                                count: request.count, timing: timing)
             image = shown
-            photoFeed.published(shown, count: request.count, timing: timing)
             showsStandIn = false
             imageIsWhole = !request.cropping
         }
@@ -2554,8 +2663,9 @@ final class DevelopController: ObservableObject {
             MainActor.assumeIsolated {
                 guard let self, self.renderCount == count, var settled = self.lastRender, settled.count == count else { return }
                 settled.surfaces = nil
-                settled.sink = nil
+                settled.display = nil
                 settled.fallback = nil
+                self.sharpRegionsSettled()
                 self.rendering = true
                 self.submitRender(settled)
             }
@@ -2796,10 +2906,16 @@ final class DevelopController: ObservableObject {
         let existing = fullSession
         let clipping = clippingOverlay
         let blurs = isLensBlurring
+        let photo = openGeneration.value
+        let revision = displayRevision(for: DisplayContentKey(settings: settings, clipping: clipping, lensBlur: blurs))
+        // The photo was just opened zoomed in: once its full-size photo is open, the part on
+        // screen is rendered first, which takes a fraction of the whole render.
+        let opening = existing == nil ? sharpOpenRequest(settings, clipping: clipping, photo: photo, revision: revision) : nil
         fullQueue.async {
             let began = DevelopTimingLog.now()
             let session = existing ?? DevelopRenderer.shared.session(for: url, maxPixelSize: nil, interactive: true)
             session?.rendersLensBlur = blurs
+            if let opening, let session, !blurs { Self.renderOpeningRegion(opening, session: session, assetID: assetID) }
             let cgImage = RenderSignposts.measure("Full-size render") {
                 session?.renderForDisplay(settings, shadowClipping: clipping.shadows,
                                           highlightClipping: clipping.highlights)?.image
@@ -2815,7 +2931,9 @@ final class DevelopController: ObservableObject {
                     session.rendersLensBlur = self.isLensBlurring
                     // Rendered before the Lens Blur mode opened or closed: render again.
                     if let cgImage, blurs == self.isLensBlurring {
-                        self.fullImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+                        let full = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+                        self.photoFeed.published(full, photo: photo, revision: revision)
+                        self.fullImage = full
                         self.fullImageSettings = settings
                     } else if cgImage != nil {
                         self.fullNeedsRender = true
@@ -3235,7 +3353,7 @@ extension DevelopController {
         navigatorSession?.rendersLensBlur = false
         // Blurred frames still on their way must not land after Close (nor unblurred ones after
         // opening the mode).
-        photoFeed.sink.invalidate()
+        display?.invalidate()
         if !restored { fullImageSettings = nil }
         if !isLensBlurring {
             lensBlurWorkCheck?.cancel()
@@ -3350,11 +3468,13 @@ extension DevelopController {
         defer { lensBlurReturn = nil }
         guard let saved = lensBlurReturn, saved.assetID == assetID, saved.generation == openGeneration.value,
               saved.unblurred == Self.withoutLensBlur(settings) else { return false }
+        // Newer than every blurred frame, so the view takes it over them; the render asked for
+        // next draws the same picture.
+        let revision = freshRevision()
+        photoFeed.published(saved.image, photo: openGeneration.value, revision: revision, count: renderCount)
         image = saved.image
-        // As new as every blurred frame, so the view takes it over the frame layer; the render
-        // asked for next (one count on) can still replace it.
-        photoFeed.published(saved.image, count: renderCount)
         if let full = saved.fullImage {
+            photoFeed.published(full, photo: openGeneration.value, revision: revision)
             fullImage = full
             fullImageSettings = settings
         } else {

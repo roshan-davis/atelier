@@ -11,6 +11,9 @@ import QuartzCore
 /// `DevelopController` publishes the ordinary image as before, so what is shown at rest (and
 /// every other view of the photo) is unchanged.
 ///
+/// Develop's feed is gated (`PhotoDisplay`): one rule decides what the view shows, whichever path
+/// an image or frame comes by, so a zoomed photo never shows a softer image before a sharp one.
+///
 /// The single-photo view, the Masking view (which shows the same render) and the After photo of
 /// the Before/After compare views (side by side and the split slider) attach; crop and the other
 /// tools keep the ordinary path. Compare views used to take the ordinary path too, so every frame
@@ -32,37 +35,91 @@ final class PhotoFeed {
 
     private let onFrame: ((RenderTiming) -> Void)?
 
-    init(onFrame: ((RenderTiming) -> Void)? = nil) { self.onFrame = onFrame }
+    /// `gated`: what the photo view shows is decided by one rule (`PhotoDisplay`, `SharpDisplay`)
+    /// that every image and frame goes through, tagged with its photo and edit (Develop). Without
+    /// it frames go through `LiveFrameSink` alone (the HDR editor).
+    init(gated: Bool = false, onFrame: ((RenderTiming) -> Void)? = nil) {
+        self.onFrame = onFrame
+        display = gated ? PhotoDisplay() : nil
+    }
 
-    /// Puts frames on screen from the render queue; see `LiveFrameSink`.
+    /// Puts frames on screen from the render queue; see `LiveFrameSink`. Not used when `display` is.
     nonisolated let sink = LiveFrameSink()
+    /// Decides and shows what the photo view shows, for a gated feed.
+    nonisolated let display: PhotoDisplay?
     private weak var view: ZoomScrollView?
     /// The image the controller published last, with the render count it was made from.
     private var published: (id: ObjectIdentifier, count: Int, timing: RenderTiming?)?
+    /// What each image handed to the view is (`DisplayTag`), for a gated feed. Weak keys: an
+    /// image nobody holds any more takes its tag with it.
+    private let tags = NSMapTable<NSImage, TagBox>.weakToStrongObjects()
+    /// The open photo (`DevelopController.openGeneration`), for images without a tag.
+    private var photo = 0
+
+    private final class TagBox {
+        let tag: DisplayTag
+        init(_ tag: DisplayTag) { self.tag = tag }
+    }
 
     /// A view is showing the photo and can take frames.
     var isAttached: Bool { view != nil }
 
+    /// Whether `view` is the one frames go to.
+    func isAttached(to view: ZoomScrollView) -> Bool { self.view === view }
+
     func attach(_ view: ZoomScrollView) {
         guard self.view !== view else { return }
-        sink.setTarget(view.liveFrameLayer, imageSize: view.liveImageSize)
         self.view = view
+        if let display {
+            display.setView(view)
+            // Whatever it shows now is offered again, so the display starts from it.
+            view.displayAttached()
+        } else {
+            sink.setTarget(view.liveFrameLayer, imageSize: view.liveImageSize)
+        }
     }
 
     func detach(_ view: ZoomScrollView) {
         guard self.view === view else { return }
-        sink.setTarget(nil, imageSize: nil)
         self.view = nil
+        if let display {
+            display.setView(nil)
+        } else {
+            sink.setTarget(nil, imageSize: nil)
+        }
     }
 
-    /// The render queue put render `timing.count` on screen (`LiveFrameSink.present`).
+    /// The render queue put render `timing.count` on screen.
     func frameShown(_ timing: RenderTiming) {
         onFrame?(timing)
     }
 
-    /// The controller published `image`, made from render `count`.
+    /// The controller published `image`, made from render `count` (HDR, and every Develop image
+    /// with `published(_:photo:revision:count:timing:)`).
     func published(_ image: NSImage, count: Int, timing: RenderTiming? = nil) {
         published = (ObjectIdentifier(image), count, timing)
+    }
+
+    /// The controller published `image`: edit `revision` of open `photo` (−1 for a stand-in),
+    /// made from render `count` when it is a render.
+    func published(_ image: NSImage, photo: Int, revision: Int, count: Int? = nil, timing: RenderTiming? = nil) {
+        tags.setObject(TagBox(DisplayTag(photo: photo, revision: revision, pixelWidth: Self.pixelWidth(image))), forKey: image)
+        if let count { published(image, count: count, timing: timing) }
+    }
+
+    /// Another photo opened (`DevelopController.open`).
+    func beginPhoto(_ photo: Int) {
+        self.photo = photo
+    }
+
+    /// What `image` is; an image the controller didn't publish counts as a stand-in of the open photo.
+    func tag(of image: NSImage) -> DisplayTag {
+        tags.object(forKey: image)?.tag ?? DisplayTag(photo: photo, revision: -1, pixelWidth: Self.pixelWidth(image))
+    }
+
+    private static func pixelWidth(_ image: NSImage) -> Double {
+        let widest = image.representations.map(\.pixelsWide).max() ?? 0
+        return Double(widest > 0 ? widest : Int(image.size.width))
     }
 
     /// Whether `image` is a published render older than the frame on screen, which must not
@@ -76,10 +133,12 @@ final class PhotoFeed {
     /// newer frame, and later frames must have the image's shape.
     func imageShown(_ image: NSImage?, in view: ZoomScrollView) {
         guard self.view === view else { return }
-        let count = image.flatMap { image in
-            published.flatMap { $0.id == ObjectIdentifier(image) ? $0.count : nil }
+        if display == nil {
+            let count = image.flatMap { image in
+                published.flatMap { $0.id == ObjectIdentifier(image) ? $0.count : nil }
+            }
+            sink.imageShown(size: image?.size, count: count)
         }
-        sink.imageShown(size: image?.size, count: count)
         if let image, let published, published.id == ObjectIdentifier(image), let timing = published.timing {
             onFrame?(timing)
         }
