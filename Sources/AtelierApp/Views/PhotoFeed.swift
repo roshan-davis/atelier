@@ -114,6 +114,16 @@ struct ZoomedDetailTarget: Equatable, Sendable {
     var pixels: CGSize
     var canvasRect: CGRect
     var layerRect: CGRect
+
+    /// The layer rectangle of `part` of the photo (0...1 from the top-left), in the same terms
+    /// as `layerRect` is of `visible`.
+    func placing(_ part: CGRect) -> CGRect {
+        guard visible.width > 0, visible.height > 0 else { return layerRect }
+        let perUnitX = layerRect.width / visible.width, perUnitY = layerRect.height / visible.height
+        let originX = layerRect.minX - visible.minX * perUnitX, originY = layerRect.minY - visible.minY * perUnitY
+        return CGRect(x: originX + part.minX * perUnitX, y: originY + part.minY * perUnitY,
+                      width: part.width * perUnitX, height: part.height * perUnitY)
+    }
 }
 
 /// The photo view's frame layer, fed from the render queue. `present` puts a frame on the layer

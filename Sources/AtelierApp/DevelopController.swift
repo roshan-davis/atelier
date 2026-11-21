@@ -2549,14 +2549,20 @@ final class DevelopController: ObservableObject {
             if let region = request.region, let regionSession = request.regionSession,
                let surfaces = request.surfaces, let sink = request.sink {
                 // Zoomed in: only the part in view, from the full-size photo.
-                if let rendered = regionSession.renderZoomedDetail(request.settings, visible: region.visible,
-                                                                   pixels: region.pixels,
-                                                                   shadowClipping: request.clipping.shadows,
-                                                                   highlightClipping: request.clipping.highlights,
-                                                                   surfaces: surfaces) {
+                if let (rendered, shown) = regionSession.renderZoomedRegion(request.settings, visible: region.visible,
+                                                                            pixels: region.pixels,
+                                                                            shadowClipping: request.clipping.shadows,
+                                                                            highlightClipping: request.clipping.highlights,
+                                                                            surfaces: surfaces) {
                     renderedAt = CACurrentMediaTime()
+                    // Placed where its pixels are on the photo: the part asked for, rounded out to
+                    // whole photo pixels, so the full-size image taking over at rest lands on
+                    // exactly the same spot (Rosh, Nov 21, 2026: "a slight 1 or 2 pixel move"
+                    // when the drag ends).
+                    var placed = region
+                    placed.layerRect = region.placing(shown)
                     let result = sink.present(rendered, count: request.count, epoch: request.liveEpoch, pool: surfaces,
-                                              placement: .region(region))
+                                              placement: .region(placed))
                     outcome = result
                     if result == .shown { shownAt = CACurrentMediaTime() }
                     surface = rendered

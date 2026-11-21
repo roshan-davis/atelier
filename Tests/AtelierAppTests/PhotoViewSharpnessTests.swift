@@ -171,13 +171,20 @@ final class PhotoViewSharpnessTests: XCTestCase {
         try await drag(.exposure) { _, tick in -1 + 2 * Double(tick) / 119 }
     }
 
+    /// A pinch leaves the zoom anywhere, so the part in view rarely starts on a whole photo pixel:
+    /// the frame must still line up with the full-size image that replaces it at rest.
+    func testDragAtAPinchedZoomStaysAligned() async throws {
+        try await drag(.contrast, magnification: 0.83) { start, tick in start + Double(tick) * 0.25 }
+    }
+
     /// 2 s of a slider at 60 Hz through the slider's own entry point, zoomed to 100%, then 1.5 s
     /// at rest: no soft sample, no flicker (the picture on top switching between the frame and the
     /// canvas mid-drag, or showing an older tick than before).
-    private func drag(_ parameter: DevelopSettings.Parameter, value: (Double, Int) -> Double) async throws {
+    private func drag(_ parameter: DevelopSettings.Parameter, magnification: CGFloat = 1.0,
+                      value: (Double, Int) -> Double) async throws {
         let harness = try await makeHarness()
         let develop = harness.develop, view = harness.view
-        try await pinch(harness, to: 1.0)
+        try await pinch(harness, to: magnification)
         var soft: [String] = [], flickers: [String] = []
         var lastTop: Top?
         var lastTick = -1
@@ -189,6 +196,11 @@ final class PhotoViewSharpnessTests: XCTestCase {
         var lastShown = develop.photoFeed.sink.shownCount
         // The histogram keeps counting the edit during the drag (`measuredRank` grows with it).
         var histogramUpdates = Set<Int>()
+        // A frame of the part in view must sit on whole photo pixels, as the full-size image that
+        // replaces it at rest does: otherwise the photo moves a pixel or two when the drag ends.
+        var misplaced: [String] = []
+        let photoWidth = CGFloat(develop.fullImage?.size.width ?? 0)
+        let photoHeight = CGFloat(develop.fullImage?.size.height ?? 0)
         func shownTick(_ sample: Sample) -> Int? {
             switch sample.top {
             case .frame: return tickOfRender[develop.photoFeed.sink.shownCount]
@@ -208,6 +220,16 @@ final class PhotoViewSharpnessTests: XCTestCase {
             }
             if let tick { lastTick = max(lastTick, tick) }
             if now.top == .frame { frameTicks += 1 }
+            let frameLayer = view.liveFrameLayer, canvasBounds = frameLayer.superlayer?.bounds ?? .zero
+            if now.top == .frame, photoWidth > 0, canvasBounds.width > 0, frameLayer.frame.width < canvasBounds.width - 1 {
+                // The full-size image is stretched over the canvas: each axis by its own scale.
+                let perX = photoWidth / canvasBounds.width, perY = photoHeight / canvasBounds.height
+                let edges = [frameLayer.frame.minX * perX, frameLayer.frame.minY * perY,
+                             frameLayer.frame.maxX * perX, frameLayer.frame.maxY * perY]
+                if let off = edges.map({ abs($0 - $0.rounded()) }).max(), off > 0.02 {
+                    misplaced.append("\(label): frame edges \(edges.map { String(format: "%.2f", $0) }) photo px")
+                }
+            }
             let shownCount = develop.photoFeed.sink.shownCount
             if during, let rank = Self.child("measuredRank", of: develop) as? Int { histogramUpdates.insert(rank) }
             if during, shownCount != lastShown { frameTimes.append(CACurrentMediaTime() * 1000); lastShown = shownCount }
@@ -239,6 +261,8 @@ final class PhotoViewSharpnessTests: XCTestCase {
         XCTAssertEqual(soft.count, 0, soft.first ?? "")
         XCTAssertEqual(flickers.count, 0, flickers.first ?? "")
         XCTAssertGreaterThan(histogramUpdates.count, 5, "the histogram stood still during the drag")
+        print("SHARPNESS \(parameter) drag: \(misplaced.count) frames off the photo's pixels")
+        XCTAssertEqual(misplaced.count, 0, misplaced.first ?? "")
     }
 
     // MARK: Photo changes

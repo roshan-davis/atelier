@@ -19,6 +19,10 @@ public enum ZoomedDetail {
         public let scale: CGFloat
         /// The rendered frame's size in pixels.
         public let size: CGSize
+        /// The part of the image the frame shows, 0...1 from the top-left: `source` (whole
+        /// pixels) in the terms of `visible`, which it rounds out by under a pixel. Where the frame
+        /// must be placed so its pixels sit exactly on the image's.
+        public let shown: CGRect
     }
 
     public static func region(of extent: CGRect, visible: CGRect, pixels: CGSize) -> Region? {
@@ -36,7 +40,10 @@ public enum ZoomedDetail {
         let scale = min(1, pixels.width / source.width, pixels.height / source.height)
         let size = CGSize(width: max(1, (source.width * scale).rounded()),
                           height: max(1, (source.height * scale).rounded()))
-        return Region(source: source, scale: scale, size: size)
+        let shownRect = CGRect(x: (source.minX - extent.minX) / extent.width,
+                               y: 1 - (source.maxY - extent.minY) / extent.height,
+                               width: source.width / extent.width, height: source.height / extent.height)
+        return Region(source: source, scale: scale, size: size, shown: shownRect)
     }
 
     /// Whether an image `imageWidth` pixels wide already has as many pixels in the visible part
@@ -54,6 +61,15 @@ extension DevelopSession {
     public func renderZoomedDetail(_ settings: DevelopSettings, visible: CGRect, pixels: CGSize,
                                    shadowClipping: Bool = false, highlightClipping: Bool = false,
                                    surfaces: DisplaySurfaces) -> IOSurface? {
+        renderZoomedRegion(settings, visible: visible, pixels: pixels, shadowClipping: shadowClipping,
+                           highlightClipping: highlightClipping, surfaces: surfaces)?.surface
+    }
+
+    /// `renderZoomedDetail`, with the part of the photo the frame actually shows (`Region.shown`,
+    /// 0...1 from the top-left), so it can be placed exactly over the photo.
+    public func renderZoomedRegion(_ settings: DevelopSettings, visible: CGRect, pixels: CGSize,
+                                   shadowClipping: Bool = false, highlightClipping: Bool = false,
+                                   surfaces: DisplaySurfaces) -> (surface: IOSurface, shown: CGRect)? {
         guard var image = image(with: settings),
               let region = ZoomedDetail.region(of: image.extent, visible: visible, pixels: pixels) else { return nil }
         if shadowClipping || highlightClipping {
@@ -69,6 +85,7 @@ extension DevelopSession {
                                                                                    kCIInputAspectRatioKey: 1])
         }
         detail = detail.cropped(to: CGRect(origin: .zero, size: region.size))
-        return DevelopRenderer.shared.render(detail, into: surfaces, onPoolFull: nil)
+        guard let surface = DevelopRenderer.shared.render(detail, into: surfaces, onPoolFull: nil) else { return nil }
+        return (surface, region.shown)
     }
 }
