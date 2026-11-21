@@ -270,6 +270,7 @@ final class PhotoViewSharpnessTests: XCTestCase {
             try await Task.sleep(for: .milliseconds(800))
         }
         var totalSoft = 0
+        var totalSwaps = 0
         var lines: [String] = []
         for index in [1, 3, 0] {
             let old = sample(view).contents
@@ -279,6 +280,9 @@ final class PhotoViewSharpnessTests: XCTestCase {
             model.focusedID = harness.ids[index]
             var newSharpAt: Double?
             var sharpSamples = 0
+            // Each different picture of the new photo that reached the screen: one means it came
+            // on in one step; more is a visible swap (the stored preview, then the render).
+            var newPictures: [ObjectIdentifier] = []
             while CACurrentMediaTime() - clicked < 4 {
                 try await Task.sleep(for: .milliseconds(5))
                 let now = sample(view)
@@ -286,6 +290,9 @@ final class PhotoViewSharpnessTests: XCTestCase {
                 let isOld = now.contents != nil && now.contents === old
                 let kind = isOld ? (now.soft ? "old photo, soft" : "old photo") : (now.soft ? "new photo, soft" : "new photo, sharp")
                 kinds[kind, default: 0] += 1
+                if !isOld, let contents = now.contents, newPictures.last != ObjectIdentifier(contents) {
+                    newPictures.append(ObjectIdentifier(contents))
+                }
                 if now.soft { soft.append(String(format: "%.0f ms: ", ms) + kind + " — " + now.line) }
                 if !isOld, !now.soft {
                     if newSharpAt == nil { newSharpAt = ms }
@@ -294,8 +301,10 @@ final class PhotoViewSharpnessTests: XCTestCase {
                 }
             }
             totalSoft += soft.count
+            totalSwaps += max(0, newPictures.count - 1)
             let line = "[\(onChange)\(zoomFirst ? ", zoomed" : ", Fit")] to \(harness.names[index]) at \(model.zoomState.level): "
                 + "click to sharp " + (newSharpAt.map { String(format: "%.0f ms", $0) } ?? "never") + "; "
+                + "\(newPictures.count) picture(s) of the new photo; "
                 + kinds.map { "\($0.key) \($0.value)" }.sorted().joined(separator: ", ")
             lines.append(line)
             print("SHARPNESS \(line)")
@@ -304,6 +313,7 @@ final class PhotoViewSharpnessTests: XCTestCase {
             try await Task.sleep(for: .milliseconds(1200))
         }
         XCTAssertEqual(totalSoft, 0, lines.joined(separator: "\n"))
+        XCTAssertEqual(totalSwaps, 0, "the new photo swapped pictures on screen:\n" + lines.joined(separator: "\n"))
     }
 
     // MARK: Helpers

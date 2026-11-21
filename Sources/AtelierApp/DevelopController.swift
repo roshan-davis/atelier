@@ -1046,8 +1046,11 @@ final class DevelopController: ObservableObject {
         let url = try? catalog.readableURL(for: assetID, cache: originals)
         let zoomed = wantsFullResolution && compareMode == .off && !isMasking && !isRemoving && !isLensBlurring
         let decodedPreview = hasPreview ? PreviewImages.shared.cached(assetID, at: cachedPreview) : nil
-        // Something sharper than what is ready is coming: the last photo stays up until it does.
-        if previousImage != nil, zoomed || decodedPreview == nil, hasPreview || url != nil {
+        // The last photo stays up until this one's own render (or, zoomed in, its full-size image)
+        // is in: the stored preview is a JPEG of an earlier render, and showing it first made
+        // every click a visible swap to the render (Rosh, Nov 21, 2026: "clicking on a thumbnail
+        // it is showing low resolution first").
+        if previousImage != nil, hasPreview || url != nil {
             beginHold(needsFullSize: zoomed)
         }
         if let decoded = decodedPreview {
@@ -1069,7 +1072,6 @@ final class DevelopController: ObservableObject {
                     guard self.assetID == assetID, self.image === placeholder, let decoded else { return }
                     self.image = decoded
                     self.showsStandIn = false
-                    if !self.holdNeedsFullSize { self.endHold(because: "with its preview") }
                     if self.histogram == nil { self.measurePreview(decoded, of: assetID) }
                 }
             }
