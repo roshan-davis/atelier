@@ -122,8 +122,10 @@ final class LibraryModel: ObservableObject {
             if mode == .hdr { hdrFocusChanged(from: oldValue) }
             if mode == .develop {
                 if zoomState.level == .fit, develop.wantsFullResolution { develop.wantsFullResolution = false }
-                develop.open(focusedID)
-                if let image = develop.image, !develop.showsPreviousPhoto, let width = detail?.asset.width, let height = detail?.asset.height {
+                develop.open(focusedID, zoomedIn: nextPhotoIsZoomedIn)
+                // While the last photo is held for a sharper picture of this one, putting this
+                // one's preview up now is the soft flash Rosh saw (Nov 21, 2026).
+                if let image = develop.image, !develop.showsPreviousPhoto, !develop.holdsPreviousPhoto, let width = detail?.asset.width, let height = detail?.asset.height {
                     zoomState.showNow(image, pixelSize: develop.croppedPixelSize(assetSize: CGSize(width: width, height: height)))
                 }
             }
@@ -147,6 +149,11 @@ final class LibraryModel: ObservableObject {
                 develop.wantsFullResolution = false
                 develop.releaseFullResolution(because: "left Develop")
                 RenderMemory.shared.releaseAllSoon(because: "left Develop")
+            }
+            // The shared full-size picture is for Loupe and Develop only (`FullSizeRenders`).
+            if mode != .develop, mode != .loupe, oldValue == .develop || oldValue == .loupe {
+                FullSizeRenders.shared.clear()
+                develop.releaseRestingFullImage()
             }
             if mode == .hdr {
                 if oldValue != .hdr { hdrReturnMode = oldValue }
@@ -533,6 +540,17 @@ final class LibraryModel: ObservableObject {
     /// Saved across launches (see `savePhotoZooms`).
     private var zoomByPhoto: [Int64: (level: ZoomLevel, center: CGPoint?)] = LibraryModel.loadPhotoZooms()
 
+    /// The photo about to open will be shown past Fit (the zoom kept or remembered for it), so
+    /// it needs its full-size image before it is sharp.
+    private var nextPhotoIsZoomedIn: Bool {
+        let report = zoomState.report
+        switch zoomState.level {
+        case .fit: return false
+        case .fill: return report.isZoomedPastFit
+        case .percent(let percent): return report.fitPercent > 0 ? percent > report.fitPercent * 1.01 : report.isZoomedPastFit
+        }
+    }
+
     private func zoomForNextPhoto(leaving previous: Int64?) {
         let mode = ZoomOnPhotoChange.current
         guard let previous else {
@@ -565,7 +583,7 @@ final class LibraryModel: ObservableObject {
         if zoom != next { zoom = next }
     }
 
-    nonisolated private static let photoZoomsKey = "zoom.byPhoto"
+    nonisolated static let photoZoomsKey = "zoom.byPhoto"
     /// Photos remembered at most; the ones zoomed longest ago are dropped first.
     nonisolated private static let photoZoomsLimit = 2000
 

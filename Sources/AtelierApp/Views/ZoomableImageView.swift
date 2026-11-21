@@ -176,6 +176,26 @@ struct ZoomableImageView: NSViewRepresentable {
     /// The overlay only shows something (the Cull preview's note markers): clicks, drags and the
     /// cursor stay the photo view's own, so zoom and pan work as without it.
     var overlayPassesClicks = false
+    /// Keeps the photo on screen as it is, at its zoom and spot, and takes the new image, zoom
+    /// and spot together once this goes false (`DevelopController.holdsPreviousPhoto`).
+    var holdsImage = false
+    /// The photo the view should show (the selection), and the photo `image` is a picture of.
+    /// While they differ the photo on screen stays exactly as it is (picture, zoom, spot,
+    /// dimming), from the moment the selection changes, until a picture of the selected photo
+    /// arrives: the one rule for changing photo in every photo view (Rosh, Nov 21, 2026). A
+    /// view that hasn't the next photo's picture ready keeps passing the last one, tagged as such.
+    var wantedPhotoID: Int64? = nil
+    var imagePhotoID: Int64? = nil
+    /// A sharper picture of `imagePhotoID` is on its way (a full-size render): the view doesn't put
+    /// a new photo on screen softer than its zoom needs while it waits, for up to a second
+    /// (`ZoomScrollView.accepts`).
+    var sharperComing = false
+    /// The version of what the picture shows (its preview file's date, for example); a softer
+    /// picture of the same photo replaces a sharper one only if it is newer. Nil: not told.
+    var imageRevision: Double? = nil
+    /// A sharper picture of the same photo and look (its full-size render), used the moment the
+    /// zoom needs more pixels than `image` has, even while a pinch is still going on.
+    var sharperImage: NSImage? = nil
 
     func makeNSView(context: Context) -> ZoomScrollView {
         let view = ZoomScrollView()
@@ -204,21 +224,12 @@ struct ZoomableImageView: NSViewRepresentable {
         }
         feed?.attach(view)
         view.visibleWidth = visibleWidth
-        // Only a new photo takes the position: ZoomState changes reach this view before the
-        // window passes it the next photo, and the photo still shown must not use it.
-        if let center = zoom.pendingCenter, let image, image !== view.shownImage {
-            view.pendingCenter = center
-            zoom.pendingCenter = nil
-        }
-        if let center = zoom.restoreCenter {
-            view.pendingCenter = center
-            zoom.restoreCenter = nil
-        }
         view.isUpdating = true
-        view.setImage(image, pixelSize: pixelSize)
-        view.setDimmed(dimmed)
-        view.apply(zoom.level)
-        view.applyPendingCenter()
+        let request = ZoomScrollView.Picture(image: image, pixelSize: pixelSize, photoID: imagePhotoID,
+                                             wantedPhotoID: wantedPhotoID, sharperComing: sharperComing,
+                                             dimmed: dimmed, holds: holdsImage, revision: imageRevision,
+                                             sharper: sharperImage)
+        view.offer(request, zoom: zoom)
         view.overlayPassesClicks = overlayPassesClicks
         view.setOverlay(overlay?(view.photoFrame))
         view.isUpdating = false
@@ -403,9 +414,186 @@ final class ZoomScrollView: NSScrollView {
     var liveFrameLayer: CALayer { canvas.frameLayer }
     /// The size of the image on screen, whose shape live frames must have.
     var liveImageSize: CGSize? { canvas.currentImageSize }
+    /// Where a frame of the whole photo goes: the canvas's bounds.
+    var liveFrameBounds: CGRect { canvas.bounds }
+
+    /// The part of the photo in view, in canvas points; nil before the photo has a size.
+    var shownCanvasRect: CGRect? {
+        guard documentSize.width > 0, documentSize.height > 0 else { return nil }
+        let shown = contentView.bounds.intersection(CGRect(origin: .zero, size: documentSize))
+        return shown.isNull || shown.width <= 0 || shown.height <= 0 ? nil : shown
+    }
+
+    /// Where a frame of only the visible part goes, and its size in screen pixels: nil while the
+    /// whole photo is in view (a frame of the whole photo is then as cheap), before the view is in
+    /// a window, and in the slider compare view.
+    func regionTarget() -> ZoomedDetailTarget? {
+        guard window != nil, visibleWidth == nil, let shown = shownCanvasRect else { return nil }
+        let visible = CGRect(x: shown.minX / documentSize.width, y: shown.minY / documentSize.height,
+                             width: shown.width / documentSize.width, height: shown.height / documentSize.height)
+        guard visible.width < 0.995 || visible.height < 0.995 else { return nil }
+        let backing = window?.backingScaleFactor ?? 2
+        let pixels = CGSize(width: (shown.width * magnification * backing).rounded(),
+                            height: (shown.height * magnification * backing).rounded())
+        return ZoomedDetailTarget(visible: visible, pixels: pixels, canvasRect: shown,
+                                  layerRect: canvas.convertToLayer(shown))
+    }
+
+    /// Shows `image` at `zoom`'s level and spot, as one update. `holding` keeps the photo on
+    /// screen as it is, at its zoom and spot, until it goes false: then the new image, zoom and
+    /// spot go on together (`DevelopController.holdsPreviousPhoto`).
+    /// A picture offered to the photo view: what it shows, of which photo, and what the source
+    /// knows (the selected photo, a sharper picture on its way, the photo's dimming).
+    struct Picture {
+        var image: NSImage?
+        var pixelSize: CGSize?
+        var photoID: Int64?
+        var wantedPhotoID: Int64?
+        var sharperComing = false
+        var dimmed = false
+        /// The source holds the last photo itself (`DevelopController.holdsPreviousPhoto`).
+        var holds = false
+        var revision: Double?
+        var sharper: NSImage?
+    }
+
+    /// The photo the picture on screen is of (nil when the view isn't told).
+    private(set) var shownPhotoID: Int64?
+    private var shownRevision: Double?
+    /// When the view began waiting for a sharper picture of a new photo.
+    private var sharperWaitBegan: CFTimeInterval?
+    private var lastOffer: (picture: Picture, zoom: ZoomState)?
+    /// The longest a new photo waits for a sharper picture before its softer one shows.
+    static let sharperLimit: CFTimeInterval = 1.0
+
+    /// The one rule for what every photo view shows (Rosh, Nov 21, 2026): the photo on screen
+    /// stays exactly as it is (picture, zoom, spot, dimming) until a picture of the selected photo
+    /// is offered; a picture softer than the zoom needs never replaces a sharper one of the same
+    /// photo (a preview rebuilt, the full-size image let go); and a new photo doesn't go on softer
+    /// than its zoom needs while a sharper picture is on its way, for up to `sharperLimit`.
+    func offer(_ picture: Picture, zoom: ZoomState) {
+        lastOffer = (picture, zoom)
+        let accepted = shownImage == nil || accepts(picture, level: zoom.level)
+        show(picture.image, pixelSize: picture.pixelSize, zoom: zoom, holding: !accepted)
+        guard accepted else { return }
+        setDimmed(picture.dimmed)
+        shownPhotoID = picture.photoID
+        shownRevision = picture.revision
+        sharperImage = picture.sharper
+        useSharperIfNeeded()
+    }
+
+    private func accepts(_ picture: Picture, level: ZoomLevel) -> Bool {
+        if picture.holds { return false }
+        if let wanted = picture.wantedPhotoID, picture.photoID != wanted { return false }
+        guard let base = picture.image, let has = Self.sharpness(of: picture.sharper ?? base) else { return true }
+        let image = picture.sharper ?? base
+        let needs = neededSharpness(for: image, pixelSize: picture.pixelSize, at: level)
+        let enough = has.pixelsPerPoint(onCanvas: documentSize(for: image, pixelSize: picture.pixelSize).width) >= needs * 0.8
+        if picture.photoID != nil, picture.photoID == shownPhotoID {
+            guard !enough, let shownImage = canvasImage ?? shownImage, let shown = Self.sharpness(of: shownImage),
+                  shown.width > has.width * 1.05 else { return true }
+            // The same photo, softer than what's on screen: never in place of a sharper picture
+            // of the same version (a full-size image let go, the preview decoded again); a newer
+            // version waits a moment for its sharper picture, like a new photo.
+            guard let revision = picture.revision, let shownRevision, revision > shownRevision else {
+                return picture.revision == nil && shownRevision == nil ? true : false
+            }
+        }
+        // A new photo: its softer picture waits a moment for the sharper one on its way.
+        guard !enough, picture.sharperComing else { sharperWaitBegan = nil; return true }
+        let now = CACurrentMediaTime()
+        if let began = sharperWaitBegan {
+            if now - began >= Self.sharperLimit { sharperWaitBegan = nil; return true }
+        } else {
+            sharperWaitBegan = now
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.sharperLimit + 0.01) { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self, let last = self.lastOffer else { return }
+                    self.offer(last.picture, zoom: last.zoom)
+                }
+            }
+        }
+        return false
+    }
+
+    private struct Sharpness {
+        let width: CGFloat
+        func pixelsPerPoint(onCanvas canvasWidth: CGFloat) -> CGFloat { canvasWidth > 0 ? width / canvasWidth : 0 }
+    }
+
+    private static func sharpness(of image: NSImage) -> Sharpness? {
+        guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
+        return Sharpness(width: CGFloat(cgImage.width))
+    }
+
+    /// The canvas `image` would have (`setImage`): the full-size photo's long edge, in points.
+    private func documentSize(for image: NSImage, pixelSize: CGSize?) -> CGSize {
+        var pixels = image.size
+        if let pixelSize, pixelSize.width > 0, pixelSize.height > 0, image.size.width > 0, image.size.height > 0 {
+            let factor = max(pixelSize.width, pixelSize.height) / max(image.size.width, image.size.height)
+            pixels = CGSize(width: image.size.width * factor, height: image.size.height * factor)
+        }
+        let backing = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
+        return CGSize(width: pixels.width / backing, height: pixels.height / backing)
+    }
+
+    /// Screen pixels per canvas point at `level` for `image`'s canvas.
+    private func neededSharpness(for image: NSImage, pixelSize: CGSize?, at level: ZoomLevel) -> CGFloat {
+        let size = documentSize(for: image, pixelSize: pixelSize)
+        guard size.width > 0, size.height > 0 else { return 0 }
+        let width = max(1, bounds.width - padding * 2), height = max(1, bounds.height - padding * 2)
+        let magnification: CGFloat
+        switch level {
+        case .fit: magnification = min(width / size.width, height / size.height)
+        case .fill: magnification = max(bounds.width / size.width, bounds.height / size.height)
+        case .percent(let value): magnification = CGFloat(value / 100)
+        }
+        return magnification * (window?.backingScaleFactor ?? 2)
+    }
+
+    /// The sharper picture offered with the one on screen (`Picture.sharper`).
+    private var sharperImage: NSImage?
+    /// What the canvas shows: `shownImage`, or `sharperImage` while the zoom needs it.
+    private var canvasImage: NSImage?
+
+    /// Puts the sharper picture on the canvas when the zoom needs more pixels than the shown one
+    /// has, and back when it doesn't (the same photo and look, so it is no visible change but
+    /// detail). Called on every zoom and scroll, so a pinch is sharp as it goes.
+    private func useSharperIfNeeded() {
+        guard let base = shownImage else { return }
+        var choice = base
+        if let sharperImage, let has = Self.sharpness(of: base), documentSize.width > 0 {
+            let needs = magnification * (window?.backingScaleFactor ?? 2)
+            // Only when the shown picture is too soft for the zoom (the same 80% as `accepts`): at
+            // Fit the proxy stays, so nothing on screen changes while the sharper one is made.
+            if has.pixelsPerPoint(onCanvas: documentSize.width) < needs * 0.8 { choice = sharperImage }
+        }
+        guard choice !== canvasImage else { return }
+        canvasImage = choice
+        canvas.setImage(choice)
+    }
+
+    func show(_ image: NSImage?, pixelSize: CGSize?, zoom: ZoomState, holding: Bool) {
+        if holding, shownImage != nil { return }
+        // Only a new photo takes the position: ZoomState changes reach this view before the
+        // window passes it the next photo, and the photo still shown must not use it.
+        if let center = zoom.pendingCenter, let image, image !== shownImage {
+            pendingCenter = center
+            zoom.pendingCenter = nil
+        }
+        if let center = zoom.restoreCenter {
+            pendingCenter = center
+            zoom.restoreCenter = nil
+        }
+        setImage(image, pixelSize: pixelSize)
+        apply(zoom.level)
+        applyPendingCenter()
+    }
 
     func setImage(_ image: NSImage?, pixelSize: CGSize?) {
         shownImage = image
+        canvasImage = image
         canvas.setImage(image)
         guard let image, image.size.width > 0, image.size.height > 0 else { return }
         // Keep the displayed image's aspect, at the full-size photo's long edge.
@@ -516,6 +704,9 @@ final class ZoomScrollView: NSScrollView {
 
     /// Tells the Navigator what part of the photo is in view, after the current layout pass.
     private func reportVisible() {
+        useSharperIfNeeded()
+        // A frame of one part of the photo goes as soon as the view moves off it.
+        feed?.visibleChanged(to: shownCanvasRect, in: self)
         // Until the view has taken its spot, what it shows isn't where it is going.
         guard let viewport, pendingCenter == nil else { return }
         var visible: CGRect?
@@ -744,8 +935,13 @@ final class ZoomCanvasView: NSView {
         placeFrameLayer()
     }
 
-    /// Covers the view; set by bounds and position because the layer is transformed.
+    /// Covers the view; set by bounds and position because the layer is transformed. With live
+    /// frames on, their sink places it (a frame of one part of the photo has its own place).
     private func placeFrameLayer() {
+        if let scrollView, let feed = scrollView.feed, feed.isAttached(scrollView) {
+            feed.sink.setWhole(bounds)
+            return
+        }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         frameLayer.bounds = CGRect(origin: .zero, size: bounds.size)

@@ -42,10 +42,27 @@ final class PhotoFeed {
 
     /// A view is showing the photo and can take frames.
     var isAttached: Bool { view != nil }
+    /// `view` is the one taking frames.
+    func isAttached(_ view: ZoomScrollView) -> Bool { self.view === view }
+
+    /// Where a frame of only the visible part would go, at the screen's resolution
+    /// (`ZoomScrollView.regionTarget`); nil at Fit or with no view.
+    var regionTarget: ZoomedDetailTarget? { view?.regionTarget() }
+
+    /// Called when the view panned or zoomed away from the frame on screen, which it then took
+    /// down: the controller renders the new view.
+    var onFrameLost: (() -> Void)?
+
+    /// The view now shows `canvasRect` of its canvas (nil: nothing yet).
+    func visibleChanged(to canvasRect: CGRect?, in view: ZoomScrollView) {
+        guard self.view === view else { return }
+        if sink.visibleChanged(to: canvasRect) { onFrameLost?() }
+    }
 
     func attach(_ view: ZoomScrollView) {
         guard self.view !== view else { return }
         sink.setTarget(view.liveFrameLayer, imageSize: view.liveImageSize)
+        sink.setLayout(whole: view.liveFrameBounds, visible: view.shownCanvasRect)
         self.view = view
     }
 
@@ -79,10 +96,33 @@ final class PhotoFeed {
         let count = image.flatMap { image in
             published.flatMap { $0.id == ObjectIdentifier(image) ? $0.count : nil }
         }
-        sink.imageShown(size: image?.size, count: count)
+        let pixels = image?.cgImage(forProposedRect: nil, context: nil, hints: nil).map { CGFloat($0.width) }
+        let width = view.liveFrameBounds.width
+        sink.imageShown(size: image?.size, count: count,
+                        pixelsPerPoint: pixels.map { width > 0 ? $0 / width : 0 })
         if let image, let published, published.id == ObjectIdentifier(image), let timing = published.timing {
             onFrame?(timing)
         }
+    }
+}
+
+/// Where a frame of the visible part of a zoomed photo goes (`ZoomedDetail`): the visible part,
+/// 0...1 from the top-left, its size in screen pixels, and the same rectangle in the photo view's
+/// canvas (points) and in its layer. Read on the main thread (`ZoomScrollView.regionTarget`).
+struct ZoomedDetailTarget: Equatable, Sendable {
+    var visible: CGRect
+    var pixels: CGSize
+    var canvasRect: CGRect
+    var layerRect: CGRect
+
+    /// The layer rectangle of `part` of the photo (0...1 from the top-left), in the same terms
+    /// as `layerRect` is of `visible`.
+    func placing(_ part: CGRect) -> CGRect {
+        guard visible.width > 0, visible.height > 0 else { return layerRect }
+        let perUnitX = layerRect.width / visible.width, perUnitY = layerRect.height / visible.height
+        let originX = layerRect.minX - visible.minX * perUnitX, originY = layerRect.minY - visible.minY * perUnitY
+        return CGRect(x: originX + part.minX * perUnitX, y: originY + part.minY * perUnitY,
+                      width: part.width * perUnitX, height: part.height * perUnitY)
     }
 }
 
@@ -109,12 +149,24 @@ final class LiveFrameSink: @unchecked Sendable {
         case noView
     }
 
+    /// What a frame covers: the whole photo (the proxy's render, or the full-size photo at Fit),
+    /// or only the part in view, rendered at the screen's resolution from the full-size photo
+    /// while zoomed in (`DevelopSession.renderZoomedDetail`). One layer shows either.
+    enum Placement: Equatable, Sendable {
+        case whole
+        case region(ZoomedDetailTarget)
+    }
+
     private let lock = NSLock()
     private weak var layer: CALayer?
     /// The size of the ordinary image on screen; frames must have its shape.
     private var imageSize: CGSize?
+    /// The canvas's bounds (a whole frame's place) and the part of it in view (a region frame's).
+    private var wholeRect = CGRect.zero
+    private var visibleRect: CGRect?
     private var epoch = 0
-    private var shown: (surface: IOSurface, pool: DisplaySurfaces)?
+    /// The frame on screen, where it is, and its pixels per canvas point.
+    private var shown: (surface: IOSurface, pool: DisplaySurfaces, placement: Placement, density: CGFloat)?
     private var shownCountValue = -1
     /// Frames from renders up to this count are older than the ordinary image on screen.
     private var floor = -1
@@ -155,13 +207,78 @@ final class LiveFrameSink: @unchecked Sendable {
         if let old { old.pool.checkIn(old.surface) }
     }
 
+    /// The canvas's bounds and the part of it in view, when a view attaches.
+    func setLayout(whole: CGRect, visible: CGRect?) {
+        lock.lock()
+        wholeRect = whole
+        visibleRect = visible
+        lock.unlock()
+    }
+
+    /// The canvas was resized (another photo shape, the crop): a whole frame follows it, a frame
+    /// of one part goes, as its place is gone. Called on the main thread; nothing is shown out of
+    /// place in between.
+    func setWhole(_ rect: CGRect) {
+        lock.lock()
+        wholeRect = rect
+        var lost: (surface: IOSurface, pool: DisplaySurfaces)?
+        let isRegion: Bool
+        if let current = shown, case .region = current.placement { isRegion = true } else { isRegion = false }
+        if isRegion, let current = shown {
+            lost = (current.surface, current.pool)
+            shown = nil
+            epoch += 1
+        }
+        let target = layer
+        lock.unlock()
+        guard let target else { return }
+        if let lost {
+            Self.clear(target)
+            lost.pool.checkIn(lost.surface)
+        } else {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            target.bounds = CGRect(origin: .zero, size: rect.size)
+            target.position = CGPoint(x: rect.midX, y: rect.midY)
+            CATransaction.commit()
+        }
+    }
+
+    /// The view now shows `canvasRect`: a frame of another part is taken down. True when one was.
+    func visibleChanged(to canvasRect: CGRect?) -> Bool {
+        lock.lock()
+        visibleRect = canvasRect
+        var lost: (surface: IOSurface, pool: DisplaySurfaces)?
+        if let current = shown, case .region(let target) = current.placement,
+           !Self.same(target.canvasRect, canvasRect) {
+            lost = (current.surface, current.pool)
+            shown = nil
+            epoch += 1
+        }
+        let target = layer
+        lock.unlock()
+        guard let lost else { return false }
+        if let target { Self.clear(target) }
+        lost.pool.checkIn(lost.surface)
+        return true
+    }
+
     /// An ordinary image of `size`, published from render `count` (nil when it isn't a render,
-    /// e.g. the cached preview), is on screen. Called on the main thread.
-    func imageShown(size: CGSize?, count: Int?) {
+    /// e.g. the cached preview or the full-size image), `pixelsPerPoint` dense on the canvas, is on
+    /// screen. Called on the main thread. The frame on top goes, unless it is newer, or it shows
+    /// the same render sharper (the zoomed region frame over the settled proxy image): the photo
+    /// never steps back to an older or softer picture.
+    func imageShown(size: CGSize?, count: Int?, pixelsPerPoint: CGFloat? = nil) {
         lock.lock()
         imageSize = size
         // A newer frame stays on top of an older image.
         if let count, count < shownCountValue {
+            lock.unlock()
+            return
+        }
+        if let current = shown, let count, count == shownCountValue,
+           let pixelsPerPoint, pixelsPerPoint < current.density * 0.95 {
+            floor = max(floor, count)
             lock.unlock()
             return
         }
@@ -174,15 +291,20 @@ final class LiveFrameSink: @unchecked Sendable {
         if let old { old.pool.checkIn(old.surface) }
     }
 
-    /// Puts `surface`, render `count` requested at `epoch`, on screen, on the calling thread.
+    /// Puts `surface`, render `count` requested at `epoch`, on screen at `placement`, on the
+    /// calling thread, in one transaction with its place: a frame is shown whole or not at all.
     /// The surface is returned to `pool` whenever it isn't shown.
-    func present(_ surface: IOSurface, count: Int, epoch: Int, pool: DisplaySurfaces) -> Outcome {
+    func present(_ surface: IOSurface, count: Int, epoch: Int, pool: DisplaySurfaces,
+                 placement: Placement = .whole) -> Outcome {
         lock.lock()
         let outcome: Outcome
         if epoch != self.epoch || count <= shownCountValue || count <= floor {
             outcome = .stale
         } else if layer == nil {
             outcome = .noView
+        } else if case .region(let region) = placement {
+            // Made for the part in view when it was asked for; the view moved since.
+            outcome = Self.same(region.canvasRect, visibleRect) ? .shown : .stale
         } else if let imageSize, Self.fits(surface, imageSize) {
             outcome = .shown
         } else {
@@ -194,11 +316,19 @@ final class LiveFrameSink: @unchecked Sendable {
             return outcome == .shown ? .noView : outcome
         }
         let old = shown
-        shown = (surface, pool)
+        let place: CGRect
+        switch placement {
+        case .whole: place = wholeRect
+        case .region(let region): place = region.layerRect
+        }
+        let density = CGFloat(surface.width) / max(1, place.width)
+        shown = (surface, pool, placement, density)
         shownCountValue = count
         lock.unlock()
         CATransaction.begin()
         CATransaction.setDisableActions(true)
+        target.bounds = CGRect(origin: .zero, size: place.size)
+        target.position = CGPoint(x: place.midX, y: place.midY)
         target.contents = surface
         target.isHidden = false
         CATransaction.commit()
@@ -207,6 +337,12 @@ final class LiveFrameSink: @unchecked Sendable {
         // Reused only once the window server has let go of it (`DisplaySurfaces.checkOut`).
         if let old { old.pool.checkIn(old.surface) }
         return .shown
+    }
+
+    private static func same(_ a: CGRect, _ b: CGRect?) -> Bool {
+        guard let b else { return false }
+        return abs(a.minX - b.minX) <= 0.5 && abs(a.minY - b.minY) <= 0.5
+            && abs(a.width - b.width) <= 0.5 && abs(a.height - b.height) <= 0.5
     }
 
     /// The image's height at the frame's width is within rounding of a pixel when they are the

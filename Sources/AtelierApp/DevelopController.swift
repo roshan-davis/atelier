@@ -1,3 +1,4 @@
+import Combine
 import AppKit
 import AtelierCore
 import CoreImage
@@ -87,7 +88,7 @@ private struct ProxyRenderRequest {
     let clipping: (shadows: Bool, highlights: Bool)
     let assetID: Int64?
     let count: Int
-    let measures: Bool
+    var measures: Bool
     let generation: Int
     let queuedAt: CFAbsoluteTime
     /// Set when the frame goes straight to the photo view (`PhotoFeed`); nil renders a CGImage.
@@ -104,6 +105,30 @@ private struct ProxyRenderRequest {
     /// Asked for with Lens Blur on (the mode open): its image must not be shown once the mode
     /// has closed, nor the other way round.
     var lensBlur = false
+    /// Zoomed in past what the proxy has pixels for: the frame is only the part in view, at the
+    /// screen's resolution, from the full-size photo (`regionSession`), instead of the whole proxy
+    /// stretched over the screen. One render either way.
+    var region: ZoomedDetailTarget? = nil
+    var regionSession: DevelopSession? = nil
+    /// A small copy of the photo the histogram is counted from while frames show only part of
+    /// it (`DevelopController.histogramSession`).
+    var histogramSession: DevelopSession? = nil
+    /// When the histogram copy was last rendered, so it is at most `histogramInterval` apart.
+    var histogramClock: LockedValue<CFTimeInterval>? = nil
+
+    /// The same render the ordinary way: a CGImage of the whole proxy, published to every view
+    /// of the photo, with the histogram counted from it.
+    var ordinary: ProxyRenderRequest {
+        var request = self
+        request.surfaces = nil
+        request.sink = nil
+        request.fallback = nil
+        request.region = nil
+        request.regionSession = nil
+        request.histogramSession = nil
+        request.measures = overlay == nil && preview == nil && !lensBlur
+        return request
+    }
 }
 
 /// State for the Develop view: the open photo's settings, its live proxy render, and saving.
@@ -601,10 +626,67 @@ final class DevelopController: ObservableObject {
                 scheduleFullRender()
                 scheduleFullBeforeRender()
             } else if !wantsFullResolution, oldValue {
+                if holdNeedsFullSize { endHold(because: "back to Fit") }
                 scheduleFullRelease()
             }
         }
     }
+    /// While another photo opens, the photo view keeps the last photo, at its zoom, until the
+    /// new one has a picture as sharp as the view needs: its 2560-pixel preview or proxy at Fit,
+    /// its full-size image zoomed in. Then the new photo, its zoom and its spot go on screen in
+    /// one step (Rosh, Nov 21, 2026: "when I select the next image it is still showing low
+    /// resolution first for a split second"). Never the 256-pixel grid thumbnail. Ends after
+    /// `photoHoldLimit` whatever happens; the Filmstrip, Navigator and panels move at once.
+    /// Shared with Loupe (`PhotoChangeHold`); 1 s at most (a heavy edit's first full-size
+    /// render took 650 ms).
+    let photoHold = PhotoChangeHold(limit: 1.0)
+    var holdsPreviousPhoto: Bool { photoHold.isHolding }
+    /// The photo the photo views' pictures are of (`ZoomableImageView.imagePhotoID`): the open one,
+    /// except while the last photo is held for it.
+    var shownPhotoID: Int64? { holdsPreviousPhoto ? nil : assetID }
+
+    /// The photo's full-size picture with the current settings, made in the background once the
+    /// photo has rested at Fit (`FullSizeRenders`), handed to the photo view as its sharper picture
+    /// (`ZoomableImageView.sharperImage`): zooming in, pinching or a Navigator click is then sharp
+    /// from the first frame instead of the proxy blown up until the full-size render is in.
+    @Published private(set) var restingFullImage: NSImage?
+    private var restingFullSettings: DevelopSettings?
+    private var restingFullTask: Task<Void, Never>?
+    /// The sharper picture for the photo view: only for exactly what it shows.
+    var sharperImage: NSImage? {
+        guard !showingBefore, sliderPreview == nil, !isCropping, !isGuiding, !(isMasking && showMaskOverlay),
+              let restingFullImage, restingFullSettings == settings else { return nil }
+        return restingFullImage
+    }
+
+    /// Develop or Loupe was left: the resting full-size picture goes (`FullSizeRenders`).
+    func releaseRestingFullImage() {
+        restingFullTask?.cancel()
+        restingFullImage = nil
+        restingFullSettings = nil
+    }
+
+    /// After an edit or an open rests: renders the full-size picture in the background.
+    private func prepareRestingFullImage() {
+        restingFullTask?.cancel()
+        guard FullSizeRenders.shared.preparesAhead, let url = sourceURL, !isLensBlurring, assetID != nil else { return }
+        if restingFullSettings == settings, restingFullImage != nil { return }
+        let settings = self.settings
+        let assetID = self.assetID
+        restingFullTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(800))
+            guard !Task.isCancelled, let self, self.assetID == assetID, self.settings == settings else { return }
+            let image = await FullSizeRenders.shared.render(url, settings: settings)
+            guard !Task.isCancelled, self.assetID == assetID, self.settings == settings, let image else { return }
+            self.restingFullImage = image
+            self.restingFullSettings = settings
+        }
+    }
+    /// What ends the hold: the full-size image (zoomed in), or the proxy's first render.
+    private var holdNeedsFullSize = false
+    /// The next photo's own render is in (not its stored preview).
+    private var holdHasRender = false
+
     /// Lets go of the full-size images a moment after the view goes back to Fit (AT-077).
     private var fullRelease: DispatchWorkItem?
     @Published private(set) var fullImage: NSImage?
@@ -622,7 +704,19 @@ final class DevelopController: ObservableObject {
     var displayImage: NSImage? {
         if isCropping || (isMasking && showMaskOverlay) || sliderPreview != nil { return image }
         if !showingBefore, let fullImage, fullImageSettings == settings { return fullImage }
+        // Zoomed in, edits show as frames of the part in view, sharp; under them the photo view
+        // keeps the full-size image (an edit behind) rather than the softer proxy, so nothing
+        // softer shows while a frame is on its way. The next full-size render replaces it.
+        if usesRegionFrames, let fullImage, fullImageSettings != nil { return fullImage }
         return image
+    }
+
+    /// Zoomed in with edits drawn as frames of the part in view (`zoomedRegion`): nothing on top
+    /// needs the whole photo, and the full-size photo is open.
+    var usesRegionFrames: Bool {
+        wantsFullResolution && compareMode == .off && !showingBefore && sliderPreview == nil && !isLensBlurring
+            && !isGuiding && !isCropping && !(isMasking && showMaskOverlay) && fullSession != nil
+            && firstRenderDone && !liveFramesOff
     }
 
     /// The open photo's history and snapshots. `committed` is the settings of the newest step,
@@ -727,6 +821,17 @@ final class DevelopController: ObservableObject {
     let frameHUD = DevelopFrameHUD()
     lazy var photoFeed = PhotoFeed { [weak frameHUD] timing in frameHUD?.submit(timing) }
     private let displaySurfaces = DisplaySurfaces()
+    /// Frames of the part in view while zoomed in (another size than the whole-photo frames).
+    private let regionSurfaces = DisplaySurfaces(limit: 3)
+    private var holdObserver: AnyCancellable?
+    /// See `histogramSessionForRegionFrames`.
+    private var histogramSession: DevelopSession?
+    private var histogramSessionOpening = false
+    nonisolated static let histogramSize = 512
+    /// The histogram's counts follow a drag about ten times a second (PRD), so its copy is
+    /// rendered at most this often beside the frames, not on every tick.
+    nonisolated static let histogramInterval: CFTimeInterval = 0.1
+    private let histogramClock = LockedValue<CFTimeInterval>(0)
     /// What live frames were last requested for; a change drops frames still rendering.
     private var lastLiveKey: LiveFrameKey?
     /// A live frame didn't fit the photo on screen; frames take the ordinary path until the
@@ -835,6 +940,10 @@ final class DevelopController: ObservableObject {
         }
         // macOS says memory is low: Core Image's cache is already cleared (`RenderMemory`); let go
         // of the full-size images too unless the photo is zoomed in (AT-077).
+        photoFeed.onFrameLost = { [weak self] in self?.zoomedFrameLost() }
+        photoHold.log = { [weak self] line in DevelopTimingLog.shared.log(self?.assetID, "photo change shown " + line) }
+        // The photo views watch the controller: tell them when the hold starts or ends.
+        holdObserver = photoHold.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
         observers.observe(RenderMemory.pressure) { [weak self] _ in
             MainActor.assumeIsolated { self?.releaseFullResolution(because: "memory pressure") }
         }
@@ -885,7 +994,9 @@ final class DevelopController: ObservableObject {
         reopen()
     }
 
-    func open(_ assetID: Int64?) {
+    /// `zoomedIn`: the photo view will show it past Fit (`LibraryModel.nextPhotoIsZoomedIn`), so
+    /// it is shown only once its full-size image is in (`holdsPreviousPhoto`).
+    func open(_ assetID: Int64?, zoomedIn: Bool = false) {
         guard assetID != self.assetID else { return }
         // The mode is for one photo: another photo cancels it, on the photo it was open on.
         if isLensBlurring { isLensBlurring = false }
@@ -930,6 +1041,10 @@ final class DevelopController: ObservableObject {
         fullBeforeSettings = nil
         let heldFullSize = fullSession != nil
         fullSession = nil
+        histogramSession = nil
+        restingFullTask?.cancel()
+        restingFullImage = nil
+        restingFullSettings = nil
         fullRelease?.cancel()
         fullRelease = nil
         // The last photo's full-size stages in Core Image's cache (step 1, Lens Blur, depth) are
@@ -960,7 +1075,10 @@ final class DevelopController: ObservableObject {
         navigatorSession = nil
         lensBlurPhoto = nil
         lensBlurSaveError = nil
+        endHold(because: nil)
         guard let assetID else { return }
+        // Zoomed in on the next photo though the last one was at Fit ("Return to its last zoom").
+        if zoomedIn, !wantsFullResolution { wantsFullResolution = true }
 
         settings = (try? catalog.developSettings(for: assetID)) ?? .neutral
         if isMasking { selectedMaskID = editedMasks.last?.id }
@@ -975,7 +1093,18 @@ final class DevelopController: ObservableObject {
         let cachedPreview = previews.url(for: assetID, size: .preview)
         let hasPreview = previews.has(.preview, for: assetID)
         let url = try? catalog.readableURL(for: assetID, cache: originals)
-        if hasPreview, let decoded = PreviewImages.shared.cached(assetID, at: cachedPreview) {
+        // Masking and Remove show the full-size image too; only the mask overlay (red, on the
+        // proxy) and Lens Blur don't.
+        let zoomed = wantsFullResolution && !(isMasking && showMaskOverlay) && !isLensBlurring
+        let decodedPreview = hasPreview ? PreviewImages.shared.cached(assetID, at: cachedPreview) : nil
+        // The last photo stays up until this one's own render (or, zoomed in, its full-size image)
+        // is in: the stored preview is a JPEG of an earlier render, and showing it first made
+        // every click a visible swap to the render (Rosh, Nov 21, 2026: "clicking on a thumbnail
+        // it is showing low resolution first").
+        if previousImage != nil, hasPreview || url != nil {
+            beginHold(needsFullSize: zoomed)
+        }
+        if let decoded = decodedPreview {
             image = decoded
             showsStandIn = false
         } else {
@@ -1063,6 +1192,9 @@ final class DevelopController: ObservableObject {
     private func decodeOpened(_ assetID: Int64, url: URL, generation: Int, afterPreparing: Bool) {
         sourceURL = url
         isLoading = true
+        // Zoomed in, the full-size photo decodes beside the proxy, not after its first render:
+        // the photo shows once it is sharp (`holdsPreviousPhoto`).
+        if wantsFullResolution { scheduleFullRender() }
         Task.detached(priority: .userInitiated) {
             let info = ShootingInfo(url: url)
             await MainActor.run {
@@ -2359,7 +2491,7 @@ final class DevelopController: ObservableObject {
         frameHUD.scheduled(renderCount)
         // Once the photo is up, live frames go straight from the GPU to the photo view (see
         // `PhotoFeed`); the first render is published the ordinary way, as it ends the stand-in.
-        let direct = photoFeed.isAttached && firstRenderDone && cropping && !liveFramesOff
+        let direct = photoFeed.isAttached && firstRenderDone && cropping && !liveFramesOff && !holdsPreviousPhoto
         // A frame still rendering for another photo, the Before view, the crop tool or an
         // Option view must not reach the screen once this one is asked for.
         let liveKey = LiveFrameKey(assetID: assetID, generation: openGeneration.value, cropping: cropping,
@@ -2368,15 +2500,69 @@ final class DevelopController: ObservableObject {
             lastLiveKey = liveKey
             photoFeed.sink.invalidate()
         }
-        submitRender(ProxyRenderRequest(
+        // Zoomed in further than the proxy has pixels for, the frame is the part in view rendered
+        // from the full-size photo at the screen's resolution: sharp on every tick, at the cost of
+        // the screen's pixels rather than the photo's (as Easel draws its canvas).
+        let region = direct ? zoomedRegion(renderBefore: renderBefore, overlay: overlay, preview: preview) : nil
+        var request = ProxyRenderRequest(
             session: session, settings: settings, preview: preview, renderBefore: renderBefore, cropping: cropping,
             overlay: overlay, clipping: clipping, assetID: assetID, count: renderCount,
             measures: overlay == nil && preview == nil && !isLensBlurring, generation: openGeneration.value,
-            queuedAt: DevelopTimingLog.now(), surfaces: direct ? displaySurfaces : nil,
+            queuedAt: DevelopTimingLog.now(), surfaces: direct ? (region == nil ? displaySurfaces : regionSurfaces) : nil,
             fallback: liveFramesOff && photoFeed.isAttached && firstRenderDone && cropping ? .liveFramesOff : nil,
             sink: direct ? photoFeed.sink : nil, liveEpoch: photoFeed.sink.currentEpoch,
             measureJob: measureJob, measureQueue: measureQueue, histogramSink: histogramSink,
-            openGeneration: openGeneration, renderBeganAt: renderBeganAt, lensBlur: isLensBlurring))
+            openGeneration: openGeneration, renderBeganAt: renderBeganAt, lensBlur: isLensBlurring)
+        request.region = region?.target
+        request.regionSession = region?.session
+        if region != nil {
+            request.histogramSession = histogramSessionForRegionFrames()
+            request.histogramClock = histogramClock
+        }
+        submitRender(request)
+    }
+
+    /// The part in view and the full-size photo to render it from, when the photo view is zoomed
+    /// in further than the proxy has pixels for and nothing on top needs the whole photo (a mask
+    /// overlay, an Option view, Lens Blur, Upright's guides, a compare view).
+    private func zoomedRegion(renderBefore: Bool, overlay: UUID?, preview: SliderPreview?)
+        -> (target: ZoomedDetailTarget, session: DevelopSession)? {
+        guard usesRegionFrames, !renderBefore, overlay == nil, preview == nil, let fullSession,
+              let proxyWidth = image?.size.width,
+              let target = photoFeed.regionTarget,
+              !ZoomedDetail.isSharpEnough(imageWidth: proxyWidth, visibleWidth: target.visible.width,
+                                          screenPixels: target.pixels.width) else { return nil }
+        return (target, fullSession)
+    }
+
+    /// While frames show only the part in view, the histogram still counts the whole photo: from a
+    /// small copy of it (`histogramSize` pixels), rendered after each frame on the render queue in
+    /// a few milliseconds, rather than the whole proxy beside every frame. Opened in the background
+    /// the first time; until then the histogram updates when the edit rests.
+    private func histogramSessionForRegionFrames() -> DevelopSession? {
+        guard let url = session?.url else { return nil }
+        if let histogramSession, histogramSession.url == url { return histogramSession }
+        guard !histogramSessionOpening else { return nil }
+        histogramSessionOpening = true
+        let assetID = self.assetID
+        DispatchQueue.global(qos: .utility).async {
+            let opened = DevelopRenderer.shared.session(for: url, maxPixelSize: Self.histogramSize, interactive: true)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    self.histogramSessionOpening = false
+                    guard self.assetID == assetID, self.session?.url == url else { return }
+                    self.histogramSession = opened
+                }
+            }
+        }
+        return nil
+    }
+
+    /// The photo view moved off the frame of the part that was in view: render the part now in
+    /// view, unless the full-size image on the canvas already shows this edit sharp.
+    private func zoomedFrameLost() {
+        guard wantsFullResolution, fullImageSettings != settings || showingBefore else { return }
+        scheduleRender()
     }
 
     /// Hands `request` to the render queue, latest-wins: a request still waiting is replaced, and
@@ -2408,7 +2594,35 @@ final class DevelopController: ObservableObject {
         var renderedAt: CFTimeInterval?
         var shownAt: CFTimeInterval?
         RenderSignposts.measure("Proxy render") {
-            if let surfaces = request.surfaces, let sink = request.sink,
+            if let region = request.region, let regionSession = request.regionSession,
+               let surfaces = request.surfaces, let sink = request.sink {
+                // Zoomed in: only the part in view, from the full-size photo.
+                if let (rendered, shown) = regionSession.renderZoomedRegion(request.settings, visible: region.visible,
+                                                                            pixels: region.pixels,
+                                                                            shadowClipping: request.clipping.shadows,
+                                                                            highlightClipping: request.clipping.highlights,
+                                                                            surfaces: surfaces) {
+                    renderedAt = CACurrentMediaTime()
+                    // Placed where its pixels are on the photo: the part asked for, rounded out to
+                    // whole photo pixels, so the full-size image taking over at rest lands on
+                    // exactly the same spot (Rosh, Nov 21, 2026: "a slight 1 or 2 pixel move"
+                    // when the drag ends).
+                    var placed = region
+                    placed.layerRect = region.placing(shown)
+                    let result = sink.present(rendered, count: request.count, epoch: request.liveEpoch, pool: surfaces,
+                                              placement: .region(placed))
+                    outcome = result
+                    if result == .shown { shownAt = CACurrentMediaTime() }
+                    surface = rendered
+                    // The histogram counts the whole photo, from its small copy, after the frame.
+                    let now = CACurrentMediaTime()
+                    if request.measures, let small = request.histogramSession, let clock = request.histogramClock,
+                       now - clock.value >= Self.histogramInterval {
+                        clock.value = now
+                        plain = small.renderForDisplay(request.settings)?.plain
+                    }
+                }
+            } else if let surfaces = request.surfaces, let sink = request.sink,
                let frame = request.session.renderToSurface(request.settings, cropping: request.cropping,
                                                            overlay: request.overlay, preview: request.preview,
                                                            shadowClipping: request.clipping.shadows,
@@ -2491,12 +2705,18 @@ final class DevelopController: ObservableObject {
             // that way.
             liveFramesOff = true
             if latest {
-                var ordinary = request
-                ordinary.surfaces = nil
-                ordinary.sink = nil
+                var ordinary = request.ordinary
                 ordinary.fallback = .liveFramesOff
                 rendering = true
                 submitRender(ordinary)
+                return
+            }
+        case .stale where request.region != nil:
+            // The view panned or zoomed while the part that was in view rendered: render the part
+            // in view now, the same way.
+            if latest, fits {
+                rendering = false
+                scheduleRender()
                 return
             }
         case .stale:
@@ -2504,9 +2724,7 @@ final class DevelopController: ObservableObject {
             // nothing newer is coming, show this edit the ordinary way so the photo isn't left on
             // an older frame.
             if latest, fits {
-                var ordinary = request
-                ordinary.surfaces = nil
-                ordinary.sink = nil
+                let ordinary = request.ordinary
                 rendering = true
                 submitRender(ordinary)
                 return
@@ -2520,11 +2738,15 @@ final class DevelopController: ObservableObject {
             image = shown
             photoFeed.published(shown, count: request.count, timing: timing)
             showsStandIn = false
+            // A compare view also waits for the Before photo, so both sides change together.
+            holdHasRender = true
+            endHoldIfReady(because: "with its first render")
             imageIsWhole = !request.cropping
         }
         if current, !firstRenderDone {
             // The photo itself is on screen now (or its render failed): no spinner.
             isLoading = false
+            if cgImage == nil, live == nil { endHold(because: "after its render failed") }
             DevelopTimingLog.shared.log(request.assetID, "first render: waited \(Int(((renderBegan - request.queuedAt) * 1000).rounded())) ms "
                 + "for the render queue, rendered in \(DevelopTimingLog.ms(since: renderBegan)) ms, "
                 + "photo shown +\(DevelopTimingLog.ms(since: openedAt)) ms")
@@ -2542,6 +2764,7 @@ final class DevelopController: ObservableObject {
         }
         scheduleFullRender()
         if compareMode != .off { scheduleFullBeforeRender() }
+        prepareRestingFullImage()
     }
 
     /// Once the edit rests, renders the last live frame's settings the ordinary way and publishes
@@ -2552,10 +2775,8 @@ final class DevelopController: ObservableObject {
         let count = request.count
         let item = DispatchWorkItem { [weak self] in
             MainActor.assumeIsolated {
-                guard let self, self.renderCount == count, var settled = self.lastRender, settled.count == count else { return }
-                settled.surfaces = nil
-                settled.sink = nil
-                settled.fallback = nil
+                guard let self, self.renderCount == count, let last = self.lastRender, last.count == count else { return }
+                let settled = last.ordinary
                 self.rendering = true
                 self.submitRender(settled)
             }
@@ -2742,6 +2963,29 @@ final class DevelopController: ObservableObject {
         wantsFullResolution && (compareMode == .off || (firstRenderDone && beforeRequest.value == nil))
     }
 
+    private func beginHold(needsFullSize: Bool) {
+        holdNeedsFullSize = needsFullSize
+        holdHasRender = false
+        photoHold.begin()
+    }
+
+    /// The photo view shows the open photo again (`holdsPreviousPhoto`); logs how long it took.
+    /// Ends the hold once the next photo has every picture the view shows: its render (or,
+    /// zoomed in, its full-size image) and, in a compare view, the same of its Before photo.
+    private func endHoldIfReady(because reason: String) {
+        guard holdsPreviousPhoto else { return }
+        let afterReady = holdNeedsFullSize ? (fullImage != nil && fullImageSettings == settings) : holdHasRender
+        let beforeReady = compareMode == .off
+            || (holdNeedsFullSize ? (fullBeforeImage != nil && fullBeforeSettings == beforeSettings) : beforeImage != nil)
+        if afterReady, beforeReady { endHold(because: reason) }
+    }
+
+    private func endHold(because reason: String?) {
+        let zoomed = holdNeedsFullSize
+        holdNeedsFullSize = false
+        photoHold.end(because: reason.map { $0 + (zoomed ? " (zoomed in)" : "") })
+    }
+
     /// Back at Fit: the full-size images and session go after a few seconds (zooming in again
     /// within that keeps them), so a photo looked at closely once doesn't hold hundreds of MB
     /// until another photo opens (AT-077).
@@ -2761,6 +3005,8 @@ final class DevelopController: ObservableObject {
         fullRelease = nil
         guard !wantsFullResolution else { return }
         let held = fullImage != nil || fullBeforeImage != nil || fullSession != nil
+        regionSurfaces.drain()
+        histogramSession = nil
         fullImage = nil
         fullImageSettings = nil
         fullImageIsStale = false
@@ -2788,24 +3034,37 @@ final class DevelopController: ObservableObject {
             fullNeedsRender = true
             return
         }
-        fullRendering = true
-        noteLensBlurWork()
-        fullImageIsStale = false
         let settings = self.settings
         let assetID = self.assetID
         let existing = fullSession
         let clipping = clippingOverlay
         let blurs = isLensBlurring
+        let shareable = !blurs && !clipping.shadows && !clipping.highlights
+        // The same photo and settings rendered at full size already (Loupe zoomed in, or this
+        // photo before): shown at once from the shared render; only the session is opened.
+        if shareable, !fullImageIsStale, let shared = FullSizeRenders.shared.cached(url, settings: settings) {
+            fullImage = shared
+            fullImageSettings = settings
+            endHoldIfReady(because: "sharp, from the shared full-size render")
+            if existing != nil { return }
+        }
+        fullRendering = true
+        noteLensBlurWork()
+        fullImageIsStale = false
+        let reuses = shareable && fullImageSettings == settings && fullImage != nil
         fullQueue.async {
             let began = DevelopTimingLog.now()
             let session = existing ?? DevelopRenderer.shared.session(for: url, maxPixelSize: nil, interactive: true)
             session?.rendersLensBlur = blurs
-            let cgImage = RenderSignposts.measure("Full-size render") {
+            // Already shown from the shared render: only the session was wanted.
+            let cgImage = reuses ? nil : RenderSignposts.measure("Full-size render") {
                 session?.renderForDisplay(settings, shadowClipping: clipping.shadows,
                                           highlightClipping: clipping.highlights)?.image
             }
-            DevelopTimingLog.shared.log(assetID, "full-size render (zoomed in)\(existing == nil ? " with full decode" : "")"
-                + "\(blurs ? " with Lens Blur" : ""): \(DevelopTimingLog.ms(since: began)) ms")
+            DevelopTimingLog.shared.log(assetID, reuses
+                ? "full-size session opened, picture from the shared full-size render: \(DevelopTimingLog.ms(since: began)) ms"
+                : "full-size render (zoomed in)\(existing == nil ? " with full decode" : "")"
+                    + "\(blurs ? " with Lens Blur" : ""): \(DevelopTimingLog.ms(since: began)) ms")
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     self.fullRendering = false
@@ -2817,6 +3076,8 @@ final class DevelopController: ObservableObject {
                     if let cgImage, blurs == self.isLensBlurring {
                         self.fullImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
                         self.fullImageSettings = settings
+                        if shareable, let fullImage = self.fullImage { FullSizeRenders.shared.store(fullImage, for: url, settings: settings) }
+                        self.endHoldIfReady(because: "sharp")
                     } else if cgImage != nil {
                         self.fullNeedsRender = true
                     }
@@ -2861,6 +3122,7 @@ final class DevelopController: ObservableObject {
                     if let cgImage {
                         self.fullBeforeImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
                         self.fullBeforeSettings = before
+                        self.endHoldIfReady(because: "sharp, with its Before")
                     }
                     if self.fullBeforeNeedsRender {
                         self.fullBeforeNeedsRender = false
@@ -2910,6 +3172,8 @@ final class DevelopController: ObservableObject {
                         if let cgImage {
                             self.beforeImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
                         }
+                        // Compare views: the After render was in first; both sides change now.
+                        self.endHoldIfReady(because: "with its Before render")
                         if !self.rendering { self.scheduleFullRender() }
                         self.scheduleFullBeforeRender()
                     }
