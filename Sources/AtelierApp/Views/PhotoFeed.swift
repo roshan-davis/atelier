@@ -36,24 +36,33 @@ final class PhotoFeed {
 
     /// Puts frames on screen from the render queue; see `LiveFrameSink`.
     nonisolated let sink = LiveFrameSink()
+    /// Puts the sharp visible part of a zoomed photo over the live frames; see `DetailFrameSink`.
+    nonisolated let detail = DetailFrameSink()
     private weak var view: ZoomScrollView?
     /// The image the controller published last, with the render count it was made from.
     private var published: (id: ObjectIdentifier, count: Int, timing: RenderTiming?)?
 
     /// A view is showing the photo and can take frames.
     var isAttached: Bool { view != nil }
+    /// The view frames go to.
+    var attachedView: ZoomScrollView? { view }
 
     func attach(_ view: ZoomScrollView) {
         guard self.view !== view else { return }
         sink.setTarget(view.liveFrameLayer, imageSize: view.liveImageSize)
+        detail.setTarget(view.detailFrameLayer)
         self.view = view
     }
 
     func detach(_ view: ZoomScrollView) {
         guard self.view === view else { return }
         sink.setTarget(nil, imageSize: nil)
+        detail.setTarget(nil)
         self.view = nil
     }
+
+    /// Where a zoomed detail frame would go now; nil at Fit, or with no view attached.
+    var detailTarget: ZoomedDetailTarget? { view?.detailTarget() }
 
     /// The render queue put render `timing.count` on screen (`LiveFrameSink.present`).
     func frameShown(_ timing: RenderTiming) {
@@ -218,6 +227,139 @@ final class LiveFrameSink: @unchecked Sendable {
     }
 
     private static func clear(_ layer: CALayer) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        layer.contents = nil
+        layer.isHidden = true
+        CATransaction.commit()
+    }
+}
+
+/// Where a zoomed detail frame (`ZoomedDetail`) goes: the visible part of the photo, 0...1 from
+/// the top-left, its size in screen pixels, and the same rectangle in the photo view's canvas
+/// (points) and in its layer, where the frame is placed. Read on the main thread
+/// (`ZoomScrollView.detailTarget`).
+struct ZoomedDetailTarget: Equatable, Sendable {
+    var visible: CGRect
+    var pixels: CGSize
+    var canvasRect: CGRect
+    var layerRect: CGRect
+}
+
+/// The photo view's detail layer, over the live frames: while a slider drags on a zoomed photo,
+/// the render queue for the full-size photo puts the visible part, rendered sharp at the screen's
+/// resolution, on it (`DevelopController.scheduleZoomedDetail`). Like `LiveFrameSink`, each frame
+/// goes on in its own Core Animation transaction from the rendering thread, and the main thread
+/// only says what frames must match (`invalidate`, `clear`).
+///
+/// A frame is dropped, and the one on screen cleared, when the view pans or zooms (its rectangle
+/// no longer covers what is shown), when the photo or what it shows changes (`invalidate`), and
+/// once an ordinary image as sharp as the frame is on screen (the full-size render at rest).
+final class DetailFrameSink: @unchecked Sendable {
+    private let lock = NSLock()
+    private weak var layer: CALayer?
+    private var epoch = 0
+    private var shown: (surface: IOSurface, pool: DisplaySurfaces, canvasRect: CGRect, density: CGFloat)?
+    private var shownCount = -1
+
+    /// What a detail render requested now must carry to be shown.
+    var currentEpoch: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return epoch
+    }
+
+    /// The canvas rectangle of the frame on screen, if any.
+    var shownCanvasRect: CGRect? {
+        lock.lock()
+        defer { lock.unlock() }
+        return shown?.canvasRect
+    }
+
+    func setTarget(_ layer: CALayer?) {
+        lock.lock()
+        let oldLayer = self.layer
+        self.layer = layer
+        lock.unlock()
+        if oldLayer !== layer { clear(oldLayer) }
+    }
+
+    /// Frames requested before this call are dropped, and the one on screen goes.
+    func invalidate() {
+        lock.lock()
+        epoch += 1
+        lock.unlock()
+        clear()
+    }
+
+    /// An ordinary image `pixelsPerPoint` dense (image pixels per canvas point) is on screen:
+    /// the frame goes if the image is at least as sharp, so the full-size render replaces it, while
+    /// the settled proxy (softer) leaves it on until then.
+    func imageShown(pixelsPerPoint: CGFloat) {
+        lock.lock()
+        let sharper = shown.map { pixelsPerPoint >= $0.density * 0.95 } ?? false
+        if sharper { epoch += 1 }
+        lock.unlock()
+        if sharper { clear() }
+    }
+
+    /// The view panned or zoomed to show `canvasRect`: a frame made for another rectangle goes.
+    func visibleChanged(to canvasRect: CGRect?) {
+        lock.lock()
+        let moved = shown.map { shown in
+            guard let canvasRect else { return true }
+            return abs(shown.canvasRect.minX - canvasRect.minX) > 0.5 || abs(shown.canvasRect.minY - canvasRect.minY) > 0.5
+                || abs(shown.canvasRect.width - canvasRect.width) > 0.5 || abs(shown.canvasRect.height - canvasRect.height) > 0.5
+        } ?? false
+        if moved { epoch += 1 }
+        lock.unlock()
+        if moved { clear() }
+    }
+
+    /// Puts `surface`, detail render `count` requested at `epoch`, on screen over `target`, on the
+    /// calling thread. True when shown; otherwise the surface is back in `pool`.
+    func present(_ surface: IOSurface, count: Int, epoch: Int, target: ZoomedDetailTarget, pool: DisplaySurfaces) -> Bool {
+        lock.lock()
+        guard epoch == self.epoch, count > shownCount, let layer else {
+            lock.unlock()
+            pool.checkIn(surface)
+            return false
+        }
+        let old = shown
+        let density = CGFloat(surface.width) / max(1, target.canvasRect.width)
+        shown = (surface, pool, target.canvasRect, density)
+        shownCount = count
+        lock.unlock()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        layer.bounds = CGRect(origin: .zero, size: target.layerRect.size)
+        layer.position = CGPoint(x: target.layerRect.midX, y: target.layerRect.midY)
+        layer.contents = surface
+        layer.isHidden = false
+        CATransaction.commit()
+        // This thread has no run loop to commit for it.
+        CATransaction.flush()
+        if let old { old.pool.checkIn(old.surface) }
+        return true
+    }
+
+    /// Takes the frame off screen and lets its pool go (it holds a screen's worth of pixels).
+    func clear() {
+        lock.lock()
+        let old = shown
+        shown = nil
+        shownCount = -1
+        let target = layer
+        lock.unlock()
+        clear(target)
+        if let old {
+            old.pool.checkIn(old.surface)
+            old.pool.drain()
+        }
+    }
+
+    private func clear(_ layer: CALayer?) {
+        guard let layer else { return }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         layer.contents = nil

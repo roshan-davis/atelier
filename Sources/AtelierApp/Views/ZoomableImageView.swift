@@ -403,10 +403,38 @@ final class ZoomScrollView: NSScrollView {
     var liveFrameLayer: CALayer { canvas.frameLayer }
     /// The size of the image on screen, whose shape live frames must have.
     var liveImageSize: CGSize? { canvas.currentImageSize }
+    /// The layer zoomed detail frames go on (`DetailFrameSink`), over the live frames.
+    var detailFrameLayer: CALayer { canvas.detailLayer }
+
+    /// The part of the photo in view, in canvas points; nil before the photo has a size.
+    private var shownCanvasRect: CGRect? {
+        guard documentSize.width > 0, documentSize.height > 0 else { return nil }
+        let shown = contentView.bounds.intersection(CGRect(origin: .zero, size: documentSize))
+        return shown.isNull || shown.width <= 0 || shown.height <= 0 ? nil : shown
+    }
+
+    /// Where a sharp frame of the visible part would go (`ZoomedDetail`): nil while the whole
+    /// photo is in view, since the proxy then has the pixels the screen shows.
+    func detailTarget() -> ZoomedDetailTarget? {
+        guard window != nil, visibleWidth == nil, let shown = shownCanvasRect else { return nil }
+        let visible = CGRect(x: shown.minX / documentSize.width, y: shown.minY / documentSize.height,
+                             width: shown.width / documentSize.width, height: shown.height / documentSize.height)
+        guard visible.width < 0.995 || visible.height < 0.995 else { return nil }
+        let backing = window?.backingScaleFactor ?? 2
+        let pixels = CGSize(width: (shown.width * magnification * backing).rounded(),
+                            height: (shown.height * magnification * backing).rounded())
+        return ZoomedDetailTarget(visible: visible, pixels: pixels, canvasRect: shown,
+                                  layerRect: canvas.convertToLayer(shown))
+    }
 
     func setImage(_ image: NSImage?, pixelSize: CGSize?) {
         shownImage = image
         canvas.setImage(image)
+        if let feed, feed.attachedView === self, let image, canvas.bounds.width > 0,
+           let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) {
+            // The full-size render at rest is as sharp as a zoomed detail frame and takes its place.
+            feed.detail.imageShown(pixelsPerPoint: CGFloat(cgImage.width) / canvas.bounds.width)
+        }
         guard let image, image.size.width > 0, image.size.height > 0 else { return }
         // Keep the displayed image's aspect, at the full-size photo's long edge.
         var pixels = image.size
@@ -516,6 +544,8 @@ final class ZoomScrollView: NSScrollView {
 
     /// Tells the Navigator what part of the photo is in view, after the current layout pass.
     private func reportVisible() {
+        // A zoomed detail frame covers one spot; panning or zooming away drops it.
+        if let feed, feed.attachedView === self { feed.detail.visibleChanged(to: shownCanvasRect) }
         // Until the view has taken its spot, what it shows isn't where it is going.
         guard let viewport, pendingCenter == nil else { return }
         var visible: CGRect?
@@ -723,6 +753,9 @@ final class ZoomCanvasView: NSView {
     /// photo flip during drags, Nov 10, 2026), so this layer turns its contents back over.
     /// The render queue sets its contents (`LiveFrameSink`); the main thread only places it.
     let frameLayer = CALayer()
+    /// Over `frameLayer`: the visible part of a zoomed photo, rendered sharp from the full-size
+    /// photo while a slider drags (`DetailFrameSink`). Turned over like `frameLayer`.
+    let detailLayer = CALayer()
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -736,6 +769,12 @@ final class ZoomCanvasView: NSView {
         frameLayer.isHidden = true
         frameLayer.setAffineTransform(CGAffineTransform(scaleX: 1, y: -1))
         layer?.addSublayer(frameLayer)
+        detailLayer.contentsGravity = .resize
+        detailLayer.minificationFilter = .linear
+        detailLayer.magnificationFilter = .linear
+        detailLayer.isHidden = true
+        detailLayer.setAffineTransform(CGAffineTransform(scaleX: 1, y: -1))
+        layer?.addSublayer(detailLayer)
         placeFrameLayer()
     }
 

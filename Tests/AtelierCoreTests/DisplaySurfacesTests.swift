@@ -70,6 +70,73 @@ final class DisplaySurfacesTests: XCTestCase {
         XCTAssertNotNil(surfaces.checkOut(width: 16, height: 8))
     }
 
+    /// A zoomed detail frame is the visible part of the ordinary render, the right way up.
+    func testZoomedDetailMatchesThatPartOfTheOrdinaryRender() throws {
+        let file = workDir.appendingPathComponent("detail.png")
+        try makeHalves(at: file, width: 60, height: 40)
+        let session = try XCTUnwrap(DevelopRenderer.shared.session(for: file, maxPixelSize: nil))
+        var settings = DevelopSettings()
+        settings.contrast = 30
+        let ordinary = try XCTUnwrap(session.renderForDisplay(settings)).image
+        let expected = try rgba(ordinary)
+        let surfaces = DisplaySurfaces(limit: 2)
+        // The middle band across the top/bottom edge, right half: 30 × 20 pixels from (30, 10).
+        let visible = CGRect(x: 0.5, y: 0.25, width: 0.5, height: 0.5)
+        let surface = try XCTUnwrap(session.renderZoomedDetail(settings, visible: visible,
+                                                               pixels: CGSize(width: 60, height: 40), surfaces: surfaces))
+        XCTAssertEqual(surface.width, 30)
+        XCTAssertEqual(surface.height, 20)
+        for (x, y) in [(2, 2), (25, 6), (4, 15), (27, 18)] {
+            let want = expected(30 + x, 10 + y)
+            let got = try surfacePixel(surface, x: x, y: y)
+            for channel in 0..<3 {
+                XCTAssertEqual(Int(got[channel]), Int(want[channel]), accuracy: 1, "pixel (\(x), \(y)) channel \(channel)")
+            }
+        }
+        // Fewer screen pixels than the region has: scaled down to them.
+        let small = try XCTUnwrap(session.renderZoomedDetail(settings, visible: visible,
+                                                             pixels: CGSize(width: 15, height: 10), surfaces: surfaces))
+        XCTAssertEqual(small.width, 15)
+        XCTAssertEqual(small.height, 10)
+    }
+
+    func testZoomedDetailRegion() throws {
+        let extent = CGRect(x: 0, y: 0, width: 6000, height: 4000)
+        // Top-left quarter at 100% on a 3000 × 2000 pixel view: no scaling, top of the photo.
+        let top = try XCTUnwrap(ZoomedDetail.region(of: extent, visible: CGRect(x: 0, y: 0, width: 0.5, height: 0.5),
+                                                    pixels: CGSize(width: 3000, height: 2000)))
+        XCTAssertEqual(top.source, CGRect(x: 0, y: 2000, width: 3000, height: 2000))
+        XCTAssertEqual(top.scale, 1)
+        XCTAssertEqual(top.size, CGSize(width: 3000, height: 2000))
+        // At 50%: half the pixels.
+        let half = try XCTUnwrap(ZoomedDetail.region(of: extent, visible: CGRect(x: 0.25, y: 0.5, width: 0.5, height: 0.5),
+                                                     pixels: CGSize(width: 1500, height: 1000)))
+        XCTAssertEqual(half.source, CGRect(x: 1500, y: 0, width: 3000, height: 2000))
+        XCTAssertEqual(half.scale, 0.5)
+        XCTAssertEqual(half.size, CGSize(width: 1500, height: 1000))
+        // Past 100% the screen magnifies; the frame is never larger than the region.
+        let close = try XCTUnwrap(ZoomedDetail.region(of: extent, visible: CGRect(x: 0, y: 0, width: 0.1, height: 0.1),
+                                                      pixels: CGSize(width: 3000, height: 2000)))
+        XCTAssertEqual(close.size, CGSize(width: 600, height: 400))
+        XCTAssertNil(ZoomedDetail.region(of: extent, visible: .zero, pixels: CGSize(width: 10, height: 10)))
+        // A 2560 px proxy has the pixels for a 1000 px view of 40% of it, not for 3000 px.
+        XCTAssertTrue(ZoomedDetail.isSharpEnough(imageWidth: 2560, visibleWidth: 0.4, screenPixels: 1000))
+        XCTAssertFalse(ZoomedDetail.isSharpEnough(imageWidth: 2560, visibleWidth: 0.4, screenPixels: 3000))
+    }
+
+    func testDrainLetsGoOfThePool() {
+        let surfaces = DisplaySurfaces(limit: 1)
+        let first = surfaces.checkOut(width: 8, height: 8)
+        XCTAssertNotNil(first)
+        XCTAssertNil(surfaces.checkOut(width: 8, height: 8))
+        surfaces.drain()
+        // The one out is dropped when it comes back; a new one can be made.
+        if let first { surfaces.checkIn(first) }
+        let second = surfaces.checkOut(width: 8, height: 8)
+        XCTAssertNotNil(second)
+        XCTAssertFalse(second === first)
+    }
+
     // MARK: Helpers
 
     /// Top half orange, bottom half blue, so a frame upside down or with red and blue swapped fails.

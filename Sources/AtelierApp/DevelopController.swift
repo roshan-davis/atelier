@@ -612,11 +612,21 @@ final class DevelopController: ObservableObject {
     /// Something the full-size image was made without has arrived in the background
     /// (`backgroundWorkArrived`): render it again, though the settings are the same.
     private var fullImageIsStale = false
-    private var fullSession: DevelopSession?
+    private(set) var fullSession: DevelopSession?
     private var sourceURL: URL?
     private var fullRendering = false
     private var fullNeedsRender = false
-    private let fullQueue = DispatchQueue(label: "atelier.develop.full", qos: .userInitiated)
+    let fullQueue = DispatchQueue(label: "atelier.develop.full", qos: .userInitiated)
+    /// Zoomed detail frames (`DevelopController+ZoomedDetail.swift`): latest wins, on `fullQueue`.
+    let detailJob = LatestJob<ZoomedDetailRequest>()
+    /// At most three screens' worth of surfaces, let go whenever no detail frame shows.
+    let detailSurfaces = DisplaySurfaces(limit: 3)
+    var detailCount = 0
+    /// Detail frames came too slowly for this drag (an Exposure drag re-decoding the RAW): the
+    /// proxy draws it alone, as before, until the edit rests.
+    var detailGaveUp = false
+    /// Detail renders in a row slower than `ZoomedDetailRequest.slowLimit`.
+    let detailSlowFrames = LockedValue(0)
 
     /// The sharpest image that matches the current settings.
     var displayImage: NSImage? {
@@ -2367,6 +2377,7 @@ final class DevelopController: ObservableObject {
         if liveKey != lastLiveKey {
             lastLiveKey = liveKey
             photoFeed.sink.invalidate()
+            photoFeed.detail.invalidate()
         }
         submitRender(ProxyRenderRequest(
             session: session, settings: settings, preview: preview, renderBefore: renderBefore, cropping: cropping,
@@ -2377,6 +2388,8 @@ final class DevelopController: ObservableObject {
             sink: direct ? photoFeed.sink : nil, liveEpoch: photoFeed.sink.currentEpoch,
             measureJob: measureJob, measureQueue: measureQueue, histogramSink: histogramSink,
             openGeneration: openGeneration, renderBeganAt: renderBeganAt, lensBlur: isLensBlurring))
+        // Zoomed in, the visible part is rendered sharp from the full-size photo beside the proxy.
+        if direct, overlay == nil { scheduleZoomedDetail(settings, clipping: clipping) }
     }
 
     /// Hands `request` to the render queue, latest-wins: a request still waiting is replaced, and
@@ -2553,6 +2566,7 @@ final class DevelopController: ObservableObject {
         let item = DispatchWorkItem { [weak self] in
             MainActor.assumeIsolated {
                 guard let self, self.renderCount == count, var settled = self.lastRender, settled.count == count else { return }
+                self.zoomedDetailSettled()
                 settled.surfaces = nil
                 settled.sink = nil
                 settled.fallback = nil
@@ -2769,6 +2783,8 @@ final class DevelopController: ObservableObject {
         fullSession = nil
         fullNeedsRender = false
         fullBeforeNeedsRender = false
+        photoFeed.detail.invalidate()
+        detailSurfaces.drain()
         if held {
             RenderMemory.shared.clear(because: reason)
             DevelopTimingLog.shared.log(assetID, "full size let go (\(reason))")

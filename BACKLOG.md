@@ -1636,3 +1636,19 @@ Rosh (Nov 15, 2026): "lets add these in the backlog and we can start with 1 firs
 **Acceptance:** corner, edge, move and straighten drags follow the pointer smoothly on a full-size RAW with no flicker (Rosh on their Mac; renders per drag measured before and after); turning, flipping and aspect changes in the tool still update the photo; each overlay draws inside the frame at every aspect and orientation; O, ⇧O, the panel and the menu agree. `CropGuideTests`, `AtelierActionsTests`.
 
 **Left out:** dragging an overlay on its own (a drag inside the frame moves the crop, as in Lightroom); choosing which ratios Aspect Ratios outlines; menu checkmarks on the chosen overlay (the panel shows it); narrowing what `CropEditorView` observes (the whole controller) unless the measurement shows it matters.
+
+## AT-089 — Develop: zoomed photo stays sharp while a slider drags
+
+**Status:** In progress — implementation on branch `claude/project-thread-6nbvgr`; Mac build, frame-rate check and Rosh's acceptance pending. **Decision:** Rosh, Nov 21, 2026, project thread "Keep full resolution while adjusting sliders": "why all the values are applying are applying on less resolution and coming back to full resolution when it finishes?", then "photoshop doesn't do this and still has smooth curve adjustment and all"; Rosh agreed to the visible-area fix. **Owner:** Claude (project thread).
+
+**Cause (from the code path, main `8bab941`):** live frames always come from the 2560 px proxy session (`DevelopController.proxySize`). Zoomed past Fit the proxy is stretched over the screen, and the full-size render (`scheduleFullRender`) waits for the drag to rest (`publishWhenSettled`, AT-039 D4) because whole-photo renders took 55–170 ms each (Rosh's trace `develop-open-2026-11-20 21.53.43.log`) and stuttered when run per tick. At Fit nothing changes (the proxy shows during and after the drag).
+
+**Scope:**
+- `ZoomedDetail` (AtelierCore): the visible region in the render's coordinates and its scale to the screen's pixels (never above 1); `DevelopSession.renderZoomedDetail` crops the full-size image to it (Core Image computes only that region), Lanczos-scales when zoomed below 100%, and renders into an IOSurface. `DisplaySurfaces` takes a per-pool `limit` and `drain()`.
+- `DetailFrameSink` and `ZoomCanvasView.detailLayer` (over the live frame layer): placed at the visible rectangle from the rendering thread, dropped on pan or zoom, on any change of photo, Before, crop or Option view, and when an ordinary image as sharp is on screen (the full-size render at rest). Its surfaces (at most 3) are let go whenever no detail frame shows.
+- `DevelopController+ZoomedDetail.swift`: with every live proxy render, if zoomed further than the proxy has pixels for, a latest-wins detail render on the full-size queue from the full-size session already open for the zoom. Not in compare views, crop, masking overlay, Lens Blur, Guided Upright or Option views. Two renders over 70 ms in a row give up for that drag (logged in the Develop timing log).
+- PRD performance line, Help (develop.html Zoom and move around).
+
+**Acceptance:** on a 24–45 MP RAW at 100% and 200%, Contrast, Highlights, Tone Curve and HSL drags stay sharp with frames per drag no lower than main (Develop > Frame Diagnostics, before and after on the same photo); Exposure drags no worse than main; memory peak within ~100 MB of main; at Fit nothing changes; pan and zoom after a drag show no stale patch. `DisplaySurfacesTests` (zoomed detail matches the ordinary render, region math, drain).
+
+**Left out / known:** the first frame of a drag that starts from the sharp full-size image shows the proxy for one detail render (~20–40 ms expected) before the sharp frame; Exposure/White Balance drags still re-decode the RAW per tick (D3b) and may fall back to the proxy; compare views keep the proxy during drags.
