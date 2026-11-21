@@ -914,7 +914,9 @@ final class DevelopController: ObservableObject {
         reopen()
     }
 
-    func open(_ assetID: Int64?) {
+    /// `zoomedIn`: the photo view will show it past Fit (`LibraryModel.nextPhotoIsZoomedIn`), so it
+    /// is shown only once its full-size image is in (`awaitingSharp`).
+    func open(_ assetID: Int64?, zoomedIn: Bool = false) {
         guard assetID != self.assetID else { return }
         // The mode is for one photo: another photo cancels it, on the photo it was open on.
         if isLensBlurring { isLensBlurring = false }
@@ -991,6 +993,8 @@ final class DevelopController: ObservableObject {
         lensBlurSaveError = nil
         endAwaitingSharp(because: nil)
         guard let assetID else { return }
+        // Zoomed in on the next photo though the last one was at Fit ("Return to its last zoom").
+        if zoomedIn, !wantsFullResolution { wantsFullResolution = true }
         if wantsFullResolution, compareMode == .off, !isMasking, !isRemoving, !isLensBlurring {
             awaitingSharp = true
             sharpOpenBegan = DevelopTimingLog.now()

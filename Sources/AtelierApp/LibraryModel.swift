@@ -122,8 +122,10 @@ final class LibraryModel: ObservableObject {
             if mode == .hdr { hdrFocusChanged(from: oldValue) }
             if mode == .develop {
                 if zoomState.level == .fit, develop.wantsFullResolution { develop.wantsFullResolution = false }
-                develop.open(focusedID)
-                if let image = develop.image, !develop.showsPreviousPhoto, let width = detail?.asset.width, let height = detail?.asset.height {
+                develop.open(focusedID, zoomedIn: nextPhotoIsZoomedIn)
+                // Zoomed in, the photo appears once it is sharp (`DevelopController.awaitingSharp`):
+                // putting its preview up now is the soft flash Rosh saw (Nov 21, 2026).
+                if let image = develop.image, !develop.showsPreviousPhoto, !develop.awaitingSharp, let width = detail?.asset.width, let height = detail?.asset.height {
                     zoomState.showNow(image, pixelSize: develop.croppedPixelSize(assetSize: CGSize(width: width, height: height)))
                 }
             }
@@ -532,6 +534,17 @@ final class LibraryModel: ObservableObject {
     /// Each photo's zoom and visible center when it was left, for "Return to its last zoom".
     /// Saved across launches (see `savePhotoZooms`).
     private var zoomByPhoto: [Int64: (level: ZoomLevel, center: CGPoint?)] = LibraryModel.loadPhotoZooms()
+
+    /// The photo about to open will be shown past Fit (the zoom kept or remembered for it), so
+    /// it needs its full-size image before it is sharp.
+    private var nextPhotoIsZoomedIn: Bool {
+        let report = zoomState.report
+        switch zoomState.level {
+        case .fit: return false
+        case .fill: return report.isZoomedPastFit
+        case .percent(let percent): return report.fitPercent > 0 ? percent > report.fitPercent * 1.01 : report.isZoomedPastFit
+        }
+    }
 
     private func zoomForNextPhoto(leaving previous: Int64?) {
         let mode = ZoomOnPhotoChange.current
